@@ -24,7 +24,7 @@ impl VertexBufferElementDescriptor {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct VertexBuffer {
     description: VertexBufferDescription,
     elements: HashMap<ElementName, VertexBufferElementDescriptor>,
