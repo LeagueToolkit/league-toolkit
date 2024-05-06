@@ -30,7 +30,7 @@ impl<'a, T> VertexBufferAccessor<'a, T> {
         element: VertexElement,
         element_off: usize,
         buffer: &'a VertexBuffer,
-    ) -> VertexBufferAccessor<'a, ()> {
+    ) -> VertexBufferAccessor<'a, T> {
         VertexBufferAccessor {
             buffer,
             element,
@@ -47,23 +47,6 @@ impl<'a, T> VertexBufferAccessor<'a, T> {
             view: self,
             counter: 0,
         }
-    }
-
-    pub fn as_f32(self) -> VertexBufferAccessor<'a, f32> {
-        assert_eq!(self.element.format, ElementFormat::X_Float32);
-        repack_self!(self)
-    }
-    pub fn as_vec2(self) -> VertexBufferAccessor<'a, Vector2<f32>> {
-        assert_eq!(self.element.format, ElementFormat::XY_Float32);
-        repack_self!(self)
-    }
-    pub fn as_vec3(self) -> VertexBufferAccessor<'a, Vector3<f32>> {
-        assert_eq!(self.element.format, ElementFormat::XYZ_Float32);
-        repack_self!(self)
-    }
-    pub fn as_vec4(self) -> VertexBufferAccessor<'a, Vector4<f32>> {
-        assert_eq!(self.element.format, ElementFormat::XYZW_Float32);
-        repack_self!(self)
     }
     // TODO (alan): impl the rest of the ElementFormat's
 }

@@ -2,6 +2,7 @@ use std::io::Read;
 
 use byteorder::ReadBytesExt;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use vecmath::Vector3;
 
 pub use range::*;
 
@@ -36,9 +37,8 @@ impl SkinnedMesh {
     ) -> Self {
         let aabb = AABB::from_vertex_iter(
             vertex_buffer
-                .accessor(ElementName::Position)
+                .accessor::<Vector3<f32>>(ElementName::Position)
                 .expect("vertex buffer must have position element")
-                .as_vec3()
                 .iter(),
         );
         Self {

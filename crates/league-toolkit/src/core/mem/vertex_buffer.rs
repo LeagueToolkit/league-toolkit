@@ -77,10 +77,10 @@ impl VertexBuffer {
         }
     }
 
-    pub fn accessor(&self, element_name: ElementName) -> Option<VertexBufferAccessor<'_, ()>> {
+    pub fn accessor<T>(&self, element_name: ElementName) -> Option<VertexBufferAccessor<'_, T>> {
         self.elements
             .get(&element_name)
-            .map(|desc| VertexBufferAccessor::<()>::new(desc.element, desc.offset as usize, self))
+            .map(|desc| VertexBufferAccessor::<T>::new(desc.element, desc.offset as usize, self))
     }
 
     pub fn description(&self) -> &VertexBufferDescription {
