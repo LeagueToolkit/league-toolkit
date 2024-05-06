@@ -1,4 +1,7 @@
-use std::io::Read;
+use std::io;
+use std::io::{Read, Write};
+use byteorder::{LittleEndian, WriteBytesExt};
+use crate::util::WriterExt;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SkinnedMeshRange {
@@ -36,5 +39,15 @@ impl SkinnedMeshRange {
             start_index: reader.read_i32::<LittleEndian>()?,
             index_count: reader.read_i32::<LittleEndian>()?,
         })
+    }
+
+    pub fn to_writer<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+        use crate::util::WriterExt;
+        writer.write_padded_string::<64>(&self.material)?;
+        writer.write_i32::<LittleEndian>(self.start_vertex)?;
+        writer.write_i32::<LittleEndian>(self.vertex_count)?;
+        writer.write_i32::<LittleEndian>(self.start_index)?;
+        writer.write_i32::<LittleEndian>(self.index_count)?;
+        Ok(())
     }
 }
