@@ -1,14 +1,9 @@
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
-}
+mod chunk;
+mod decoder;
+mod error;
+mod wad;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub use chunk::*;
+pub use decoder::*;
+pub use error::*;
+pub use wad::*;
