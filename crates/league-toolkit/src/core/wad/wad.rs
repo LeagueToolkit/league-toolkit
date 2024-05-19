@@ -5,7 +5,7 @@ use std::{
 
 use byteorder::{ReadBytesExt as _, LE};
 
-use crate::{WadChunk, WadDecoder, WadError};
+use super::{WadChunk, WadDecoder, WadError};
 
 #[derive(Debug)]
 pub struct Wad<TSource: Read + Seek> {
