@@ -1,6 +1,6 @@
 use std::io::{Read, Seek, SeekFrom};
 
-use crate::{WadChunk, WadChunkCompression, WadError};
+use super::{WadChunk, WadChunkCompression, WadError};
 use flate2::read::GzDecoder;
 use memchr::memmem;
 

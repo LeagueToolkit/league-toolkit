@@ -3,7 +3,7 @@ use std::io::{BufReader, Read};
 use byteorder::{ReadBytesExt as _, LE};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
-use crate::WadError;
+use super::WadError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromPrimitive, IntoPrimitive)]
 #[repr(u8)]
