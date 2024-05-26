@@ -4,8 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+bitflags = "2.5.0"
 byteorder = "1.5.0"
 flate2 = "1.0.30"
+lazy_static = "1.4.0"
 log = "0.4.21"
 memchr = "2.7.2"
 num_enum = "0.7.2"

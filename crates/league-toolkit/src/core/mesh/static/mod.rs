@@ -4,26 +4,15 @@ use byteorder::{ByteOrder, LittleEndian, ReadBytesExt};
 use log::debug;
 use vecmath::{Vector2, Vector3, Vector4};
 
-use crate::core::primitives::Color;
+use crate::core::{
+    mesh::ParseError,
+    primitives::{Color, Sphere, AABB},
+};
 
 mod face;
 pub use face::*;
 
 const MAGIC: &[u8] = "r3d2Mesh".as_bytes();
-
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("Invalid file signature")]
-    InvalidFileSignature,
-    #[error("Invalid file version")]
-    InvalidFileVersion,
-    #[error("IO Error")]
-    ReaderError(#[from] std::io::Error),
-    #[error("UTF-8 Error")]
-    Utf8Error(#[from] std::str::Utf8Error),
-}
-
-pub type Result<T> = core::result::Result<T, Error>;
 
 #[derive(Clone, Debug)]
 pub struct StaticMesh {
@@ -36,15 +25,12 @@ pub struct StaticMesh {
 
 // TODO (alan): figure out endianness
 
-pub struct BBox<T> {
-    pub min: Vector2<T>,
-    pub max: Vector2<T>,
-}
-
 // TODO (alan): move/rename this
 pub trait ReaderExt: Read {
     // FIXME (alan): make own result type here
-    fn read_padded_string<T: ByteOrder, const N: usize>(&mut self) -> Result<String> {
+    fn read_padded_string<T: ByteOrder, const N: usize>(
+        &mut self,
+    ) -> crate::core::mesh::Result<String> {
         let mut buf: [u8; N] = [0; N];
         self.read_exact(&mut buf)?;
         let i = buf.iter().position(|&b| b == b'\0').unwrap_or(buf.len());
@@ -89,22 +75,29 @@ pub trait ReaderExt: Read {
         ])
     }
 
-    fn read_bbox_f32<T: ByteOrder>(&mut self) -> io::Result<BBox<f32>> {
-        Ok(BBox {
-            min: self.read_vector2_f32::<T>()?,
-            max: self.read_vector2_f32::<T>()?,
+    fn read_bbox_f32<T: ByteOrder>(&mut self) -> io::Result<AABB<f32>> {
+        Ok(AABB {
+            min: self.read_vector3_f32::<T>()?,
+            max: self.read_vector3_f32::<T>()?,
         })
+    }
+
+    fn read_sphere_f32<T: ByteOrder>(&mut self) -> io::Result<Sphere> {
+        Ok(Sphere::new(
+            self.read_vector3_f32::<T>()?,
+            self.read_f32::<T>()?,
+        ))
     }
 }
 
 impl<R: io::Read + ?Sized> ReaderExt for R {}
 
 impl StaticMesh {
-    pub fn from_reader<R: Read>(reader: &mut R) -> Result<Self> {
+    pub fn from_reader<R: Read>(reader: &mut R) -> crate::core::mesh::Result<Self> {
         let mut buf: [u8; 8] = [0; 8];
         reader.read_exact(&mut buf)?;
         if MAGIC != buf {
-            return Err(Error::InvalidFileSignature);
+            return Err(ParseError::InvalidFileSignature);
         }
 
         let major = reader.read_u16::<LittleEndian>()?;
@@ -113,7 +106,7 @@ impl StaticMesh {
 
         // there are versions [2][1] and [1][1] as well
         if major != 2 && major != 3 && minor != 1 {
-            return Err(Error::InvalidFileVersion);
+            return Err(ParseError::InvalidFileVersion);
         }
 
         let name = reader.read_padded_string::<LittleEndian, 128>()?;
