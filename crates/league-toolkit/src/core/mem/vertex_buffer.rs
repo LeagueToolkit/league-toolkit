@@ -1,4 +1,7 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Debug,
+};
 
 use super::{
     ElementName, VertexBufferDescription, VertexBufferUsage, VertexBufferView, VertexElement,
@@ -24,7 +27,7 @@ impl VertexBufferElementDescriptor {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct VertexBuffer {
     description: VertexBufferDescription,
     elements: HashMap<ElementName, VertexBufferElementDescriptor>,
@@ -33,6 +36,18 @@ pub struct VertexBuffer {
     count: usize,
 
     buffer: Vec<u8>,
+}
+
+impl Debug for VertexBuffer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("VertexBuffer")
+            .field("description", &self.description)
+            .field("elements", &self.elements)
+            .field("stride", &self.stride)
+            .field("count", &self.count)
+            .field("buffer (size)", &self.buffer.len())
+            .finish()
+    }
 }
 
 impl VertexBuffer {
@@ -44,7 +59,10 @@ impl VertexBuffer {
         let description = VertexBufferDescription::new(usage, elements.clone());
         let mut element_descriptors = HashMap::new();
         let mut off = 0;
-        for e in sanitize_elements_for_duplication(elements) {
+        for e in elements {
+            if element_descriptors.contains_key(&e.name) {
+                panic!("vertex buffer has duplicate elements! FIXME (alan): don't panic here :)");
+            }
             element_descriptors.insert(e.name, VertexBufferElementDescriptor::new(e, off as isize));
             off += e.size()
         }
@@ -87,16 +105,4 @@ impl VertexBuffer {
     pub fn buffer(&self) -> &[u8] {
         &self.buffer
     }
-}
-
-fn sanitize_elements_for_duplication(elements: Vec<VertexElement>) -> HashSet<VertexElement> {
-    let orig_len = elements.len();
-    let mut set: HashSet<VertexElement> = HashSet::new();
-    elements.into_iter().for_each(|x| {
-        set.insert(x);
-    });
-    if set.len() != orig_len {
-        panic!("Contains duplicate vertex elements. FIXME (alan): don't panic here :)");
-    }
-    set
 }
