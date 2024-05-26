@@ -9,7 +9,13 @@ pub struct AABB<T> {
 }
 
 impl<T: Default> AABB<T> {
-    pub fn new() -> Self {
+    pub fn new(min: Vector3<T>, max: Vector3<T>) -> Self {
+        Self { min, max }
+    }
+}
+
+impl<T: Default> Default for AABB<T> {
+    fn default() -> Self {
         Self {
             min: [T::default(), T::default(), T::default()],
             max: [T::default(), T::default(), T::default()],

@@ -69,7 +69,7 @@ impl SkinnedMesh {
         let mut vertex_count = 0;
         let mut ranges;
         let mut vertex_declaration: VertexBufferDescription = vertex::BASIC.clone();
-        let mut b_box = AABB::new();
+        let mut b_box = AABB::default();
         let mut b_sphere = Sphere::INFINITE;
 
         if major == 0 {
