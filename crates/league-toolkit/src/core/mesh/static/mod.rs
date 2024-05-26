@@ -87,4 +87,20 @@ impl StaticMesh {
             vertex_colors,
         })
     }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn vertices(&self) -> &[[f32; 3]] {
+        &self.vertices
+    }
+
+    pub fn faces(&self) -> &[StaticMeshFace] {
+        &self.faces
+    }
+
+    pub fn vertex_colors(&self) -> Option<&Vec<Color>> {
+        self.vertex_colors.as_ref()
+    }
 }
