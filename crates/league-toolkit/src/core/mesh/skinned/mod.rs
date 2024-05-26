@@ -1,14 +1,12 @@
 use std::io::Read;
 
 use crate::core::{
-    mem::{
-        ElementName, IndexBuffer, IndexFormat, VertexBuffer, VertexBufferDescription, VertexElement,
-    },
+    mem::{ElementName, IndexBuffer, IndexFormat, VertexBuffer, VertexBufferDescription},
     primitives::{Sphere, AABB},
 };
 
 use byteorder::{LittleEndian, ReadBytesExt};
-use num_enum::{FromPrimitive, TryFromPrimitive};
+use num_enum::TryFromPrimitive;
 
 use super::{ParseError, Result};
 
@@ -63,12 +61,12 @@ impl SkinnedMesh {
             return Err(ParseError::InvalidFileVersion);
         }
 
-        let mut index_count = 0;
-        let mut vertex_count = 0;
+        let index_count;
+        let vertex_count;
         let mut ranges;
         let mut vertex_declaration: VertexBufferDescription = vertex::BASIC.clone();
-        let mut b_box = AABB::default();
-        let mut b_sphere = Sphere::INFINITE;
+        let mut _b_box = AABB::default();
+        let mut _b_sphere = Sphere::INFINITE;
 
         if major == 0 {
             index_count = reader.read_i32::<LittleEndian>()?;
@@ -103,8 +101,8 @@ impl SkinnedMesh {
                     }
                 };
 
-                b_box = reader.read_bbox_f32::<LittleEndian>()?;
-                b_sphere = reader.read_sphere_f32::<LittleEndian>()?;
+                _b_box = reader.read_bbox_f32::<LittleEndian>()?;
+                _b_sphere = reader.read_sphere_f32::<LittleEndian>()?;
             }
         }
 

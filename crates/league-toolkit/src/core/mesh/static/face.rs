@@ -1,6 +1,6 @@
-use std::io::{self, Read};
+use std::io::Read;
 
-use byteorder::{ByteOrder, LittleEndian, ReadBytesExt};
+use byteorder::{LittleEndian, ReadBytesExt};
 
 use vecmath::Vector2;
 

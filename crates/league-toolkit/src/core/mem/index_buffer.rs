@@ -9,8 +9,8 @@ pub enum IndexFormat {
 impl IndexFormat {
     pub fn size(&self) -> usize {
         match self {
-            IndexFormat::U16 => 2,
-            IndexFormat::U32 => 4,
+            IndexFormat::U16 => size_of::<u16>(),
+            IndexFormat::U32 => size_of::<u32>(),
         }
     }
 }

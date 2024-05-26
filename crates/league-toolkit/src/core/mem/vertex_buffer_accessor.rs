@@ -1,6 +1,5 @@
 use std::marker::PhantomData;
 
-use log::debug;
 use vecmath::{Vector2, Vector3, Vector4};
 
 use crate::core::mem::ElementFormat;
