@@ -72,8 +72,7 @@ impl VertexBufferDescription {
         &self.elements
     }
 
-    pub fn into_vertex_buffer(self, vertex_count: usize) -> VertexBuffer {
-        let buf = vec![0; self.vertex_size() * vertex_count];
+    pub fn into_vertex_buffer(self, buf: Vec<u8>) -> VertexBuffer {
         VertexBuffer::new(self.usage, self.elements, buf)
     }
 }
