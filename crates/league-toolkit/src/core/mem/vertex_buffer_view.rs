@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+use log::debug;
 use vecmath::{Vector2, Vector3, Vector4};
 
 use crate::core::mem::ElementFormat;
@@ -74,7 +75,7 @@ impl<'a> VertexBufferView<'a, f32> {
     pub fn get(&self, index: usize) -> f32 {
         let offset = self.offset(index);
         let buf = self.buffer.buffer();
-        f32::from_ne_bytes(buf[offset..offset + 4].try_into().unwrap())
+        f32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap())
     }
 }
 
@@ -82,8 +83,8 @@ impl<'a> VertexBufferView<'a, Vector2<f32>> {
     pub fn get(&self, index: usize) -> Vector2<f32> {
         let offset = self.offset(index);
         let buf = self.buffer.buffer();
-        let x = f32::from_ne_bytes(buf[offset..offset + 4].try_into().unwrap());
-        let y = f32::from_ne_bytes(buf[offset + 4..offset + 8].try_into().unwrap());
+        let x = f32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap());
+        let y = f32::from_le_bytes(buf[offset + 4..offset + 8].try_into().unwrap());
         [x, y]
     }
 }
@@ -92,9 +93,9 @@ impl<'a> VertexBufferView<'a, Vector3<f32>> {
     pub fn get(&self, index: usize) -> Vector3<f32> {
         let offset = self.offset(index);
         let buf = self.buffer.buffer();
-        let x = f32::from_ne_bytes(buf[offset..offset + 4].try_into().unwrap());
-        let y = f32::from_ne_bytes(buf[offset + 4..offset + 8].try_into().unwrap());
-        let z = f32::from_ne_bytes(buf[offset + 8..offset + 12].try_into().unwrap());
+        let x = f32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap());
+        let y = f32::from_le_bytes(buf[offset + 4..offset + 8].try_into().unwrap());
+        let z = f32::from_le_bytes(buf[offset + 8..offset + 12].try_into().unwrap());
         [x, y, z]
     }
 }
@@ -103,10 +104,10 @@ impl<'a> VertexBufferView<'a, Vector4<f32>> {
     pub fn get(&self, index: usize) -> Vector4<f32> {
         let offset = self.offset(index);
         let buf = self.buffer.buffer();
-        let x = f32::from_ne_bytes(buf[offset..offset + 4].try_into().unwrap());
-        let y = f32::from_ne_bytes(buf[offset + 4..offset + 8].try_into().unwrap());
-        let z = f32::from_ne_bytes(buf[offset + 8..offset + 12].try_into().unwrap());
-        let w = f32::from_ne_bytes(buf[offset + 12..offset + 16].try_into().unwrap());
+        let x = f32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap());
+        let y = f32::from_le_bytes(buf[offset + 4..offset + 8].try_into().unwrap());
+        let z = f32::from_le_bytes(buf[offset + 8..offset + 12].try_into().unwrap());
+        let w = f32::from_le_bytes(buf[offset + 12..offset + 16].try_into().unwrap());
         [x, y, z, w]
     }
 }
