@@ -26,7 +26,6 @@ pub struct SkinnedMesh {
     ranges: Vec<SkinnedMeshRange>,
     vertex_buffer: VertexBuffer,
     index_buffer: IndexBuffer,
-    is_disposed: bool,
 }
 
 impl SkinnedMesh {
@@ -48,7 +47,6 @@ impl SkinnedMesh {
             ranges,
             vertex_buffer,
             index_buffer,
-            is_disposed: false,
         }
     }
 
