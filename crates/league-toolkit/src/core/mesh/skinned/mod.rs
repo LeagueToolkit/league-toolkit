@@ -120,6 +120,26 @@ impl SkinnedMesh {
 
         Ok(Self::new(ranges, vertex_buffer, index_buffer))
     }
+
+    pub fn aabb(&self) -> AABB<f32> {
+        self.aabb
+    }
+
+    pub fn bounding_sphere(&self) -> Sphere {
+        self.bounding_sphere
+    }
+
+    pub fn ranges(&self) -> &[SkinnedMeshRange] {
+        &self.ranges
+    }
+
+    pub fn vertex_buffer(&self) -> &VertexBuffer {
+        &self.vertex_buffer
+    }
+
+    pub fn index_buffer(&self) -> &IndexBuffer {
+        &self.index_buffer
+    }
 }
 
 #[derive(TryFromPrimitive)]
