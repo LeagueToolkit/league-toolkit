@@ -73,12 +73,12 @@ impl SkinnedMesh {
         if major == 0 {
             index_count = reader.read_i32::<LittleEndian>()?;
             vertex_count = reader.read_i32::<LittleEndian>()?;
-            ranges = vec![SkinnedMeshRange::new("Base", 0, 0, 0, 0)] // TODO (alan): impl SkinnedMeshRange
+            ranges = vec![SkinnedMeshRange::new("Base", 0, 0, 0, 0)]
         } else {
             let range_len = reader.read_u32::<LittleEndian>()? as usize;
             ranges = Vec::with_capacity(range_len);
             for _ in 0..range_len {
-                ranges.push(SkinnedMeshRange::from_reader(reader)?) // TODO (alan): impl SkinnedMeshRange
+                ranges.push(SkinnedMeshRange::from_reader(reader)?)
             }
 
             if major == 4 {
