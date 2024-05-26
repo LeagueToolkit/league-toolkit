@@ -27,7 +27,7 @@ impl SkinnedMeshRange {
     }
 
     pub fn from_reader<R: Read>(reader: &mut R) -> super::Result<Self> {
-        use crate::core::mesh::r#static::ReaderExt;
+        use crate::util::ReaderExt as _;
         use byteorder::{LittleEndian, ReadBytesExt};
         Ok(Self {
             material: reader.read_padded_string::<LittleEndian, 64>()?,

@@ -1,6 +1,5 @@
 use std::io::{self, Read};
 
-use super::ReaderExt;
 use byteorder::{ByteOrder, LittleEndian, ReadBytesExt};
 
 use vecmath::Vector2;
@@ -17,6 +16,7 @@ pub struct StaticMeshFace {
 
 impl StaticMeshFace {
     pub fn from_reader<R: Read>(reader: &mut R) -> crate::core::mesh::Result<Self> {
+        use crate::util::ReaderExt as _;
         let vertex_ids = (
             reader.read_u32::<LittleEndian>()? as u8,
             reader.read_u32::<LittleEndian>()? as u8,

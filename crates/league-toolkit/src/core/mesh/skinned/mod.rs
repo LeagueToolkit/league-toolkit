@@ -51,7 +51,7 @@ impl SkinnedMesh {
     }
 
     pub fn from_reader<R: Read>(reader: &mut R) -> Result<Self> {
-        use super::ReaderExt as _;
+        use crate::util::ReaderExt as _;
         let magic = reader.read_u32::<LittleEndian>()?;
         if magic != MAGIC {
             return Err(ParseError::InvalidFileSignature);
