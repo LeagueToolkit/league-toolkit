@@ -9,7 +9,7 @@ use super::{VertexBuffer, VertexElement};
 
 macro_rules! repack_self {
     ($self:ident) => {
-        VertexBufferView {
+        VertexBufferAccessor {
             buffer: $self.buffer,
             element: $self.element,
             element_off: $self.element_off,
@@ -19,20 +19,20 @@ macro_rules! repack_self {
 }
 
 /// A view of a single VertexElement over a VertexBuffer
-pub struct VertexBufferView<'a, T> {
+pub struct VertexBufferAccessor<'a, T> {
     buffer: &'a VertexBuffer,
     element: VertexElement,
     element_off: usize,
 
     _t: PhantomData<T>,
 }
-impl<'a, T> VertexBufferView<'a, T> {
+impl<'a, T> VertexBufferAccessor<'a, T> {
     pub(super) fn new(
         element: VertexElement,
         element_off: usize,
         buffer: &'a VertexBuffer,
-    ) -> VertexBufferView<'a, ()> {
-        VertexBufferView {
+    ) -> VertexBufferAccessor<'a, ()> {
+        VertexBufferAccessor {
             buffer,
             element,
             element_off,
@@ -50,19 +50,19 @@ impl<'a, T> VertexBufferView<'a, T> {
         }
     }
 
-    pub fn as_f32(self) -> VertexBufferView<'a, f32> {
+    pub fn as_f32(self) -> VertexBufferAccessor<'a, f32> {
         assert_eq!(self.element.format, ElementFormat::X_Float32);
         repack_self!(self)
     }
-    pub fn as_vec2(self) -> VertexBufferView<'a, Vector2<f32>> {
+    pub fn as_vec2(self) -> VertexBufferAccessor<'a, Vector2<f32>> {
         assert_eq!(self.element.format, ElementFormat::XY_Float32);
         repack_self!(self)
     }
-    pub fn as_vec3(self) -> VertexBufferView<'a, Vector3<f32>> {
+    pub fn as_vec3(self) -> VertexBufferAccessor<'a, Vector3<f32>> {
         assert_eq!(self.element.format, ElementFormat::XYZ_Float32);
         repack_self!(self)
     }
-    pub fn as_vec4(self) -> VertexBufferView<'a, Vector4<f32>> {
+    pub fn as_vec4(self) -> VertexBufferAccessor<'a, Vector4<f32>> {
         assert_eq!(self.element.format, ElementFormat::XYZW_Float32);
         repack_self!(self)
     }
@@ -71,7 +71,7 @@ impl<'a, T> VertexBufferView<'a, T> {
 
 // TODO(alan): figure out endianness (again)
 
-impl<'a> VertexBufferView<'a, f32> {
+impl<'a> VertexBufferAccessor<'a, f32> {
     pub fn get(&self, index: usize) -> f32 {
         let offset = self.offset(index);
         let buf = self.buffer.buffer();
@@ -79,7 +79,7 @@ impl<'a> VertexBufferView<'a, f32> {
     }
 }
 
-impl<'a> VertexBufferView<'a, Vector2<f32>> {
+impl<'a> VertexBufferAccessor<'a, Vector2<f32>> {
     pub fn get(&self, index: usize) -> Vector2<f32> {
         let offset = self.offset(index);
         let buf = self.buffer.buffer();
@@ -89,7 +89,7 @@ impl<'a> VertexBufferView<'a, Vector2<f32>> {
     }
 }
 
-impl<'a> VertexBufferView<'a, Vector3<f32>> {
+impl<'a> VertexBufferAccessor<'a, Vector3<f32>> {
     pub fn get(&self, index: usize) -> Vector3<f32> {
         let offset = self.offset(index);
         let buf = self.buffer.buffer();
@@ -100,7 +100,7 @@ impl<'a> VertexBufferView<'a, Vector3<f32>> {
     }
 }
 
-impl<'a> VertexBufferView<'a, Vector4<f32>> {
+impl<'a> VertexBufferAccessor<'a, Vector4<f32>> {
     pub fn get(&self, index: usize) -> Vector4<f32> {
         let offset = self.offset(index);
         let buf = self.buffer.buffer();
@@ -113,7 +113,7 @@ impl<'a> VertexBufferView<'a, Vector4<f32>> {
 }
 
 pub struct VertexBufferViewIter<'a, T> {
-    view: &'a VertexBufferView<'a, T>,
+    view: &'a VertexBufferAccessor<'a, T>,
     counter: usize,
 }
 

@@ -36,7 +36,7 @@ impl SkinnedMesh {
     ) -> Self {
         let aabb = AABB::from_vertex_iter(
             vertex_buffer
-                .view(ElementName::Position)
+                .accessor(ElementName::Position)
                 .expect("vertex buffer must have position element")
                 .as_vec3()
                 .iter(),

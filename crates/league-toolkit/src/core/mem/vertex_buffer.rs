@@ -4,7 +4,7 @@ use std::{
 };
 
 use super::{
-    ElementName, VertexBufferDescription, VertexBufferUsage, VertexBufferView, VertexElement,
+    ElementName, VertexBufferAccessor, VertexBufferDescription, VertexBufferUsage, VertexElement,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -80,10 +80,10 @@ impl VertexBuffer {
         }
     }
 
-    pub fn view(&self, element_name: ElementName) -> Option<VertexBufferView<'_, ()>> {
+    pub fn accessor(&self, element_name: ElementName) -> Option<VertexBufferAccessor<'_, ()>> {
         self.elements
             .get(&element_name)
-            .map(|desc| VertexBufferView::<()>::new(desc.element, desc.offset as usize, self))
+            .map(|desc| VertexBufferAccessor::<()>::new(desc.element, desc.offset as usize, self))
     }
 
     pub fn description(&self) -> &VertexBufferDescription {

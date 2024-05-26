@@ -6,5 +6,5 @@ pub mod vertex_buffer_description;
 pub use vertex_buffer_description::*;
 pub mod vertex_element;
 pub use vertex_element::*;
-pub mod vertex_buffer_view;
-pub use vertex_buffer_view::*;
+pub mod vertex_buffer_accessor;
+pub use vertex_buffer_accessor::*;
