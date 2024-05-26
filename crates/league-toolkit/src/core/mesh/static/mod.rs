@@ -1,13 +1,10 @@
-use std::io::{self, Read};
+use std::io::Read;
 
-use byteorder::{ByteOrder, LittleEndian, ReadBytesExt};
+use byteorder::{LittleEndian, ReadBytesExt};
 use log::debug;
-use vecmath::{Vector2, Vector3, Vector4};
+use vecmath::Vector3;
 
-use crate::core::{
-    mesh::ParseError,
-    primitives::{Color, Sphere, AABB},
-};
+use crate::core::{mesh::ParseError, primitives::Color};
 
 mod face;
 pub use face::*;
@@ -49,8 +46,8 @@ impl StaticMesh {
         let vertex_count = reader.read_i32::<LittleEndian>()?;
         let face_count = reader.read_i32::<LittleEndian>()?;
 
-        let flags = reader.read_u32::<LittleEndian>()?; // TODO (alan): handle StaticMeshFlags
-        let bounding_box = reader.read_bbox_f32::<LittleEndian>()?;
+        let _flags = reader.read_u32::<LittleEndian>()?; // TODO (alan): handle StaticMeshFlags
+        let _bounding_box = reader.read_bbox_f32::<LittleEndian>()?;
 
         let has_vertex_colors = match (major, minor) {
             (3.., 2..) => reader.read_i32::<LittleEndian>()? == 1,
@@ -74,7 +71,7 @@ impl StaticMesh {
             false => None,
         };
 
-        let central_point = reader.read_vector3_f32::<LittleEndian>()?;
+        let _central_point = reader.read_vector3_f32::<LittleEndian>()?;
 
         let mut faces = Vec::with_capacity(face_count as usize);
         for _ in 0..face_count {

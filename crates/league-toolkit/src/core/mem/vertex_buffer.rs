@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    fmt::Debug,
-};
+use std::{collections::HashMap, fmt::Debug};
 
 use super::{
     ElementName, VertexBufferAccessor, VertexBufferDescription, VertexBufferUsage, VertexElement,
