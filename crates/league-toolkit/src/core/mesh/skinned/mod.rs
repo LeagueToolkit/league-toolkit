@@ -110,11 +110,13 @@ impl SkinnedMesh {
             }
         }
 
-        let index_buffer = IndexBuffer::new(
-            crate::core::mem::IndexFormat::U16,
-            vec![0; (index_count as usize) * IndexFormat::U16.size()],
-        );
-        let vertex_buffer = vertex_declaration.into_vertex_buffer(vertex_count as usize);
+        let mut index_buffer = vec![0; (index_count as usize) * IndexFormat::U16.size()];
+        reader.read_exact(&mut index_buffer)?;
+        let index_buffer = IndexBuffer::new(crate::core::mem::IndexFormat::U16, index_buffer);
+
+        let mut vertex_buffer = vec![0; vertex_declaration.vertex_size() * vertex_count as usize];
+        reader.read_exact(&mut vertex_buffer)?;
+        let vertex_buffer = vertex_declaration.into_vertex_buffer(vertex_buffer);
 
         Ok(Self::new(ranges, vertex_buffer, index_buffer))
     }
