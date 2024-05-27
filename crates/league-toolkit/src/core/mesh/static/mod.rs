@@ -4,10 +4,11 @@ use byteorder::{LittleEndian, ReadBytesExt};
 use log::debug;
 use vecmath::Vector3;
 
-use crate::core::{mesh::ParseError, primitives::Color};
+use crate::core::primitives::Color;
 
 mod face;
 pub use face::*;
+use crate::core::mesh::error::ParseError;
 
 const MAGIC: &[u8] = "r3d2Mesh".as_bytes();
 
@@ -37,7 +38,7 @@ impl StaticMesh {
 
         // there are versions [2][1] and [1][1] as well
         if major != 2 && major != 3 && minor != 1 {
-            return Err(ParseError::InvalidFileVersion);
+            return Err(ParseError::InvalidFileVersion(major, minor));
         }
 
         let name = reader.read_padded_string::<LittleEndian, 128>()?;

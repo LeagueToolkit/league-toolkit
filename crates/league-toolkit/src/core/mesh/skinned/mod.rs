@@ -2,16 +2,17 @@ use std::io::Read;
 
 use crate::core::{
     mem::{ElementName, IndexBuffer, IndexFormat, VertexBuffer, VertexBufferDescription},
-    primitives::{Sphere, AABB},
+    primitives::{AABB, Sphere},
 };
 
 use byteorder::{LittleEndian, ReadBytesExt};
-use num_enum::TryFromPrimitive;
+use num_enum::{TryFromPrimitive, TryFromPrimitiveError};
 
-use super::{ParseError, Result};
+use super::Result;
 
 mod range;
 pub use range::*;
+use crate::core::mesh::error::ParseError;
 
 mod vertex;
 
@@ -58,7 +59,7 @@ impl SkinnedMesh {
         let major = reader.read_u16::<LittleEndian>()?;
         let minor = reader.read_u16::<LittleEndian>()?;
         if major != 0 && major != 2 && major != 4 && minor != 1 {
-            return Err(ParseError::InvalidFileVersion);
+            return Err(ParseError::InvalidFileVersion(major, minor));
         }
 
         let index_count;
@@ -91,13 +92,13 @@ impl SkinnedMesh {
                 let vertex_type: SkinnedMeshVertexType = reader
                     .read_u32::<LittleEndian>()?
                     .try_into()
-                    .expect("invalid vertex type"); // TODO (alan): handle TryFromPrimitive error?
+                    .map_err(|e: TryFromPrimitiveError<SkinnedMeshVertexType>| ParseError::InvalidField("vertex type", e.number.to_string()))?;
                 vertex_declaration = match (vertex_size, vertex_type) {
                     (52, SkinnedMeshVertexType::Basic) => vertex::BASIC.clone(),
                     (56, SkinnedMeshVertexType::Color) => vertex::COLOR.clone(),
                     (72, SkinnedMeshVertexType::Tangent) => vertex::TANGENT.clone(),
                     _ => {
-                        return Err(ParseError::InvalidFileSignature); // TODO (alan): real error here
+                        return Err(ParseError::InvalidField("vertex type/size", format!("{vertex_type:?}: {vertex_size}")));
                     }
                 };
 
