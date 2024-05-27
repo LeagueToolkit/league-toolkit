@@ -68,4 +68,4 @@ pub trait ReaderExt: Read {
     }
 }
 
-impl<R: io::Read + ?Sized> ReaderExt for R {}
+impl<R: Read + ?Sized> ReaderExt for R {}

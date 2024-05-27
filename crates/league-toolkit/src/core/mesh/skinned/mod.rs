@@ -139,7 +139,7 @@ impl SkinnedMesh {
     }
 }
 
-#[derive(TryFromPrimitive)]
+#[derive(TryFromPrimitive, Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 #[repr(u32)]
 enum SkinnedMeshVertexType {
     Basic,
