@@ -32,7 +32,7 @@ bitflags! {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VertexBufferDescription {
     usage: VertexBufferUsage,
     description_flags: VertexBufferElementFlags,

@@ -18,7 +18,7 @@ mod read;
 
 const MAGIC: u32 = 0x00112233;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct SkinnedMesh {
     aabb: AABB<f32>,
     bounding_sphere: Sphere,
