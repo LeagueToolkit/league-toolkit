@@ -4,6 +4,7 @@ use byteorder::{ByteOrder, ReadBytesExt};
 use glam::{Quat, Vec2, Vec3, Vec4};
 
 use crate::core::primitives::{Color, Sphere, AABB};
+
 pub trait ReaderExt: Read {
     // FIXME (alan): make own result type here
     fn read_padded_string<T: ByteOrder, const N: usize>(
@@ -24,17 +25,17 @@ pub trait ReaderExt: Read {
         })
     }
 
-    fn read_vector2_f32<T: ByteOrder>(&mut self) -> io::Result<Vec2> {
+    fn read_vec2<T: ByteOrder>(&mut self) -> io::Result<Vec2> {
         Ok(Vec2::new(self.read_f32::<T>()?, self.read_f32::<T>()?))
     }
-    fn read_vector3_f32<T: ByteOrder>(&mut self) -> io::Result<Vec3> {
+    fn read_vec3<T: ByteOrder>(&mut self) -> io::Result<Vec3> {
         Ok(Vec3::new(
             self.read_f32::<T>()?,
             self.read_f32::<T>()?,
             self.read_f32::<T>()?,
         ))
     }
-    fn read_vector4_f32<T: ByteOrder>(&mut self) -> io::Result<Vec4> {
+    fn read_vec4<T: ByteOrder>(&mut self) -> io::Result<Vec4> {
         Ok(Vec4::new(
             self.read_f32::<T>()?,
             self.read_f32::<T>()?,
@@ -43,7 +44,7 @@ pub trait ReaderExt: Read {
         ))
     }
 
-    fn read_quaternion_f32<T: ByteOrder>(&mut self) -> io::Result<Quat> {
+    fn read_quat<T: ByteOrder>(&mut self) -> io::Result<Quat> {
         Ok(Quat::from_array([
             self.read_f32::<T>()?,
             self.read_f32::<T>()?,
@@ -52,16 +53,16 @@ pub trait ReaderExt: Read {
         ]))
     }
 
-    fn read_bbox_f32<T: ByteOrder>(&mut self) -> io::Result<AABB> {
+    fn read_aabb<T: ByteOrder>(&mut self) -> io::Result<AABB> {
         Ok(AABB {
-            min: self.read_vector3_f32::<T>()?,
-            max: self.read_vector3_f32::<T>()?,
+            min: self.read_vec3::<T>()?,
+            max: self.read_vec3::<T>()?,
         })
     }
 
-    fn read_sphere_f32<T: ByteOrder>(&mut self) -> io::Result<Sphere> {
+    fn read_sphere<T: ByteOrder>(&mut self) -> io::Result<Sphere> {
         Ok(Sphere::new(
-            self.read_vector3_f32::<T>()?,
+            self.read_vec3::<T>()?,
             self.read_f32::<T>()?,
         ))
     }

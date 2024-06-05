@@ -1,1 +1,7 @@
-mod rig_resource;
+pub mod rig_resource;
+pub use rig_resource::*;
+pub mod joint;
+pub use joint::*;
+pub mod error;
+pub use error::*;
+
