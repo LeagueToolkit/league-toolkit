@@ -1,7 +1,7 @@
 use std::io::Read;
 use byteorder::{LittleEndian, ReadBytesExt};
+use glam::Vec3;
 use log::debug;
-use vecmath::Vector3;
 use crate::core::mesh::error::ParseError;
 use crate::core::mesh::r#static::MAGIC;
 use crate::core::mesh::{StaticMesh, StaticMeshFace};
@@ -40,7 +40,7 @@ impl StaticMesh {
         };
 
         // TODO (alan): try some byte reinterp here
-        let mut vertices: Vec<Vector3<f32>> = Vec::with_capacity(vertex_count as usize);
+        let mut vertices: Vec<Vec3> = Vec::with_capacity(vertex_count as usize);
         for _ in 0..vertex_count {
             vertices.push(reader.read_vector3_f32::<LittleEndian>()?);
         }

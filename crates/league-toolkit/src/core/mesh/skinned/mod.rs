@@ -1,8 +1,8 @@
 use std::io::Read;
 
 use byteorder::ReadBytesExt;
+use glam::Vec3;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use vecmath::Vector3;
 
 pub use range::*;
 
@@ -22,7 +22,7 @@ const MAGIC: u32 = 0x00112233;
 
 #[derive(Debug, PartialEq)]
 pub struct SkinnedMesh {
-    aabb: AABB<f32>,
+    aabb: AABB,
     bounding_sphere: Sphere,
     ranges: Vec<SkinnedMeshRange>,
     vertex_buffer: VertexBuffer,
@@ -37,7 +37,7 @@ impl SkinnedMesh {
     ) -> Self {
         let aabb = AABB::from_vertex_iter(
             vertex_buffer
-                .accessor::<Vector3<f32>>(ElementName::Position)
+                .accessor::<Vec3>(ElementName::Position)
                 .expect("vertex buffer must have position element")
                 .iter(),
         );
@@ -50,7 +50,7 @@ impl SkinnedMesh {
         }
     }
 
-    pub fn aabb(&self) -> AABB<f32> {
+    pub fn aabb(&self) -> AABB {
         self.aabb
     }
 

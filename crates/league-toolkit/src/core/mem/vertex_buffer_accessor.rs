@@ -1,6 +1,5 @@
 use std::marker::PhantomData;
-
-use vecmath::{Vector2, Vector3, Vector4};
+use glam::{Vec2, vec2, Vec3, vec3, Vec4, vec4};
 
 use crate::core::mem::ElementFormat;
 
@@ -61,36 +60,36 @@ impl<'a> VertexBufferAccessor<'a, f32> {
     }
 }
 
-impl<'a> VertexBufferAccessor<'a, Vector2<f32>> {
-    pub fn get(&self, index: usize) -> Vector2<f32> {
+impl<'a> VertexBufferAccessor<'a, Vec2> {
+    pub fn get(&self, index: usize) -> Vec2 {
         let offset = self.offset(index);
         let buf = self.buffer.buffer();
         let x = f32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap());
         let y = f32::from_le_bytes(buf[offset + 4..offset + 8].try_into().unwrap());
-        [x, y]
+        vec2(x, y)
     }
 }
 
-impl<'a> VertexBufferAccessor<'a, Vector3<f32>> {
-    pub fn get(&self, index: usize) -> Vector3<f32> {
+impl<'a> VertexBufferAccessor<'a, Vec3> {
+    pub fn get(&self, index: usize) -> Vec3 {
         let offset = self.offset(index);
         let buf = self.buffer.buffer();
         let x = f32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap());
         let y = f32::from_le_bytes(buf[offset + 4..offset + 8].try_into().unwrap());
         let z = f32::from_le_bytes(buf[offset + 8..offset + 12].try_into().unwrap());
-        [x, y, z]
+        vec3(x, y, z)
     }
 }
 
-impl<'a> VertexBufferAccessor<'a, Vector4<f32>> {
-    pub fn get(&self, index: usize) -> Vector4<f32> {
+impl<'a> VertexBufferAccessor<'a, Vec4> {
+    pub fn get(&self, index: usize) -> Vec4 {
         let offset = self.offset(index);
         let buf = self.buffer.buffer();
         let x = f32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap());
         let y = f32::from_le_bytes(buf[offset + 4..offset + 8].try_into().unwrap());
         let z = f32::from_le_bytes(buf[offset + 8..offset + 12].try_into().unwrap());
         let w = f32::from_le_bytes(buf[offset + 12..offset + 16].try_into().unwrap());
-        [x, y, z, w]
+        vec4(x, y, z, w)
     }
 }
 
@@ -117,6 +116,6 @@ macro_rules! impl_iter {
 }
 
 impl_iter!(f32);
-impl_iter!(Vector2<f32>);
-impl_iter!(Vector3<f32>);
-impl_iter!(Vector4<f32>);
+impl_iter!(Vec2);
+impl_iter!(Vec3);
+impl_iter!(Vec4);

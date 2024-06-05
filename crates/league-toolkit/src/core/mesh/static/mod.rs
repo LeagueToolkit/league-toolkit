@@ -1,7 +1,7 @@
 use std::io::Read;
 
 use byteorder::ReadBytesExt;
-use vecmath::Vector3;
+use glam::Vec3;
 
 pub use face::*;
 
@@ -16,7 +16,7 @@ const MAGIC: &[u8] = "r3d2Mesh".as_bytes();
 pub struct StaticMesh {
     name: String,
 
-    vertices: Vec<Vector3<f32>>,
+    vertices: Vec<Vec3>,
     faces: Vec<StaticMeshFace>,
     vertex_colors: Option<Vec<Color>>,
 }
@@ -28,7 +28,7 @@ impl StaticMesh {
         &self.name
     }
 
-    pub fn vertices(&self) -> &[[f32; 3]] {
+    pub fn vertices(&self) -> &[Vec3] {
         &self.vertices
     }
 

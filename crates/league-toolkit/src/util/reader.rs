@@ -1,7 +1,7 @@
 use std::io::{self, Read};
 
 use byteorder::{ByteOrder, ReadBytesExt};
-use vecmath::{Vector2, Vector3, Vector4};
+use glam::{Quat, Vec2, Vec3, Vec4};
 
 use crate::core::primitives::{Color, Sphere, AABB};
 pub trait ReaderExt: Read {
@@ -24,36 +24,35 @@ pub trait ReaderExt: Read {
         })
     }
 
-    fn read_vector2_f32<T: ByteOrder>(&mut self) -> io::Result<Vector2<f32>> {
-        Ok([self.read_f32::<T>()?, self.read_f32::<T>()?])
+    fn read_vector2_f32<T: ByteOrder>(&mut self) -> io::Result<Vec2> {
+        Ok(Vec2::new(self.read_f32::<T>()?, self.read_f32::<T>()?))
     }
-    fn read_vector3_f32<T: ByteOrder>(&mut self) -> io::Result<Vector3<f32>> {
-        Ok([
+    fn read_vector3_f32<T: ByteOrder>(&mut self) -> io::Result<Vec3> {
+        Ok(Vec3::new(
             self.read_f32::<T>()?,
             self.read_f32::<T>()?,
             self.read_f32::<T>()?,
-        ])
+        ))
     }
-    fn read_vector4_f32<T: ByteOrder>(&mut self) -> io::Result<Vector4<f32>> {
-        Ok([
+    fn read_vector4_f32<T: ByteOrder>(&mut self) -> io::Result<Vec4> {
+        Ok(Vec4::new(
             self.read_f32::<T>()?,
             self.read_f32::<T>()?,
             self.read_f32::<T>()?,
             self.read_f32::<T>()?,
-        ])
-    }
-
-    // TODO (alan): quaternion type (maybe vecmath is not the play)
-    fn read_quaternion_f32<T: ByteOrder>(&mut self) -> io::Result<Vector4<f32>> {
-        Ok([
-            self.read_f32::<T>()?,
-            self.read_f32::<T>()?,
-            self.read_f32::<T>()?,
-            self.read_f32::<T>()?,
-        ])
+        ))
     }
 
-    fn read_bbox_f32<T: ByteOrder>(&mut self) -> io::Result<AABB<f32>> {
+    fn read_quaternion_f32<T: ByteOrder>(&mut self) -> io::Result<Quat> {
+        Ok(Quat::from_array([
+            self.read_f32::<T>()?,
+            self.read_f32::<T>()?,
+            self.read_f32::<T>()?,
+            self.read_f32::<T>()?,
+        ]))
+    }
+
+    fn read_bbox_f32<T: ByteOrder>(&mut self) -> io::Result<AABB> {
         Ok(AABB {
             min: self.read_vector3_f32::<T>()?,
             max: self.read_vector3_f32::<T>()?,

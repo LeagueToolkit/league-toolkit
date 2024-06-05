@@ -1,7 +1,7 @@
 use std::io::{self, Read, Write};
 
 use byteorder::{ByteOrder, ReadBytesExt, WriteBytesExt};
-use vecmath::{Vector2, Vector3, Vector4};
+use glam::{Quat, Vec2, Vec3, Vec4};
 
 use crate::core::primitives::{Color, Sphere, AABB};
 pub trait WriterExt: Write {
@@ -17,34 +17,33 @@ pub trait WriterExt: Write {
         color.to_writer::<E>(self)
     }
 
-    fn write_vector2_f32<E: ByteOrder>(&mut self, vec: &Vector2<f32>) -> io::Result<()> {
-        self.write_f32::<E>(vec[0])?;
-        self.write_f32::<E>(vec[1])?;
+    fn write_vector2_f32<E: ByteOrder>(&mut self, vec: &Vec2) -> io::Result<()> {
+        for i in vec.to_array() {
+            self.write_f32::<E>(i)?;
+        }
         Ok(())
     }
-    fn write_vector3_f32<E: ByteOrder>(&mut self, vec: &Vector3<f32>) -> io::Result<()> {
-        self.write_f32::<E>(vec[0])?;
-        self.write_f32::<E>(vec[1])?;
-        self.write_f32::<E>(vec[2])?;
+    fn write_vector3_f32<E: ByteOrder>(&mut self, vec: &Vec3) -> io::Result<()> {
+        for i in vec.to_array() {
+            self.write_f32::<E>(i)?;
+        }
         Ok(())
     }
-    fn write_vector4_f32<E: ByteOrder>(&mut self, vec: &Vector4<f32>) -> io::Result<()> {
-        self.write_f32::<E>(vec[0])?;
-        self.write_f32::<E>(vec[1])?;
-        self.write_f32::<E>(vec[2])?;
-        self.write_f32::<E>(vec[3])?;
+    fn write_vector4_f32<E: ByteOrder>(&mut self, vec: &Vec4) -> io::Result<()> {
+        for i in vec.to_array() {
+            self.write_f32::<E>(i)?;
+        }
         Ok(())
     }
-    fn write_quaternion_f32<E: ByteOrder>(&mut self, quaternion: &Vector4<f32>) -> io::Result<()> {
-        self.write_f32::<E>(quaternion[0])?;
-        self.write_f32::<E>(quaternion[1])?;
-        self.write_f32::<E>(quaternion[2])?;
-        self.write_f32::<E>(quaternion[3])?;
+    fn write_quaternion_f32<E: ByteOrder>(&mut self, quaternion: &Quat) -> io::Result<()> {
+        for i in quaternion.to_array() {
+            self.write_f32::<E>(i)?;
+        }
         Ok(())
     }
 
 
-    fn write_aabb_f32<E: ByteOrder>(&mut self, aabb: &AABB<f32>) -> io::Result<()> {
+    fn write_aabb_f32<E: ByteOrder>(&mut self, aabb: &AABB) -> io::Result<()> {
         self.write_vector3_f32::<E>(&aabb.min)?;
         self.write_vector3_f32::<E>(&aabb.max)?;
         Ok(())
