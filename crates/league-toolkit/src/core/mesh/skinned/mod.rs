@@ -15,6 +15,7 @@ use super::Result;
 mod range;
 mod vertex;
 mod read;
+mod write;
 
 const MAGIC: u32 = 0x00112233;
 
