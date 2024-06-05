@@ -1,7 +1,7 @@
 use std::io::Read;
 
 use byteorder::ReadBytesExt;
-use num_enum::TryFromPrimitive;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 pub use range::*;
 
@@ -70,7 +70,7 @@ impl SkinnedMesh {
     }
 }
 
-#[derive(TryFromPrimitive, Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
+#[derive(TryFromPrimitive, IntoPrimitive, Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 #[repr(u32)]
 enum SkinnedMeshVertexType {
     Basic,
