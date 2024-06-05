@@ -2,8 +2,8 @@ use vecmath::Vector3;
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct Sphere {
-    origin: Vector3<f32>,
-    radius: f32,
+    pub origin: Vector3<f32>,
+    pub radius: f32,
 }
 
 impl Sphere {
