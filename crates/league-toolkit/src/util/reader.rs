@@ -16,6 +16,18 @@ pub trait ReaderExt: Read {
         Ok(std::str::from_utf8(&buf[..i])?.to_string())
     }
 
+    fn read_str_until_nul(&mut self) -> io::Result<String> {
+        let mut s = String::new();
+        loop {
+            let c = self.read_u8()? as char;
+            if c == b'\0' as char {
+                break;
+            }
+            s.push(c);
+        }
+        Ok(s)
+    }
+
     fn read_color<T: ByteOrder>(&mut self) -> io::Result<Color> {
         Ok(Color {
             r: self.read_f32::<T>()?,
