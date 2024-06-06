@@ -7,7 +7,11 @@ pub mod joint;
 pub use joint::*;
 
 pub mod error;
-mod rig;
 
 pub use error::*;
+
+pub mod rig;
+
+pub use rig::*;
+
 
