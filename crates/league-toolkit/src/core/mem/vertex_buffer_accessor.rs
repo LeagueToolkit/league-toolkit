@@ -24,6 +24,7 @@ pub struct VertexBufferAccessor<'a, T> {
 
     _t: PhantomData<T>,
 }
+
 impl<'a, T> VertexBufferAccessor<'a, T> {
     pub(super) fn new(
         element: VertexElement,
@@ -90,6 +91,15 @@ impl<'a> VertexBufferAccessor<'a, Vec4> {
         let z = f32::from_le_bytes(buf[offset + 8..offset + 12].try_into().unwrap());
         let w = f32::from_le_bytes(buf[offset + 12..offset + 16].try_into().unwrap());
         vec4(x, y, z, w)
+    }
+}
+
+
+impl<'a> VertexBufferAccessor<'a, [u8; 4]> {
+    pub fn get(&self, index: usize) -> [u8; 4] {
+        let offset = self.offset(index);
+        let buf = self.buffer.buffer();
+        [buf[offset], buf[offset + 1], buf[offset + 2], buf[offset + 3]]
     }
 }
 
