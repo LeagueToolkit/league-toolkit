@@ -61,8 +61,8 @@ impl SkinnedMesh {
                     }
                 };
 
-                _b_box = reader.read_bbox_f32::<LittleEndian>()?;
-                _b_sphere = reader.read_sphere_f32::<LittleEndian>()?;
+                _b_box = reader.read_aabb::<LittleEndian>()?;
+                _b_sphere = reader.read_sphere::<LittleEndian>()?;
             }
         }
 

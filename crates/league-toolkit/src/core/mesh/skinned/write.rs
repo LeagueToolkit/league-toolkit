@@ -28,15 +28,15 @@ impl SkinnedMesh {
         w.write_i32::<LittleEndian>(self.index_buffer.count() as i32)?;
         w.write_i32::<LittleEndian>(self.vertex_buffer.count() as i32)?;
         w.write_u32::<LittleEndian>(self.vertex_buffer.stride() as u32)?;
-        w.write_u32::<LittleEndian>( match self.vertex_buffer.description() {
+        w.write_u32::<LittleEndian>(match self.vertex_buffer.description() {
             d if d == &*vertex::BASIC => SkinnedMeshVertexType::Basic.into(),
             d if d == &*vertex::COLOR => SkinnedMeshVertexType::Color.into(),
             d if d == &*vertex::TANGENT => SkinnedMeshVertexType::Tangent.into(),
             _ => panic!("FIXME: unhandled mesh vertex type"),
         })?;
 
-        w.write_aabb_f32::<LittleEndian>(&self.aabb)?;
-        w.write_sphere_f32::<LittleEndian>(&self.bounding_sphere)?;
+        w.write_aabb::<LittleEndian>(&self.aabb)?;
+        w.write_sphere::<LittleEndian>(&self.bounding_sphere)?;
 
         w.write_all(self.index_buffer.buffer())?;
         w.write_all(self.vertex_buffer.buffer())?;

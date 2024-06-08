@@ -1,4 +1,5 @@
 use std::{collections::HashMap, fmt::Debug};
+use std::collections::BTreeMap;
 
 use super::{
     ElementName, VertexBufferAccessor, VertexBufferDescription, VertexBufferUsage, VertexElement,
@@ -24,27 +25,15 @@ impl VertexBufferElementDescriptor {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VertexBuffer {
     description: VertexBufferDescription,
-    elements: HashMap<ElementName, VertexBufferElementDescriptor>,
+    elements: BTreeMap<ElementName, VertexBufferElementDescriptor>,
 
     stride: usize,
     count: usize,
 
     buffer: Vec<u8>,
-}
-
-impl Debug for VertexBuffer {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("VertexBuffer")
-            .field("description", &self.description)
-            .field("elements", &self.elements)
-            .field("stride", &self.stride)
-            .field("count", &self.count)
-            .field("buffer (size)", &self.buffer.len())
-            .finish()
-    }
 }
 
 impl VertexBuffer {
@@ -54,7 +43,7 @@ impl VertexBuffer {
         }
 
         let description = VertexBufferDescription::new(usage, elements.clone());
-        let mut element_descriptors = HashMap::new();
+        let mut element_descriptors = BTreeMap::new();
         let mut off = 0;
         for e in elements {
             if element_descriptors.contains_key(&e.name) {
@@ -87,7 +76,7 @@ impl VertexBuffer {
         &self.description
     }
 
-    pub fn elements(&self) -> &HashMap<ElementName, VertexBufferElementDescriptor> {
+    pub fn elements(&self) -> &BTreeMap<ElementName, VertexBufferElementDescriptor> {
         &self.elements
     }
 

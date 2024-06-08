@@ -1,8 +1,7 @@
 use std::io::Read;
 
 use byteorder::{LittleEndian, ReadBytesExt};
-
-use vecmath::Vector2;
+use glam::{Vec2, vec2};
 
 use crate::core::primitives::Color;
 
@@ -10,7 +9,7 @@ use crate::core::primitives::Color;
 pub struct StaticMeshFace {
     pub material: String,
     pub vertex_ids: (u8, u8, u8),
-    pub uvs: (Vector2<f32>, Vector2<f32>, Vector2<f32>),
+    pub uvs: (Vec2, Vec2, Vec2),
     pub colors: (Color, Color, Color),
 }
 
@@ -37,7 +36,7 @@ impl StaticMeshFace {
         Ok(Self {
             material,
             vertex_ids,
-            uvs: ([uvs.0, uvs.3], [uvs.1, uvs.4], [uvs.2, uvs.5]),
+            uvs: (vec2(uvs.0, uvs.3), vec2(uvs.1, uvs.4), vec2(uvs.2, uvs.5)),
             colors: (Color::ONE, Color::ONE, Color::ONE),
         })
     }
