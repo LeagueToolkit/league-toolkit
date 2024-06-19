@@ -1,0 +1,102 @@
+use std::io;
+use std::io::{Seek, SeekFrom, Write};
+use byteorder::WriteBytesExt;
+use crate::core::animation::rig::RigResource;
+use crate::util::hash;
+
+impl RigResource {
+    pub fn to_writer<W: Write + Seek + ?Sized>(&self, writer: &mut W) -> io::Result<()> {
+        use crate::util::WriterExt as _;
+        use byteorder::{WriteBytesExt as _, LE};
+        writer.write_u32::<LE>(0)?; // file size - write later (see [3])
+        writer.write_u32::<LE>(Self::FORMAT_TOKEN)?;
+        writer.write_u32::<LE>(0)?; // version
+
+        writer.write_u16::<LE>(self.flags)?;
+        writer.write_u16::<LE>(self.joints.len() as u16)?;
+        writer.write_u16::<LE>(self.influences.len() as u16)?;
+
+        let joints_section_size = self.joints.len() * 100;
+        let joint_hash_ids_section_size = self.joints.len() * 8;
+        let influences_section_size = self.influences.len() * 2;
+
+        let joints_off = 64;
+        let joint_hash_ids_off = joints_off + joints_section_size;
+        let influences_off = joint_hash_ids_off + joint_hash_ids_section_size;
+        let joint_names_off = influences_off + influences_section_size;
+
+        writer.write_i32::<LE>(joints_off as i32)?;
+        writer.write_i32::<LE>(joint_hash_ids_off as i32)?;
+        writer.write_i32::<LE>(influences_off as i32)?;
+
+        let name_off_pos = writer.stream_position()?;
+        writer.write_i32::<LE>(-1)?; // name offset - write later (see [1])
+
+        let asset_name_off_pos = writer.stream_position()?;
+        writer.write_i32::<LE>(-1)?; // asset_name offset - write later (see [2])
+
+        writer.write_i32::<LE>(joint_names_off as i32)?;
+
+        for _ in 0..5 { // reserved offset fields
+            writer.write_u32::<LE>(0xFFFFFFFF)?;
+        }
+
+        // Write joint names + remember offsets
+        let mut joint_name_offs = Vec::with_capacity(self.joints.len());
+        for j in &self.joints {
+            joint_name_offs.push(writer.stream_position()?);
+            writer.write_all(j.name().as_bytes())?;
+            writer.write_u8(0)? // TODO (alan): write null terminated string helper
+        }
+
+        // Write joints
+        writer.seek(SeekFrom::Start(joints_off as u64))?;
+        for (j, off) in self.joints.iter().zip(joint_name_offs.iter()) {
+            j.to_writer(writer, *off)?;
+        }
+
+        // Write influences
+        writer.seek(SeekFrom::Start(influences_off as u64))?;
+        for inf in &self.influences {
+            writer.write_i16::<LE>(*inf)?;
+        }
+
+        // Write joint id hashed, sorted by hash
+        writer.seek(SeekFrom::Start(joint_hash_ids_off as u64))?;
+        let mut hash_ids = self.joints.iter()
+            .map(|j| (j.id(), hash::elf(j.name())))
+            .collect::<Vec<_>>();
+        hash_ids.sort_by(|a, b| b.1.cmp(&a.1));
+
+        for (id, hash) in hash_ids {
+            writer.write_i16::<LE>(id)?;
+            writer.write_i16::<LE>(0)?;
+            writer.write_u32::<LE>(hash as u32)?; // TODO (alan): is this u32 or u64
+        }
+
+        // TODO (alan): write null terminated string helper
+        let name_off = writer.seek(SeekFrom::End(0))?;
+        writer.write_all(self.name.as_bytes())?;
+        writer.write_u8(0)?;
+
+        let asset_name_off = writer.stream_position()?;
+        writer.write_all(self.asset_name.as_bytes())?;
+        writer.write_u8(0)?;
+
+        // [1] write name offset
+        writer.seek(SeekFrom::Start(name_off))?;
+        writer.write_i32::<LE>(name_off as i32)?;
+
+        // [2] write name offset
+        writer.seek(SeekFrom::Start(asset_name_off))?;
+        writer.write_i32::<LE>(asset_name_off as i32)?;
+
+        // [3] write file size
+        let size = writer.stream_position()?;
+        writer.seek(SeekFrom::Start(0))?;
+        writer.write_u32::<LE>(size as u32)?;
+
+
+        Ok(())
+    }
+}

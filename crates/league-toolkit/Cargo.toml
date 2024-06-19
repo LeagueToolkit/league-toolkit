@@ -4,9 +4,17 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+bitflags = "2.5.0"
 byteorder = "1.5.0"
 flate2 = "1.0.30"
+glam = { version = "0.27.0", features = ["glam-assert"] }
+insta = "1.39.0"
+lazy_static = "1.4.0"
+log = "0.4.21"
 memchr = "2.7.2"
 num_enum = "0.7.2"
 thiserror = "1.0.60"
 zstd = "0.13.1"
+
+[dev-dependencies]
+approx = "0.5.1"
