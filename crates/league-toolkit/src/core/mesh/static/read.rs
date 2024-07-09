@@ -1,11 +1,11 @@
-use std::io::Read;
-use byteorder::{LittleEndian, ReadBytesExt};
-use glam::Vec3;
-use log::debug;
 use crate::core::mesh::error::ParseError;
 use crate::core::mesh::r#static::MAGIC;
 use crate::core::mesh::{StaticMesh, StaticMeshFace};
 use crate::core::primitives::Color;
+use byteorder::{ReadBytesExt, LE};
+use glam::Vec3;
+use log::debug;
+use std::io::Read;
 
 impl StaticMesh {
     pub fn from_reader<R: Read>(reader: &mut R) -> crate::core::mesh::Result<Self> {
@@ -16,8 +16,8 @@ impl StaticMesh {
             return Err(ParseError::InvalidFileSignature);
         }
 
-        let major = reader.read_u16::<LittleEndian>()?;
-        let minor = reader.read_u16::<LittleEndian>()?;
+        let major = reader.read_u16::<LE>()?;
+        let minor = reader.read_u16::<LE>()?;
         debug!("version: {major}.{minor}");
 
         // there are versions [2][1] and [1][1] as well
@@ -25,38 +25,38 @@ impl StaticMesh {
             return Err(ParseError::InvalidFileVersion(major, minor));
         }
 
-        let name = reader.read_padded_string::<LittleEndian, 128>()?;
+        let name = reader.read_padded_string::<LE, 128>()?;
         debug!("name: {name}");
 
-        let vertex_count = reader.read_i32::<LittleEndian>()?;
-        let face_count = reader.read_i32::<LittleEndian>()?;
+        let vertex_count = reader.read_i32::<LE>()?;
+        let face_count = reader.read_i32::<LE>()?;
 
-        let _flags = reader.read_u32::<LittleEndian>()?; // TODO (alan): handle StaticMeshFlags
-        let _bounding_box = reader.read_aabb::<LittleEndian>()?;
+        let _flags = reader.read_u32::<LE>()?; // TODO (alan): handle StaticMeshFlags
+        let _bounding_box = reader.read_aabb::<LE>()?;
 
         let has_vertex_colors = match (major, minor) {
-            (3.., 2..) => reader.read_i32::<LittleEndian>()? == 1,
+            (3.., 2..) => reader.read_i32::<LE>()? == 1,
             _ => false,
         };
 
         // TODO (alan): try some byte reinterp here
         let mut vertices: Vec<Vec3> = Vec::with_capacity(vertex_count as usize);
         for _ in 0..vertex_count {
-            vertices.push(reader.read_vec3::<LittleEndian>()?);
+            vertices.push(reader.read_vec3::<LE>()?);
         }
 
         let vertex_colors: Option<Vec<Color>> = match has_vertex_colors {
             true => {
                 let mut v = Vec::with_capacity(vertex_count as usize);
                 for _ in 0..vertex_count {
-                    v.push(reader.read_color::<LittleEndian>()?);
+                    v.push(reader.read_color::<LE>()?);
                 }
                 Some(v)
             }
             false => None,
         };
 
-        let _central_point = reader.read_vec3::<LittleEndian>()?;
+        let _central_point = reader.read_vec3::<LE>()?;
 
         let mut faces = Vec::with_capacity(face_count as usize);
         for _ in 0..face_count {

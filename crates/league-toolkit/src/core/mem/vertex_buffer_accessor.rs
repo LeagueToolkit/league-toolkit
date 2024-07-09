@@ -1,20 +1,7 @@
+use glam::{vec2, vec3, vec4, Vec2, Vec3, Vec4};
 use std::marker::PhantomData;
-use glam::{Vec2, vec2, Vec3, vec3, Vec4, vec4};
-
-use crate::core::mem::ElementFormat;
 
 use super::{VertexBuffer, VertexElement};
-
-macro_rules! repack_self {
-    ($self:ident) => {
-        VertexBufferAccessor {
-            buffer: $self.buffer,
-            element: $self.element,
-            element_off: $self.element_off,
-            _t: PhantomData,
-        }
-    };
-}
 
 /// A view of a single VertexElement over a VertexBuffer
 pub struct VertexBufferAccessor<'a, T> {
@@ -94,12 +81,16 @@ impl<'a> VertexBufferAccessor<'a, Vec4> {
     }
 }
 
-
 impl<'a> VertexBufferAccessor<'a, [u8; 4]> {
     pub fn get(&self, index: usize) -> [u8; 4] {
         let offset = self.offset(index);
         let buf = self.buffer.buffer();
-        [buf[offset], buf[offset + 1], buf[offset + 2], buf[offset + 3]]
+        [
+            buf[offset],
+            buf[offset + 1],
+            buf[offset + 2],
+            buf[offset + 3],
+        ]
     }
 }
 

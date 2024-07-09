@@ -1,10 +1,9 @@
-use std::io::{Read, Seek};
 use crate::core::animation;
 use crate::core::animation::rig::RigResource;
+use std::io::{Read, Seek};
 
 impl RigResource {
     pub fn from_reader<R: Read + Seek + ?Sized>(reader: &mut R) -> animation::Result<Self> {
-        use crate::util::ReaderExt as _;
         use byteorder::{ReadBytesExt as _, LE};
         use std::io::SeekFrom;
 
@@ -18,13 +17,13 @@ impl RigResource {
     }
 
     fn read<R: Read + Seek + ?Sized>(reader: &mut R) -> animation::Result<Self> {
+        use crate::core::animation::{Joint, ParseError};
         use crate::util::ReaderExt as _;
         use byteorder::{ReadBytesExt as _, LE};
         use std::io::SeekFrom;
-        use crate::core::animation::{Joint, ParseError};
 
-        let file_size = reader.read_u32::<LE>()?;
-        let format_token = reader.read_u32::<LE>()?;
+        let _file_size = reader.read_u32::<LE>()?;
+        let _format_token = reader.read_u32::<LE>()?;
         let version = reader.read_u32::<LE>()?;
         if version != 0 {
             return Err(ParseError::InvalidFileVersion(version));
@@ -38,13 +37,12 @@ impl RigResource {
         let influences_off = reader.read_i32::<LE>()?;
         let name_off = reader.read_i32::<LE>()?;
         let asset_name_off = reader.read_i32::<LE>()?;
-        let bone_names_off = reader.read_i32::<LE>()?;
+        let _bone_names_off = reader.read_i32::<LE>()?;
 
         // extension offsets
         for _ in 0..5 {
             reader.read_i32::<LE>()?;
         }
-
 
         let mut joints = Vec::with_capacity(joint_count);
         if joints_off > 0 {
@@ -87,9 +85,8 @@ impl RigResource {
                 reader.seek(SeekFrom::Start(asset_name_off as u64))?;
                 reader.read_str_until_nul()?
             }
-            false => String::new()
+            false => String::new(),
         };
-
 
         Ok(Self {
             flags,
@@ -100,9 +97,7 @@ impl RigResource {
         })
     }
 
-    fn read_legacy<R: Read + ?Sized>(reader: &mut R) -> animation::Result<Self> {
-        use crate::util::ReaderExt as _;
-        use byteorder::{ReadBytesExt as _, LE};
+    fn read_legacy<R: Read + ?Sized>(_reader: &mut R) -> animation::Result<Self> {
         unimplemented!("TODO: impl legacy skeleton");
     }
 }

@@ -1,7 +1,7 @@
+use crate::util::reader::ReaderExt;
+use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 use std::io;
 use std::io::{Read, Write};
-use byteorder::{LittleEndian, WriteBytesExt};
-use crate::util::WriterExt;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SkinnedMeshRange {
@@ -30,24 +30,22 @@ impl SkinnedMeshRange {
     }
 
     pub fn from_reader<R: Read>(reader: &mut R) -> super::Result<Self> {
-        use crate::util::ReaderExt as _;
-        use byteorder::{LittleEndian, ReadBytesExt};
         Ok(Self {
-            material: reader.read_padded_string::<LittleEndian, 64>()?,
-            start_vertex: reader.read_i32::<LittleEndian>()?,
-            vertex_count: reader.read_i32::<LittleEndian>()?,
-            start_index: reader.read_i32::<LittleEndian>()?,
-            index_count: reader.read_i32::<LittleEndian>()?,
+            material: reader.read_padded_string::<LE, 64>()?,
+            start_vertex: reader.read_i32::<LE>()?,
+            vertex_count: reader.read_i32::<LE>()?,
+            start_index: reader.read_i32::<LE>()?,
+            index_count: reader.read_i32::<LE>()?,
         })
     }
 
     pub fn to_writer<W: Write>(&self, writer: &mut W) -> io::Result<()> {
         use crate::util::WriterExt;
         writer.write_padded_string::<64>(&self.material)?;
-        writer.write_i32::<LittleEndian>(self.start_vertex)?;
-        writer.write_i32::<LittleEndian>(self.vertex_count)?;
-        writer.write_i32::<LittleEndian>(self.start_index)?;
-        writer.write_i32::<LittleEndian>(self.index_count)?;
+        writer.write_i32::<LE>(self.start_vertex)?;
+        writer.write_i32::<LE>(self.vertex_count)?;
+        writer.write_i32::<LE>(self.start_index)?;
+        writer.write_i32::<LE>(self.index_count)?;
         Ok(())
     }
 }

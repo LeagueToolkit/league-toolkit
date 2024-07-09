@@ -1,13 +1,11 @@
-use std::io;
-use std::io::{Seek, SeekFrom, Write};
-use byteorder::WriteBytesExt;
 use crate::core::animation::rig::RigResource;
 use crate::util::hash;
+use byteorder::{WriteBytesExt, LE};
+use std::io;
+use std::io::{Seek, SeekFrom, Write};
 
 impl RigResource {
     pub fn to_writer<W: Write + Seek + ?Sized>(&self, writer: &mut W) -> io::Result<()> {
-        use crate::util::WriterExt as _;
-        use byteorder::{WriteBytesExt as _, LE};
         writer.write_u32::<LE>(0)?; // file size - write later (see [3])
         writer.write_u32::<LE>(Self::FORMAT_TOKEN)?;
         writer.write_u32::<LE>(0)?; // version
@@ -29,15 +27,16 @@ impl RigResource {
         writer.write_i32::<LE>(joint_hash_ids_off as i32)?;
         writer.write_i32::<LE>(influences_off as i32)?;
 
-        let name_off_pos = writer.stream_position()?;
+        let _name_off_pos = writer.stream_position()?;
         writer.write_i32::<LE>(-1)?; // name offset - write later (see [1])
 
-        let asset_name_off_pos = writer.stream_position()?;
+        let _asset_name_off_pos = writer.stream_position()?;
         writer.write_i32::<LE>(-1)?; // asset_name offset - write later (see [2])
 
         writer.write_i32::<LE>(joint_names_off as i32)?;
 
-        for _ in 0..5 { // reserved offset fields
+        for _ in 0..5 {
+            // reserved offset fields
             writer.write_u32::<LE>(0xFFFFFFFF)?;
         }
 
@@ -63,7 +62,9 @@ impl RigResource {
 
         // Write joint id hashed, sorted by hash
         writer.seek(SeekFrom::Start(joint_hash_ids_off as u64))?;
-        let mut hash_ids = self.joints.iter()
+        let mut hash_ids = self
+            .joints
+            .iter()
             .map(|j| (j.id(), hash::elf(j.name())))
             .collect::<Vec<_>>();
         hash_ids.sort_by(|a, b| b.1.cmp(&a.1));
@@ -95,7 +96,6 @@ impl RigResource {
         let size = writer.stream_position()?;
         writer.seek(SeekFrom::Start(0))?;
         writer.write_u32::<LE>(size as u32)?;
-
 
         Ok(())
     }

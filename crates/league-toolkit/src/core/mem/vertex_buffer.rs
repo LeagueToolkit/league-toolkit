@@ -1,5 +1,5 @@
-use std::{collections::HashMap, fmt::Debug};
 use std::collections::BTreeMap;
+use std::fmt::Debug;
 
 use super::{
     ElementName, VertexBufferAccessor, VertexBufferDescription, VertexBufferUsage, VertexElement,
