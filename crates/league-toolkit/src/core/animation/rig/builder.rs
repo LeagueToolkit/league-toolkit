@@ -1,5 +1,5 @@
-use std::collections::VecDeque;
 use crate::core::animation::{joint, Joint, RigResource};
+use std::collections::VecDeque;
 
 pub struct Builder {
     name: String,
@@ -25,7 +25,12 @@ impl Builder {
         // It's probably not much of a win traversing the joint tree to pre-allocate the Vec exactly,
         // but we could measure this at some point
         let mut joints = Vec::with_capacity(self.root_joints.len());
-        let mut q = self.root_joints.into_iter().rev().map(|j| (j, -1)).collect::<VecDeque<_>>();
+        let mut q = self
+            .root_joints
+            .into_iter()
+            .rev()
+            .map(|j| (j, -1))
+            .collect::<VecDeque<_>>();
         while let Some((joint, parent_id)) = q.pop_back() {
             assert!(joints.len() < i16::MAX as usize);
             let i = joints.len() as i16;
@@ -50,34 +55,25 @@ impl Builder {
 
 #[cfg(test)]
 mod tests {
-    use insta::assert_debug_snapshot;
     use super::*;
+    use insta::assert_debug_snapshot;
 
     #[test]
     fn build_rig() {
-        let rig =
-            RigResource::builder("my_rig", "my_rig_asset")
-                .with_root_joint(
-                    Joint::builder("root_1")
-                        .with_flags(10)
-                        .with_children([
-                            Joint::builder("2a").with_flags(11),
-                            Joint::builder("2b").with_flags(12).with_influence(true),
-                        ])
-                )
-                .with_root_joint(
-                    Joint::builder("root_2")
-                        .with_flags(20)
-                        .with_children([
-                            Joint::builder("2a")
-                                .with_flags(21)
-                                .with_influence(true)
-                                .with_children([
-                                    Joint::builder("2aa").with_flags(211)
-                                ]),
-                        ])
-                )
-                .build();
+        let rig = RigResource::builder("my_rig", "my_rig_asset")
+            .with_root_joint(Joint::builder("root_1").with_flags(10).with_children([
+                Joint::builder("2a").with_flags(11),
+                Joint::builder("2b").with_flags(12).with_influence(true),
+            ]))
+            .with_root_joint(
+                Joint::builder("root_2")
+                    .with_flags(20)
+                    .with_children([Joint::builder("2a")
+                        .with_flags(21)
+                        .with_influence(true)
+                        .with_children([Joint::builder("2aa").with_flags(211)])]),
+            )
+            .build();
 
         assert_debug_snapshot!(rig);
     }
