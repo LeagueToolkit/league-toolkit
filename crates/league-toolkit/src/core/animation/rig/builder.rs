@@ -16,8 +16,12 @@ impl Builder {
         }
     }
     pub fn with_root_joint(mut self, child: joint::Builder) -> Self {
-        self.root_joints.push(child);
+        self.add_root_joint(child);
         self
+    }
+
+    pub fn add_root_joint(&mut self, child: joint::Builder) {
+        self.root_joints.push(child);
     }
 
     pub fn build(self) -> RigResource {
