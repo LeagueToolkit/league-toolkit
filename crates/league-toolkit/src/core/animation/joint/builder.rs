@@ -1,7 +1,7 @@
+use crate::core::animation::{joint, Joint};
+use glam::Mat4;
 use std::path::Iter;
 use std::process::id;
-use glam::Mat4;
-use crate::core::animation::{Joint, joint};
 
 pub struct Builder {
     pub name: String,
@@ -35,12 +35,12 @@ impl Builder {
         self.is_influence = is_influence;
         self
     }
-    pub fn with_local_transform(mut self, is_influence: bool) -> Self {
-        self.is_influence = is_influence;
+    pub fn with_local_transform(mut self, local_transform: Mat4) -> Self {
+        self.local_transform = local_transform;
         self
     }
-    pub fn with_inverse_bind_transform(mut self, is_influence: bool) -> Self {
-        self.is_influence = is_influence;
+    pub fn with_inverse_bind_transform(mut self, inverse_bind_transform: Mat4) -> Self {
+        self.inverse_bind_transform = inverse_bind_transform;
         self
     }
 
@@ -50,6 +50,17 @@ impl Builder {
     }
 
     pub fn build(self, id: i16, parent_id: i16) -> (Joint, Vec<Box<Builder>>) {
-        (Joint::new(self.name, self.flags, id, parent_id, self.radius, self.local_transform, self.inverse_bind_transform), self.children)
+        (
+            Joint::new(
+                self.name,
+                self.flags,
+                id,
+                parent_id,
+                self.radius,
+                self.local_transform,
+                self.inverse_bind_transform,
+            ),
+            self.children,
+        )
     }
 }
