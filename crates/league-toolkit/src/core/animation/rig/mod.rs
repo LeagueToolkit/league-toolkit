@@ -1,6 +1,7 @@
 mod read;
 mod write;
 mod builder;
+pub use builder::Builder;
 
 use std::io::{Read, Seek};
 use super::Joint;
@@ -18,6 +19,10 @@ pub struct RigResource {
 impl RigResource {
     /// The FNV hash of the format token string
     const FORMAT_TOKEN: u32 = 0x22FD4FC3;
+
+    pub fn builder(name: impl Into<String>, asset_name: impl Into<String>) -> Builder {
+        Builder::new(name, asset_name)
+    }
 
     pub fn flags(&self) -> u16 {
         self.flags

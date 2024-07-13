@@ -1,5 +1,5 @@
 use crate::core::animation::rig::RigResource;
-use crate::util::hash;
+use crate::util::{hash, WriterExt};
 use byteorder::{WriteBytesExt, LE};
 use std::io;
 use std::io::{Seek, SeekFrom, Write};
@@ -44,8 +44,7 @@ impl RigResource {
         let mut joint_name_offs = Vec::with_capacity(self.joints.len());
         for j in &self.joints {
             joint_name_offs.push(writer.stream_position()?);
-            writer.write_all(j.name().as_bytes())?;
-            writer.write_u8(0)? // TODO (alan): write null terminated string helper
+            writer.write_terminated_string(j.name())?;
         }
 
         // Write joints
@@ -77,8 +76,7 @@ impl RigResource {
 
         // TODO (alan): write null terminated string helper
         let name_off = writer.seek(SeekFrom::End(0))?;
-        writer.write_all(self.name.as_bytes())?;
-        writer.write_u8(0)?;
+        writer.write_terminated_string(&self.name)?;
 
         let asset_name_off = writer.stream_position()?;
         writer.write_all(self.asset_name.as_bytes())?;

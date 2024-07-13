@@ -29,6 +29,9 @@ pub struct Joint {
 }
 
 impl Joint {
+    pub fn builder(name: impl Into<String>) -> Builder {
+        Builder::new(name)
+    }
     pub fn name(&self) -> &str {
         &self.name
     }
