@@ -92,7 +92,7 @@ mod test {
         a.to_writer(&mut buf, name_off).unwrap();
 
         buf.seek(SeekFrom::Start(name_off)).unwrap();
-        buf.write(joint_name.as_bytes()).unwrap();
+        buf.write_all(joint_name.as_bytes()).unwrap();
         buf.rewind().unwrap();
 
         println!("{buf:?}");
