@@ -6,6 +6,9 @@ use crate::util::ReaderExt;
 pub mod legacy;
 mod read;
 mod write;
+mod builder;
+
+pub use builder::Builder;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Joint {

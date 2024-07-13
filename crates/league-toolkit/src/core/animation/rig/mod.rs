@@ -1,5 +1,6 @@
 mod read;
 mod write;
+mod builder;
 
 use std::io::{Read, Seek};
 use super::Joint;
