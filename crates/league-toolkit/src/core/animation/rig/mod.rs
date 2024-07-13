@@ -1,7 +1,6 @@
 mod read;
 mod write;
 mod builder;
-
 pub use builder::Builder;
 
 use std::io::{Read, Seek};

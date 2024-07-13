@@ -7,15 +7,15 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 pub use range::*;
 
 use crate::core::{
-    mem::{ElementName, IndexBuffer, VertexBuffer},
-    primitives::{AABB, Sphere},
+    mem::{ElementName, IndexBuffer, VertexBuffer, VertexBufferDescription},
+    primitives::{Sphere, AABB},
 };
 
 use super::Result;
 
 mod range;
-mod vertex;
 mod read;
+mod vertex;
 mod write;
 
 const MAGIC: u32 = 0x00112233;
@@ -71,10 +71,22 @@ impl SkinnedMesh {
     }
 }
 
-#[derive(TryFromPrimitive, IntoPrimitive, Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
+#[derive(
+    TryFromPrimitive, IntoPrimitive, Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash,
+)]
 #[repr(u32)]
-enum SkinnedMeshVertexType {
+pub enum SkinnedMeshVertexType {
     Basic,
     Color,
     Tangent,
+}
+
+impl From<SkinnedMeshVertexType> for VertexBufferDescription {
+    fn from(value: SkinnedMeshVertexType) -> Self {
+        match value {
+            SkinnedMeshVertexType::Basic => vertex::BASIC.clone(),
+            SkinnedMeshVertexType::Color => vertex::COLOR.clone(),
+            SkinnedMeshVertexType::Tangent => vertex::TANGENT.clone(),
+        }
+    }
 }

@@ -1,7 +1,7 @@
 use std::io::Read;
 
-use byteorder::{LittleEndian, ReadBytesExt};
-use glam::{Vec2, vec2};
+use byteorder::{ReadBytesExt, LE};
+use glam::{vec2, Vec2};
 
 use crate::core::primitives::Color;
 
@@ -17,20 +17,20 @@ impl StaticMeshFace {
     pub fn from_reader<R: Read>(reader: &mut R) -> crate::core::mesh::Result<Self> {
         use crate::util::ReaderExt as _;
         let vertex_ids = (
-            reader.read_u32::<LittleEndian>()? as u8,
-            reader.read_u32::<LittleEndian>()? as u8,
-            reader.read_u32::<LittleEndian>()? as u8,
+            reader.read_u32::<LE>()? as u8,
+            reader.read_u32::<LE>()? as u8,
+            reader.read_u32::<LE>()? as u8,
         );
 
-        let material = reader.read_padded_string::<LittleEndian, 64>()?;
+        let material = reader.read_padded_string::<LE, 64>()?;
 
         let uvs = (
-            reader.read_f32::<LittleEndian>()?,
-            reader.read_f32::<LittleEndian>()?,
-            reader.read_f32::<LittleEndian>()?,
-            reader.read_f32::<LittleEndian>()?,
-            reader.read_f32::<LittleEndian>()?,
-            reader.read_f32::<LittleEndian>()?,
+            reader.read_f32::<LE>()?,
+            reader.read_f32::<LE>()?,
+            reader.read_f32::<LE>()?,
+            reader.read_f32::<LE>()?,
+            reader.read_f32::<LE>()?,
+            reader.read_f32::<LE>()?,
         );
 
         Ok(Self {

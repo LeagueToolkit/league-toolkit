@@ -1,5 +1,5 @@
-use std::{collections::HashMap, fmt::Debug};
 use std::collections::BTreeMap;
+use std::fmt::Debug;
 
 use super::{
     ElementName, VertexBufferAccessor, VertexBufferDescription, VertexBufferUsage, VertexElement,
@@ -55,7 +55,7 @@ impl VertexBuffer {
         let stride = off; // off collects the sizes of all the elements, which also happens to be the stride
 
         if buffer.len() % stride != 0 {
-            panic!("Buffer size must be a multiple of it's stride! FIXME (alan): don't panic here");
+            panic!("Buffer size must be a multiple of it's stride! size: {}, stride: {stride} FIXME (alan): don't panic here", buffer.len());
         }
         Self {
             description,

@@ -1,12 +1,25 @@
-use glam::Mat4;
-use std::io::{Read, Seek};
-use std::io;
 use crate::core::animation::Joint;
+use crate::util::ReaderExt;
+use byteorder::{ReadBytesExt, LE};
+use glam::Mat4;
+use std::io;
+use std::io::SeekFrom;
+use std::io::{Read, Seek};
 
 impl Joint {
-    pub fn new(name: String, flags: u16, id: i16, parent_id: i16, radius: f32, local_transform: Mat4, inverse_bind_transform: Mat4) -> Self {
-        let (local_scale, local_rotation, local_translation) = local_transform.to_scale_rotation_translation();
-        let (inverse_bind_scale, inverse_bind_rotation, inverse_bind_translation) = inverse_bind_transform.to_scale_rotation_translation();
+    pub fn new(
+        name: String,
+        flags: u16,
+        id: i16,
+        parent_id: i16,
+        radius: f32,
+        local_transform: Mat4,
+        inverse_bind_transform: Mat4,
+    ) -> Self {
+        let (local_scale, local_rotation, local_translation) =
+            local_transform.to_scale_rotation_translation();
+        let (inverse_bind_scale, inverse_bind_rotation, inverse_bind_translation) =
+            inverse_bind_transform.to_scale_rotation_translation();
 
         Self {
             name,
@@ -26,15 +39,11 @@ impl Joint {
     }
 
     pub fn from_reader<R: Read + Seek + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        use byteorder::{ReadBytesExt as _, LE};
-        use std::io::SeekFrom;
-        use crate::util::ReaderExt as _;
-
         let flags = reader.read_u16::<LE>()?;
         let id = reader.read_i16::<LE>()?;
         let parent_id = reader.read_i16::<LE>()?;
         reader.read_i16::<LE>()?; // padding
-        let name_hash = reader.read_u32::<LE>()?;
+        let _name_hash = reader.read_u32::<LE>()?;
         let radius = reader.read_f32::<LE>()?;
 
         let local_translation = reader.read_vec3::<LE>()?;
@@ -58,11 +67,19 @@ impl Joint {
             id,
             parent_id,
             radius,
-            local_transform: Mat4::from_scale_rotation_translation(local_scale, local_rotation.normalize(), local_translation),
+            local_transform: Mat4::from_scale_rotation_translation(
+                local_scale,
+                local_rotation.normalize(),
+                local_translation,
+            ),
             local_translation,
             local_scale,
             local_rotation,
-            inverse_bind_transform: Mat4::from_scale_rotation_translation(inverse_bind_scale, inverse_bind_rotation.normalize(), inverse_bind_translation),
+            inverse_bind_transform: Mat4::from_scale_rotation_translation(
+                inverse_bind_scale,
+                inverse_bind_rotation.normalize(),
+                inverse_bind_translation,
+            ),
             inverse_bind_translation,
             inverse_bind_scale,
             inverse_bind_rotation,

@@ -4,7 +4,6 @@ use crate::core::animation::{joint, Joint, RigResource};
 pub struct Builder {
     name: String,
     asset_name: String,
-    // joints: Vec<joint::Builder>,
     root_joints: Vec<joint::Builder>,
 }
 
@@ -16,7 +15,6 @@ impl Builder {
             root_joints: vec![],
         }
     }
-
     pub fn with_root_joint(mut self, child: joint::Builder) -> Self {
         self.root_joints.push(child);
         self

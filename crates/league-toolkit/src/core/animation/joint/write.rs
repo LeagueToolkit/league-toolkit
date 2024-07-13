@@ -1,13 +1,16 @@
-use std::io;
-use std::io::{Seek, SeekFrom, Write};
-use crate::core::animation::{Joint};
+use crate::core::animation::Joint;
 use crate::util::hash;
+use crate::util::WriterExt;
+use byteorder::{WriteBytesExt, LE};
+use std::io;
+use std::io::{Seek, Write};
 
 impl Joint {
-    pub fn to_writer<W: Write + Seek + ?Sized>(&self, writer: &mut W, name_off: u64) -> io::Result<()> {
-        use crate::util::WriterExt as _;
-        use byteorder::{WriteBytesExt as _, LE};
-
+    pub fn to_writer<W: Write + Seek + ?Sized>(
+        &self,
+        writer: &mut W,
+        name_off: u64,
+    ) -> io::Result<()> {
         writer.write_u16::<LE>(self.flags)?;
         writer.write_i16::<LE>(self.id)?;
         writer.write_i16::<LE>(self.parent_id)?;
@@ -34,24 +37,29 @@ impl Joint {
 
 #[cfg(test)]
 mod test {
-    use std::io::Cursor;
-    use approx::{AbsDiffEq, assert_ulps_eq, UlpsEq};
-    use glam::{Mat4, Quat, vec3};
-    use crate::util::WriterExt;
     use super::*;
+    use approx::assert_ulps_eq;
+    use glam::{vec3, Mat4, Quat};
+    use io::SeekFrom;
+    use std::io::Cursor;
 
     macro_rules! assert_joint_fuzzy_vec {
         ($a: ident, $b: ident, $field:tt) => {
             for (a, b) in $a.$field.to_array().iter().zip($b.$field.to_array().iter()) {
-                assert_ulps_eq!(a,b);
+                assert_ulps_eq!(a, b);
             }
             $a.$field = $b.$field;
         };
     }
     macro_rules! assert_joint_fuzzy_mat {
         ($a: ident, $b: ident, $field:tt) => {
-            for (a, b) in $a.$field.to_cols_array().iter().zip($b.$field.to_cols_array().iter()) {
-                assert_ulps_eq!(a,b);
+            for (a, b) in $a
+                .$field
+                .to_cols_array()
+                .iter()
+                .zip($b.$field.to_cols_array().iter())
+            {
+                assert_ulps_eq!(a, b);
             }
             $a.$field = $b.$field;
         };
@@ -69,25 +77,33 @@ mod test {
         let joint_size = 100; // size of joint in bytes
         let mut buf = Cursor::new(vec![0; joint_size + joint_name.len() + 1]); // +1 for nul terminator
 
-        let mut a = Joint::new(joint_name.into(), 1234, 5432, 9876, 42.0, mat, mat.inverse());
+        let mut a = Joint::new(
+            joint_name.into(),
+            1234,
+            5432,
+            9876,
+            42.0,
+            mat,
+            mat.inverse(),
+        );
 
         let name_off = joint_size as u64;
 
         a.to_writer(&mut buf, name_off).unwrap();
 
         buf.seek(SeekFrom::Start(name_off)).unwrap();
-        buf.write(joint_name.as_bytes()).unwrap();
+        buf.write_all(joint_name.as_bytes()).unwrap();
         buf.rewind().unwrap();
 
         println!("{buf:?}");
 
         let mut b = Joint::from_reader(&mut buf).unwrap();
         /*
-          Because assert_eq isn't good with floats,
-          we first check the float values with the 'approx' crate (see above macros),
-          then *sets* the fields equal to each other,
-          so that the assert_eq doesn't fail on those fields - but still checks everything else.
-         */
+         Because assert_eq isn't good with floats,
+         we first check the float values with the 'approx' crate (see above macros),
+         then *sets* the fields equal to each other,
+         so that the assert_eq doesn't fail on those fields - but still checks everything else.
+        */
         assert_joint_fuzzy_vec!(a, b, local_scale);
         assert_joint_fuzzy_vec!(a, b, local_rotation);
         assert_joint_fuzzy_vec!(a, b, local_translation);
