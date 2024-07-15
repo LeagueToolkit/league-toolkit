@@ -11,8 +11,8 @@ impl RigResource {
         writer.write_u32::<LE>(0)?; // version
 
         writer.write_u16::<LE>(self.flags)?;
-        writer.write_u16::<LE>(self.joints.len() as u16)?;
-        writer.write_u16::<LE>(self.influences.len() as u16)?;
+        writer.write_u16::<LE>(self.joints.len() as _)?;
+        writer.write_u32::<LE>(self.influences.len() as _)?;
 
         let joints_section_size = self.joints.len() * 100;
         let joint_hash_ids_section_size = self.joints.len() * 8;
