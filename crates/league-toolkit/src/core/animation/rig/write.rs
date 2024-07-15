@@ -79,8 +79,7 @@ impl RigResource {
         writer.write_terminated_string(&self.name)?;
 
         let asset_name_off = writer.stream_position()?;
-        writer.write_all(self.asset_name.as_bytes())?;
-        writer.write_u8(0)?;
+        writer.write_terminated_string(&self.asset_name)?;
 
         // [1] write name offset
         writer.seek(SeekFrom::Start(name_off_pos))?;
