@@ -3,6 +3,7 @@ use glam::Mat4;
 use std::path::Iter;
 use std::process::id;
 
+#[derive(Clone)]
 pub struct Builder {
     pub name: String,
     pub flags: u16,
