@@ -11,8 +11,8 @@ impl RigResource {
         writer.write_u32::<LE>(0)?; // version
 
         writer.write_u16::<LE>(self.flags)?;
-        writer.write_u16::<LE>(self.joints.len() as u16)?;
-        writer.write_u16::<LE>(self.influences.len() as u16)?;
+        writer.write_u16::<LE>(self.joints.len() as _)?;
+        writer.write_u32::<LE>(self.influences.len() as _)?;
 
         let joints_section_size = self.joints.len() * 100;
         let joint_hash_ids_section_size = self.joints.len() * 8;
@@ -74,7 +74,6 @@ impl RigResource {
             writer.write_u32::<LE>(hash as u32)?; // TODO (alan): is this u32 or u64
         }
 
-        // TODO (alan): write null terminated string helper
         let name_off = writer.seek(SeekFrom::End(0))?;
         writer.write_terminated_string(&self.name)?;
 
