@@ -49,6 +49,10 @@ impl Builder {
         self
     }
 
+    pub fn add_child(&mut self, child: Box<Builder>) {
+        self.children.push(child);
+    }
+
     pub fn build(self, id: i16, parent_id: i16) -> (Joint, Vec<Box<Builder>>) {
         (
             Joint::new(
