@@ -74,7 +74,6 @@ impl RigResource {
             writer.write_u32::<LE>(hash as u32)?; // TODO (alan): is this u32 or u64
         }
 
-        // TODO (alan): write null terminated string helper
         let name_off = writer.seek(SeekFrom::End(0))?;
         writer.write_terminated_string(&self.name)?;
 
