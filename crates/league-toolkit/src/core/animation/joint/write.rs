@@ -29,7 +29,7 @@ impl Joint {
         writer.write_quat::<LE>(&self.inverse_bind_rotation)?;
 
         let pos = writer.stream_position()?;
-        writer.write_i32::<LE>((name_off - pos) as i32)?;
+        writer.write_i32::<LE>((name_off as i32 - pos as i32))?;
 
         Ok(())
     }
