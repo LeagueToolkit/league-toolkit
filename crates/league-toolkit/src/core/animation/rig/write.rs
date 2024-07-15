@@ -27,10 +27,10 @@ impl RigResource {
         writer.write_i32::<LE>(joint_hash_ids_off as i32)?;
         writer.write_i32::<LE>(influences_off as i32)?;
 
-        let _name_off_pos = writer.stream_position()?;
+        let name_off_pos = writer.stream_position()?;
         writer.write_i32::<LE>(-1)?; // name offset - write later (see [1])
 
-        let _asset_name_off_pos = writer.stream_position()?;
+        let asset_name_off_pos = writer.stream_position()?;
         writer.write_i32::<LE>(-1)?; // asset_name offset - write later (see [2])
 
         writer.write_i32::<LE>(joint_names_off as i32)?;
@@ -83,11 +83,11 @@ impl RigResource {
         writer.write_u8(0)?;
 
         // [1] write name offset
-        writer.seek(SeekFrom::Start(name_off))?;
+        writer.seek(SeekFrom::Start(name_off_pos))?;
         writer.write_i32::<LE>(name_off as i32)?;
 
         // [2] write name offset
-        writer.seek(SeekFrom::Start(asset_name_off))?;
+        writer.seek(SeekFrom::Start(asset_name_off_pos))?;
         writer.write_i32::<LE>(asset_name_off as i32)?;
 
         // [3] write file size
