@@ -80,6 +80,8 @@ impl RigResource {
 
         let asset_name_off = writer.stream_position()?;
         writer.write_terminated_string(&self.asset_name)?;
+        // file size, see [3]
+        let size = writer.stream_position()?;
 
         // [1] write name offset
         writer.seek(SeekFrom::Start(name_off_pos))?;
@@ -90,7 +92,6 @@ impl RigResource {
         writer.write_i32::<LE>(asset_name_off as i32)?;
 
         // [3] write file size
-        let size = writer.stream_position()?;
         writer.seek(SeekFrom::Start(0))?;
         writer.write_u32::<LE>(size as u32)?;
 
