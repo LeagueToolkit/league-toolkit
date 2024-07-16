@@ -45,9 +45,15 @@ impl Builder {
         self
     }
 
-    pub fn with_children<const N: usize>(mut self, children: [impl Into<Box<Builder>>; N]) -> Self {
-        self.children.extend(children.map(|c| c.into()));
+    pub fn with_children<I: IntoIterator<Item = impl Into<Box<Builder>>>>(
+        mut self,
+        children: I,
+    ) -> Self {
+        self.add_children(children);
         self
+    }
+    pub fn add_children<I: IntoIterator<Item = impl Into<Box<Builder>>>>(&mut self, children: I) {
+        self.children.extend(children.into_iter().map(|c| c.into()));
     }
 
     pub fn add_child(&mut self, child: Box<Builder>) {
