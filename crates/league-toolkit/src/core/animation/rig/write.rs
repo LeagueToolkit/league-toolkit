@@ -1,5 +1,5 @@
 use crate::core::animation::rig::RigResource;
-use crate::util::hash;
+use crate::util::{hash, WriterExt};
 use byteorder::{WriteBytesExt, LE};
 use std::io;
 use std::io::{Seek, SeekFrom, Write};
@@ -11,8 +11,8 @@ impl RigResource {
         writer.write_u32::<LE>(0)?; // version
 
         writer.write_u16::<LE>(self.flags)?;
-        writer.write_u16::<LE>(self.joints.len() as u16)?;
-        writer.write_u16::<LE>(self.influences.len() as u16)?;
+        writer.write_u16::<LE>(self.joints.len() as _)?;
+        writer.write_u32::<LE>(self.influences.len() as _)?;
 
         let joints_section_size = self.joints.len() * 100;
         let joint_hash_ids_section_size = self.joints.len() * 8;
@@ -27,10 +27,10 @@ impl RigResource {
         writer.write_i32::<LE>(joint_hash_ids_off as i32)?;
         writer.write_i32::<LE>(influences_off as i32)?;
 
-        let _name_off_pos = writer.stream_position()?;
+        let name_off_pos = writer.stream_position()?;
         writer.write_i32::<LE>(-1)?; // name offset - write later (see [1])
 
-        let _asset_name_off_pos = writer.stream_position()?;
+        let asset_name_off_pos = writer.stream_position()?;
         writer.write_i32::<LE>(-1)?; // asset_name offset - write later (see [2])
 
         writer.write_i32::<LE>(joint_names_off as i32)?;
@@ -44,8 +44,7 @@ impl RigResource {
         let mut joint_name_offs = Vec::with_capacity(self.joints.len());
         for j in &self.joints {
             joint_name_offs.push(writer.stream_position()?);
-            writer.write_all(j.name().as_bytes())?;
-            writer.write_u8(0)? // TODO (alan): write null terminated string helper
+            writer.write_terminated_string(j.name())?;
         }
 
         // Write joints
@@ -75,25 +74,23 @@ impl RigResource {
             writer.write_u32::<LE>(hash as u32)?; // TODO (alan): is this u32 or u64
         }
 
-        // TODO (alan): write null terminated string helper
         let name_off = writer.seek(SeekFrom::End(0))?;
-        writer.write_all(self.name.as_bytes())?;
-        writer.write_u8(0)?;
+        writer.write_terminated_string(&self.name)?;
 
         let asset_name_off = writer.stream_position()?;
-        writer.write_all(self.asset_name.as_bytes())?;
-        writer.write_u8(0)?;
+        writer.write_terminated_string(&self.asset_name)?;
+        // file size, see [3]
+        let size = writer.stream_position()?;
 
         // [1] write name offset
-        writer.seek(SeekFrom::Start(name_off))?;
+        writer.seek(SeekFrom::Start(name_off_pos))?;
         writer.write_i32::<LE>(name_off as i32)?;
 
         // [2] write name offset
-        writer.seek(SeekFrom::Start(asset_name_off))?;
+        writer.seek(SeekFrom::Start(asset_name_off_pos))?;
         writer.write_i32::<LE>(asset_name_off as i32)?;
 
         // [3] write file size
-        let size = writer.stream_position()?;
         writer.seek(SeekFrom::Start(0))?;
         writer.write_u32::<LE>(size as u32)?;
 

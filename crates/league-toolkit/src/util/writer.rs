@@ -14,6 +14,12 @@ pub trait WriterExt: Write {
         self.write_all(&buf)
     }
 
+    /// Writes a string with a null terminator (writes sizeof(str) + 1 bytes)
+    fn write_terminated_string<S: AsRef<str>>(&mut self, str: S) -> io::Result<()> {
+        self.write_all(str.as_ref().as_bytes())?;
+        self.write_u8(0)
+    }
+
     fn write_color<E: ByteOrder>(&mut self, color: &Color) -> io::Result<()> {
         color.to_writer::<E>(self)
     }
