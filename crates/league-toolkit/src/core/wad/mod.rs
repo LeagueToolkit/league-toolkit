@@ -13,6 +13,7 @@ use std::{
 
 use byteorder::{ReadBytesExt as _, LE};
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug)]
 pub struct Wad<TSource: Read + Seek> {
     chunks: HashMap<u64, WadChunk>,

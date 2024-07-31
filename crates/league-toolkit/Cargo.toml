@@ -3,6 +3,9 @@ name = "league-toolkit"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+serde = ["dep:serde"]
+
 [dependencies]
 bitflags = "2.5.0"
 byteorder = "1.5.0"
@@ -15,6 +18,8 @@ memchr = "2.7.2"
 num_enum = "0.7.2"
 thiserror = "1.0.60"
 zstd = "0.13.1"
+
+serde = { version = "1.0.204", features = ["derive"], optional = true }
 
 [dev-dependencies]
 approx = "0.5.1"
