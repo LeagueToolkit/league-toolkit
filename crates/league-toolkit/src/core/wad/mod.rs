@@ -17,6 +17,7 @@ use byteorder::{ReadBytesExt as _, LE};
 #[derive(Debug)]
 pub struct Wad<TSource: Read + Seek> {
     chunks: HashMap<u64, WadChunk>,
+    #[cfg_attr(feature = "serde", serde(ignore))]
     source: TSource,
 }
 
