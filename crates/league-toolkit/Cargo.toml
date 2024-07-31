@@ -5,6 +5,7 @@ edition = "2021"
 
 [features]
 serde = ["dep:serde"]
+wasm = ["serde", "dep:wasm-bindgen"]
 
 [dependencies]
 bitflags = "2.5.0"
@@ -20,6 +21,7 @@ thiserror = "1.0.60"
 zstd = "0.13.1"
 
 serde = { version = "1.0.204", features = ["derive"], optional = true }
+wasm-bindgen = { version = "0.2", features = ["serde"], optional = true }
 
 [dev-dependencies]
 approx = "0.5.1"
