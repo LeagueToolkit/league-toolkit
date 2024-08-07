@@ -4,14 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
+default = ["zstd"]
+
+zstd = ["dep:zstd"]
+ruzstd = ["dep:ruzstd"]
+
 serde = ["dep:serde"]
-wasm = [
-  "serde",
-  "dep:wasm-bindgen",
-  "flate2/rust_backend",
-  "zstd/wasm",
-  "zstd/thin",
-]
+wasm = ["serde", "dep:wasm-bindgen", "flate2/rust_backend", "ruzstd"]
 
 [dependencies]
 bitflags = "2.5.0"
@@ -24,8 +23,9 @@ log = "0.4.21"
 memchr = "2.7.2"
 num_enum = "0.7.2"
 thiserror = "1.0.60"
-zstd = { version = "0.12.4", default-features = false }
-zstd-sys = { version = "=2.0.1", default-features = false }
+
+zstd = { version = "0.13", default-features = false, optional = true }
+ruzstd = { version = "0.7", optional = true }
 
 serde = { version = "1.0.204", features = ["derive"], optional = true }
 wasm-bindgen = { version = "0.2", features = ["serde"], optional = true }
