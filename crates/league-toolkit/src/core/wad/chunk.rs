@@ -33,27 +33,18 @@ pub struct WadChunk {
 impl WadChunk {
     pub(crate) fn read<R: Read>(reader: &mut BufReader<R>) -> Result<WadChunk, WadError> {
         let path_hash = reader.read_u64::<LE>()?;
-        // log::debug!("path_hash: {path_hash:#x}");
         let data_offset = reader.read_u32::<LE>()? as usize;
-        // log::debug!("data_offset: {data_offset:#x}");
         let compressed_size = reader.read_i32::<LE>()? as usize;
-        // log::debug!("compressed_size: {compressed_size}");
         let uncompressed_size = reader.read_i32::<LE>()? as usize;
-        // log::debug!("uncompressed_size: {uncompressed_size}");
 
         let type_frame_count = reader.read_u8()?;
-        // log::debug!("type_frame_count: {type_frame_count}");
         let frame_count = type_frame_count >> 4;
         let compression_type = WadChunkCompression::try_from_primitive(type_frame_count & 0xF)
             .expect("failed to read chunk compression");
-        // log::debug!("compression_type: {compression_type:?}");
 
         let is_duplicated = reader.read_u8()? == 1;
-        // log::debug!("is_duplicated: {is_duplicated}");
         let start_frame = reader.read_u16::<LE>()?;
-        // log::debug!("start_frame: {start_frame}");
         let checksum = reader.read_u64::<LE>()?;
-        // log::debug!("checksum: {checksum}");
 
         Ok(WadChunk {
             path_hash,
