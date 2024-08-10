@@ -44,7 +44,6 @@ where
             .seek(SeekFrom::Start(chunk.data_offset as u64))?;
 
         let mut data = vec![0; chunk.uncompressed_size];
-        log::debug!("decoding gzip chunk...");
         GzDecoder::new(&mut self.source).read_exact(&mut data)?;
 
         Ok(data.into_boxed_slice())
@@ -55,7 +54,6 @@ where
 
         let mut data: Vec<u8> = vec![0; chunk.uncompressed_size];
 
-        log::debug!("decoding zstd chunk...");
         #[cfg(feature = "zstd")]
         {
             zstd::Decoder::new(&mut self.source)
@@ -91,10 +89,6 @@ where
             (chunk.data_offset + zstd_magic_offset) as u64,
         ))?;
 
-        log::debug!(
-            "decoding zstd multi chunk...\ndata_off: {}\nmagic_off: {zstd_magic_offset}",
-            chunk.data_offset
-        );
         // decode zstd data
         #[cfg(feature = "zstd")]
         {

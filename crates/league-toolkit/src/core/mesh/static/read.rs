@@ -4,7 +4,6 @@ use crate::core::mesh::{StaticMesh, StaticMeshFace};
 use crate::core::primitives::Color;
 use byteorder::{ReadBytesExt, LE};
 use glam::Vec3;
-use log::debug;
 use std::io::Read;
 
 impl StaticMesh {
@@ -18,7 +17,6 @@ impl StaticMesh {
 
         let major = reader.read_u16::<LE>()?;
         let minor = reader.read_u16::<LE>()?;
-        debug!("version: {major}.{minor}");
 
         // there are versions [2][1] and [1][1] as well
         if major != 2 && major != 3 && minor != 1 {
@@ -26,7 +24,6 @@ impl StaticMesh {
         }
 
         let name = reader.read_padded_string::<LE, 128>()?;
-        debug!("name: {name}");
 
         let vertex_count = reader.read_i32::<LE>()?;
         let face_count = reader.read_i32::<LE>()?;
