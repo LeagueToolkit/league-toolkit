@@ -10,7 +10,10 @@ zstd = ["dep:zstd"]
 ruzstd = ["dep:ruzstd"]
 
 serde = ["dep:serde"]
-wasm = ["serde", "dep:wasm-bindgen", "flate2/rust_backend", "ruzstd"]
+rust_backends = [
+  "flate2/rust_backend",
+  "ruzstd",
+] # TODO: we might want more granular control here down the line
 
 [dependencies]
 bitflags = "2.5.0"
@@ -28,7 +31,6 @@ zstd = { version = "0.13", default-features = false, optional = true }
 ruzstd = { version = "0.7", optional = true }
 
 serde = { version = "1.0.204", features = ["derive"], optional = true }
-wasm-bindgen = { version = "0.2", features = ["serde"], optional = true }
 
 [dev-dependencies]
 approx = "0.5.1"
