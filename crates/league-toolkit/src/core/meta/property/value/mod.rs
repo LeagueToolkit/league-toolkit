@@ -30,7 +30,6 @@ macro_rules! enum_construct {
             $(BinPropertyKind::$variant => paste::paste! {
                 Self::$variant([<$variant Value>]::$method)
             },)*
-            _ => unimplemented!("{:?}", $item),
         }
     };
 }
