@@ -4,12 +4,20 @@ use byteorder::{ByteOrder, ReadBytesExt};
 use glam::{Quat, Vec2, Vec3, Vec4};
 
 use crate::core::primitives::{Color, Sphere, AABB};
+#[derive(Debug, thiserror::Error)]
+pub enum ReaderError {
+    #[error("IO Error - {0}")]
+    ReaderError(#[from] std::io::Error),
+    #[error("UTF-8 Error - {0}")]
+    Utf8Error(#[from] std::str::Utf8Error),
+    #[error("From UTF-8 Error - {0}")]
+    FromUtf8Error(#[from] std::string::FromUtf8Error),
+}
+
+pub type ReaderResult<T> = core::result::Result<T, ReaderError>;
 
 pub trait ReaderExt: Read {
-    // FIXME (alan): make own result type here
-    fn read_padded_string<T: ByteOrder, const N: usize>(
-        &mut self,
-    ) -> crate::core::mesh::Result<String> {
+    fn read_padded_string<T: ByteOrder, const N: usize>(&mut self) -> ReaderResult<String> {
         let mut buf: [u8; N] = [0; N];
         self.read_exact(&mut buf)?;
         let i = buf.iter().position(|&b| b == b'\0').unwrap_or(buf.len());
