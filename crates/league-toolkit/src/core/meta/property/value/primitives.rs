@@ -18,7 +18,6 @@ macro_rules! impl_prim {
                 reader: &mut R,
                 _legacy: bool,
             ) -> Result<Self, crate::core::meta::ParseError> {
-                log::debug!("$name");
                 Ok(Self(reader.$($method)*()?))
             }
         }

@@ -25,7 +25,6 @@ impl BinTreeObject {
         let mut properties = HashMap::with_capacity(prop_count);
         for _ in 0..prop_count {
             let prop = BinProperty::from_reader(reader, legacy)?;
-            log::debug!("prop: {prop:?}");
             properties.insert(prop.name_hash, prop);
         }
 
