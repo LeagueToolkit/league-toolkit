@@ -6,6 +6,7 @@ use super::{BinProperty, ParseError};
 #[derive(Debug)]
 pub struct BinTreeObject {
     pub path_hash: u32,
+    pub class_hash: u32,
     pub properties: HashMap<u32, BinProperty>,
 }
 
@@ -30,6 +31,7 @@ impl BinTreeObject {
 
         Ok(Self {
             path_hash,
+            class_hash,
             properties,
         })
     }
