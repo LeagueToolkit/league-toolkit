@@ -1,9 +1,10 @@
 use std::io::{self, Read};
 
 use byteorder::{ByteOrder, ReadBytesExt};
-use glam::{Quat, Vec2, Vec3, Vec4};
+use glam::{Mat4, Quat, Vec2, Vec3, Vec4};
 
 use crate::core::primitives::{Color, Sphere, AABB};
+
 #[derive(Debug, thiserror::Error)]
 pub enum ReaderError {
     #[error("IO Error - {0}")]
@@ -24,6 +25,13 @@ pub trait ReaderExt: Read {
         Ok(std::str::from_utf8(&buf[..i])?.to_string())
     }
 
+    fn read_len_prefixed_string<T: ByteOrder>(&mut self) -> ReaderResult<String> {
+        let len = self.read_u16::<T>()?;
+        let mut buf = vec![0; len as _];
+        self.read_exact(&mut buf)?;
+        Ok(String::from_utf8(buf)?)
+    }
+
     fn read_str_until_nul(&mut self) -> io::Result<String> {
         let mut s = String::new();
         loop {
@@ -34,6 +42,10 @@ pub trait ReaderExt: Read {
             s.push(c);
         }
         Ok(s)
+    }
+
+    fn read_bool(&mut self) -> io::Result<bool> {
+        Ok(self.read_u8()? != 0x0)
     }
 
     fn read_color<T: ByteOrder>(&mut self) -> io::Result<Color> {
@@ -73,6 +85,16 @@ pub trait ReaderExt: Read {
         ]))
     }
 
+    fn read_mat4_row_major<T: ByteOrder>(&mut self) -> io::Result<Mat4> {
+        Ok(Mat4::from_cols(
+            self.read_vec4::<T>()?,
+            self.read_vec4::<T>()?,
+            self.read_vec4::<T>()?,
+            self.read_vec4::<T>()?,
+        )
+        .transpose())
+    }
+
     fn read_aabb<T: ByteOrder>(&mut self) -> io::Result<AABB> {
         Ok(AABB {
             min: self.read_vec3::<T>()?,
@@ -81,10 +103,7 @@ pub trait ReaderExt: Read {
     }
 
     fn read_sphere<T: ByteOrder>(&mut self) -> io::Result<Sphere> {
-        Ok(Sphere::new(
-            self.read_vec3::<T>()?,
-            self.read_f32::<T>()?,
-        ))
+        Ok(Sphere::new(self.read_vec3::<T>()?, self.read_f32::<T>()?))
     }
 }
 
