@@ -1,7 +1,8 @@
-use std::io::Write;
 use byteorder::{ByteOrder, WriteBytesExt};
+use std::io::Write;
 
-#[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct Color {
     pub r: f32,
     pub g: f32,
@@ -16,7 +17,10 @@ impl Color {
         Self { r, g, b, a }
     }
 
-    pub fn to_writer<E: ByteOrder>(&self, writer: &mut (impl Write + ?Sized)) -> std::io::Result<()> {
+    pub fn to_writer<E: ByteOrder>(
+        &self,
+        writer: &mut (impl Write + ?Sized),
+    ) -> std::io::Result<()> {
         writer.write_f32::<E>(self.r)?;
         writer.write_f32::<E>(self.g)?;
         writer.write_f32::<E>(self.b)?;
