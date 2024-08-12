@@ -48,13 +48,11 @@ pub trait ReaderExt: Read {
         Ok(self.read_u8()? != 0x0)
     }
 
-    fn read_color<T: ByteOrder>(&mut self) -> io::Result<Color> {
-        Ok(Color {
-            r: self.read_f32::<T>()?,
-            g: self.read_f32::<T>()?,
-            b: self.read_f32::<T>()?,
-            a: self.read_f32::<T>()?,
-        })
+    fn read_color_f32<O: ByteOrder>(&mut self) -> io::Result<Color<f32>> {
+        Color::<f32>::from_reader::<O, _>(self)
+    }
+    fn read_color_u8(&mut self) -> io::Result<Color<u8>> {
+        Color::<u8>::from_reader(self)
     }
 
     fn read_vec2<T: ByteOrder>(&mut self) -> io::Result<Vec2> {

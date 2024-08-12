@@ -55,7 +55,8 @@ impl_prim!(Vector3Value, Vec3, [], read_vec3::<LE>);
 impl_prim!(Vector4Value, Vec4, [], read_vec4::<LE>);
 impl_prim!(Matrix44Value, Mat4, [], read_mat4_row_major::<LE>);
 
-impl_prim!(ColorValue, Color, [], read_color::<LE>);
+type ColorU8 = Color<u8>;
+impl_prim!(ColorValue, ColorU8, [], read_color_u8);
 impl_prim!(HashValue, u32, [Eq, Hash], read_u32::<LE>);
 impl_prim!(WadChunkLinkValue, u64, [Eq, Hash], read_u64::<LE>);
 impl_prim!(ObjectLinkValue, u32, [Eq, Hash], read_u32::<LE>);
