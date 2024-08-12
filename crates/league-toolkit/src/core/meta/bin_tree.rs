@@ -96,9 +96,13 @@ impl BinTree {
         }
 
         let mut objects = HashMap::with_capacity(obj_count);
-        for class_hash in obj_classes {
-            let tree_obj = BinTreeObject::from_reader(reader, class_hash, false)?;
-            objects.insert(tree_obj.path_hash, tree_obj);
+        match Self::try_read_objects(reader, &obj_classes, &mut objects, false) {
+            Ok(_) => {}
+            Err(ParseError::InvalidPropertyType(kind)) => {
+                log::warn!("Invalid prop type {kind}. Trying reading objects as legacy.");
+                Self::try_read_objects(reader, &obj_classes, &mut objects, true)?;
+            }
+            e => e?,
         }
 
         let data_overrides = match (is_override, version) {
@@ -120,5 +124,19 @@ impl BinTree {
             dependencies,
             data_overrides,
         })
+    }
+
+    fn try_read_objects<R: io::Read>(
+        reader: &mut R,
+        obj_classes: &[u32],
+        objects: &mut HashMap<u32, BinTreeObject>,
+        legacy: bool,
+    ) -> Result<(), ParseError> {
+        objects.clear();
+        for &class_hash in obj_classes {
+            let tree_obj = BinTreeObject::from_reader(reader, class_hash, legacy)?;
+            objects.insert(tree_obj.path_hash, tree_obj);
+        }
+        Ok(())
     }
 }
