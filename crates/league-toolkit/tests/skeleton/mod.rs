@@ -1,6 +1,6 @@
-use std::io::{BufReader, Cursor};
 use insta::assert_debug_snapshot;
 use league_toolkit::core::animation::RigResource;
+use std::io::Cursor;
 
 #[test]
 pub fn read() {

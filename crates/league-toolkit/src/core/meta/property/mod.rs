@@ -1,11 +1,6 @@
-use core::hash;
-use std::io;
-
-use log::debug;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use std::io;
 use value::PropertyValueEnum;
-
-use crate::core::{animation::legacy, meta::traits::ReadProperty as _};
 
 use super::ParseError;
 

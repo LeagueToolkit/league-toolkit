@@ -26,7 +26,6 @@ impl ReadProperty for StructValue {
         reader: &mut R,
         legacy: bool,
     ) -> Result<Self, crate::core::meta::ParseError> {
-        use crate::util::ReaderExt as _;
         use byteorder::{ReadBytesExt as _, LE};
 
         let class_hash = reader.read_u32::<LE>()?;

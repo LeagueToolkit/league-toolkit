@@ -15,7 +15,6 @@ impl BinTreeObject {
         class_hash: u32,
         legacy: bool,
     ) -> Result<Self, ParseError> {
-        use crate::util::ReaderExt as _;
         use byteorder::{ReadBytesExt as _, LE};
 
         let _size = reader.read_u32::<LE>()?;

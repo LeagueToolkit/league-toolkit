@@ -1,6 +1,6 @@
-use std::io::{self, Read, Write};
+use std::io::{self, Write};
 
-use byteorder::{ByteOrder, ReadBytesExt, WriteBytesExt};
+use byteorder::{ByteOrder, WriteBytesExt};
 use glam::{Quat, Vec2, Vec3, Vec4};
 
 use crate::core::primitives::{Color, Sphere, AABB};
@@ -48,7 +48,6 @@ pub trait WriterExt: Write {
         }
         Ok(())
     }
-
 
     fn write_aabb<E: ByteOrder>(&mut self, aabb: &AABB) -> io::Result<()> {
         self.write_vec3::<E>(&aabb.min)?;
