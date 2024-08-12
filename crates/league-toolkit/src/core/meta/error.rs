@@ -1,3 +1,5 @@
+use super::property::BinPropertyKind;
+
 #[derive(Debug, thiserror::Error)]
 pub enum ParseError {
     #[error("Invalid file signature")]
@@ -12,4 +14,6 @@ pub enum ParseError {
     Utf8Error(#[from] std::str::Utf8Error),
     #[error(transparent)]
     ReaderError(#[from] crate::util::ReaderError),
+    #[error("Invalid property kind - {0}")]
+    InvalidPropertyType(#[from] num_enum::TryFromPrimitiveError<BinPropertyKind>),
 }

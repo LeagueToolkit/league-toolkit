@@ -52,12 +52,11 @@ impl BinPropertyKind {
     ///
     /// "Non-legacy" property types can just be used as is.
     ///
-    pub fn unpack(raw: u8, legacy: bool) -> BinPropertyKind {
+    pub fn unpack(raw: u8, legacy: bool) -> Result<BinPropertyKind, ParseError> {
         use BinPropertyKind as BPK;
         if !legacy {
-            log::debug!("raw bin prop kind: {raw}");
             // TODO (alan): don't panic here
-            return BPK::try_from_primitive(raw).expect("invalid BinPropertyKind primitive form");
+            return Ok(BPK::try_from_primitive(raw)?);
         }
         let mut fudged = raw;
 
@@ -71,8 +70,7 @@ impl BinPropertyKind {
             fudged += 1;
         }
 
-        BinPropertyKind::try_from_primitive(fudged)
-            .expect("invalid fudged BinPropertyKind primitive form")
+        Ok(BinPropertyKind::try_from_primitive(fudged)?)
     }
 
     pub fn read<R: io::Read>(

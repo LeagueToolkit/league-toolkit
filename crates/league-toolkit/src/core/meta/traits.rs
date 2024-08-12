@@ -25,8 +25,11 @@ pub trait ReadProperty: Sized {
 
 use byteorder::ReadBytesExt as _;
 pub trait ReaderExt: io::Read {
-    fn read_property_kind(&mut self, legacy: bool) -> io::Result<BinPropertyKind> {
-        Ok(BinPropertyKind::unpack(self.read_u8()?, legacy))
+    fn read_property_kind(
+        &mut self,
+        legacy: bool,
+    ) -> Result<BinPropertyKind, crate::core::meta::ParseError> {
+        BinPropertyKind::unpack(self.read_u8()?, legacy)
     }
 }
 
