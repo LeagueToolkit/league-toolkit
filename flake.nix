@@ -1,6 +1,6 @@
 {
   inputs = {
-    # nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     rust-overlay.url = "github:oxalica/rust-overlay";
 
     # crane = {
@@ -31,7 +31,9 @@
           })
       );
 
-    rustToolchain = eachSystem (pkgs: pkgs.rust-bin.stable.latest);
+    rustToolchain = eachSystem (pkgs: (pkgs.rust-bin.stable.latest.default.override {
+     extensions = [ "rust-src" ];
+    }));
 
     treefmtEval = eachSystem (pkgs: treefmt-nix.lib.evalModule pkgs ./treefmt.nix);
   in {
@@ -54,15 +56,14 @@
           (lib.optionals stdenv.isLinux mold)
         ];
         buildInputs = [
-          rustToolchain.${pkgs.system}.default
+          rustToolchain.${pkgs.system}
           rust-analyzer-unwrapped
           cargo
+          cargo-insta
           # pkg-config
           # openssl
         ];
-        RUST_SRC_PATH = "${
-          rustToolchain.${pkgs.system}.rust-src
-        }/lib/rustlib/src/rust/library";
+        RUST_SRC_PATH = rustPlatform.rustLibSrc;
       });
     });
 

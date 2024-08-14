@@ -5,6 +5,7 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 use super::WadError;
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromPrimitive, IntoPrimitive)]
 #[repr(u8)]
 pub enum WadChunkCompression {
@@ -15,17 +16,18 @@ pub enum WadChunkCompression {
     ZstdMulti = 4,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WadChunk {
-    pub(crate) path_hash: u64,
-    pub(crate) data_offset: usize,
-    pub(crate) compressed_size: usize,
-    pub(crate) uncompressed_size: usize,
-    pub(crate) compression_type: WadChunkCompression,
-    pub(crate) is_duplicated: bool,
-    pub(crate) frame_count: u8,
-    pub(crate) start_frame: u16,
-    pub(crate) checksum: u64,
+    pub path_hash: u64,
+    pub data_offset: usize,
+    pub compressed_size: usize,
+    pub uncompressed_size: usize,
+    pub compression_type: WadChunkCompression,
+    pub is_duplicated: bool,
+    pub frame_count: u8,
+    pub start_frame: u16,
+    pub checksum: u64,
 }
 
 impl WadChunk {

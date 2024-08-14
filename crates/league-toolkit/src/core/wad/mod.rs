@@ -13,9 +13,11 @@ use std::{
 
 use byteorder::{ReadBytesExt as _, LE};
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug)]
 pub struct Wad<TSource: Read + Seek> {
     chunks: HashMap<u64, WadChunk>,
+    #[cfg_attr(feature = "serde", serde(skip))]
     source: TSource,
 }
 
@@ -59,7 +61,7 @@ impl<TSource: Read + Seek> Wad<TSource> {
         let chunk_count = reader.read_i32::<LE>()? as usize;
         let mut chunks = HashMap::<u64, WadChunk>::with_capacity(chunk_count);
         for _ in 0..chunk_count {
-            let chunk = WadChunk::read(&mut reader).expect("failed to read chunk");
+            let chunk = WadChunk::read(&mut reader)?;
             chunks
                 .insert(chunk.path_hash(), chunk)
                 .map_or(Ok(()), |chunk| {

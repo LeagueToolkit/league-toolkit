@@ -6,6 +6,9 @@ use memchr::memmem;
 
 const ZSTD_MAGIC: [u8; 4] = [0x28, 0xB5, 0x2F, 0xFD];
 
+#[cfg(all(feature = "zstd", feature = "ruzstd"))]
+compile_error!("feature \"zstd\" and feature \"ruzstd\" cannot be enabled at the same time");
+
 pub struct WadDecoder<'wad, TSource: Read + Seek> {
     pub(crate) source: &'wad mut TSource,
 }
@@ -32,6 +35,7 @@ where
             ))),
             WadChunkCompression::Zstd => self.decode_zstd_chunk(chunk),
             WadChunkCompression::ZstdMulti => self.decode_zstd_multi_chunk(chunk),
+            _ => todo!(),
         }
     }
 
@@ -49,9 +53,19 @@ where
             .seek(SeekFrom::Start(chunk.data_offset as u64))?;
 
         let mut data: Vec<u8> = vec![0; chunk.uncompressed_size];
-        zstd::Decoder::new(&mut self.source)
-            .expect("failed to create zstd decoder")
-            .read_exact(&mut data)?;
+
+        #[cfg(feature = "zstd")]
+        {
+            zstd::Decoder::new(&mut self.source)
+                .expect("failed to create zstd decoder")
+                .read_exact(&mut data)?;
+        }
+        #[cfg(feature = "ruzstd")]
+        {
+            ruzstd::StreamingDecoder::new(&mut self.source)
+                .expect("failed to create ruzstd decoder")
+                .read_exact(&mut data)?;
+        }
 
         Ok(data.into_boxed_slice())
     }
@@ -76,9 +90,18 @@ where
         ))?;
 
         // decode zstd data
-        zstd::Decoder::new(&mut self.source)
-            .expect("failed to create zstd decoder")
-            .read_exact(&mut data[zstd_magic_offset..])?;
+        #[cfg(feature = "zstd")]
+        {
+            zstd::Decoder::new(&mut self.source)
+                .expect("failed to create zstd decoder")
+                .read_exact(&mut data[zstd_magic_offset..])?;
+        }
+        #[cfg(feature = "ruzstd")]
+        {
+            ruzstd::StreamingDecoder::new(&mut self.source)
+                .expect("failed to create ruzstd decoder")
+                .read(&mut data[zstd_magic_offset..])?;
+        }
 
         Ok(data.into_boxed_slice())
     }
