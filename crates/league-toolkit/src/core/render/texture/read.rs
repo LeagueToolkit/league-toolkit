@@ -13,8 +13,11 @@ pub enum TextureReadError {
     UnsupportedTextureFormat(TextureFileFormat),
     #[error("Unexpected texture file format! expected {0}, got {1}")]
     UnexpectedTextureFormat(TextureFileFormat, TextureFileFormat),
+
     #[error("IO error: {0}")]
     IOError(#[from] io::Error),
+    #[error("Error reading DDS file: {0}")]
+    DdsError(#[from] ddsfile::Error),
 }
 
 pub type Result<T> = core::result::Result<T, TextureReadError>;

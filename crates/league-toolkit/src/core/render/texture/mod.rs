@@ -2,4 +2,8 @@ pub mod format;
 
 mod read;
 
-pub struct Texture {}
+#[derive(Debug)]
+pub enum Texture {
+    Dds(ddsfile::Dds),
+    Tex,
+}

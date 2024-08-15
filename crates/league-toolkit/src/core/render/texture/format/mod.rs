@@ -52,6 +52,10 @@ impl TextureFileFormat {
     /// **NOTE**: You **must** make sure the reader does not include the magic bytes!
     pub fn read_no_magic<R: io::Read + ?Sized>(&self, reader: &mut R) -> read::Result<Texture> {
         match self {
+            TextureFileFormat::DDS => {
+                let dds = ddsfile::Dds::read(reader).unwrap();
+                Ok(Texture::Dds(dds))
+            }
             _ => Err(read::TextureReadError::UnsupportedTextureFormat(*self)),
         }
     }
