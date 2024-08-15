@@ -1,6 +1,3 @@
-use std::io::Read;
-
-use byteorder::ReadBytesExt;
 use glam::Vec3;
 
 pub use face::*;

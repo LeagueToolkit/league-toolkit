@@ -1,5 +1,6 @@
+pub mod animation;
 pub mod mem;
 pub mod mesh;
+pub mod meta;
 pub mod primitives;
 pub mod wad;
-pub mod animation;
