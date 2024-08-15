@@ -1,5 +1,5 @@
-use glam::{Vec3, vec3};
 use super::Sphere;
+use glam::{vec3, Vec3};
 
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct AABB {

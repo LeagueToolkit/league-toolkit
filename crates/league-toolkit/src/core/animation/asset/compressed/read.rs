@@ -1,13 +1,10 @@
-use std::io::{Read, Seek, SeekFrom};
-use std::mem::size_of;
-use bitflags::bitflags;
-use byteorder::ReadBytesExt;
-use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
-use crate::core::animation::{asset, Compressed};
 use crate::core::animation::asset::compressed::frame::Frame;
 use crate::core::animation::asset::error_metric::ErrorMetric;
 use crate::core::animation::AssetParseError::{InvalidField, InvalidFileVersion, MissingData};
-use crate::util::ReaderExt;
+use crate::core::animation::{asset, Compressed};
+use bitflags::bitflags;
+use std::io::{Read, Seek, SeekFrom};
+use std::mem::size_of;
 
 bitflags! {
     #[derive(Clone, Debug)]
@@ -30,7 +27,6 @@ impl Compressed {
         if version != 1 && version != 2 && version != 3 {
             return Err(InvalidFileVersion(version));
         }
-
 
         let resource_size = reader.read_u32::<LE>()?;
         let format_token = reader.read_u32::<LE>()?;
@@ -87,9 +83,7 @@ impl Compressed {
             if align_of > 0 && (p & (align_of - 1)) != 0 {
                 panic!("bad alignment!");
             }
-            let frame = unsafe {
-                std::mem::transmute::<_, Frame>(frame)
-            };
+            let frame = unsafe { std::mem::transmute::<_, Frame>(frame) };
             frames.push(frame);
         }
 
@@ -99,9 +93,9 @@ impl Compressed {
             true => 24,
             false => 48,
         };
-        let mut jump_caches = Vec::with_capacity(jump_cache_count as usize * jump_frame_size * joint_count as usize);
+        let mut jump_caches =
+            Vec::with_capacity(jump_cache_count as usize * jump_frame_size * joint_count as usize);
         reader.read_exact(&mut jump_caches)?;
-
 
         Ok(Self {
             flags,
