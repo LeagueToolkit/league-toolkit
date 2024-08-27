@@ -3,7 +3,7 @@ use std::io;
 
 use crate::core::render::texture::format::TextureFileFormat;
 
-use super::Texture;
+use super::{format::tex, CompressedTexture};
 
 #[derive(thiserror::Error, Debug)]
 pub enum TextureReadError {
@@ -18,11 +18,13 @@ pub enum TextureReadError {
     IOError(#[from] io::Error),
     #[error("Error reading DDS file: {0}")]
     DdsError(#[from] ddsfile::Error),
+    #[error("Error reading TEX file: {0}")]
+    TexError(#[from] tex::Error),
 }
 
 pub type Result<T> = core::result::Result<T, TextureReadError>;
 
-impl Texture {
+impl CompressedTexture {
     pub fn from_reader<R: io::Read + io::Seek + ?Sized>(reader: &mut R) -> Result<Self> {
         let magic = reader.read_u32::<LE>()?;
         reader.seek(io::SeekFrom::Start(0))?;

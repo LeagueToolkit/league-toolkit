@@ -3,7 +3,7 @@ use std::{
     io::{self},
 };
 
-use super::{read, Texture};
+use super::{read, CompressedTexture};
 use byteorder::{ReadBytesExt, LE};
 
 pub mod tex;
@@ -36,7 +36,10 @@ impl TextureFileFormat {
         }
     }
 
-    pub fn read<R: io::Read + ?Sized>(&self, reader: &mut R) -> read::Result<Texture> {
+    pub fn read<R: io::Read + io::Seek + ?Sized>(
+        &self,
+        reader: &mut R,
+    ) -> read::Result<CompressedTexture> {
         let magic = reader.read_u32::<LE>()?;
         let from_magic = TextureFileFormat::from_magic(magic);
         if from_magic != *self {
@@ -50,13 +53,34 @@ impl TextureFileFormat {
     /// Attempts to read a texture of this format - without reading the 4 magic bytes.
     ///
     /// **NOTE**: You **must** make sure the reader does not include the magic bytes!
-    pub fn read_no_magic<R: io::Read + ?Sized>(&self, reader: &mut R) -> read::Result<Texture> {
+    pub fn read_no_magic<R: io::Read + io::Seek + ?Sized>(
+        &self,
+        reader: &mut R,
+    ) -> read::Result<CompressedTexture> {
         match self {
             TextureFileFormat::DDS => {
                 let dds = ddsfile::Dds::read(reader).unwrap();
-                Ok(Texture::Dds(dds))
+                Ok(CompressedTexture::Dds(dds))
             }
+            TextureFileFormat::TEX => Ok(tex::read_tex(reader)?),
             _ => Err(read::TextureReadError::UnsupportedTextureFormat(*self)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use test_log::test;
+
+    use super::*;
+
+    #[test]
+    fn dds() {
+        let format = TextureFileFormat::DDS;
+        let mut file = fs::File::open("/home/alan/Downloads/aurora_square_0.aurora.dds").unwrap();
+        let tex = format.read_no_magic(&mut file).unwrap();
+
+        panic!();
     }
 }
