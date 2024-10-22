@@ -25,6 +25,7 @@ pub trait ReadProperty: Sized {
 
 use byteorder::ReadBytesExt as _;
 pub trait ReaderExt: io::Read {
+    /// Reads a u8 as a property kind
     fn read_property_kind(
         &mut self,
         legacy: bool,

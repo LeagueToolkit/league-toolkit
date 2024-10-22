@@ -90,6 +90,7 @@ pub struct BinProperty {
     pub value: PropertyValueEnum,
 }
 
+use super::traits::PropertyValue as _;
 impl BinProperty {
     pub fn from_reader<R: io::Read>(reader: &mut R, legacy: bool) -> Result<Self, ParseError> {
         use super::traits::ReaderExt;
@@ -103,6 +104,6 @@ impl BinProperty {
         })
     }
     pub fn size(&self) -> usize {
-        todo!()
+        5 + self.value.size_no_header()
     }
 }
