@@ -36,7 +36,7 @@ impl ReadProperty for StructValue {
             });
         }
 
-        let _size = reader.read_u32::<LE>()?;
+        let size = reader.read_u32::<LE>()?;
         let prop_count = reader.read_u16::<LE>()?;
         let mut properties = HashMap::with_capacity(prop_count as _);
         for _ in 0..prop_count {
@@ -44,7 +44,12 @@ impl ReadProperty for StructValue {
             properties.insert(prop.name_hash, prop);
         }
 
-        // TODO (alan): assert size is valid for the data we read
+        let real_size: usize = 2 + properties.values().map(|p| p.size()).sum::<usize>();
+        if size as usize != real_size {
+            return Err(crate::core::meta::ParseError::InvalidSize(
+                size as _, real_size,
+            ));
+        }
 
         Ok(Self {
             class_hash,
