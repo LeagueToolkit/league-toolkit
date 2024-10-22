@@ -22,6 +22,9 @@ impl ReadProperty for ContainerValue {
         use byteorder::{ReadBytesExt as _, LE};
 
         let item_kind = reader.read_property_kind(legacy)?;
+        if item_kind.is_container() {
+            return Err(crate::core::meta::ParseError::InvalidNesting(item_kind));
+        }
 
         let size = reader.read_u32::<LE>()?;
         let prop_count = reader.read_u32::<LE>()?;

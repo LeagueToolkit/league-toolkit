@@ -3,6 +3,7 @@ use std::{collections::HashMap, hash::Hash};
 use crate::core::meta::{
     property::BinPropertyKind,
     traits::{PropertyValue, ReadProperty},
+    ParseError,
 };
 
 use super::PropertyValueEnum;
@@ -62,12 +63,15 @@ impl PropertyValue for MapValue {
 use crate::core::meta::traits::ReaderExt;
 use byteorder::{ReadBytesExt, LE};
 impl ReadProperty for MapValue {
-    fn from_reader<R: std::io::Read>(
-        reader: &mut R,
-        legacy: bool,
-    ) -> Result<Self, crate::core::meta::ParseError> {
+    fn from_reader<R: std::io::Read>(reader: &mut R, legacy: bool) -> Result<Self, ParseError> {
         let key_kind = reader.read_property_kind(legacy)?;
+        if !key_kind.is_primitive() {
+            return Err(ParseError::InvalidKeyType(key_kind));
+        }
         let value_kind = reader.read_property_kind(legacy)?;
+        if value_kind.is_container() {
+            return Err(ParseError::InvalidNesting(value_kind));
+        }
         let _size = reader.read_u32::<LE>()?;
         let len = reader.read_u32::<LE>()? as _;
         let mut entries = HashMap::with_capacity(len);

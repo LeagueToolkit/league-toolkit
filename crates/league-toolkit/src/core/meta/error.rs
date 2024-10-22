@@ -15,6 +15,11 @@ pub enum ParseError {
     #[error("Invalid size - expected {0}, got {1} bytes")]
     InvalidSize(usize, usize),
 
+    #[error("Container type {0:?} cannot be nested!")]
+    InvalidNesting(BinPropertyKind),
+    #[error("Invalid map key type {0:?}, only primitive types can be used as keys.")]
+    InvalidKeyType(BinPropertyKind),
+
     #[error(transparent)]
     ReaderError(#[from] crate::util::ReaderError),
     #[error("IO Error - {0}")]

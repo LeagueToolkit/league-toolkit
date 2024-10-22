@@ -73,6 +73,36 @@ impl BinPropertyKind {
         Ok(BinPropertyKind::try_from_primitive(fudged)?)
     }
 
+    pub fn is_primitive(&self) -> bool {
+        use BinPropertyKind::*;
+        matches!(
+            self,
+            None | Bool
+                | I8
+                | U8
+                | I16
+                | U16
+                | I32
+                | U32
+                | I64
+                | U64
+                | F32
+                | Vector2
+                | Vector3
+                | Vector4
+                | Matrix44
+                | Color
+                | String
+                | Hash
+                | WadChunkLink
+        )
+    }
+
+    pub fn is_container(&self) -> bool {
+        use BinPropertyKind::*;
+        matches!(self, Container | UnorderedContainer | Optional | Map)
+    }
+
     pub fn read<R: io::Read>(
         self,
         reader: &mut R,

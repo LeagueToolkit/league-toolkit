@@ -1,4 +1,7 @@
-use crate::core::meta::traits::{PropertyValue, ReadProperty};
+use crate::core::meta::{
+    traits::{PropertyValue, ReadProperty},
+    ParseError,
+};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, PartialEq, Debug)]
@@ -16,11 +19,12 @@ impl PropertyValue for OptionalValue {
 use super::{super::super::traits::ReaderExt as _, PropertyValueEnum};
 use crate::util::ReaderExt as _;
 impl ReadProperty for OptionalValue {
-    fn from_reader<R: std::io::Read>(
-        reader: &mut R,
-        legacy: bool,
-    ) -> Result<Self, crate::core::meta::ParseError> {
+    fn from_reader<R: std::io::Read>(reader: &mut R, legacy: bool) -> Result<Self, ParseError> {
         let kind = reader.read_property_kind(legacy)?;
+        if kind.is_container() {
+            return Err(ParseError::InvalidNesting(kind));
+        }
+
         let is_some = reader.read_bool()?;
 
         Ok(Self(match is_some {
