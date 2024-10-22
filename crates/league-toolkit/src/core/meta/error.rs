@@ -11,7 +11,7 @@ pub enum ParseError {
     #[error("Invalid '{0}' - got '{1}'")]
     InvalidField(&'static str, String),
     #[error("Invalid property kind - {0}")]
-    InvalidPropertyType(#[from] num_enum::TryFromPrimitiveError<BinPropertyKind>),
+    InvalidPropertyTypePrimitive(#[from] num_enum::TryFromPrimitiveError<BinPropertyKind>),
     #[error("Invalid size - expected {0}, got {1} bytes")]
     InvalidSize(usize, usize),
 

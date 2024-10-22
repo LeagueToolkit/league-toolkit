@@ -98,7 +98,7 @@ impl BinTree {
         let mut objects = HashMap::with_capacity(obj_count);
         match Self::try_read_objects(reader, &obj_classes, &mut objects, false) {
             Ok(_) => {}
-            Err(ParseError::InvalidPropertyType(kind)) => {
+            Err(ParseError::InvalidPropertyTypePrimitive(kind)) => {
                 log::warn!("Invalid prop type {kind}. Trying reading objects as legacy.");
                 Self::try_read_objects(reader, &obj_classes, &mut objects, true)?;
             }
