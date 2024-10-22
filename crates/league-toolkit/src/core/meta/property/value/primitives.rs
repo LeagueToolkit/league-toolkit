@@ -33,7 +33,11 @@ use glam::{Mat4, Vec2, Vec3, Vec4};
 // a single struct/rust primitive.
 
 impl_prim!(BoolValue, bool, [Eq, Hash], read_bool);
-// TODO (alan): how is this different from a regular BoolValue?
+
+// https://github.com/LeagueToolkit/league-toolkit/pull/6#discussion_r1809366173
+// > Afaik this is leftover from before bitfield support was added to league.
+// > This type is also not a primitive, meaning it can't be used as a key for map.
+// - moonshadow
 impl_prim!(BitBoolValue, bool, [Eq, Hash], read_bool);
 
 impl_prim!(I8Value, i8, [Eq, Hash], read_i8);
