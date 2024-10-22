@@ -23,7 +23,7 @@ impl ReadProperty for ContainerValue {
 
         let item_kind = reader.read_property_kind(legacy)?;
 
-        let _size = reader.read_u32::<LE>()?;
+        let size = reader.read_u32::<LE>()?;
         let prop_count = reader.read_u32::<LE>()?;
         let mut items = Vec::with_capacity(prop_count as _);
         for _ in 0..prop_count {
@@ -31,7 +31,12 @@ impl ReadProperty for ContainerValue {
             items.push(prop);
         }
 
-        // TODO (alan): assert size is valid for the data we read
+        let real_size: usize = 4 + items.iter().map(|p| p.size_no_header()).sum::<usize>();
+        if size as usize != real_size {
+            return Err(crate::core::meta::ParseError::InvalidSize(
+                size as _, real_size,
+            ));
+        }
 
         Ok(Self { items })
     }
