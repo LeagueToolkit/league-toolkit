@@ -14,6 +14,7 @@ BinTree(
           "kind": Container,
           "name_hash": 2257500010,
           "value": ContainerValue(
+            item_kind: Struct,
             items: [
               PropertyValueEnum(
                 kind: Struct,
