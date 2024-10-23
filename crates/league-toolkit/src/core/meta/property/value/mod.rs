@@ -20,7 +20,9 @@ pub use unordered_container::*;
 
 use std::io;
 
-use crate::core::meta::{property::BinPropertyKind, traits::ReadProperty as _, ParseError};
+use crate::core::meta::{
+    property::BinPropertyKind, traits::ReadProperty as _, traits::WriteProperty as _, ParseError,
+};
 
 use enum_dispatch::enum_dispatch;
 
@@ -30,6 +32,20 @@ macro_rules! enum_construct {
             $(BinPropertyKind::$variant => paste::paste! {
                 Self::$variant([<$variant Value>]::$method)
             },)*
+        }
+    };
+}
+macro_rules! enum_to_writer {
+    ($item:expr, $writer:expr, [$($variant:ident),*]) => {
+        match $item {
+            $(Self::$variant(inner) => inner.to_writer($writer, false),)*
+        }
+    };
+}
+macro_rules! enum_kind {
+    ($item:expr, [$($variant:ident),*]) => {
+        match $item {
+            $(Self::$variant(_) => BinPropertyKind::$variant,)*
         }
     };
 }
@@ -69,6 +85,40 @@ pub enum PropertyValueEnum {
 }
 
 impl PropertyValueEnum {
+    pub fn kind(&self) -> BinPropertyKind {
+        enum_kind!(
+            self,
+            [
+                None,
+                Bool,
+                I8,
+                U8,
+                I16,
+                U16,
+                I32,
+                U32,
+                I64,
+                U64,
+                F32,
+                Vector2,
+                Vector3,
+                Vector4,
+                Matrix44,
+                Color,
+                String,
+                Hash,
+                WadChunkLink,
+                Container,
+                UnorderedContainer,
+                Struct,
+                Embedded,
+                ObjectLink,
+                Optional,
+                Map,
+                BitBool
+            ]
+        )
+    }
     pub fn from_reader<R: io::Read + std::io::Seek>(
         reader: &mut R,
         kind: BinPropertyKind,
@@ -107,5 +157,41 @@ impl PropertyValueEnum {
                 BitBool
             ]
         ))
+    }
+
+    pub fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), io::Error> {
+        enum_to_writer!(
+            self,
+            writer,
+            [
+                None,
+                Bool,
+                I8,
+                U8,
+                I16,
+                U16,
+                I32,
+                U32,
+                I64,
+                U64,
+                F32,
+                Vector2,
+                Vector3,
+                Vector4,
+                Matrix44,
+                Color,
+                String,
+                Hash,
+                WadChunkLink,
+                Container,
+                UnorderedContainer,
+                Struct,
+                Embedded,
+                ObjectLink,
+                Optional,
+                Map,
+                BitBool
+            ]
+        )
     }
 }
