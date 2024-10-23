@@ -49,8 +49,11 @@ impl WriteProperty for OptionalValue {
     fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
         &self,
         writer: &mut R,
-        _legacy: bool,
+        legacy: bool,
     ) -> Result<(), std::io::Error> {
+        if legacy {
+            unimplemented!("legacy optional write")
+        }
         writer.write_property_kind(self.0)?;
         writer.write_bool(self.1.is_some())?;
         if let Some(value) = &self.1 {
