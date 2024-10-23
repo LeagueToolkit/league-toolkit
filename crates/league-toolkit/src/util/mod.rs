@@ -5,8 +5,8 @@ pub mod writer;
 pub use reader::*;
 pub use writer::*;
 
-/// Returns the number of bytes 'moved' by the `inner` function, of some seekable object.
-/// **NOTE**: this function assumes the cursor position after calling `inner()` will always be >= the cursor after calling `inner()`
+/// Measures the differnece in cursor position of an `io::Seek`, before and after calling `inner`
+/// **NOTE**: this function assumes the cursor position after calling `inner()` will always be >= the cursor after calling `inner()`. Negative position differences will clamp to 0.
 ///
 /// The `inner` function's Err type **must** impl `From<std::io::Error>`, since
 /// `std::io::Seek::stream_position()` is fallable
