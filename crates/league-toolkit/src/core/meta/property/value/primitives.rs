@@ -14,7 +14,7 @@ macro_rules! impl_prim {
         }
 
         impl ReadProperty for $name {
-            fn from_reader<R: std::io::Read>(
+            fn from_reader<R: std::io::Read + ?Sized>(
                 reader: &mut R,
                 _legacy: bool,
             ) -> Result<Self, crate::core::meta::ParseError> {
@@ -22,7 +22,7 @@ macro_rules! impl_prim {
             }
         }
         impl WriteProperty for $name {
-            fn to_writer<W: std::io::Write + ?Sized>(
+            fn to_writer<W: std::io::Write + std::io::Seek + ?Sized>(
                 &self,
                 writer: &mut W,
                 _legacy: bool,

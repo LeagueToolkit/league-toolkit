@@ -36,7 +36,9 @@ impl BinTree {
 }
 
 impl BinTree {
-    pub fn from_reader<R: io::Read + std::io::Seek>(reader: &mut R) -> Result<Self, ParseError> {
+    pub fn from_reader<R: io::Read + std::io::Seek + ?Sized>(
+        reader: &mut R,
+    ) -> Result<Self, ParseError> {
         use crate::util::ReaderExt as _;
         use byteorder::{ReadBytesExt as _, LE};
 
@@ -126,7 +128,7 @@ impl BinTree {
         })
     }
 
-    fn try_read_objects<R: io::Read + std::io::Seek>(
+    fn try_read_objects<R: io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         obj_classes: &[u32],
         objects: &mut HashMap<u32, BinTreeObject>,

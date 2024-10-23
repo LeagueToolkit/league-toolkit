@@ -11,7 +11,7 @@ impl PropertyValue for NoneValue {
 }
 
 impl ReadProperty for NoneValue {
-    fn from_reader<R: std::io::Read + std::io::Seek>(
+    fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
         _reader: &mut R,
         _legacy: bool,
     ) -> Result<Self, crate::core::meta::ParseError> {
@@ -19,7 +19,7 @@ impl ReadProperty for NoneValue {
     }
 }
 impl WriteProperty for NoneValue {
-    fn to_writer<R: std::io::Write + ?Sized>(
+    fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
         &self,
         writer: &mut R,
         _legacy: bool,

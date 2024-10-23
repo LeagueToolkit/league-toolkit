@@ -25,7 +25,7 @@ use super::{
 };
 use crate::util::{ReaderExt as _, WriterExt as _};
 impl ReadProperty for OptionalValue {
-    fn from_reader<R: std::io::Read + std::io::Seek>(
+    fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         legacy: bool,
     ) -> Result<Self, ParseError> {
@@ -46,7 +46,7 @@ impl ReadProperty for OptionalValue {
     }
 }
 impl WriteProperty for OptionalValue {
-    fn to_writer<R: std::io::Write + ?Sized>(
+    fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
         &self,
         writer: &mut R,
         _legacy: bool,

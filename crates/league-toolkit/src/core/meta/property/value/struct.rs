@@ -25,7 +25,7 @@ impl Value for StructValue {
 }
 
 impl ReadProperty for StructValue {
-    fn from_reader<R: std::io::Read + std::io::Seek>(
+    fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         legacy: bool,
     ) -> Result<Self, crate::core::meta::ParseError> {

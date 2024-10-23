@@ -66,7 +66,7 @@ impl PropertyValue for MapValue {
 use crate::core::meta::traits::ReaderExt;
 use byteorder::{ReadBytesExt, LE};
 impl ReadProperty for MapValue {
-    fn from_reader<R: std::io::Read + std::io::Seek>(
+    fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         legacy: bool,
     ) -> Result<Self, ParseError> {

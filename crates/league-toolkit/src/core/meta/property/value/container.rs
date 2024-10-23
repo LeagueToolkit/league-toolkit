@@ -1,17 +1,19 @@
 use crate::{
     core::meta::{
-        traits::{PropertyValue as Value, ReadProperty, ReaderExt, WriteProperty},
+        property::BinPropertyKind,
+        traits::{PropertyValue as Value, ReadProperty, ReaderExt, WriteProperty, WriterExt},
         ParseError,
     },
     util::measure,
 };
 
 use super::PropertyValueEnum;
-use byteorder::{ReadBytesExt as _, LE};
+use byteorder::{ReadBytesExt as _, WriteBytesExt as _, LE};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ContainerValue {
+    pub item_kind: BinPropertyKind,
     pub items: Vec<PropertyValueEnum>,
 }
 
@@ -22,7 +24,7 @@ impl Value for ContainerValue {
 }
 
 impl ReadProperty for ContainerValue {
-    fn from_reader<R: std::io::Read + std::io::Seek>(
+    fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         legacy: bool,
     ) -> Result<Self, ParseError> {
@@ -46,16 +48,19 @@ impl ReadProperty for ContainerValue {
             return Err(ParseError::InvalidSize(size as _, real_size));
         }
 
-        Ok(Self { items })
+        Ok(Self { item_kind, items })
     }
 }
 
 impl WriteProperty for ContainerValue {
-    fn to_writer<R: std::io::Write + ?Sized>(
+    fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
         &self,
         writer: &mut R,
         legacy: bool,
     ) -> Result<(), std::io::Error> {
-        todo!()
+        writer.write_property_kind(self.item_kind)?;
+        writer.write_u32::<LE>(0)?;
+
+        Ok(())
     }
 }

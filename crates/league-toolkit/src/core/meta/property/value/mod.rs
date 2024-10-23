@@ -119,7 +119,7 @@ impl PropertyValueEnum {
             ]
         )
     }
-    pub fn from_reader<R: io::Read + std::io::Seek>(
+    pub fn from_reader<R: io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         kind: BinPropertyKind,
         legacy: bool,
@@ -159,7 +159,10 @@ impl PropertyValueEnum {
         ))
     }
 
-    pub fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<(), io::Error> {
+    pub fn to_writer<W: io::Write + io::Seek + ?Sized>(
+        &self,
+        writer: &mut W,
+    ) -> Result<(), io::Error> {
         enum_to_writer!(
             self,
             writer,

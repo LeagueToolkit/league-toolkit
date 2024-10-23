@@ -13,7 +13,7 @@ pub struct BinTreeObject {
 }
 
 impl BinTreeObject {
-    pub fn from_reader<R: io::Read + io::Seek>(
+    pub fn from_reader<R: io::Read + io::Seek + ?Sized>(
         reader: &mut R,
         class_hash: u32,
         legacy: bool,

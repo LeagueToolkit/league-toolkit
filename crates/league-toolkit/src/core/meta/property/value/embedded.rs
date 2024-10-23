@@ -13,7 +13,7 @@ impl PropertyValue for EmbeddedValue {
 }
 
 impl ReadProperty for EmbeddedValue {
-    fn from_reader<R: std::io::Read + std::io::Seek>(
+    fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         legacy: bool,
     ) -> Result<Self, crate::core::meta::ParseError> {
@@ -21,7 +21,7 @@ impl ReadProperty for EmbeddedValue {
     }
 }
 impl WriteProperty for EmbeddedValue {
-    fn to_writer<R: std::io::Write + ?Sized>(
+    fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
         &self,
         writer: &mut R,
         legacy: bool,

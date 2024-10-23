@@ -17,7 +17,7 @@ pub trait PropertyValue {
 }
 
 pub trait ReadProperty: Sized {
-    fn from_reader<R: io::Read + io::Seek>(
+    fn from_reader<R: io::Read + io::Seek + ?Sized>(
         reader: &mut R,
         legacy: bool,
     ) -> Result<Self, crate::core::meta::ParseError>;
@@ -37,7 +37,7 @@ pub trait ReaderExt: io::Read {
 impl<R: io::Read + ?Sized> ReaderExt for R {}
 
 pub trait WriteProperty: Sized {
-    fn to_writer<R: io::Write + ?Sized>(
+    fn to_writer<R: io::Write + io::Seek + ?Sized>(
         &self,
         writer: &mut R,
         legacy: bool,

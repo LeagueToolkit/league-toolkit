@@ -103,7 +103,7 @@ impl BinPropertyKind {
         matches!(self, Container | UnorderedContainer | Optional | Map)
     }
 
-    pub fn read<R: io::Read + std::io::Seek>(
+    pub fn read<R: io::Read + std::io::Seek + ?Sized>(
         self,
         reader: &mut R,
         legacy: bool,
@@ -122,7 +122,7 @@ pub struct BinProperty {
 
 use super::traits::PropertyValue as _;
 impl BinProperty {
-    pub fn from_reader<R: io::Read + std::io::Seek>(
+    pub fn from_reader<R: io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         legacy: bool,
     ) -> Result<Self, ParseError> {
@@ -136,7 +136,10 @@ impl BinProperty {
             value: PropertyValueEnum::from_reader(reader, kind, legacy)?,
         })
     }
-    pub fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), io::Error> {
+    pub fn to_writer<W: io::Write + std::io::Seek + ?Sized>(
+        &self,
+        writer: &mut W,
+    ) -> Result<(), io::Error> {
         use super::traits::WriterExt;
         use byteorder::{WriteBytesExt as _, LE};
 
