@@ -1,54 +1,21 @@
 use std::{collections::HashMap, io};
 
-use super::{error::ParseError, BinTreeObject};
+use crate::core::meta::ParseError;
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug)]
-pub struct BinTree {
-    pub is_override: bool,
-    pub version: u32,
-
-    pub objects: HashMap<u32, BinTreeObject>,
-    /// List of other property bins we depend on.
-    ///
-    /// Property bins can depend on other property bins in a similar fashion to importing code libraries
-    pub dependencies: Vec<String>,
-
-    data_overrides: Vec<()>,
-}
+use super::{BinTree, BinTreeObject};
+use crate::util::ReaderExt as _;
+use byteorder::{ReadBytesExt as _, LE};
 
 impl BinTree {
-    pub fn new(
-        objects: impl IntoIterator<Item = BinTreeObject>,
-        dependencies: impl IntoIterator<Item = String>,
-    ) -> Self {
-        Self {
-            version: 3,
-            is_override: false,
-            objects: objects
-                .into_iter()
-                .map(|o: BinTreeObject| (o.path_hash, o))
-                .collect(),
-            dependencies: dependencies.into_iter().collect(),
-            data_overrides: Vec::new(),
-        }
-    }
-}
-
-impl BinTree {
+    pub const PROP: u32 = u32::from_le_bytes(*b"PROP");
+    pub const PTCH: u32 = u32::from_le_bytes(*b"PTCH");
     pub fn from_reader<R: io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
     ) -> Result<Self, ParseError> {
-        use crate::util::ReaderExt as _;
-        use byteorder::{ReadBytesExt as _, LE};
-
-        const PROP: u32 = u32::from_le_bytes(*b"PROP");
-        const PTCH: u32 = u32::from_le_bytes(*b"PTCH");
-
         let magic = reader.read_u32::<LE>()?;
         let is_override = match magic {
-            PROP => false,
-            PTCH => {
+            Self::PROP => false,
+            Self::PTCH => {
                 let override_version = reader.read_u32::<LE>()?;
                 if override_version != 1 {
                     return Err(ParseError::InvalidFileVersion(override_version));
@@ -60,10 +27,12 @@ impl BinTree {
                 let _maybe_override_object_count = reader.read_u32::<LE>()?;
 
                 let magic = reader.read_u32::<LE>()?;
-                if magic != PROP {
+                if magic != Self::PROP {
                     // TODO (alan): repr this in the error
                     log::error!(
-                        "Expected PROP ({PROP:#x}) section after PTCH ({PTCH:#x}), got '{:#x}'",
+                        "Expected PROP ({:#x}) section after PTCH ({:#x}), got '{:#x}'",
+                        Self::PROP,
+                        Self::PTCH,
                         magic
                     );
                     return Err(ParseError::InvalidFileSignature);
@@ -112,7 +81,7 @@ impl BinTree {
                 let count = reader.read_u32::<LE>()?;
                 let mut v = Vec::with_capacity(count as _);
                 for _ in 0..count {
-                    v.push(()); // TODO: impl
+                    v.push(()); // TODO: impl data overrides
                 }
                 v
             }
