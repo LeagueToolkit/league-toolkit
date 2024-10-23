@@ -1,5 +1,5 @@
 ---
-source: crates/league-toolkit/tests/meta/mod.rs
+source: crates/league-toolkit/tests/meta.rs
 expression: bin
 ---
 BinTree(
