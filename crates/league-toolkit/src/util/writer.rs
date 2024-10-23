@@ -49,7 +49,6 @@ pub trait WriterExt: Write {
         Ok(())
     }
 
-
     fn write_aabb<E: ByteOrder>(&mut self, aabb: &AABB) -> io::Result<()> {
         self.write_vec3::<E>(&aabb.min)?;
         self.write_vec3::<E>(&aabb.max)?;

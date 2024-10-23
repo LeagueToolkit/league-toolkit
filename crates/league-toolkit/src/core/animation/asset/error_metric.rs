@@ -1,6 +1,6 @@
+use byteorder::{ReadBytesExt, LE};
 use std::io;
 use std::io::Read;
-use byteorder::{LE, ReadBytesExt};
 
 // Represents the optimization settings of a transform component
 #[derive(Clone, Debug)]
@@ -22,10 +22,16 @@ impl Default for ErrorMetric {
 
 impl ErrorMetric {
     pub fn new(margin: f32, discontinuity_threshold: f32) -> Self {
-        Self { margin, discontinuity_threshold }
+        Self {
+            margin,
+            discontinuity_threshold,
+        }
     }
 
     pub fn from_reader<R: Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
-        Ok(Self::new(reader.read_f32::<LE>()?, reader.read_f32::<LE>()?))
+        Ok(Self::new(
+            reader.read_f32::<LE>()?,
+            reader.read_f32::<LE>()?,
+        ))
     }
 }

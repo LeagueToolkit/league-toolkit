@@ -17,6 +17,9 @@ pub fn elf<S: AsRef<str>>(input: S) -> usize {
 mod tests {
     #[test]
     fn elf() {
-        assert_eq!(super::elf("jdfgsdhfsdfsd 6445dsfsd7fg/*/+bfjsdgf%$^"), 248446350);
+        assert_eq!(
+            super::elf("jdfgsdhfsdfsd 6445dsfsd7fg/*/+bfjsdgf%$^"),
+            248446350
+        );
     }
 }

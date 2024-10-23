@@ -73,10 +73,7 @@ pub trait ReaderExt: Read {
     }
 
     fn read_sphere<T: ByteOrder>(&mut self) -> io::Result<Sphere> {
-        Ok(Sphere::new(
-            self.read_vec3::<T>()?,
-            self.read_f32::<T>()?,
-        ))
+        Ok(Sphere::new(self.read_vec3::<T>()?, self.read_f32::<T>()?))
     }
 }
 

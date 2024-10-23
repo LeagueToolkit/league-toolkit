@@ -13,7 +13,8 @@ impl Frame {
         self.joint_id & 0x3fff
     }
     pub fn transform_type(&self) -> TransformType {
-        TransformType::try_from_primitive((self.joint_id >> 14) as u8).expect("invalid transform type")
+        TransformType::try_from_primitive((self.joint_id >> 14) as u8)
+            .expect("invalid transform type")
     }
 }
 

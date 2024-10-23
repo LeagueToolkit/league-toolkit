@@ -1,12 +1,12 @@
-use glam::{Vec3};
-use crate::core::animation::{AnimationAsset};
 use crate::core::animation::asset::compressed::frame::Frame;
 use crate::core::animation::asset::compressed::read::AnimationFlags;
 use crate::core::animation::asset::error_metric::ErrorMetric;
+use crate::core::animation::AnimationAsset;
+use glam::Vec3;
 
+mod frame;
 mod read;
 mod write;
-mod frame;
 
 #[derive(Clone, Debug)]
 pub struct Compressed {
