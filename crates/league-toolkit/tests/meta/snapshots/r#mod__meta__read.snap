@@ -28,7 +28,7 @@ BinTree(
                     607245356: {
                       "kind": Optional,
                       "name_hash": 607245356,
-                      "value": OptionalValue(Some(PropertyValueEnum(
+                      "value": OptionalValue(F32, Some(PropertyValueEnum(
                         kind: F32,
                         value: F32Value(10.0),
                       ))),
@@ -51,7 +51,7 @@ BinTree(
                     1376955374: {
                       "kind": Optional,
                       "name_hash": 1376955374,
-                      "value": OptionalValue(Some(PropertyValueEnum(
+                      "value": OptionalValue(F32, Some(PropertyValueEnum(
                         kind: F32,
                         value: F32Value(1.0),
                       ))),
