@@ -6,7 +6,7 @@ use crate::{
         traits::{PropertyValue, ReadProperty, ReaderExt, WriteProperty, WriterExt},
         ParseError,
     },
-    util::measure,
+    util::{measure, window},
 };
 use byteorder::{ReadBytesExt as _, WriteBytesExt as _, LE};
 
@@ -129,8 +129,7 @@ impl WriteProperty for MapValue {
             Ok::<_, io::Error>(())
         })?;
 
-        writer.seek(io::SeekFrom::Start(size_pos))?;
-        writer.write_u32::<LE>(size as _)?;
+        window(writer, size_pos, |writer| writer.write_u32::<LE>(size as _))?;
 
         Ok(())
     }

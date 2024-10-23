@@ -6,7 +6,7 @@ use crate::{
         traits::{PropertyValue as Value, ReadProperty, ReaderExt, WriteProperty, WriterExt},
         ParseError,
     },
-    util::measure,
+    util::{measure, window},
 };
 
 use super::PropertyValueEnum;
@@ -77,8 +77,7 @@ impl WriteProperty for ContainerValue {
             Ok::<_, io::Error>(())
         })?;
 
-        writer.seek(io::SeekFrom::Start(size_pos))?;
-        writer.write_u32::<LE>(size as u32)?;
+        window(writer, size_pos, |writer| writer.write_u32::<LE>(size as _))?;
 
         Ok(())
     }
