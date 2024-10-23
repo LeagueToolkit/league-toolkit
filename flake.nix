@@ -63,6 +63,7 @@
             cargo
             cargo-insta
             cargo-hack
+            cargo-expand
             # pkg-config
             # openssl
           ];
