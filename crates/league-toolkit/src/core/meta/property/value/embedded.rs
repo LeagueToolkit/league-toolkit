@@ -26,6 +26,6 @@ impl WriteProperty for EmbeddedValue {
         writer: &mut R,
         legacy: bool,
     ) -> Result<(), std::io::Error> {
-        todo!()
+        StructValue::to_writer(&self.0, writer, legacy)
     }
 }

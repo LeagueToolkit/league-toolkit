@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, io};
 
 use crate::{
     core::meta::{
@@ -7,6 +7,7 @@ use crate::{
     },
     util::measure,
 };
+use byteorder::{ReadBytesExt as _, WriteBytesExt as _, LE};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, PartialEq, Debug, Default)]
@@ -29,8 +30,6 @@ impl ReadProperty for StructValue {
         reader: &mut R,
         legacy: bool,
     ) -> Result<Self, crate::core::meta::ParseError> {
-        use byteorder::{ReadBytesExt as _, LE};
-
         let class_hash = reader.read_u32::<LE>()?;
         if class_hash == 0 {
             return Ok(Self {
@@ -64,11 +63,33 @@ impl ReadProperty for StructValue {
     }
 }
 impl WriteProperty for StructValue {
-    fn to_writer<R: std::io::Write + ?Sized>(
+    fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
         &self,
         writer: &mut R,
         legacy: bool,
     ) -> Result<(), std::io::Error> {
-        todo!()
+        if legacy {
+            unimplemented!("legacy struct writing");
+        }
+
+        writer.write_u32::<LE>(self.class_hash)?;
+
+        let size_pos = writer.stream_position()?;
+        writer.write_u32::<LE>(0)?;
+
+        let (size, _) = measure(writer, |writer| {
+            writer.write_u16::<LE>(self.properties.len() as _)?;
+
+            for prop in self.properties.values() {
+                prop.to_writer(writer)?;
+            }
+
+            Ok::<_, io::Error>(())
+        })?;
+
+        writer.seek(io::SeekFrom::Start(size_pos))?;
+        writer.write_u32::<LE>(size as _)?;
+
+        Ok(())
     }
 }
