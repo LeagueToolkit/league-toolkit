@@ -1,3 +1,5 @@
+use std::io;
+
 use crate::{
     core::meta::{
         property::BinPropertyKind,
@@ -53,13 +55,30 @@ impl ReadProperty for ContainerValue {
 }
 
 impl WriteProperty for ContainerValue {
+    // TODO: legacy writing
     fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
         &self,
         writer: &mut R,
         legacy: bool,
     ) -> Result<(), std::io::Error> {
+        if legacy {
+            unimplemented!("legacy container writing");
+        }
+
         writer.write_property_kind(self.item_kind)?;
+        let size_pos = writer.stream_position()?;
         writer.write_u32::<LE>(0)?;
+
+        let (size, _) = measure(writer, |writer| {
+            writer.write_u32::<LE>(self.items.len() as _)?;
+            for item in &self.items {
+                item.to_writer(writer)?;
+            }
+            Ok::<_, io::Error>(())
+        })?;
+
+        writer.seek(io::SeekFrom::Start(size_pos))?;
+        writer.write_u32::<LE>(size as u32)?;
 
         Ok(())
     }
