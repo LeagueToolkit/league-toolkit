@@ -10,6 +10,12 @@ pub struct Color<T = f32> {
     pub a: T,
 }
 
+impl<T> AsRef<Color<T>> for Color<T> {
+    fn as_ref(&self) -> &Color<T> {
+        &self
+    }
+}
+
 impl<T> Color<T> {
     pub const fn new(r: T, g: T, b: T, a: T) -> Self {
         Self { r, g, b, a }
