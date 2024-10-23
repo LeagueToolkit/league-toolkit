@@ -35,3 +35,20 @@ pub trait ReaderExt: io::Read {
 }
 
 impl<R: io::Read + ?Sized> ReaderExt for R {}
+
+pub trait WriteProperty: Sized {
+    fn to_writer<R: io::Write + ?Sized>(
+        &self,
+        writer: &mut R,
+        legacy: bool,
+    ) -> Result<(), io::Error>;
+}
+
+use byteorder::WriteBytesExt as _;
+pub trait WriterExt: io::Write {
+    fn write_property_kind(&mut self, kind: BinPropertyKind) -> Result<(), io::Error> {
+        self.write_u8(kind.into())
+    }
+}
+
+impl<R: io::Write + ?Sized> WriterExt for R {}
