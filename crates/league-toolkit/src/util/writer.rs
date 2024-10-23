@@ -14,6 +14,13 @@ pub trait WriterExt: Write {
         self.write_all(&buf)
     }
 
+    fn write_len_prefixed_string<T: ByteOrder, S: AsRef<str>>(&mut self, str: S) -> io::Result<()> {
+        let str = str.as_ref();
+        self.write_u16::<T>(str.len() as _)?;
+        self.write_all(str.as_bytes())?;
+        Ok(())
+    }
+
     /// Writes a string with a null terminator (writes sizeof(str) + 1 bytes)
     fn write_terminated_string<S: AsRef<str>>(&mut self, str: S) -> io::Result<()> {
         self.write_all(str.as_ref().as_bytes())?;
