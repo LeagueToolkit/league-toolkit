@@ -30,6 +30,9 @@ zstd = { version = "0.13", default-features = false, optional = true }
 ruzstd = { version = "0.7", optional = true }
 
 serde = { version = "1.0.204", features = ["derive"], optional = true }
+paste = "1.0.15"
+miette = "7.2.0"
+enum_dispatch = "0.3.13"
 
 [dev-dependencies]
 league-toolkit = {path = ".", features = ["serde"]}
