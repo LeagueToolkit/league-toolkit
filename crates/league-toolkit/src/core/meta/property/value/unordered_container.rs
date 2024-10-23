@@ -27,6 +27,6 @@ impl WriteProperty for UnorderedContainerValue {
         writer: &mut R,
         legacy: bool,
     ) -> Result<(), std::io::Error> {
-        todo!()
+        self.0.to_writer(writer, legacy)
     }
 }
