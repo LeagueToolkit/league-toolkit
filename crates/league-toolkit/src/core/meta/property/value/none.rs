@@ -21,7 +21,7 @@ impl ReadProperty for NoneValue {
 impl WriteProperty for NoneValue {
     fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
         &self,
-        writer: &mut R,
+        _writer: &mut R,
         _legacy: bool,
     ) -> Result<(), std::io::Error> {
         Ok(())
