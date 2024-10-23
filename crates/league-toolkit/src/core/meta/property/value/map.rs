@@ -1,13 +1,14 @@
-use std::{collections::HashMap, hash::Hash};
+use std::{collections::HashMap, hash::Hash, io};
 
 use crate::{
     core::meta::{
         property::BinPropertyKind,
-        traits::{PropertyValue, ReadProperty, WriteProperty},
+        traits::{PropertyValue, ReadProperty, ReaderExt, WriteProperty, WriterExt},
         ParseError,
     },
     util::measure,
 };
+use byteorder::{ReadBytesExt as _, WriteBytesExt as _, LE};
 
 use super::PropertyValueEnum;
 
@@ -63,10 +64,8 @@ impl PropertyValue for MapValue {
                 .sum::<usize>()
     }
 }
-use crate::core::meta::traits::ReaderExt;
-use byteorder::{ReadBytesExt, LE};
 impl ReadProperty for MapValue {
-    fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
+    fn from_reader<R: io::Read + io::Seek + ?Sized>(
         reader: &mut R,
         legacy: bool,
     ) -> Result<Self, ParseError> {
@@ -102,11 +101,37 @@ impl ReadProperty for MapValue {
     }
 }
 impl WriteProperty for MapValue {
-    fn to_writer<R: std::io::Write + ?Sized>(
+    fn to_writer<R: io::Write + io::Seek + ?Sized>(
         &self,
         writer: &mut R,
         legacy: bool,
-    ) -> Result<(), std::io::Error> {
-        todo!()
+    ) -> Result<(), io::Error> {
+        if legacy {
+            unimplemented!("legacy map writing")
+        }
+
+        // FIXME: enforce key/value type restrictions at the type level (or if not possible,
+        // assertions at MapValue::new level)
+        writer.write_property_kind(self.key_kind)?;
+        writer.write_property_kind(self.value_kind)?;
+
+        let size_pos = writer.stream_position()?;
+        writer.write_u32::<LE>(0)?;
+
+        let (size, _) = measure(writer, |writer| {
+            writer.write_u16::<LE>(self.entries.len() as _)?;
+
+            for (k, v) in self.entries.iter() {
+                k.0.to_writer(writer)?;
+                v.to_writer(writer)?;
+            }
+
+            Ok::<_, io::Error>(())
+        })?;
+
+        writer.seek(io::SeekFrom::Start(size_pos))?;
+        writer.write_u32::<LE>(size as _)?;
+
+        Ok(())
     }
 }
