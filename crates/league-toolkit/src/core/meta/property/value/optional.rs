@@ -19,7 +19,10 @@ impl PropertyValue for OptionalValue {
 use super::{super::super::traits::ReaderExt as _, PropertyValueEnum};
 use crate::util::ReaderExt as _;
 impl ReadProperty for OptionalValue {
-    fn from_reader<R: std::io::Read>(reader: &mut R, legacy: bool) -> Result<Self, ParseError> {
+    fn from_reader<R: std::io::Read + std::io::Seek>(
+        reader: &mut R,
+        legacy: bool,
+    ) -> Result<Self, ParseError> {
         let kind = reader.read_property_kind(legacy)?;
         if kind.is_container() {
             return Err(ParseError::InvalidNesting(kind));

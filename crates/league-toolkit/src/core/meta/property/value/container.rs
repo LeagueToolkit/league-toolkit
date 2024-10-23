@@ -1,6 +1,13 @@
-use crate::core::meta::traits::{PropertyValue as Value, ReadProperty, ReaderExt};
+use crate::{
+    core::meta::{
+        traits::{PropertyValue as Value, ReadProperty, ReaderExt},
+        ParseError,
+    },
+    util::measure,
+};
 
 use super::PropertyValueEnum;
+use byteorder::{ReadBytesExt as _, LE};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -15,30 +22,28 @@ impl Value for ContainerValue {
 }
 
 impl ReadProperty for ContainerValue {
-    fn from_reader<R: std::io::Read>(
+    fn from_reader<R: std::io::Read + std::io::Seek>(
         reader: &mut R,
         legacy: bool,
-    ) -> Result<Self, crate::core::meta::ParseError> {
-        use byteorder::{ReadBytesExt as _, LE};
-
+    ) -> Result<Self, ParseError> {
         let item_kind = reader.read_property_kind(legacy)?;
         if item_kind.is_container() {
-            return Err(crate::core::meta::ParseError::InvalidNesting(item_kind));
+            return Err(ParseError::InvalidNesting(item_kind));
         }
 
         let size = reader.read_u32::<LE>()?;
-        let prop_count = reader.read_u32::<LE>()?;
-        let mut items = Vec::with_capacity(prop_count as _);
-        for _ in 0..prop_count {
-            let prop = PropertyValueEnum::from_reader(reader, item_kind, legacy)?;
-            items.push(prop);
-        }
+        let (real_size, items) = measure(reader, |reader| {
+            let prop_count = reader.read_u32::<LE>()?;
+            let mut items = Vec::with_capacity(prop_count as _);
+            for _ in 0..prop_count {
+                let prop = PropertyValueEnum::from_reader(reader, item_kind, legacy)?;
+                items.push(prop);
+            }
+            Ok::<_, ParseError>(items)
+        })?;
 
-        let real_size: usize = 4 + items.iter().map(|p| p.size_no_header()).sum::<usize>();
-        if size as usize != real_size {
-            return Err(crate::core::meta::ParseError::InvalidSize(
-                size as _, real_size,
-            ));
+        if size as u64 != real_size {
+            return Err(ParseError::InvalidSize(size as _, real_size));
         }
 
         Ok(Self { items })

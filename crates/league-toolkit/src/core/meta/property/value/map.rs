@@ -1,9 +1,12 @@
 use std::{collections::HashMap, hash::Hash};
 
-use crate::core::meta::{
-    property::BinPropertyKind,
-    traits::{PropertyValue, ReadProperty},
-    ParseError,
+use crate::{
+    core::meta::{
+        property::BinPropertyKind,
+        traits::{PropertyValue, ReadProperty},
+        ParseError,
+    },
+    util::measure,
 };
 
 use super::PropertyValueEnum;
@@ -63,7 +66,10 @@ impl PropertyValue for MapValue {
 use crate::core::meta::traits::ReaderExt;
 use byteorder::{ReadBytesExt, LE};
 impl ReadProperty for MapValue {
-    fn from_reader<R: std::io::Read>(reader: &mut R, legacy: bool) -> Result<Self, ParseError> {
+    fn from_reader<R: std::io::Read + std::io::Seek>(
+        reader: &mut R,
+        legacy: bool,
+    ) -> Result<Self, ParseError> {
         let key_kind = reader.read_property_kind(legacy)?;
         if !key_kind.is_primitive() {
             return Err(ParseError::InvalidKeyType(key_kind));
@@ -72,19 +78,26 @@ impl ReadProperty for MapValue {
         if value_kind.is_container() {
             return Err(ParseError::InvalidNesting(value_kind));
         }
-        let _size = reader.read_u32::<LE>()?;
-        let len = reader.read_u32::<LE>()? as _;
-        let mut entries = HashMap::with_capacity(len);
-        for _ in 0..len {
-            entries.insert(
-                key_kind.read(reader, legacy).map(PropertyValueUnsafeEq)?,
-                value_kind.read(reader, legacy)?,
-            );
+        let size = reader.read_u32::<LE>()?;
+        let (real_size, value) = measure(reader, |reader| {
+            let len = reader.read_u32::<LE>()? as _;
+            let mut entries = HashMap::with_capacity(len);
+            for _ in 0..len {
+                entries.insert(
+                    key_kind.read(reader, legacy).map(PropertyValueUnsafeEq)?,
+                    value_kind.read(reader, legacy)?,
+                );
+            }
+            Ok::<_, ParseError>(Self {
+                key_kind,
+                value_kind,
+                entries,
+            })
+        })?;
+
+        if size as u64 != real_size {
+            return Err(ParseError::InvalidSize(size as _, real_size));
         }
-        Ok(Self {
-            key_kind,
-            value_kind,
-            entries,
-        })
+        Ok(value)
     }
 }

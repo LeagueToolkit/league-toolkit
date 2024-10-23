@@ -17,7 +17,7 @@ pub trait PropertyValue {
 }
 
 pub trait ReadProperty: Sized {
-    fn from_reader<R: io::Read>(
+    fn from_reader<R: io::Read + io::Seek>(
         reader: &mut R,
         legacy: bool,
     ) -> Result<Self, crate::core::meta::ParseError>;

@@ -103,7 +103,7 @@ impl BinPropertyKind {
         matches!(self, Container | UnorderedContainer | Optional | Map)
     }
 
-    pub fn read<R: io::Read>(
+    pub fn read<R: io::Read + std::io::Seek>(
         self,
         reader: &mut R,
         legacy: bool,
@@ -122,7 +122,10 @@ pub struct BinProperty {
 
 use super::traits::PropertyValue as _;
 impl BinProperty {
-    pub fn from_reader<R: io::Read>(reader: &mut R, legacy: bool) -> Result<Self, ParseError> {
+    pub fn from_reader<R: io::Read + std::io::Seek>(
+        reader: &mut R,
+        legacy: bool,
+    ) -> Result<Self, ParseError> {
         use super::traits::ReaderExt;
         use byteorder::{ReadBytesExt as _, LE};
         let name_hash = reader.read_u32::<LE>()?;

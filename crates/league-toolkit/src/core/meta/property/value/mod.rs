@@ -69,7 +69,7 @@ pub enum PropertyValueEnum {
 }
 
 impl PropertyValueEnum {
-    pub fn from_reader<R: io::Read>(
+    pub fn from_reader<R: io::Read + std::io::Seek>(
         reader: &mut R,
         kind: BinPropertyKind,
         legacy: bool,

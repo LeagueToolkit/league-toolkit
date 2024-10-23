@@ -13,7 +13,7 @@ impl PropertyValue for UnorderedContainerValue {
 }
 
 impl ReadProperty for UnorderedContainerValue {
-    fn from_reader<R: std::io::Read>(
+    fn from_reader<R: std::io::Read + std::io::Seek>(
         reader: &mut R,
         legacy: bool,
     ) -> Result<Self, crate::core::meta::ParseError> {

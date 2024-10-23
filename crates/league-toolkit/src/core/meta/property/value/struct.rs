@@ -1,8 +1,11 @@
 use std::collections::HashMap;
 
-use crate::core::meta::{
-    traits::{PropertyValue as Value, ReadProperty},
-    BinProperty,
+use crate::{
+    core::meta::{
+        traits::{PropertyValue as Value, ReadProperty},
+        BinProperty, ParseError,
+    },
+    util::measure,
 };
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -22,7 +25,7 @@ impl Value for StructValue {
 }
 
 impl ReadProperty for StructValue {
-    fn from_reader<R: std::io::Read>(
+    fn from_reader<R: std::io::Read + std::io::Seek>(
         reader: &mut R,
         legacy: bool,
     ) -> Result<Self, crate::core::meta::ParseError> {
@@ -37,23 +40,26 @@ impl ReadProperty for StructValue {
         }
 
         let size = reader.read_u32::<LE>()?;
-        let prop_count = reader.read_u16::<LE>()?;
-        let mut properties = HashMap::with_capacity(prop_count as _);
-        for _ in 0..prop_count {
-            let prop = BinProperty::from_reader(reader, legacy)?;
-            properties.insert(prop.name_hash, prop);
-        }
 
-        let real_size: usize = 2 + properties.values().map(|p| p.size()).sum::<usize>();
-        if size as usize != real_size {
+        let (real_size, value) = measure(reader, |reader| {
+            let prop_count = reader.read_u16::<LE>()?;
+            let mut properties = HashMap::with_capacity(prop_count as _);
+            for _ in 0..prop_count {
+                let prop = BinProperty::from_reader(reader, legacy)?;
+                properties.insert(prop.name_hash, prop);
+            }
+            Ok::<_, ParseError>(Self {
+                class_hash,
+                properties,
+            })
+        })?;
+
+        if size as u64 != real_size {
             return Err(crate::core::meta::ParseError::InvalidSize(
                 size as _, real_size,
             ));
         }
 
-        Ok(Self {
-            class_hash,
-            properties,
-        })
+        Ok(value)
     }
 }

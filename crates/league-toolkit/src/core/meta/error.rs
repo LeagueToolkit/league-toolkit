@@ -13,7 +13,7 @@ pub enum ParseError {
     #[error("Invalid property kind - {0}")]
     InvalidPropertyTypePrimitive(#[from] num_enum::TryFromPrimitiveError<BinPropertyKind>),
     #[error("Invalid size - expected {0}, got {1} bytes")]
-    InvalidSize(usize, usize),
+    InvalidSize(u64, u64),
 
     #[error("Container type {0:?} cannot be nested!")]
     InvalidNesting(BinPropertyKind),

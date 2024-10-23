@@ -11,7 +11,7 @@ impl PropertyValue for NoneValue {
 }
 
 impl ReadProperty for NoneValue {
-    fn from_reader<R: std::io::Read>(
+    fn from_reader<R: std::io::Read + std::io::Seek>(
         _reader: &mut R,
         _legacy: bool,
     ) -> Result<Self, crate::core::meta::ParseError> {

@@ -12,7 +12,7 @@ impl PropertyValue for StringValue {
 }
 
 impl ReadProperty for StringValue {
-    fn from_reader<R: std::io::Read>(
+    fn from_reader<R: std::io::Read + std::io::Seek>(
         reader: &mut R,
         _legacy: bool,
     ) -> Result<Self, crate::core::meta::ParseError> {
