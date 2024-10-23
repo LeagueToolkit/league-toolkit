@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     core::meta::{
-        traits::{PropertyValue as Value, ReadProperty},
+        traits::{PropertyValue as Value, ReadProperty, WriteProperty},
         BinProperty, ParseError,
     },
     util::measure,
@@ -61,5 +61,14 @@ impl ReadProperty for StructValue {
         }
 
         Ok(value)
+    }
+}
+impl WriteProperty for StructValue {
+    fn to_writer<R: std::io::Write + ?Sized>(
+        &self,
+        writer: &mut R,
+        legacy: bool,
+    ) -> Result<(), std::io::Error> {
+        todo!()
     }
 }

@@ -1,4 +1,4 @@
-use crate::core::meta::traits::{PropertyValue, ReadProperty};
+use crate::core::meta::traits::{PropertyValue, ReadProperty, WriteProperty};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(transparent)]
@@ -19,5 +19,15 @@ impl ReadProperty for StringValue {
         use crate::util::ReaderExt as _;
         use byteorder::LE;
         Ok(Self(reader.read_len_prefixed_string::<LE>()?))
+    }
+}
+
+impl WriteProperty for StringValue {
+    fn to_writer<R: std::io::Write + ?Sized>(
+        &self,
+        writer: &mut R,
+        legacy: bool,
+    ) -> Result<(), std::io::Error> {
+        todo!()
     }
 }

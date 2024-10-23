@@ -3,7 +3,7 @@ use std::{collections::HashMap, hash::Hash};
 use crate::{
     core::meta::{
         property::BinPropertyKind,
-        traits::{PropertyValue, ReadProperty},
+        traits::{PropertyValue, ReadProperty, WriteProperty},
         ParseError,
     },
     util::measure,
@@ -99,5 +99,14 @@ impl ReadProperty for MapValue {
             return Err(ParseError::InvalidSize(size as _, real_size));
         }
         Ok(value)
+    }
+}
+impl WriteProperty for MapValue {
+    fn to_writer<R: std::io::Write + ?Sized>(
+        &self,
+        writer: &mut R,
+        legacy: bool,
+    ) -> Result<(), std::io::Error> {
+        todo!()
     }
 }

@@ -1,4 +1,4 @@
-use crate::core::meta::traits::{PropertyValue, ReadProperty};
+use crate::core::meta::traits::{PropertyValue, ReadProperty, WriteProperty};
 
 use super::StructValue;
 
@@ -18,5 +18,14 @@ impl ReadProperty for EmbeddedValue {
         legacy: bool,
     ) -> Result<Self, crate::core::meta::ParseError> {
         StructValue::from_reader(reader, legacy).map(Self)
+    }
+}
+impl WriteProperty for EmbeddedValue {
+    fn to_writer<R: std::io::Write + ?Sized>(
+        &self,
+        writer: &mut R,
+        legacy: bool,
+    ) -> Result<(), std::io::Error> {
+        todo!()
     }
 }

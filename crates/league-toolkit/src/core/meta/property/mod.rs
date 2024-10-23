@@ -136,6 +136,16 @@ impl BinProperty {
             value: PropertyValueEnum::from_reader(reader, kind, legacy)?,
         })
     }
+    pub fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<(), io::Error> {
+        use super::traits::WriterExt;
+        use byteorder::{WriteBytesExt as _, LE};
+
+        writer.write_u32::<LE>(self.name_hash)?;
+        writer.write_property_kind(self.value.kind())?;
+
+        self.value.to_writer(writer)?;
+        Ok(())
+    }
     pub fn size(&self) -> usize {
         5 + self.value.size_no_header()
     }

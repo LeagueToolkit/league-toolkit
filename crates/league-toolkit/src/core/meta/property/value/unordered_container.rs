@@ -1,4 +1,4 @@
-use crate::core::meta::traits::{PropertyValue, ReadProperty};
+use crate::core::meta::traits::{PropertyValue, ReadProperty, WriteProperty};
 
 use super::ContainerValue;
 
@@ -18,5 +18,15 @@ impl ReadProperty for UnorderedContainerValue {
         legacy: bool,
     ) -> Result<Self, crate::core::meta::ParseError> {
         Ok(Self(ContainerValue::from_reader(reader, legacy)?))
+    }
+}
+
+impl WriteProperty for UnorderedContainerValue {
+    fn to_writer<R: std::io::Write + ?Sized>(
+        &self,
+        writer: &mut R,
+        legacy: bool,
+    ) -> Result<(), std::io::Error> {
+        todo!()
     }
 }

@@ -1,6 +1,6 @@
 use crate::{
     core::meta::{
-        traits::{PropertyValue as Value, ReadProperty, ReaderExt},
+        traits::{PropertyValue as Value, ReadProperty, ReaderExt, WriteProperty},
         ParseError,
     },
     util::measure,
@@ -47,5 +47,15 @@ impl ReadProperty for ContainerValue {
         }
 
         Ok(Self { items })
+    }
+}
+
+impl WriteProperty for ContainerValue {
+    fn to_writer<R: std::io::Write + ?Sized>(
+        &self,
+        writer: &mut R,
+        legacy: bool,
+    ) -> Result<(), std::io::Error> {
+        todo!()
     }
 }
