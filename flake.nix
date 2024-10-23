@@ -54,6 +54,7 @@
         default = pkgs.mkShell (with pkgs; {
           nativeBuildInputs = [
             clang
+            gdb
             # Use mold when we are runnning in Linux
             (lib.optionals stdenv.isLinux mold)
           ];
