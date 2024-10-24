@@ -1,0 +1,110 @@
+---
+source: crates/league-toolkit/tests/meta.rs
+expression: bin
+---
+BinTree(
+  is_override: false,
+  version: 3,
+  objects: {
+    2154231397: BinTreeObject(
+      path_hash: 2154231397,
+      class_hash: 1171098015,
+      properties: {
+        2257500010: {
+          "kind": Container,
+          "name_hash": 2257500010,
+          "value": ContainerValue(
+            item_kind: Struct,
+            items: [
+              PropertyValueEnum(
+                kind: Struct,
+                value: StructValue(
+                  class_hash: 164488258,
+                  properties: {
+                    431879391: {
+                      "kind": U8,
+                      "name_hash": 431879391,
+                      "value": U8Value(0),
+                    },
+                    607245356: {
+                      "kind": Optional,
+                      "name_hash": 607245356,
+                      "value": OptionalValue(F32, Some(PropertyValueEnum(
+                        kind: F32,
+                        value: F32Value(10.0),
+                      ))),
+                    },
+                    895082843: {
+                      "kind": BitBool,
+                      "name_hash": 895082843,
+                      "value": BitBoolValue(true),
+                    },
+                    1013213428: {
+                      "kind": String,
+                      "name_hash": 1013213428,
+                      "value": StringValue("ASSETS/Characters/Leona/Skins/Base/Particles/common_Black.dds"),
+                    },
+                    1025882318: {
+                      "kind": String,
+                      "name_hash": 1025882318,
+                      "value": StringValue("empty"),
+                    },
+                    1376955374: {
+                      "kind": Optional,
+                      "name_hash": 1376955374,
+                      "value": OptionalValue(F32, Some(PropertyValueEnum(
+                        kind: F32,
+                        value: F32Value(1.0),
+                      ))),
+                    },
+                    2927860839: {
+                      "kind": Embedded,
+                      "name_hash": 2927860839,
+                      "value": EmbeddedValue(StructValue(
+                        class_hash: 70254680,
+                        properties: {
+                          3031705514: {
+                            "kind": F32,
+                            "name_hash": 3031705514,
+                            "value": F32Value(1.0),
+                          },
+                        },
+                      )),
+                    },
+                    3043919889: {
+                      "kind": String,
+                      "name_hash": 3043919889,
+                      "value": StringValue("ASSETS/Characters/Leona/Skins/Base/Particles/common_Black.dds"),
+                    },
+                  },
+                ),
+              ),
+            ],
+          ),
+        },
+        2624027180: {
+          "kind": U16,
+          "name_hash": 2624027180,
+          "value": U16Value(132),
+        },
+        3770906030: {
+          "kind": String,
+          "name_hash": 3770906030,
+          "value": StringValue("Play_sfx_Leona_LeonaZenithBladeMissile_hit"),
+        },
+        3882058040: {
+          "kind": String,
+          "name_hash": 3882058040,
+          "value": StringValue("Characters/Leona/Skins/Skin0/Particles/Leona_Base_E_ZB_sfx_01"),
+        },
+        3975268028: {
+          "kind": String,
+          "name_hash": 3975268028,
+          "value": StringValue("Leona_Base_E_ZB_sfx_01"),
+        },
+      },
+    ),
+  },
+  dependencies: [],
+  data_overrides: [],
+)

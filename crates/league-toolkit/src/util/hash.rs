@@ -1,7 +1,7 @@
 pub fn elf<S: AsRef<str>>(input: S) -> usize {
     let input = input.as_ref();
     let mut hash = 0;
-    let mut high = 0;
+    let mut high;
     for b in input.as_bytes() {
         hash = (hash << 4) + (*b as usize);
         high = hash & 0xF0000000;

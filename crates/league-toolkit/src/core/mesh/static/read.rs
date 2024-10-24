@@ -46,7 +46,7 @@ impl StaticMesh {
             true => {
                 let mut v = Vec::with_capacity(vertex_count as usize);
                 for _ in 0..vertex_count {
-                    v.push(reader.read_color::<LE>()?);
+                    v.push(reader.read_color_f32::<LE>()?);
                 }
                 Some(v)
             }

@@ -1,19 +1,35 @@
 use std::io::{self, Read};
 
 use byteorder::{ByteOrder, ReadBytesExt};
-use glam::{Quat, Vec2, Vec3, Vec4};
+use glam::{Mat4, Quat, Vec2, Vec3, Vec4};
 
 use crate::core::primitives::{Color, Sphere, AABB};
 
+#[derive(Debug, thiserror::Error)]
+pub enum ReaderError {
+    #[error("IO Error - {0}")]
+    ReaderError(#[from] std::io::Error),
+    #[error("UTF-8 Error - {0}")]
+    Utf8Error(#[from] std::str::Utf8Error),
+    #[error("From UTF-8 Error - {0}")]
+    FromUtf8Error(#[from] std::string::FromUtf8Error),
+}
+
+pub type ReaderResult<T> = core::result::Result<T, ReaderError>;
+
 pub trait ReaderExt: Read {
-    // FIXME (alan): make own result type here
-    fn read_padded_string<T: ByteOrder, const N: usize>(
-        &mut self,
-    ) -> crate::core::mesh::Result<String> {
+    fn read_padded_string<T: ByteOrder, const N: usize>(&mut self) -> ReaderResult<String> {
         let mut buf: [u8; N] = [0; N];
         self.read_exact(&mut buf)?;
         let i = buf.iter().position(|&b| b == b'\0').unwrap_or(buf.len());
         Ok(std::str::from_utf8(&buf[..i])?.to_string())
+    }
+
+    fn read_len_prefixed_string<T: ByteOrder>(&mut self) -> ReaderResult<String> {
+        let len = self.read_u16::<T>()?;
+        let mut buf = vec![0; len as _];
+        self.read_exact(&mut buf)?;
+        Ok(String::from_utf8(buf)?)
     }
 
     fn read_str_until_nul(&mut self) -> io::Result<String> {
@@ -28,13 +44,15 @@ pub trait ReaderExt: Read {
         Ok(s)
     }
 
-    fn read_color<T: ByteOrder>(&mut self) -> io::Result<Color> {
-        Ok(Color {
-            r: self.read_f32::<T>()?,
-            g: self.read_f32::<T>()?,
-            b: self.read_f32::<T>()?,
-            a: self.read_f32::<T>()?,
-        })
+    fn read_bool(&mut self) -> io::Result<bool> {
+        Ok(self.read_u8()? != 0x0)
+    }
+
+    fn read_color_f32<O: ByteOrder>(&mut self) -> io::Result<Color<f32>> {
+        Color::<f32>::from_reader::<O, _>(self)
+    }
+    fn read_color_u8(&mut self) -> io::Result<Color<u8>> {
+        Color::<u8>::from_reader(self)
     }
 
     fn read_vec2<T: ByteOrder>(&mut self) -> io::Result<Vec2> {
@@ -63,6 +81,16 @@ pub trait ReaderExt: Read {
             self.read_f32::<T>()?,
             self.read_f32::<T>()?,
         ]))
+    }
+
+    fn read_mat4_row_major<T: ByteOrder>(&mut self) -> io::Result<Mat4> {
+        Ok(Mat4::from_cols(
+            self.read_vec4::<T>()?,
+            self.read_vec4::<T>()?,
+            self.read_vec4::<T>()?,
+            self.read_vec4::<T>()?,
+        )
+        .transpose())
     }
 
     fn read_aabb<T: ByteOrder>(&mut self) -> io::Result<AABB> {

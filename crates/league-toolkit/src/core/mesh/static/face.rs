@@ -37,7 +37,7 @@ impl StaticMeshFace {
             material,
             vertex_ids,
             uvs: (vec2(uvs.0, uvs.3), vec2(uvs.1, uvs.4), vec2(uvs.2, uvs.5)),
-            colors: (Color::ONE, Color::ONE, Color::ONE),
+            colors: (Color::<f32>::ONE, Color::<f32>::ONE, Color::<f32>::ONE),
         })
     }
 }

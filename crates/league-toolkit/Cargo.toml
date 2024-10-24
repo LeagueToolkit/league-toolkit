@@ -9,7 +9,7 @@ default = ["zstd"]
 zstd = ["dep:zstd"]
 ruzstd = ["dep:ruzstd"]
 
-serde = ["dep:serde"]
+serde = ["dep:serde", "glam/serde"]
 rust_backends = [
   "flate2/rust_backend",
   "ruzstd",
@@ -20,7 +20,6 @@ bitflags = "2.5.0"
 byteorder = "1.5.0"
 flate2 = "1.0.30"
 glam = { version = "0.27.0", features = ["glam-assert"] }
-insta = "1.39.0"
 lazy_static = "1.4.0"
 log = "0.4.21"
 memchr = "2.7.2"
@@ -31,6 +30,13 @@ zstd = { version = "0.13", default-features = false, optional = true }
 ruzstd = { version = "0.7", optional = true }
 
 serde = { version = "1.0.204", features = ["derive"], optional = true }
+paste = "1.0.15"
+miette = "7.2.0"
+enum_dispatch = "0.3.13"
 
 [dev-dependencies]
+league-toolkit = {path = ".", features = ["serde"]}
 approx = "0.5.1"
+insta = { version = "1.39.0", features = ["ron"] }
+serde = { version = "*", features = ["derive"] }
+glam = { version = "*", features = ["glam-assert", "serde"] }
