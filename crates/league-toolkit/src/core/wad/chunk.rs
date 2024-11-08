@@ -39,21 +39,21 @@ impl WadChunk {
     ) -> Result<WadChunk, WadError> {
         let path_hash = reader.read_u64::<LE>()?;
         let data_offset = reader.read_u32::<LE>()? as usize;
-        let compressed_size = reader.read_u32::<LE>()? as usize;
-        let uncompressed_size = reader.read_u32::<LE>()? as usize;
+        let compressed_size = reader.read_i32::<LE>()? as usize;
+        let uncompressed_size = reader.read_i32::<LE>()? as usize;
 
-        let type_count = reader.read_u8()?;
-        let frame_count = type_count >> 4;
-        let compression_type = WadChunkCompression::try_from_primitive(type_count & 0xF)
+        let type_frame_count = reader.read_u8()?;
+        let frame_count = type_frame_count >> 4;
+        let compression_type = WadChunkCompression::try_from_primitive(type_frame_count & 0xF)
             .expect("failed to read chunk compression");
 
         let is_duplicated = match minor {
-            4 => false,
-            _ => reader.read_u8()? == 1,
+            ..4 => false,
+            4.. => reader.read_u8()? == 1,
         };
         let start_frame = match minor {
-            4 => reader.read_u24::<LE>()?,
-            _ => reader.read_u16::<LE>()? as u32,
+            ..4 => reader.read_u16::<LE>()? as u32,
+            4.. => reader.read_u24::<LE>()?,
         };
         let checksum = reader.read_u64::<LE>()?;
 
