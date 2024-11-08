@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Debug, PartialEq, PartialOrd)]
 pub struct ModProject {
     pub name: String,
+    pub display_name: String,
     pub version: String,
     pub description: String,
     pub authors: Vec<ModProjectAuthor>,
@@ -28,6 +29,7 @@ mod tests {
             project,
             ModProject {
                 name: "test".to_string(),
+                display_name: "Test 123".to_string(),
                 version: "0.1.0".to_string(),
                 description: "test".to_string(),
                 authors: vec![
