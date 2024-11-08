@@ -35,7 +35,7 @@ miette = "7.2.0"
 enum_dispatch = "0.3.13"
 
 [dev-dependencies]
-league-toolkit = {path = ".", features = ["serde"]}
+league-toolkit = { path = ".", features = ["serde"] }
 approx = "0.5.1"
 insta = { version = "1.39.0", features = ["ron"] }
 serde = { version = "*", features = ["derive"] }

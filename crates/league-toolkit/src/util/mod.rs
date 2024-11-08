@@ -1,7 +1,9 @@
 pub mod hash;
+pub mod int;
 pub mod reader;
 pub mod writer;
 
+pub use int::*;
 pub use reader::*;
 pub use writer::*;
 
