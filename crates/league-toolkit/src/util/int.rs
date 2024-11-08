@@ -27,3 +27,31 @@ impl From<u24> for u32 {
         (value.hi as u32) << 16 | (value.mi as u32) << 8 | (value.lo as u32)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_u24_new() {
+        let value = u24::new(0x123456);
+        assert_eq!(value.hi, 0x12);
+        assert_eq!(value.mi, 0x34);
+        assert_eq!(value.lo, 0x56);
+    }
+
+    #[test]
+    fn test_u24_from_u32() {
+        let value: u24 = 0x123456_u32.into();
+        assert_eq!(value.hi, 0x12);
+        assert_eq!(value.mi, 0x34);
+        assert_eq!(value.lo, 0x56);
+    }
+
+    #[test]
+    fn test_u32_from_u24() {
+        let u24_value = u24::new(0x123456);
+        let u32_value: u32 = u24_value.into();
+        assert_eq!(u32_value, 0x123456);
+    }
+}
