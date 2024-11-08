@@ -1,0 +1,39 @@
+---
+source: crates/league-toolkit/tests/wad.rs
+expression: wad.chunks()
+---
+{
+  2227312568830940929: WadChunk(
+    path_hash: 2227312568830940929,
+    data_offset: 10911,
+    compressed_size: 23023,
+    uncompressed_size: 131084,
+    compression_type: Zstd,
+    is_duplicated: false,
+    frame_count: 0,
+    start_frame: 0,
+    checksum: 3922618146135880204,
+  ),
+  3349600290122526159: WadChunk(
+    path_hash: 3349600290122526159,
+    data_offset: 33934,
+    compressed_size: 20786,
+    uncompressed_size: 131084,
+    compression_type: Zstd,
+    is_duplicated: false,
+    frame_count: 0,
+    start_frame: 0,
+    checksum: 13212711047613655776,
+  ),
+  11042693609879973350: WadChunk(
+    path_hash: 11042693609879973350,
+    data_offset: 368,
+    compressed_size: 10543,
+    uncompressed_size: 32780,
+    compression_type: Zstd,
+    is_duplicated: false,
+    frame_count: 0,
+    start_frame: 0,
+    checksum: 3841611443327106610,
+  ),
+}

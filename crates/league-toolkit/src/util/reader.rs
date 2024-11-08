@@ -1,9 +1,8 @@
-use std::io::{self, Read};
-
+use super::u24;
+use crate::core::primitives::{Color, Sphere, AABB};
 use byteorder::{ByteOrder, ReadBytesExt};
 use glam::{Mat4, Quat, Vec2, Vec3, Vec4};
-
-use crate::core::primitives::{Color, Sphere, AABB};
+use std::io::{self, Read};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ReaderError {
@@ -18,6 +17,12 @@ pub enum ReaderError {
 pub type ReaderResult<T> = core::result::Result<T, ReaderError>;
 
 pub trait ReaderExt: Read {
+    fn read_u24<T: ByteOrder>(&mut self) -> io::Result<u24> {
+        let mut buf = [0; 3];
+        self.read_exact(&mut buf)?;
+        Ok(u24::new(T::read_u32(&buf)))
+    }
+
     fn read_padded_string<T: ByteOrder, const N: usize>(&mut self) -> ReaderResult<String> {
         let mut buf: [u8; N] = [0; N];
         self.read_exact(&mut buf)?;

@@ -3,6 +3,8 @@ use std::io::{BufReader, Read};
 use byteorder::{ReadBytesExt as _, LE};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
+use crate::util::{int, u24};
+
 use super::WadError;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -26,24 +28,33 @@ pub struct WadChunk {
     pub compression_type: WadChunkCompression,
     pub is_duplicated: bool,
     pub frame_count: u8,
-    pub start_frame: u16,
+    pub start_frame: u32,
     pub checksum: u64,
 }
 
 impl WadChunk {
-    pub(crate) fn read<R: Read>(reader: &mut BufReader<R>) -> Result<WadChunk, WadError> {
+    pub(crate) fn read<R: Read>(
+        reader: &mut BufReader<R>,
+        minor: u8,
+    ) -> Result<WadChunk, WadError> {
         let path_hash = reader.read_u64::<LE>()?;
         let data_offset = reader.read_u32::<LE>()? as usize;
-        let compressed_size = reader.read_i32::<LE>()? as usize;
-        let uncompressed_size = reader.read_i32::<LE>()? as usize;
+        let compressed_size = reader.read_u32::<LE>()? as usize;
+        let uncompressed_size = reader.read_u32::<LE>()? as usize;
 
-        let type_frame_count = reader.read_u8()?;
-        let frame_count = type_frame_count >> 4;
-        let compression_type = WadChunkCompression::try_from_primitive(type_frame_count & 0xF)
+        let type_count = reader.read_u8()?;
+        let frame_count = type_count >> 4;
+        let compression_type = WadChunkCompression::try_from_primitive(type_count & 0xF)
             .expect("failed to read chunk compression");
 
-        let is_duplicated = reader.read_u8()? == 1;
-        let start_frame = reader.read_u16::<LE>()?;
+        let is_duplicated = match minor {
+            4 => false,
+            _ => reader.read_u8()? == 1,
+        };
+        let start_frame = match minor {
+            4 => reader.read_u24::<LE>()?,
+            _ => reader.read_u16::<LE>()? as u32,
+        };
         let checksum = reader.read_u64::<LE>()?;
 
         Ok(WadChunk {
