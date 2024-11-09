@@ -1,5 +1,6 @@
-use crate::util::reader::ReaderExt;
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
+use io_ext::ReaderExt;
+use io_ext::WriterExt;
 use std::io;
 use std::io::{Read, Write};
 
@@ -40,7 +41,6 @@ impl SkinnedMeshRange {
     }
 
     pub fn to_writer<W: Write>(&self, writer: &mut W) -> io::Result<()> {
-        use crate::util::WriterExt;
         writer.write_padded_string::<64>(&self.material)?;
         writer.write_i32::<LE>(self.start_vertex)?;
         writer.write_i32::<LE>(self.vertex_count)?;

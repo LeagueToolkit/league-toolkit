@@ -1,9 +1,10 @@
+use io_ext::ReaderExt;
 use std::io::Read;
 
 use byteorder::{ReadBytesExt, LE};
 use glam::{vec2, Vec2};
 
-use crate::core::primitives::Color;
+use league_primitives::Color;
 
 #[derive(Debug, Clone)]
 pub struct StaticMeshFace {
@@ -15,7 +16,6 @@ pub struct StaticMeshFace {
 
 impl StaticMeshFace {
     pub fn from_reader<R: Read>(reader: &mut R) -> crate::core::mesh::Result<Self> {
-        use crate::util::ReaderExt as _;
         let vertex_ids = (
             reader.read_u32::<LE>()? as u8,
             reader.read_u32::<LE>()? as u8,

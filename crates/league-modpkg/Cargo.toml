@@ -4,3 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+thiserror = "1.0.60"
+byteorder = "1.5.0"
+
+io-ext = { path = "../io-ext" }

@@ -21,7 +21,7 @@ pub enum ParseError {
     InvalidKeyType(BinPropertyKind),
 
     #[error(transparent)]
-    ReaderError(#[from] crate::util::ReaderError),
+    ReaderError(#[from] io_ext::ReaderError),
     #[error("IO Error - {0}")]
     IOError(#[from] std::io::Error),
     #[error("UTF-8 Error - {0}")]

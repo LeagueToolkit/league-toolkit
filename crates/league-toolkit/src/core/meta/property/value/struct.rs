@@ -1,13 +1,11 @@
 use std::{collections::HashMap, io};
 
-use crate::{
-    core::meta::{
-        traits::{PropertyValue as Value, ReadProperty, WriteProperty},
-        BinProperty, ParseError,
-    },
-    util::{measure, window},
+use crate::core::meta::{
+    traits::{PropertyValue as Value, ReadProperty, WriteProperty},
+    BinProperty, ParseError,
 };
 use byteorder::{ReadBytesExt as _, WriteBytesExt as _, LE};
+use io_ext::{measure, window};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, PartialEq, Debug, Default)]

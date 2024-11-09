@@ -1,9 +1,6 @@
-use crate::{
-    core::meta::traits::{PropertyValue, ReadProperty, WriteProperty},
-    util::ReaderExt as _,
-    util::WriterExt as _,
-};
+use crate::core::meta::traits::{PropertyValue, ReadProperty, WriteProperty};
 use byteorder::LE;
+use io_ext::{ReaderExt, WriterExt};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(transparent)]

@@ -1,14 +1,14 @@
 use crate::core::mesh::error::ParseError;
 use crate::core::mesh::r#static::MAGIC;
 use crate::core::mesh::{StaticMesh, StaticMeshFace};
-use crate::core::primitives::Color;
 use byteorder::{ReadBytesExt, LE};
 use glam::Vec3;
+use io_ext::ReaderExt;
+use league_primitives::Color;
 use std::io::Read;
 
 impl StaticMesh {
     pub fn from_reader<R: Read>(reader: &mut R) -> crate::core::mesh::Result<Self> {
-        use crate::util::ReaderExt as _;
         let mut buf: [u8; 8] = [0; 8];
         reader.read_exact(&mut buf)?;
         if MAGIC != buf {
