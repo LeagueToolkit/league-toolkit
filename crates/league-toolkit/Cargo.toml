@@ -9,7 +9,7 @@ default = ["zstd"]
 zstd = ["dep:zstd"]
 ruzstd = ["dep:ruzstd"]
 
-serde = ["dep:serde", "glam/serde"]
+serde = ["dep:serde", "glam/serde", "league-primitives/serde"]
 rust_backends = [
   "flate2/rust_backend",
   "ruzstd",
@@ -26,7 +26,7 @@ memchr = "2.7.2"
 num_enum = "0.7.2"
 thiserror = "1.0.60"
 io-ext = { path = "../io-ext" }
-league-primitives = { path = "../league-primitives", features = ["serde"] }
+league-primitives = { path = "../league-primitives" }
 zstd = { version = "0.13", default-features = false, optional = true }
 ruzstd = { version = "0.7", optional = true }
 
