@@ -1,6 +1,6 @@
 use std::{
+    borrow::Cow,
     io::{BufReader, Read},
-    sync::Arc,
 };
 
 use byteorder::{ReadBytesExt as _, LE};
@@ -10,7 +10,7 @@ use crate::error::ModpkgError;
 
 #[derive(Debug, PartialEq, PartialOrd)]
 pub struct ModpkgChunk {
-    path: Arc<str>,
+    path: Cow<'static, str>,
     path_hash: u64,
     compressed_size: usize,
     uncompressed_size: usize,
@@ -28,7 +28,7 @@ impl ModpkgChunk {
         let checksum = reader.read_u64::<LE>()?;
 
         Ok(Self {
-            path: Arc::from(path),
+            path: Cow::from(path),
             path_hash,
             compressed_size: compressed_size as usize,
             uncompressed_size: uncompressed_size as usize,
@@ -37,8 +37,8 @@ impl ModpkgChunk {
         })
     }
 
-    pub fn path(&self) -> Arc<str> {
-        self.path.clone()
+    pub fn path(&self) -> &str {
+        &self.path
     }
     pub fn path_hash(&self) -> u64 {
         self.path_hash
