@@ -29,8 +29,6 @@ pub enum AnimationAssetType {
 
 impl AnimationAsset {
     pub fn from_reader<R: Read + Seek + ?Sized>(reader: &mut R) -> error::Result<AnimationAsset> {
-        use crate::util::ReaderExt as _;
-        use byteorder::{ReadBytesExt as _, LE};
         let asset_type = Self::identify_from_reader(reader)?;
         reader.seek(SeekFrom::Start(0))?;
         match asset_type {

@@ -1,4 +1,5 @@
 use crate::core::meta::traits::{PropertyValue, ReadProperty, WriteProperty};
+use io_ext::{ReaderExt, WriterExt};
 
 macro_rules! impl_prim {
     ($name:tt, $rust:tt, [$($derive:tt),*], $method:ident $(::<$endian:ident>)?, $($write_value:tt)*) => {
@@ -33,10 +34,9 @@ macro_rules! impl_prim {
     };
 }
 
-use crate::core::primitives::Color;
-use crate::util::{ReaderExt, WriterExt};
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 use glam::{Mat4, Vec2, Vec3, Vec4};
+use league_primitives::Color;
 
 // A "primitive" in this case is just a PropertyValue that just encapsulates
 // a single struct/rust primitive.

@@ -1,9 +1,9 @@
 use std::io::{self, Write};
 
 use byteorder::{ByteOrder, WriteBytesExt};
-use glam::{Mat4, Quat, Vec2, Vec3, Vec4};
+use glam::{Mat4, Quat};
 
-use crate::core::primitives::{Color, Sphere, AABB};
+use league_primitives::{Color, Sphere, AABB};
 
 pub trait WriterExt: Write {
     fn write_padded_string<const N: usize>(&mut self, str: &str) -> io::Result<()> {

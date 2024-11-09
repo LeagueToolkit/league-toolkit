@@ -1,9 +1,9 @@
 use std::{collections::HashMap, io};
 
-use crate::util::{measure, window};
+use io_ext::{measure, window};
 
 use super::{super::BinProperty, ParseError};
-use byteorder::{ReadBytesExt as _, WriteBytesExt as _, LE};
+use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, PartialEq)]

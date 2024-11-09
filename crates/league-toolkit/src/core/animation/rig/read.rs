@@ -18,8 +18,8 @@ impl RigResource {
 
     fn read<R: Read + Seek + ?Sized>(reader: &mut R) -> animation::Result<Self> {
         use crate::core::animation::{Joint, ParseError};
-        use crate::util::ReaderExt as _;
-        use byteorder::{ReadBytesExt as _, LE};
+        use byteorder::{ReadBytesExt, LE};
+        use io_ext::ReaderExt;
         use std::io::SeekFrom;
 
         let _file_size = reader.read_u32::<LE>()?;

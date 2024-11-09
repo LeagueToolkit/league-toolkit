@@ -1,16 +1,14 @@
 use std::io;
 
-use crate::{
-    core::meta::{
-        property::BinPropertyKind,
-        traits::{PropertyValue as Value, ReadProperty, ReaderExt, WriteProperty, WriterExt},
-        ParseError,
-    },
-    util::{measure, window},
+use crate::core::meta::{
+    property::BinPropertyKind,
+    traits::{PropertyValue as Value, ReadProperty, ReaderExt, WriteProperty, WriterExt},
+    ParseError,
 };
 
 use super::PropertyValueEnum;
-use byteorder::{ReadBytesExt as _, WriteBytesExt as _, LE};
+use byteorder::{ReadBytesExt, WriteBytesExt, LE};
+use io_ext::{measure, window};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]

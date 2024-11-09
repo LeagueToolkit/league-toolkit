@@ -3,8 +3,8 @@ use std::{collections::HashMap, io};
 use crate::core::meta::ParseError;
 
 use super::{BinTree, BinTreeObject};
-use crate::util::ReaderExt as _;
-use byteorder::{ReadBytesExt as _, LE};
+use byteorder::{ReadBytesExt, LE};
+use io_ext::ReaderExt;
 
 impl BinTree {
     pub const PROP: u32 = u32::from_le_bytes(*b"PROP");

@@ -1,8 +1,8 @@
 use std::io;
 
 use super::BinTree;
-use crate::util::WriterExt as _;
-use byteorder::{WriteBytesExt as _, LE};
+use byteorder::{WriteBytesExt, LE};
+use io_ext::WriterExt;
 
 impl BinTree {
     pub fn to_writer<W: io::Write + io::Seek + ?Sized>(

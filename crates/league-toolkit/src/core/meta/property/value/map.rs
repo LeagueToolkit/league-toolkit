@@ -1,14 +1,12 @@
 use std::{collections::HashMap, hash::Hash, io};
 
-use crate::{
-    core::meta::{
-        property::BinPropertyKind,
-        traits::{PropertyValue, ReadProperty, ReaderExt, WriteProperty, WriterExt},
-        ParseError,
-    },
-    util::{measure, window},
+use crate::core::meta::{
+    property::BinPropertyKind,
+    traits::{PropertyValue, ReadProperty, ReaderExt, WriteProperty, WriterExt},
+    ParseError,
 };
-use byteorder::{ReadBytesExt as _, WriteBytesExt as _, LE};
+use byteorder::{ReadBytesExt, WriteBytesExt, LE};
+use io_ext::{measure, window};
 
 use super::PropertyValueEnum;
 

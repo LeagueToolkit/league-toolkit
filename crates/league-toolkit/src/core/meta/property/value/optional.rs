@@ -1,8 +1,10 @@
+use super::PropertyValueEnum;
 use crate::core::meta::{
     property::BinPropertyKind,
-    traits::{PropertyValue, ReadProperty, WriteProperty},
+    traits::{PropertyValue, ReadProperty, ReaderExt, WriteProperty, WriterExt},
     ParseError,
 };
+use io_ext::{ReaderExt as _, WriterExt as _};
 
 // I am not a fan of the double tagging, but fixing it would be a whole ordeal (and might not be
 // possible with static dispatch?).
@@ -19,11 +21,6 @@ impl PropertyValue for OptionalValue {
     }
 }
 
-use super::{
-    super::super::traits::{ReaderExt as _, WriterExt as _},
-    PropertyValueEnum,
-};
-use crate::util::{ReaderExt as _, WriterExt as _};
 impl ReadProperty for OptionalValue {
     fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
