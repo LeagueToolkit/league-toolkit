@@ -8,7 +8,7 @@ use std::{
 use crate::{error::ModpkgError, Modpkg, ModpkgAuthor, ModpkgChunk, ModpkgLicense};
 
 impl Modpkg {
-    pub const MAGIC: u64 = u64::from_le_bytes(*b"_MODPKG_");
+    pub const MAGIC: u64 = u64::from_le_bytes(*b"_modpkg_");
 
     pub fn read(reader: &mut BufReader<impl Read>) -> Result<Self, ModpkgError> {
         let magic = reader.read_u64::<LE>()?;
