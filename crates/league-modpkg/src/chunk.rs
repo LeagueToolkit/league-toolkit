@@ -14,7 +14,7 @@ pub struct ModpkgChunk {
     uncompressed_checksum: u64,
 
     path_index: u32,
-    wad_path_index: u32,
+    wad_paths_index: u32,
     layers_index: u32,
 }
 
@@ -30,7 +30,7 @@ impl ModpkgChunk {
         let uncompressed_checksum = reader.read_u64::<LE>()?;
 
         let path_index = reader.read_u32::<LE>()?;
-        let wad_path_index = reader.read_u32::<LE>()?;
+        let wad_paths_index = reader.read_u32::<LE>()?;
         let layers_index = reader.read_u32::<LE>()?;
 
         Ok(Self {
@@ -41,7 +41,7 @@ impl ModpkgChunk {
             compressed_checksum,
             uncompressed_checksum,
             path_index,
-            wad_path_index,
+            wad_paths_index,
             layers_index,
         })
     }
@@ -70,8 +70,8 @@ impl ModpkgChunk {
     pub fn path_index(&self) -> u32 {
         self.path_index
     }
-    pub fn wad_path_index(&self) -> u32 {
-        self.wad_path_index
+    pub fn wad_paths_index(&self) -> u32 {
+        self.wad_paths_index
     }
     pub fn layers_index(&self) -> u32 {
         self.layers_index
