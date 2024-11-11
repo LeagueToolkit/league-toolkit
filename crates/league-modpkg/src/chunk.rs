@@ -1,47 +1,57 @@
-use std::{
-    borrow::Cow,
-    io::{BufReader, Read},
-};
-
-use byteorder::{ReadBytesExt as _, LE};
-use io_ext::ReaderExt as _;
-
 use crate::error::ModpkgError;
+use byteorder::{ReadBytesExt as _, LE};
+use std::io::{BufReader, Read};
 
 #[derive(Debug, PartialEq, PartialOrd)]
 pub struct ModpkgChunk {
-    path: Cow<'static, str>,
     path_hash: u64,
+
+    data_offset: usize,
     compressed_size: usize,
     uncompressed_size: usize,
-    data_offset: usize,
-    checksum: u64,
+
+    compressed_checksum: u64,
+    uncompressed_checksum: u64,
+
+    path_index: u32,
+    wad_path_index: u32,
+    layers_index: u32,
 }
 
 impl ModpkgChunk {
     pub fn read(reader: &mut BufReader<impl Read>) -> Result<Self, ModpkgError> {
-        let path = reader.read_len_prefixed_string::<LE>()?;
         let path_hash = reader.read_u64::<LE>()?;
+
+        let data_offset = reader.read_u64::<LE>()?;
         let compressed_size = reader.read_u64::<LE>()?;
         let uncompressed_size = reader.read_u64::<LE>()?;
-        let data_offset = reader.read_u64::<LE>()?;
-        let checksum = reader.read_u64::<LE>()?;
+
+        let compressed_checksum = reader.read_u64::<LE>()?;
+        let uncompressed_checksum = reader.read_u64::<LE>()?;
+
+        let path_index = reader.read_u32::<LE>()?;
+        let wad_path_index = reader.read_u32::<LE>()?;
+        let layers_index = reader.read_u32::<LE>()?;
 
         Ok(Self {
-            path: Cow::from(path),
             path_hash,
+            data_offset: data_offset as usize,
             compressed_size: compressed_size as usize,
             uncompressed_size: uncompressed_size as usize,
-            data_offset: data_offset as usize,
-            checksum,
+            compressed_checksum,
+            uncompressed_checksum,
+            path_index,
+            wad_path_index,
+            layers_index,
         })
     }
 
-    pub fn path(&self) -> &str {
-        &self.path
-    }
     pub fn path_hash(&self) -> u64 {
         self.path_hash
+    }
+
+    pub fn data_offset(&self) -> usize {
+        self.data_offset
     }
     pub fn compressed_size(&self) -> usize {
         self.compressed_size
@@ -49,10 +59,21 @@ impl ModpkgChunk {
     pub fn uncompressed_size(&self) -> usize {
         self.uncompressed_size
     }
-    pub fn data_offset(&self) -> usize {
-        self.data_offset
+
+    pub fn compressed_checksum(&self) -> u64 {
+        self.compressed_checksum
     }
-    pub fn checksum(&self) -> u64 {
-        self.checksum
+    pub fn uncompressed_checksum(&self) -> u64 {
+        self.uncompressed_checksum
+    }
+
+    pub fn path_index(&self) -> u32 {
+        self.path_index
+    }
+    pub fn wad_path_index(&self) -> u32 {
+        self.wad_path_index
+    }
+    pub fn layers_index(&self) -> u32 {
+        self.layers_index
     }
 }
