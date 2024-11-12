@@ -32,6 +32,7 @@ impl ModpkgChunk {
         let path_index = reader.read_u32::<LE>()?;
         let wad_paths_index = reader.read_u32::<LE>()?;
         let layers_index = reader.read_u32::<LE>()?;
+        let _ = reader.read_u32::<LE>()?; // reserved
 
         Ok(Self {
             path_hash,
