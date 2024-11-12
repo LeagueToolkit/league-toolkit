@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 mod chunk;
 mod error;
+mod pkg_utils;
 mod read;
 
 #[derive(Debug, PartialEq)]
