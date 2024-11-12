@@ -1,84 +1,118 @@
+use crate::{error::ModpkgError, Modpkg, ModpkgChunk, ModpkgMetadata};
 use byteorder::{ReadBytesExt as _, LE};
-use io_ext::ReaderExt as _;
+use io_ext::measure;
 use std::{
     collections::{hash_map::Entry, HashMap},
-    io::{BufReader, Read},
+    io::{BufReader, Read, Seek, SeekFrom},
 };
-
-use crate::{error::ModpkgError, Modpkg, ModpkgAuthor, ModpkgChunk, ModpkgLicense};
 
 impl Modpkg {
     pub const MAGIC: u64 = u64::from_le_bytes(*b"_modpkg_");
 
-    pub fn read(reader: &mut BufReader<impl Read>) -> Result<Self, ModpkgError> {
-        let magic = reader.read_u64::<LE>()?;
-        if magic != Self::MAGIC {
-            return Err(ModpkgError::InvalidMagic(magic));
+    pub fn read(reader: &mut BufReader<impl Read + Seek>) -> Result<Self, ModpkgError> {
+        let (
+            real_header_size,
+            (
+                header_size,
+                metadata_size,
+                signature_size,
+                chunk_paths_size,
+                wad_paths_size,
+                layers_size,
+                chunk_count,
+            ),
+        ) = measure(reader, |reader| {
+            let magic = reader.read_u64::<LE>()?;
+            if magic != Self::MAGIC {
+                return Err(ModpkgError::InvalidMagic(magic));
+            }
+
+            let version = reader.read_u32::<LE>()?;
+            if version != 1 {
+                return Err(ModpkgError::InvalidVersion(version));
+            }
+
+            let header_size = reader.read_u32::<LE>()?;
+            let metadata_size = reader.read_u32::<LE>()? as usize;
+            let signature_size = reader.read_u32::<LE>()? as usize;
+            let chunk_paths_size = reader.read_u32::<LE>()? as usize;
+            let wad_paths_size = reader.read_u32::<LE>()? as usize;
+            let layers_size = reader.read_u32::<LE>()? as usize;
+            let chunk_count = reader.read_u32::<LE>()?;
+
+            Ok((
+                header_size,
+                metadata_size,
+                signature_size,
+                chunk_paths_size,
+                wad_paths_size,
+                layers_size,
+                chunk_count,
+            ))
+        })?;
+
+        if header_size != real_header_size as u32 {
+            return Err(ModpkgError::InvalidHeaderSize {
+                header_size,
+                actual_size: real_header_size,
+            });
         }
 
-        let version = reader.read_u32::<LE>()?;
-        if version != 1 {
-            return Err(ModpkgError::InvalidVersion(version));
+        let mut metadata = vec![0; metadata_size];
+        let mut signature = vec![0; signature_size];
+        let mut chunk_paths = vec![0; chunk_paths_size];
+        let mut wad_paths = vec![0; wad_paths_size];
+        let mut layers = vec![0; layers_size];
+
+        reader.read_exact(&mut metadata)?;
+        reader.read_exact(&mut signature)?;
+        reader.read_exact(&mut chunk_paths)?;
+        reader.read_exact(&mut wad_paths)?;
+        reader.read_exact(&mut layers)?;
+
+        let metadata: ModpkgMetadata = rmp_serde::from_slice(&metadata)?;
+        let chunk_paths: Vec<String> = rmp_serde::from_slice(&chunk_paths)?;
+        let wad_paths: Vec<String> = rmp_serde::from_slice(&wad_paths)?;
+
+        let layers: Vec<String> = rmp_serde::from_slice(&layers)?;
+        if !layers.contains(&"base".to_string()) {
+            return Err(ModpkgError::MissingBaseLayer);
         }
 
-        let name = reader.read_len_prefixed_string::<LE>()?;
-        let display_name = reader.read_len_prefixed_string::<LE>()?;
-        let description = reader.read_len_prefixed_string::<LE>()?;
-        let version = reader.read_len_prefixed_string::<LE>()?;
-        let distributor = reader.read_len_prefixed_string::<LE>()?;
+        let chunks = Self::read_chunks(reader, chunk_count)?;
 
-        let authors = Self::read_authors(reader)?;
-        let license = ModpkgLicense::read(reader)?;
-        let chunks = Self::read_chunks(reader)?;
         Ok(Self {
-            name,
-            display_name,
-            description: match description.len() {
-                0 => None,
-                _ => Some(description),
-            },
-            version,
-            distributor: match distributor.len() {
-                0 => None,
-                _ => Some(distributor),
-            },
-            authors,
-            license,
+            metadata,
+            chunk_paths,
+            wad_paths,
             chunks,
         })
     }
 
-    fn read_authors(reader: &mut BufReader<impl Read>) -> Result<Vec<ModpkgAuthor>, ModpkgError> {
-        let count = reader.read_u32::<LE>()?;
-        let mut authors = Vec::with_capacity(count as usize);
-        for _ in 0..count {
-            let name = reader.read_len_prefixed_string::<LE>()?;
-            let role = reader.read_len_prefixed_string::<LE>()?;
-
-            authors.push(ModpkgAuthor {
-                name,
-                role: match role.len() {
-                    0 => None,
-                    _ => Some(role),
-                },
-            });
-        }
-
-        Ok(authors)
-    }
-
     fn read_chunks(
         reader: &mut BufReader<impl Read>,
+        chunk_count: u32,
     ) -> Result<HashMap<u64, ModpkgChunk>, ModpkgError> {
-        let chunk_count = reader.read_u32::<LE>()?;
         let mut chunks = HashMap::with_capacity(chunk_count as usize);
+        let mut last_hash = 0;
+
         for _ in 0..chunk_count {
             let chunk = ModpkgChunk::read(reader)?;
-            match chunks.entry(chunk.path_hash()) {
+            let current_hash = chunk.path_hash();
+
+            if current_hash <= last_hash && last_hash != 0 {
+                return Err(ModpkgError::UnsortedChunks {
+                    previous: last_hash,
+                    current: current_hash,
+                });
+            }
+
+            match chunks.entry(current_hash) {
                 Entry::Occupied(_) => {
-                    return Err(ModpkgError::DuplicateChunk(chunk.path_hash()));
+                    return Err(ModpkgError::DuplicateChunk(current_hash));
                 }
                 Entry::Vacant(entry) => {
+                    last_hash = current_hash;
                     entry.insert(chunk);
                 }
             }
