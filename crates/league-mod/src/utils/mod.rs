@@ -10,7 +10,7 @@ pub fn is_valid_mod_name(name: impl AsRef<str>) -> bool {
 pub fn validate_mod_name(name: impl AsRef<str>) -> eyre::Result<()> {
     if !is_valid_mod_name(name) {
         return Err(eyre!(
-            "Invalid mod name, must be alphanumeric and contain no spaces or special characters"
+            "Invalid mod name, must be alphanumeric and contain no spaces or special characters (You can set a display name later)"
         ));
     }
 

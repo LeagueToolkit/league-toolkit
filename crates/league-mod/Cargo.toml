@@ -9,3 +9,6 @@ eyre = "0.6.12"
 toml = "0.8.19"
 mod-project = { path = "../mod-project" }
 regex = "1.11.1"
+colored = "2"
+inquire = "0.7.5"
+slug = "0.1.6"

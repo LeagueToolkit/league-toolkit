@@ -15,7 +15,7 @@ struct Args {
 pub enum Commands {
     Init {
         #[arg(short, long)]
-        name: String,
+        name: Option<String>,
         #[arg(short, long)]
         display_name: Option<String>,
         #[arg(short, long)]
