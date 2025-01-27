@@ -10,3 +10,6 @@ toml = "0.8.19"
 mod-project = { path = "../mod-project" }
 regex = "1.11.1"
 serde_json = "1.0"
+colored = "2"
+inquire = "0.7.5"
+slug = "0.1.6"
