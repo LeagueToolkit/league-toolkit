@@ -1,5 +1,7 @@
 use thiserror::Error;
 
+use crate::ModpkgCompression;
+
 #[derive(Error, Debug)]
 pub enum ModpkgError {
     #[error("IO error: {0}")]
@@ -11,10 +13,20 @@ pub enum ModpkgError {
     InvalidHeaderSize { header_size: u32, actual_size: u64 },
     #[error("Chunks are not in ascending order: previous: {previous}, current: {current}")]
     UnsortedChunks { previous: u64, current: u64 },
+    #[error("Missing metadata chunk")]
+    MissingMetadata,
     #[error("Missing base layer")]
     MissingBaseLayer,
     #[error("Invalid modpkg compression type: {0}")]
     InvalidCompressionType(u8),
+    #[error(
+        "Unexpected compression type: chunk: {chunk:x}, expected: {expected}, actual: {actual}"
+    )]
+    UnexpectedCompressionType {
+        chunk: u64,
+        expected: ModpkgCompression,
+        actual: ModpkgCompression,
+    },
     #[error("Invalid modpkg license type: {0}")]
     InvalidLicenseType(u8),
     #[error("Invalid modpkg magic: {0}")]
@@ -23,6 +35,8 @@ pub enum ModpkgError {
     InvalidVersion(u32),
     #[error("Duplicate chunk: {0}")]
     DuplicateChunk(u64),
+    #[error("Chunk not found: {0:x}")]
+    MissingChunk(u64),
 
     #[error("Msgpack decode error: {0}")]
     MsgpackDecode(#[from] rmp_serde::decode::Error),

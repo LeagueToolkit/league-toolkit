@@ -1,4 +1,4 @@
-use crate::error::ModpkgError;
+use crate::{error::ModpkgError, ModpkgCompression};
 use byteorder::{ReadBytesExt as _, LE};
 use std::io::{BufReader, Read};
 
@@ -7,6 +7,7 @@ pub struct ModpkgChunk {
     path_hash: u64,
 
     data_offset: usize,
+    compression: ModpkgCompression,
     compressed_size: usize,
     uncompressed_size: usize,
 
@@ -15,7 +16,7 @@ pub struct ModpkgChunk {
 
     path_index: u32,
     wad_paths_index: u32,
-    layers_index: u32,
+    layer_index: u32,
 }
 
 impl ModpkgChunk {
@@ -23,6 +24,7 @@ impl ModpkgChunk {
         let path_hash = reader.read_u64::<LE>()?;
 
         let data_offset = reader.read_u64::<LE>()?;
+        let compression = ModpkgCompression::try_from(reader.read_u8()?)?;
         let compressed_size = reader.read_u64::<LE>()?;
         let uncompressed_size = reader.read_u64::<LE>()?;
 
@@ -31,19 +33,19 @@ impl ModpkgChunk {
 
         let path_index = reader.read_u32::<LE>()?;
         let wad_paths_index = reader.read_u32::<LE>()?;
-        let layers_index = reader.read_u32::<LE>()?;
-        let _ = reader.read_u32::<LE>()?; // reserved
+        let layer_index = reader.read_u32::<LE>()?;
 
         Ok(Self {
             path_hash,
             data_offset: data_offset as usize,
+            compression,
             compressed_size: compressed_size as usize,
             uncompressed_size: uncompressed_size as usize,
             compressed_checksum,
             uncompressed_checksum,
             path_index,
             wad_paths_index,
-            layers_index,
+            layer_index,
         })
     }
 
@@ -53,6 +55,9 @@ impl ModpkgChunk {
 
     pub fn data_offset(&self) -> usize {
         self.data_offset
+    }
+    pub fn compression(&self) -> ModpkgCompression {
+        self.compression
     }
     pub fn compressed_size(&self) -> usize {
         self.compressed_size
@@ -74,7 +79,7 @@ impl ModpkgChunk {
     pub fn wad_paths_index(&self) -> u32 {
         self.wad_paths_index
     }
-    pub fn layers_index(&self) -> u32 {
-        self.layers_index
+    pub fn layer_index(&self) -> u32 {
+        self.layer_index
     }
 }

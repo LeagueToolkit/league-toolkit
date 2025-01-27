@@ -1,20 +1,35 @@
 use chunk::ModpkgChunk;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-
+use error::ModpkgError;
+use metadata::ModpkgMetadata;
+use std::{collections::HashMap, fmt::Display, io};
 mod chunk;
 mod error;
+mod license;
+mod metadata;
 mod read;
+mod utils;
+
+pub const METADATA_CHUNK_NAME: &str = "__metadata__";
+pub const LAYERS_CHUNK_NAME: &str = "__layers__";
+pub const WADS_CHUNK_NAME: &str = "__wads__";
+pub const CHUNK_PATHS_CHUNK_NAME: &str = "__chunk_paths__";
+
+pub const METADATA_CHUNK_HASH: u64 = 0xc3b02c1cbcdff91f;
+pub const LAYERS_CHUNK_HASH: u64 = 0xe8f354f18f398ee1;
+pub const WADS_CHUNK_HASH: u64 = 0x67c34d7d3d2900df;
+pub const CHUNK_PATHS_CHUNK_HASH: u64 = 0xbe4dc608d6e153c0;
 
 #[derive(Debug, PartialEq)]
-pub struct Modpkg {
+pub struct Modpkg<TSource: io::Read + io::Seek> {
     metadata: ModpkgMetadata,
     chunk_paths: Vec<String>,
     wad_paths: Vec<String>,
     chunks: HashMap<u64, ModpkgChunk>,
+
+    source: TSource,
 }
 
-impl Modpkg {
+impl<TSource: io::Read + io::Seek> Modpkg<TSource> {
     pub fn metadata(&self) -> &ModpkgMetadata {
         &self.metadata
     }
@@ -23,68 +38,33 @@ impl Modpkg {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct ModpkgMetadata {
-    name: String,
-    display_name: String,
-    description: Option<String>,
-    version: String,
-    distributor: Option<String>,
-    authors: Vec<ModpkgAuthor>,
-    license: ModpkgLicense,
-}
-
-impl ModpkgMetadata {
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-    pub fn display_name(&self) -> &str {
-        &self.display_name
-    }
-    pub fn description(&self) -> Option<&str> {
-        self.description.as_deref()
-    }
-    pub fn version(&self) -> &str {
-        &self.version
-    }
-    pub fn distributor(&self) -> Option<&str> {
-        self.distributor.as_deref()
-    }
-    pub fn authors(&self) -> &[ModpkgAuthor] {
-        &self.authors
-    }
-    pub fn license(&self) -> &ModpkgLicense {
-        &self.license
-    }
-}
-
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub enum ModpkgLicense {
-    None,
-    Spdx { spdx_id: String },
-    Custom { name: String, url: String },
-}
-
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct ModpkgAuthor {
-    name: String,
-    role: Option<String>,
-}
-
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub enum ModpkgCompression {
     None = 0,
     Zstd = 1,
 }
 
+impl Display for ModpkgCompression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{:?}",
+            match self {
+                ModpkgCompression::None => "none",
+                ModpkgCompression::Zstd => "zstd",
+            }
+        )
+    }
+}
+
 impl TryFrom<u8> for ModpkgCompression {
-    type Error = &'static str;
+    type Error = ModpkgError;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         Ok(match value {
             0 => ModpkgCompression::None,
             1 => ModpkgCompression::Zstd,
-            _ => return Err("Invalid modpkg compression value"),
+            _ => return Err(ModpkgError::InvalidCompressionType(value)),
         })
     }
 }
