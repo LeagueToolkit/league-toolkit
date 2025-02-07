@@ -139,10 +139,11 @@ mod tests {
     use super::*;
     use proptest::prelude::*;
     proptest! {
-    #[test]
+        #[test]
         fn test_metadata_size(metadata: ModpkgMetadata) {
             test::written_size(&metadata, metadata.size());
         }
+        #[test]
         fn test_author_size(author: ModpkgAuthor) {
             test::written_size(&author, author.size());
         }
