@@ -28,6 +28,7 @@ pub enum ModpkgLicense {
 }
 
 impl ModpkgLicense {
+    /// The total size of the license when written to bytes.
     #[inline]
     pub fn size(&self) -> usize {
         1 + match self {
