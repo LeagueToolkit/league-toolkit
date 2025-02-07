@@ -1,16 +1,31 @@
 use binrw::{binrw, NullString};
+use binrw::binrw;
+
+use crate::utils::{nullstr_read, nullstr_write};
 
 #[binrw]
 #[brw(little)]
 #[derive(Debug, PartialEq, Default)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum ModpkgLicense {
     #[default]
     #[brw(magic = 0u8)]
     None,
     #[brw(magic = 1u8)]
-    Spdx { spdx_id: NullString },
+    Spdx {
+        #[bw(map = nullstr_write)]
+        #[br(try_map = nullstr_read)]
+        spdx_id: String,
+    },
     #[brw(magic = 2u8)]
-    Custom { name: NullString, url: NullString },
+    Custom {
+        #[bw(map = nullstr_write)]
+        #[br(try_map = nullstr_read)]
+        name: String,
+        #[bw(map = nullstr_write)]
+        #[br(try_map = nullstr_read)]
+        url: String,
+    },
 }
 
 impl ModpkgLicense {
