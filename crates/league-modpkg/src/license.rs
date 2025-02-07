@@ -1,67 +1,83 @@
-use std::io::{BufReader, Read, Write};
+use binrw::{binrw, NullString};
 
-use byteorder::{ReadBytesExt as _, WriteBytesExt as _, LE};
-use io_ext::{ReaderExt as _, WriterExt as _};
-
-use crate::error::ModpkgError;
-
+#[binrw]
+#[brw(little)]
 #[derive(Debug, PartialEq, Default)]
 pub enum ModpkgLicense {
     #[default]
+    #[brw(magic = 0u8)]
     None,
-    Spdx {
-        spdx_id: String,
-    },
-    Custom {
-        name: String,
-        url: String,
-    },
+    #[brw(magic = 1u8)]
+    Spdx { spdx_id: NullString },
+    #[brw(magic = 2u8)]
+    Custom { name: NullString, url: NullString },
 }
 
 impl ModpkgLicense {
-    pub fn read(reader: &mut BufReader<impl Read>) -> Result<Self, ModpkgError> {
-        let license_type = reader.read_u8()?;
-        match license_type {
-            0 => Ok(Self::None),
-            1 => Ok(Self::Spdx {
-                spdx_id: reader.read_len_prefixed_string::<LE>()?,
-            }),
-            2 => Ok(Self::Custom {
-                name: reader.read_len_prefixed_string::<LE>()?,
-                url: reader.read_len_prefixed_string::<LE>()?,
-            }),
-            _ => Err(ModpkgError::InvalidLicenseType(license_type)),
-        }
-    }
-
-    pub fn write(&self, writer: &mut impl Write) -> Result<(), ModpkgError> {
-        writer.write_u8(match self {
-            Self::None => 0,
-            Self::Spdx { .. } => 1,
-            Self::Custom { .. } => 2,
-        })?;
-
-        match self {
-            Self::Spdx { spdx_id } => {
-                writer.write_len_prefixed_string_better::<LE>(spdx_id)?;
-
-                Ok(())
-            }
-            Self::Custom { name, url } => {
-                writer.write_len_prefixed_string_better::<LE>(name)?;
-                writer.write_len_prefixed_string_better::<LE>(url)?;
-
-                Ok(())
-            }
-            Self::None => Ok(()),
-        }
-    }
-
+    #[inline]
     pub fn size(&self) -> usize {
-        match self {
-            Self::None => 1,
-            Self::Spdx { spdx_id } => 1 + 4 + spdx_id.len(),
-            Self::Custom { name, url } => 1 + 4 + 4 + name.len() + url.len(),
+        1 + match self {
+            Self::None => 0,
+            // null terminators not included in len()
+            Self::Spdx { spdx_id } => 1 + spdx_id.len(),
+            Self::Custom { name, url } => 2 + name.len() + url.len(),
         }
+    }
+}
+
+// TODO: use proptest here
+#[cfg(test)]
+mod tests {
+    use std::io::Cursor;
+
+    use binrw::BinWrite;
+
+    use super::*;
+
+    #[test]
+    fn test_none_size() {
+        let license = ModpkgLicense::default();
+        let mut buf = Cursor::new(Vec::with_capacity(license.size() + 512));
+        license.write(&mut buf).unwrap();
+        println!("{:x?}", buf.clone().into_inner());
+
+        assert_eq!(
+            license.size(),
+            buf.into_inner().len(),
+            "comparing reported size with real size"
+        );
+    }
+
+    #[test]
+    fn test_spdx_size() {
+        let license = ModpkgLicense::Spdx {
+            spdx_id: "test".to_string().into(),
+        };
+
+        let mut buf = Cursor::new(Vec::with_capacity(license.size() + 512));
+        license.write(&mut buf).unwrap();
+
+        assert_eq!(
+            license.size(),
+            buf.into_inner().len(),
+            "comparing reported size with real size"
+        );
+    }
+    #[test]
+    fn test_custom_size() {
+        let license = ModpkgLicense::Custom {
+            name: "customName".into(),
+            url: "http://fake.url/".into(),
+        };
+        let mut buf = Cursor::new(Vec::with_capacity(license.size() + 512));
+        license.write(&mut buf).unwrap();
+
+        println!("{:x?}", buf.clone().into_inner());
+
+        assert_eq!(
+            license.size(),
+            buf.into_inner().len(),
+            "comparing reported size with real size"
+        );
     }
 }
