@@ -1,35 +1,60 @@
+use binrw::{binrw, NullString};
 use chunk::ModpkgChunk;
 use error::ModpkgError;
+use itertools::Itertools;
 use metadata::ModpkgMetadata;
-use std::{collections::HashMap, fmt::Display, io};
+use std::{
+    collections::HashMap,
+    fmt::Display,
+    io::{Read, Seek},
+};
 mod chunk;
 mod error;
 mod license;
 mod metadata;
-mod read;
 mod utils;
 
-pub const METADATA_CHUNK_NAME: &str = "__metadata__";
-pub const LAYERS_CHUNK_NAME: &str = "__layers__";
-pub const WADS_CHUNK_NAME: &str = "__wads__";
-pub const CHUNK_PATHS_CHUNK_NAME: &str = "__chunk_paths__";
-
-pub const METADATA_CHUNK_HASH: u64 = 0xc3b02c1cbcdff91f;
-pub const LAYERS_CHUNK_HASH: u64 = 0xe8f354f18f398ee1;
-pub const WADS_CHUNK_HASH: u64 = 0x67c34d7d3d2900df;
-pub const CHUNK_PATHS_CHUNK_HASH: u64 = 0xbe4dc608d6e153c0;
-
+#[binrw]
+#[brw(little, magic = b"_modpkg_")]
 #[derive(Debug, PartialEq)]
-pub struct Modpkg<TSource: io::Read + io::Seek> {
-    metadata: ModpkgMetadata,
-    chunk_paths: Vec<String>,
-    wad_paths: Vec<String>,
+pub struct Modpkg<TSource: Read + Seek + Default> {
+    #[br(temp, assert(version == 1))]
+    #[bw(calc = 1)]
+    version: u32,
+    #[br(temp)]
+    #[bw(calc = signature.len() as u32)]
+    signature_size: u32,
+    #[br(temp)]
+    #[bw(calc = chunks.len() as u32)]
+    chunk_count: u32,
+
+    #[br(count = signature_size)]
+    signature: Vec<u8>,
+
+    #[br(temp)]
+    #[bw(calc = chunk_paths.len() as u32)]
+    chunk_path_count: u32,
+    #[br(count = chunk_path_count)]
+    chunk_paths: Vec<NullString>,
+
+    #[br(temp)]
+    #[bw(calc = wad_paths.len() as u32)]
+    wad_path_count: u32,
+    #[br(count = wad_path_count)]
+    wad_paths: Vec<NullString>,
+
+    #[br(count = chunk_count, map = |m: Vec<ModpkgChunk>| m.into_iter().map(|c| (c.path_hash, c)).collect())]
+    #[bw(map = |m| m.values().copied().collect_vec())]
     chunks: HashMap<u64, ModpkgChunk>,
 
+    metadata: ModpkgMetadata,
+
+    #[brw(ignore)]
+    /// The original byte source.
     source: TSource,
 }
 
-impl<TSource: io::Read + io::Seek> Modpkg<TSource> {
+impl<TSource: Read + Seek + Default> Modpkg<TSource> {
     pub fn metadata(&self) -> &ModpkgMetadata {
         &self.metadata
     }
@@ -38,6 +63,8 @@ impl<TSource: io::Read + io::Seek> Modpkg<TSource> {
     }
 }
 
+#[binrw]
+#[brw(little, repr = u8)]
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub enum ModpkgCompression {
     None = 0,
