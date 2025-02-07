@@ -1,4 +1,3 @@
-use binrw::{binrw, NullString};
 use binrw::binrw;
 
 use crate::utils::{nullstr_read, nullstr_write};
@@ -40,59 +39,15 @@ impl ModpkgLicense {
     }
 }
 
-// TODO: use proptest here
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
-
-    use binrw::BinWrite;
-
     use super::*;
-
+    use crate::utils::test;
+    use proptest::prelude::*;
+    proptest! {
     #[test]
-    fn test_none_size() {
-        let license = ModpkgLicense::default();
-        let mut buf = Cursor::new(Vec::with_capacity(license.size() + 512));
-        license.write(&mut buf).unwrap();
-        println!("{:x?}", buf.clone().into_inner());
-
-        assert_eq!(
-            license.size(),
-            buf.into_inner().len(),
-            "comparing reported size with real size"
-        );
-    }
-
-    #[test]
-    fn test_spdx_size() {
-        let license = ModpkgLicense::Spdx {
-            spdx_id: "test".to_string().into(),
-        };
-
-        let mut buf = Cursor::new(Vec::with_capacity(license.size() + 512));
-        license.write(&mut buf).unwrap();
-
-        assert_eq!(
-            license.size(),
-            buf.into_inner().len(),
-            "comparing reported size with real size"
-        );
-    }
-    #[test]
-    fn test_custom_size() {
-        let license = ModpkgLicense::Custom {
-            name: "customName".into(),
-            url: "http://fake.url/".into(),
-        };
-        let mut buf = Cursor::new(Vec::with_capacity(license.size() + 512));
-        license.write(&mut buf).unwrap();
-
-        println!("{:x?}", buf.clone().into_inner());
-
-        assert_eq!(
-            license.size(),
-            buf.into_inner().len(),
-            "comparing reported size with real size"
-        );
+        fn test_license_size(license: ModpkgLicense) {
+            test::written_size(&license, license.size());
+        }
     }
 }

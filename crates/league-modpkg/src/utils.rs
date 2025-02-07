@@ -18,3 +18,23 @@ pub fn nullstr_read(s: NullString) -> Result<String, std::string::FromUtf8Error>
 pub fn nullstr_write<'a>(s: impl Into<&'a String>) -> NullString {
     NullString::from(s.into().as_str())
 }
+
+#[cfg(test)]
+pub mod test {
+    use binrw::{meta, BinWrite};
+    use std::io::Cursor;
+
+    pub fn written_size<I>(item: &I, expected_size: usize)
+    where
+        for<'a> I: BinWrite<Args<'a> = ()> + meta::WriteEndian,
+    {
+        let mut buf = Cursor::new(Vec::with_capacity(expected_size + 64));
+        item.write(&mut buf).unwrap();
+
+        assert_eq!(
+            expected_size,
+            buf.into_inner().len(),
+            "comparing reported size with real size"
+        );
+    }
+}
