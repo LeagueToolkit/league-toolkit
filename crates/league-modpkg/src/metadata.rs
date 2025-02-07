@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 #[binrw]
 #[brw(little)]
 #[derive(Debug, PartialEq, Default)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ModpkgMetadata {
     #[br(temp)]
     #[bw(calc = name.len() as u32)]
@@ -95,6 +96,7 @@ impl ModpkgMetadata {
 #[binrw]
 #[brw(little)]
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ModpkgAuthor {
     #[br(temp)]
     #[bw( calc = name.len() as u32 )]
@@ -128,61 +130,19 @@ impl ModpkgAuthor {
     }
 }
 
-// TODO: use proptest here
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
-
-    use binrw::BinWrite;
+    use crate::utils::test;
 
     use super::*;
-
+    use proptest::prelude::*;
+    proptest! {
     #[test]
-    fn test_empty_metadata_size() {
-        let metadata = ModpkgMetadata::default();
-
-        let mut buf = Cursor::new(Vec::with_capacity(metadata.size() + 512));
-        metadata.write(&mut buf).unwrap();
-
-        assert_eq!(
-            metadata.size(),
-            buf.into_inner().len(),
-            "comparing reported size with real size"
-        );
-    }
-
-    #[test]
-    fn test_metadata_size() {
-        let mod_name = "test".to_string();
-        let display_name = "test".to_string();
-        let description = "test".to_string();
-        let version = "test".to_string();
-        let distributor = "test".to_string();
-        let author_name = "test".to_string();
-        let author_role = "test".to_string();
-        let license = ModpkgLicense::Spdx {
-            spdx_id: "test".to_string().into(),
-        };
-
-        let metadata = ModpkgMetadata {
-            name: mod_name,
-            display_name,
-            description: Some(description),
-            version,
-            distributor: Some(distributor),
-            authors: vec![ModpkgAuthor {
-                name: author_name,
-                role: Some(author_role),
-            }],
-            license,
-        };
-        let mut buf = Cursor::new(Vec::with_capacity(metadata.size() + 512));
-        metadata.write(&mut buf).unwrap();
-
-        assert_eq!(
-            metadata.size(),
-            buf.into_inner().len(),
-            "comparing reported size with real size"
-        );
+        fn test_metadata_size(metadata: ModpkgMetadata) {
+            test::written_size(&metadata, metadata.size());
+        }
+        fn test_author_size(author: ModpkgAuthor) {
+            test::written_size(&author, author.size());
+        }
     }
 }
