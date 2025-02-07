@@ -46,7 +46,7 @@ mod tests {
     use crate::utils::test;
     use proptest::prelude::*;
     proptest! {
-    #[test]
+        #[test]
         fn test_license_size(license: ModpkgLicense) {
             test::written_size(&license, license.size());
         }
