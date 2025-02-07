@@ -43,6 +43,8 @@ pub struct Modpkg<TSource: Read + Seek + Default> {
     #[br(count = wad_path_count)]
     wad_paths: Vec<NullString>,
 
+    // alan: pretty sure this works to align the individual chunks - https://github.com/jam1garner/binrw/issues/68
+    #[brw(align_before = 8)]
     #[br(count = chunk_count, map = |m: Vec<ModpkgChunk>| m.into_iter().map(|c| (c.path_hash, c)).collect())]
     #[bw(map = |m| m.values().copied().collect_vec())]
     chunks: HashMap<u64, ModpkgChunk>,
