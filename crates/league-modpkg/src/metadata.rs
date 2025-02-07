@@ -58,6 +58,7 @@ pub struct ModpkgMetadata {
 }
 
 impl ModpkgMetadata {
+    /// The total size of the metadata when written to bytes.
     pub fn size(&self) -> usize {
         (self.name.len() + size_of::<u32>())
             + (self.display_name.len() + size_of::<u32>())
@@ -125,6 +126,7 @@ impl ModpkgAuthor {
 }
 
 impl ModpkgAuthor {
+    /// The total size of the author when written to bytes.
     pub fn size(&self) -> usize {
         (self.name.len() + size_of::<u32>()) + (optional_string_len(&self.role) + size_of::<u32>())
     }
