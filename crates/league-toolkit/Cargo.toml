@@ -32,10 +32,9 @@ ruzstd = { version = "0.7", optional = true }
 xxhash-rust = { version = "0.8.15", features = ["xxh64", "xxh3"] }
 itertools = "0.14.0"
 serde = { version = "1.0.204", features = ["derive"], optional = true }
-image = { version = "0.25.2", default-features = false, features = ["dds", "png"] }
+image = { version = "0.25.2", default-features = false, features = ["dds"] }
 ddsfile = "0.5.2"
-image_dds = "0.6.0"
-
+image_dds = {version = "0.6.0", default-features = false, features = ["ddsfile", "image"]}
 paste = "1.0.15"
 miette = "7.2.0"
 enum_dispatch = "0.3.13"
