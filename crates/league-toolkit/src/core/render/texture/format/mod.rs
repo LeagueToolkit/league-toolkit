@@ -70,6 +70,10 @@ impl TextureFileFormat {
 
 #[cfg(test)]
 mod tests {
+    use image::{codecs::png::PngEncoder, ImageEncoder};
+    use image_dds::image_from_dds;
+    use io::BufWriter;
+    use log::debug;
     use std::fs;
     use test_log::test;
 
@@ -77,10 +81,22 @@ mod tests {
 
     #[test]
     fn dds() {
-        let format = TextureFileFormat::DDS;
-        let mut file = fs::File::open("/home/alan/Downloads/aurora_square_0.aurora.dds").unwrap();
-        let tex = format.read_no_magic(&mut file).unwrap();
-
-        panic!();
+        //let format = TextureFileFormat::DDS;
+        //let mut file = fs::File::open("/home/alan/Downloads/aurora_square_0.aurora.dds").unwrap();
+        //let CompressedTexture::Dds(dds) = format.read_no_magic(&mut file).unwrap() else {
+        //    unreachable!();
+        //};
+        //
+        //let img = image_from_dds(&dds, 0).unwrap();
+        //let out = PngEncoder::new(
+        //    std::fs::File::create("./out.png")
+        //        .map(BufWriter::new)
+        //        .unwrap(),
+        //);
+        //img.write_with_encoder(out).unwrap();
+        //
+        //println!("{dds:?}");
+        //
+        //panic!();
     }
 }
