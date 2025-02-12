@@ -7,7 +7,9 @@ pub enum ParseError {
     #[error("Invalid '{0}' - got '{1}'")]
     InvalidField(&'static str, String),
     #[error("IO Error - {0}")]
-    ReaderError(#[from] std::io::Error),
+    IOError(#[from] std::io::Error),
     #[error("UTF-8 Error - {0}")]
     Utf8Error(#[from] std::str::Utf8Error),
+    #[error(transparent)]
+    ReaderError(#[from] io_ext::ReaderError),
 }

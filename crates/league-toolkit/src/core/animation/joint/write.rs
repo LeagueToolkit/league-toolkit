@@ -1,7 +1,7 @@
 use crate::core::animation::Joint;
 use crate::util::hash;
-use crate::util::WriterExt;
 use byteorder::{WriteBytesExt, LE};
+use io_ext::WriterExt;
 use std::io;
 use std::io::{Seek, Write};
 
@@ -29,7 +29,7 @@ impl Joint {
         writer.write_quat::<LE>(&self.inverse_bind_rotation)?;
 
         let pos = writer.stream_position()?;
-        writer.write_i32::<LE>(name_off as i32 - pos as i32)?;
+        writer.write_i32::<LE>((name_off as i64 - pos as i64) as i32)?;
 
         Ok(())
     }

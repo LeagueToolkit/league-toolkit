@@ -9,7 +9,7 @@ default = ["zstd"]
 zstd = ["dep:zstd"]
 ruzstd = ["dep:ruzstd"]
 
-serde = ["dep:serde"]
+serde = ["dep:serde", "glam/serde", "league-primitives/serde"]
 rust_backends = [
   "flate2/rust_backend",
   "ruzstd",
@@ -20,21 +20,30 @@ bitflags = "2.5.0"
 byteorder = "1.5.0"
 flate2 = "1.0.30"
 glam = { version = "0.27.0", features = ["glam-assert"] }
-insta = "1.39.0"
-lazy_static = "1.4.0"
+lazy_static = "1.5.0"
 log = "0.4.21"
 memchr = "2.7.2"
 num_enum = "0.7.2"
 thiserror = "1.0.60"
-
+io-ext = { path = "../io-ext" }
+league-primitives = { path = "../league-primitives" }
 zstd = { version = "0.13", default-features = false, optional = true }
 ruzstd = { version = "0.7", optional = true }
-
+xxhash-rust = { version = "0.8.15", features = ["xxh64", "xxh3"] }
+itertools = "0.14.0"
 serde = { version = "1.0.204", features = ["derive"], optional = true }
 image = { version = "0.25.2", default-features = false, features = ["dds"] }
 ddsfile = "0.5.2"
 image_dds = "0.6.0"
 
+paste = "1.0.15"
+miette = "7.2.0"
+enum_dispatch = "0.3.13"
+
 [dev-dependencies]
+league-toolkit = { path = ".", features = ["serde"] }
 approx = "0.5.1"
 test-log = "0.2.16"
+insta = { version = "1.39.0", features = ["ron"] }
+serde = { version = "*", features = ["derive"] }
+glam = { version = "*", features = ["glam-assert", "serde"] }

@@ -32,7 +32,7 @@
       );
 
     rustToolchain = eachSystem (pkgs: (pkgs.rust-bin.stable.latest.default.override {
-     extensions = [ "rust-src" ];
+      extensions = ["rust-src"];
     }));
 
     treefmtEval = eachSystem (pkgs: treefmt-nix.lib.evalModule pkgs ./treefmt.nix);
@@ -52,6 +52,7 @@
       default = pkgs.mkShell (with pkgs; {
         nativeBuildInputs = [
           clang
+          gdb
           # Use mold when we are runnning in Linux
           (lib.optionals stdenv.isLinux mold)
         ];
@@ -60,6 +61,9 @@
           rust-analyzer-unwrapped
           cargo
           cargo-insta
+          cargo-hack
+          cargo-expand
+          bacon
           # pkg-config
           # openssl
         ];

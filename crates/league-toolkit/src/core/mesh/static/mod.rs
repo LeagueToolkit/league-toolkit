@@ -1,16 +1,12 @@
-use std::io::Read;
-
-use byteorder::ReadBytesExt;
 use glam::Vec3;
 
 pub use face::*;
-
-use crate::core::primitives::Color;
+use league_primitives::Color;
 
 mod face;
 mod read;
 
-const MAGIC: &[u8] = "r3d2Mesh".as_bytes();
+pub const MAGIC: &[u8] = b"r3d2Mesh";
 
 #[derive(Clone, Debug)]
 pub struct StaticMesh {

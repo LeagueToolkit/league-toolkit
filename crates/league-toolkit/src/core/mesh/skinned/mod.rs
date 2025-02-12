@@ -1,15 +1,10 @@
-use std::io::Read;
-
-use byteorder::ReadBytesExt;
 use glam::Vec3;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 pub use range::*;
 
-use crate::core::{
-    mem::{ElementName, IndexBuffer, VertexBuffer, VertexBufferDescription},
-    primitives::{Sphere, AABB},
-};
+use crate::core::mem::{ElementName, IndexBuffer, VertexBuffer, VertexBufferDescription};
+use league_primitives::{Sphere, AABB};
 
 use super::Result;
 

@@ -117,6 +117,7 @@ macro_rules! impl_iter {
 }
 
 impl_iter!(f32);
+impl_iter!([u8; 4]);
 impl_iter!(Vec2);
 impl_iter!(Vec3);
 impl_iter!(Vec4);
