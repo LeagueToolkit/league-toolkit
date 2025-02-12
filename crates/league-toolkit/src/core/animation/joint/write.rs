@@ -1,7 +1,7 @@
 use crate::core::animation::Joint;
 use crate::util::hash;
-use crate::util::WriterExt;
 use byteorder::{WriteBytesExt, LE};
+use io_ext::WriterExt;
 use std::io;
 use std::io::{Seek, Write};
 

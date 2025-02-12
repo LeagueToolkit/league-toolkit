@@ -15,3 +15,5 @@ Cargo.lock
 # Nix build artifacts/direnv stuff
 .direnv
 result
+
+bin

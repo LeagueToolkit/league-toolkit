@@ -2,14 +2,14 @@ use crate::core::mem::{IndexBuffer, IndexFormat, VertexBufferDescription};
 use crate::core::mesh::error::ParseError;
 use crate::core::mesh::skinned::{vertex, SkinnedMeshVertexType, MAGIC};
 use crate::core::mesh::{SkinnedMesh, SkinnedMeshRange};
-use crate::core::primitives::{Sphere, AABB};
 use byteorder::{ReadBytesExt, LE};
+use io_ext::ReaderExt;
+use league_primitives::{Sphere, AABB};
 use num_enum::TryFromPrimitiveError;
 use std::io::Read;
 
 impl SkinnedMesh {
     pub fn from_reader<R: Read>(reader: &mut R) -> crate::core::mesh::Result<Self> {
-        use crate::util::ReaderExt as _;
         let magic = reader.read_u32::<LE>()?;
         if magic != MAGIC {
             return Err(ParseError::InvalidFileSignature);

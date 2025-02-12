@@ -1,12 +1,9 @@
-use std::io::{Read, Seek};
-use byteorder::ReadBytesExt;
 use glam::{Mat4, Quat, Vec3};
-use crate::util::ReaderExt;
 
+mod builder;
 pub mod legacy;
 mod read;
 mod write;
-mod builder;
 
 pub use builder::Builder;
 
@@ -25,7 +22,6 @@ pub struct Joint {
     inverse_bind_translation: Vec3,
     inverse_bind_scale: Vec3,
     inverse_bind_rotation: Quat,
-
 }
 
 impl Joint {
