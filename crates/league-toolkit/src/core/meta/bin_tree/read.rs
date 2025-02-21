@@ -9,6 +9,12 @@ use io_ext::ReaderExt;
 impl BinTree {
     pub const PROP: u32 = u32::from_le_bytes(*b"PROP");
     pub const PTCH: u32 = u32::from_le_bytes(*b"PTCH");
+
+    /// Reads a BinTree from a reader.
+    ///
+    /// # Arguments
+    ///
+    /// * `reader` - A reader that implements io::Read and io::Seek.
     pub fn from_reader<R: io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
     ) -> Result<Self, ParseError> {

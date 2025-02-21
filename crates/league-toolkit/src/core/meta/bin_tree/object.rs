@@ -14,6 +14,13 @@ pub struct BinTreeObject {
 }
 
 impl BinTreeObject {
+    /// Reads a BinTreeObject from a reader.
+    ///
+    /// # Arguments
+    ///
+    /// * `reader` - A reader that implements io::Read and io::Seek.
+    /// * `class_hash` - The hash of the class of the object.
+    /// * `legacy` - Whether to read in legacy format.
     pub fn from_reader<R: io::Read + io::Seek + ?Sized>(
         reader: &mut R,
         class_hash: u32,
@@ -43,6 +50,12 @@ impl BinTreeObject {
         Ok(value)
     }
 
+    /// Writes a BinTreeObject to a writer.
+    ///
+    /// # Arguments
+    ///
+    /// * `writer` - A writer that implements io::Write and io::Seek.
+    /// * `legacy` - Whether to write in legacy format.
     pub fn to_writer<W: io::Write + io::Seek + ?Sized>(
         &self,
         writer: &mut W,
@@ -51,6 +64,7 @@ impl BinTreeObject {
         if legacy {
             unimplemented!("legacy BinTreeObject write");
         }
+
         let size_pos = writer.stream_position()?;
         writer.write_u32::<LE>(0)?;
 

@@ -6,15 +6,16 @@ use crate::core::meta::{
 };
 use io_ext::{ReaderExt as _, WriterExt as _};
 
-// I am not a fan of the double tagging, but fixing it would be a whole ordeal (and might not be
-// possible with static dispatch?).
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, PartialEq, Debug)]
-pub struct OptionalValue(pub BinPropertyKind, pub Option<Box<PropertyValueEnum>>);
+pub struct OptionalValue {
+    kind: BinPropertyKind,
+    value: Option<Box<PropertyValueEnum>>,
+}
 
 impl PropertyValue for OptionalValue {
     fn size_no_header(&self) -> usize {
-        2 + match &self.1 {
+        2 + match &self.value {
             Some(inner) => inner.size_no_header(),
             None => 0,
         }
@@ -33,13 +34,13 @@ impl ReadProperty for OptionalValue {
 
         let is_some = reader.read_bool()?;
 
-        Ok(Self(
+        Ok(Self {
             kind,
-            match is_some {
+            value: match is_some {
                 true => Some(kind.read(reader, legacy)?.into()),
                 false => None,
             },
-        ))
+        })
     }
 }
 impl WriteProperty for OptionalValue {
@@ -51,9 +52,9 @@ impl WriteProperty for OptionalValue {
         if legacy {
             unimplemented!("legacy optional write")
         }
-        writer.write_property_kind(self.0)?;
-        writer.write_bool(self.1.is_some())?;
-        if let Some(value) = &self.1 {
+        writer.write_property_kind(self.kind)?;
+        writer.write_bool(self.value.is_some())?;
+        if let Some(value) = &self.value {
             value.to_writer(writer)?;
         }
 

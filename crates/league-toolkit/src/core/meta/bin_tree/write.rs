@@ -5,6 +5,12 @@ use byteorder::{WriteBytesExt, LE};
 use io_ext::WriterExt;
 
 impl BinTree {
+    /// Writes a BinTree to a writer.
+    ///
+    /// # Arguments
+    ///
+    /// * `writer` - A writer that implements io::Write and io::Seek.
+    /// * `legacy` - Whether to write in legacy format.
     pub fn to_writer<W: io::Write + io::Seek + ?Sized>(
         &self,
         writer: &mut W,
