@@ -21,6 +21,17 @@ pub trait WriterExt: Write {
         Ok(())
     }
 
+    /// Writes a string with a length prefix (writes sizeof(str.len()) + str.len() bytes)
+    fn write_len_prefixed_string_better<T: ByteOrder>(
+        &mut self,
+        str: impl AsRef<str>,
+    ) -> io::Result<()> {
+        let str = str.as_ref();
+        self.write_u16::<T>(str.len() as _)?;
+        self.write_all(str.as_bytes())?;
+        Ok(())
+    }
+
     /// Writes a string with a null terminator (writes sizeof(str) + 1 bytes)
     fn write_terminated_string<S: AsRef<str>>(&mut self, str: S) -> io::Result<()> {
         self.write_all(str.as_ref().as_bytes())?;
