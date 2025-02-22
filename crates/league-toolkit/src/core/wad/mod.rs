@@ -1,7 +1,9 @@
+mod builder;
 mod chunk;
 mod decoder;
 mod error;
 
+pub use builder::*;
 pub use chunk::*;
 pub use decoder::*;
 pub use error::*;
