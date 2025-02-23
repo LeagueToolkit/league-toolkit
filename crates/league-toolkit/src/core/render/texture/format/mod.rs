@@ -70,7 +70,6 @@ impl TextureFileFormat {
 
 #[cfg(test)]
 mod tests {
-    use image::{codecs::png::PngEncoder, ImageEncoder};
     use image_dds::image_from_dds;
     use io::BufWriter;
     use log::debug;
