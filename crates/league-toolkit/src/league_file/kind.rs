@@ -1,6 +1,7 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+/// The kind of league file (animation, mapgeo, bin, etc)
 pub enum LeagueFileKind {
     Animation,
     Jpeg,
@@ -28,6 +29,7 @@ pub enum LeagueFileKind {
 impl LeagueFileKind {
     #[inline]
     #[must_use]
+    /// The extension for this file type (.anm, .mapgeo, .bin, etc)
     pub fn extension(&self) -> &'static str {
         match self {
             Self::Animation => "anm",
@@ -55,6 +57,7 @@ impl LeagueFileKind {
     }
 
     #[must_use]
+    /// Infer the file type from the extension. Works with or without a preceding '.'.
     pub fn from_extension(extension: impl AsRef<str>) -> LeagueFileKind {
         let extension = extension.as_ref();
         if extension.is_empty() {
