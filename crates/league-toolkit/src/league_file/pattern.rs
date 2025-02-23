@@ -43,16 +43,8 @@ pub static LEAGUE_FILE_MAGIC_BYTES: &[LeagueFilePattern] = &[
     LeagueFilePattern::from_bytes(b"<svg", LeagueFileKind::Svg),
 ];
 
-lazy_static! {
-    /// The length of the largest possible file type magic, in bytes.
-    pub static ref MAX_MAGIC_SIZE: usize = {
-        LEAGUE_FILE_MAGIC_BYTES
-            .iter()
-            .map(|p| p.min_length)
-            .max()
-            .unwrap()
-    };
-}
+/// The length of the largest possible file type magic, in bytes.
+pub const MAX_MAGIC_SIZE: usize = 8;
 
 pub enum LeagueFilePatternKind {
     Bytes(&'static [u8]),
@@ -88,5 +80,21 @@ impl LeagueFilePattern {
                 LeagueFilePatternKind::Bytes(bytes) => &data[..bytes.len()] == bytes,
                 LeagueFilePatternKind::Fn(f) => f(data),
             }
+    }
+}
+
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_max_magic_size() {
+        assert_eq!(
+            MAX_MAGIC_SIZE,
+            LEAGUE_FILE_MAGIC_BYTES
+                .iter()
+                .map(|p| p.min_length)
+                .max()
+                .unwrap()
+        );
     }
 }
