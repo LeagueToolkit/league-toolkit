@@ -30,7 +30,7 @@ league-primitives = { path = "../league-primitives" }
 zstd = { version = "0.13", default-features = false, optional = true }
 ruzstd = { version = "0.7", optional = true }
 xxhash-rust = { version = "0.8.15", features = ["xxh64", "xxh3"] }
-
+itertools = "0.14.0"
 serde = { version = "1.0.204", features = ["derive"], optional = true }
 paste = "1.0.15"
 miette = "7.2.0"
