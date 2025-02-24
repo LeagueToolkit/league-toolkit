@@ -1,10 +1,10 @@
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::io;
-use value::PropertyValueEnum;
 
-use super::ParseError;
+use super::Error;
 
 pub mod value;
+pub use value::PropertyValueEnum;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(
@@ -45,6 +45,8 @@ pub enum BinPropertyKind {
 }
 
 impl BinPropertyKind {
+    /// Converts a u8 into a BinPropertyKind, accounting for pre/post WadChunkLink.
+    ///
     /// The WadChunkLink bin property type was newly added by Riot. For some reason they decided to put it in the middle of the enum,
     /// so we need to handle cases from before and after it existed.
     ///
@@ -52,15 +54,14 @@ impl BinPropertyKind {
     ///
     /// "Non-legacy" property types can just be used as is.
     ///
-    pub fn unpack(raw: u8, legacy: bool) -> Result<BinPropertyKind, ParseError> {
+    pub fn unpack(raw: u8, legacy: bool) -> Result<BinPropertyKind, Error> {
         use BinPropertyKind as BPK;
         if !legacy {
-            // TODO (alan): don't panic here
             return Ok(BPK::try_from_primitive(raw)?);
         }
         let mut fudged = raw;
 
-        // if the prop type comes after where WadChunkLink is now, we need to
+        // if the prop type comes after where WadChunkLink is now, we need to fudge it
         if fudged >= BPK::WadChunkLink.into() && fudged < BPK::Container.into() {
             fudged -= Into::<u8>::into(BPK::WadChunkLink);
             fudged |= Into::<u8>::into(BPK::Container);
@@ -73,6 +74,7 @@ impl BinPropertyKind {
         Ok(BinPropertyKind::try_from_primitive(fudged)?)
     }
 
+    /// Whether this property kind is a primitive type. (i8, u8, .. u32, u64, f32, Vector2, Vector3, Vector4, Matrix44, Color, String, Hash, WadChunkLink),
     pub fn is_primitive(&self) -> bool {
         use BinPropertyKind::*;
         matches!(
@@ -98,6 +100,7 @@ impl BinPropertyKind {
         )
     }
 
+    /// Whether this property kind is a container type (container, unordered container, optional, map).
     pub fn is_container(&self) -> bool {
         use BinPropertyKind::*;
         matches!(self, Container | UnorderedContainer | Optional | Map)
@@ -107,7 +110,7 @@ impl BinPropertyKind {
         self,
         reader: &mut R,
         legacy: bool,
-    ) -> Result<PropertyValueEnum, super::ParseError> {
+    ) -> Result<PropertyValueEnum, super::Error> {
         PropertyValueEnum::from_reader(reader, self, legacy)
     }
 }
@@ -122,10 +125,11 @@ pub struct BinProperty {
 
 use super::traits::PropertyValue as _;
 impl BinProperty {
+    /// Read a BinProperty from a reader. This will read the name_hash, prop kind and then value, in that order.
     pub fn from_reader<R: io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         legacy: bool,
-    ) -> Result<Self, ParseError> {
+    ) -> Result<Self, Error> {
         use super::traits::ReaderExt;
         use byteorder::{ReadBytesExt as _, LE};
         let name_hash = reader.read_u32::<LE>()?;

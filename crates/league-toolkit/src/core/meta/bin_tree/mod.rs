@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 
 mod object;
-use super::error::ParseError;
 pub use object::*;
 
-pub mod read;
-pub mod write;
+mod read;
+mod write;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, PartialEq)]
+/// The top level tree of a bin file
 pub struct BinTree {
     pub is_override: bool,
     pub version: u32,

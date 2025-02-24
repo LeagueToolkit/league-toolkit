@@ -3,7 +3,7 @@ use miette::Diagnostic;
 use super::property::BinPropertyKind;
 
 #[derive(Debug, thiserror::Error, Diagnostic)]
-pub enum ParseError {
+pub enum Error {
     #[error("Invalid file signature")]
     InvalidFileSignature,
     #[error("Invalid file version '{0}'")]

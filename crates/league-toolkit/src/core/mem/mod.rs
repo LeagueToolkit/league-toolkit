@@ -1,3 +1,4 @@
+//! League memory primitives (index / vertex buffers, etc)
 pub mod index_buffer;
 pub use index_buffer::*;
 pub mod vertex_buffer;

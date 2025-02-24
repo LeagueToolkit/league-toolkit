@@ -1,3 +1,4 @@
+//! Skinned & static meshes
 mod r#static;
 
 use error::ParseError;

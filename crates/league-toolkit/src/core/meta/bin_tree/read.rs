@@ -1,6 +1,6 @@
 use std::{collections::HashMap, io};
 
-use crate::core::meta::ParseError;
+use crate::core::meta::Error;
 
 use super::{BinTree, BinTreeObject};
 use byteorder::{ReadBytesExt, LE};
@@ -17,14 +17,14 @@ impl BinTree {
     /// * `reader` - A reader that implements io::Read and io::Seek.
     pub fn from_reader<R: io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
-    ) -> Result<Self, ParseError> {
+    ) -> Result<Self, Error> {
         let magic = reader.read_u32::<LE>()?;
         let is_override = match magic {
             Self::PROP => false,
             Self::PTCH => {
                 let override_version = reader.read_u32::<LE>()?;
                 if override_version != 1 {
-                    return Err(ParseError::InvalidFileVersion(override_version));
+                    return Err(Error::InvalidFileVersion(override_version));
                 }
 
                 // It might be possible to create an override property bin
@@ -41,17 +41,17 @@ impl BinTree {
                         Self::PTCH,
                         magic
                     );
-                    return Err(ParseError::InvalidFileSignature);
+                    return Err(Error::InvalidFileSignature);
                 }
                 true
             }
-            _ => return Err(ParseError::InvalidFileSignature),
+            _ => return Err(Error::InvalidFileSignature),
         };
 
         let version = reader.read_u32::<LE>()?;
         if !matches!(version, 1..=3) {
             // TODO (alan): distinguish override/non-override version
-            return Err(ParseError::InvalidFileVersion(version));
+            return Err(Error::InvalidFileVersion(version));
         }
 
         let dependencies = match version {
@@ -75,7 +75,7 @@ impl BinTree {
         let mut objects = HashMap::with_capacity(obj_count);
         match Self::try_read_objects(reader, &obj_classes, &mut objects, false) {
             Ok(_) => {}
-            Err(ParseError::InvalidPropertyTypePrimitive(kind)) => {
+            Err(Error::InvalidPropertyTypePrimitive(kind)) => {
                 log::warn!("Invalid prop type {kind}. Trying reading objects as legacy.");
                 Self::try_read_objects(reader, &obj_classes, &mut objects, true)?;
             }
@@ -108,7 +108,7 @@ impl BinTree {
         obj_classes: &[u32],
         objects: &mut HashMap<u32, BinTreeObject>,
         legacy: bool,
-    ) -> Result<(), ParseError> {
+    ) -> Result<(), Error> {
         objects.clear();
         for &class_hash in obj_classes {
             let tree_obj = BinTreeObject::from_reader(reader, class_hash, legacy)?;

@@ -2,11 +2,12 @@ use std::{collections::HashMap, io};
 
 use io_ext::{measure, window};
 
-use super::{super::BinProperty, ParseError};
+use super::super::{BinProperty, Error};
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, PartialEq)]
+/// A node in the bin tree
 pub struct BinTreeObject {
     pub path_hash: u32,
     pub class_hash: u32,
@@ -25,7 +26,7 @@ impl BinTreeObject {
         reader: &mut R,
         class_hash: u32,
         legacy: bool,
-    ) -> Result<Self, ParseError> {
+    ) -> Result<Self, Error> {
         let size = reader.read_u32::<LE>()?;
         let (real_size, value) = measure(reader, |reader| {
             let path_hash = reader.read_u32::<LE>()?;
@@ -37,7 +38,7 @@ impl BinTreeObject {
                 properties.insert(prop.name_hash, prop);
             }
 
-            Ok::<_, ParseError>(Self {
+            Ok::<_, Error>(Self {
                 path_hash,
                 class_hash,
                 properties,
@@ -45,7 +46,7 @@ impl BinTreeObject {
         })?;
 
         if size as u64 != real_size {
-            return Err(ParseError::InvalidSize(size as _, real_size));
+            return Err(Error::InvalidSize(size as _, real_size));
         }
         Ok(value)
     }

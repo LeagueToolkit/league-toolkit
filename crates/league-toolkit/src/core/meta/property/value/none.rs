@@ -14,7 +14,7 @@ impl ReadProperty for NoneValue {
     fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
         _reader: &mut R,
         _legacy: bool,
-    ) -> Result<Self, crate::core::meta::ParseError> {
+    ) -> Result<Self, crate::core::meta::Error> {
         Ok(Self)
     }
 }

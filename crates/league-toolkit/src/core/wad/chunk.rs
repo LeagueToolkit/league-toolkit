@@ -18,6 +18,7 @@ pub enum WadChunkCompression {
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// A single wad chunk
 pub struct WadChunk {
     pub path_hash: u64,
     pub data_offset: usize,
