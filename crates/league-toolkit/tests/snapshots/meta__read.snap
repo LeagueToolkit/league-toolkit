@@ -29,10 +29,13 @@ BinTree(
                     607245356: {
                       "kind": Optional,
                       "name_hash": 607245356,
-                      "value": OptionalValue(F32, Some(PropertyValueEnum(
+                      "value": OptionalValue(
                         kind: F32,
-                        value: F32Value(10.0),
-                      ))),
+                        value: Some(PropertyValueEnum(
+                          kind: F32,
+                          value: F32Value(10.0),
+                        )),
+                      ),
                     },
                     895082843: {
                       "kind": BitBool,
@@ -52,10 +55,13 @@ BinTree(
                     1376955374: {
                       "kind": Optional,
                       "name_hash": 1376955374,
-                      "value": OptionalValue(F32, Some(PropertyValueEnum(
+                      "value": OptionalValue(
                         kind: F32,
-                        value: F32Value(1.0),
-                      ))),
+                        value: Some(PropertyValueEnum(
+                          kind: F32,
+                          value: F32Value(1.0),
+                        )),
+                      ),
                     },
                     2927860839: {
                       "kind": Embedded,
