@@ -20,7 +20,7 @@ bitflags = "2.5.0"
 byteorder = "1.5.0"
 flate2 = "1.0.30"
 glam = { version = "0.27.0", features = ["glam-assert"] }
-lazy_static = "1.4.0"
+lazy_static = "1.5.0"
 log = "0.4.21"
 memchr = "2.7.2"
 num_enum = "0.7.2"
