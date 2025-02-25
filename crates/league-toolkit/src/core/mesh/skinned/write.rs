@@ -31,8 +31,8 @@ impl SkinnedMesh {
         w.write_aabb::<LE>(&self.aabb)?;
         w.write_sphere::<LE>(&self.bounding_sphere)?;
 
-        w.write_all(self.vertex_buffer.buffer())?;
         w.write_all(self.index_buffer.as_bytes())?;
+        w.write_all(self.vertex_buffer.as_bytes())?;
 
         w.write_all(&[0_u8; 12])?; // end tab
         Ok(())

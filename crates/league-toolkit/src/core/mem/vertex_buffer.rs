@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 
-use crate::core::mem::vertex::{
-    ElementName, VertexBufferAccessor, VertexBufferDescription, VertexBufferUsage, VertexElement,
+use super::vertex::{
+    ElementName, Format, VertexBufferAccessor, VertexBufferDescription, VertexBufferUsage,
+    VertexElement,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -26,6 +27,9 @@ impl VertexBufferElementDescriptor {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// A collection of vertex elements that can be used to render a mesh.
+///
+/// Each vertex element is a collection of a single vertex attribute, like position, normal, or color.
 pub struct VertexBuffer {
     description: VertexBufferDescription,
     elements: BTreeMap<ElementName, VertexBufferElementDescriptor>,
@@ -66,7 +70,10 @@ impl VertexBuffer {
         }
     }
 
-    pub fn accessor<T>(&self, element_name: ElementName) -> Option<VertexBufferAccessor<'_, T>> {
+    pub fn accessor<T: Format>(
+        &self,
+        element_name: ElementName,
+    ) -> Option<VertexBufferAccessor<'_, T>> {
         self.elements
             .get(&element_name)
             .map(|desc| VertexBufferAccessor::<T>::new(desc.element, desc.offset as usize, self))
@@ -80,15 +87,23 @@ impl VertexBuffer {
         &self.elements
     }
 
+    /// The size in bytes of all the element sizes combined (i.e. all the data for a single vertex).
     pub fn stride(&self) -> usize {
         self.stride
     }
 
+    /// The number of vertices in the buffer.
     pub fn count(&self) -> usize {
         self.count
     }
 
-    pub fn buffer(&self) -> &[u8] {
+    /// Get a slice of the underlying bytes.
+    pub fn as_bytes(&self) -> &[u8] {
         &self.buffer
+    }
+
+    /// Take ownership of the underlying bytes.
+    pub fn into_inner(self) -> Vec<u8> {
+        self.buffer
     }
 }

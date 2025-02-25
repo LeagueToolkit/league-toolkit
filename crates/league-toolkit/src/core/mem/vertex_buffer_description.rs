@@ -33,6 +33,7 @@ bitflags! {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Holds the element descriptions, flags & usage information for a [`VertexBuffer`].
 pub struct VertexBufferDescription {
     usage: VertexBufferUsage,
     description_flags: VertexBufferElementFlags,

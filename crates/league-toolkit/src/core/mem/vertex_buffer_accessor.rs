@@ -3,16 +3,29 @@ use std::marker::PhantomData;
 
 use crate::core::mem::vertex::{VertexBuffer, VertexElement};
 
-/// A view of a single VertexElement over a VertexBuffer
-pub struct VertexBufferAccessor<'a, T> {
+/// A trait for reading vertex element data in a given format
+pub trait Format {
+    type Item;
+    #[must_use]
+    fn read(buffer: &VertexBuffer, index: usize, element_offset: usize) -> Self::Item;
+}
+
+/// Get the offset of a single vertex element for a single vertex in a vertex buffer.
+fn offset(buffer: &VertexBuffer, index: usize, element_offset: usize) -> usize {
+    buffer.stride() * index + element_offset
+}
+
+/// A view over all vertices of a single [`VertexElement`] in a [`VertexBuffer`]
+pub struct VertexBufferAccessor<'a, T: Format> {
     buffer: &'a VertexBuffer,
-    element: VertexElement,
+    _element: VertexElement,
     element_off: usize,
 
     _t: PhantomData<T>,
 }
 
-impl<'a, T> VertexBufferAccessor<'a, T> {
+impl<'a, T: Format> VertexBufferAccessor<'a, T> {
+    /// Creates a new VertexBufferAccessor. The type of element is **not** checked, so the caller must ensure that the element format matches the format of the accessor.
     pub(super) fn new(
         element: VertexElement,
         element_off: usize,
@@ -20,17 +33,16 @@ impl<'a, T> VertexBufferAccessor<'a, T> {
     ) -> VertexBufferAccessor<'a, T> {
         VertexBufferAccessor {
             buffer,
-            element,
+            _element: element,
             element_off,
             _t: PhantomData,
         }
     }
-    fn offset(&self, index: usize) -> usize {
-        self.buffer.stride() * index + self.element_off
-    }
 
-    pub fn iter(&'a self) -> VertexBufferViewIter<'a, T> {
-        VertexBufferViewIter {
+    #[inline(always)]
+    #[must_use]
+    pub fn iter(&'a self) -> Iter<'a, T> {
+        Iter {
             view: self,
             counter: 0,
         }
@@ -40,28 +52,31 @@ impl<'a, T> VertexBufferAccessor<'a, T> {
 
 // TODO(alan): figure out endianness (again)
 
-impl<'a> VertexBufferAccessor<'a, f32> {
-    pub fn get(&self, index: usize) -> f32 {
-        let offset = self.offset(index);
-        let buf = self.buffer.buffer();
+impl Format for f32 {
+    type Item = f32;
+    fn read(buffer: &VertexBuffer, index: usize, element_off: usize) -> f32 {
+        let offset = offset(buffer, index, element_off);
+        let buf = buffer.as_bytes();
         f32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap())
     }
 }
 
-impl<'a> VertexBufferAccessor<'a, Vec2> {
-    pub fn get(&self, index: usize) -> Vec2 {
-        let offset = self.offset(index);
-        let buf = self.buffer.buffer();
+impl Format for Vec2 {
+    type Item = Vec2;
+    fn read(buffer: &VertexBuffer, index: usize, element_off: usize) -> Vec2 {
+        let offset = offset(buffer, index, element_off);
+        let buf = buffer.as_bytes();
         let x = f32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap());
         let y = f32::from_le_bytes(buf[offset + 4..offset + 8].try_into().unwrap());
         vec2(x, y)
     }
 }
 
-impl<'a> VertexBufferAccessor<'a, Vec3> {
-    pub fn get(&self, index: usize) -> Vec3 {
-        let offset = self.offset(index);
-        let buf = self.buffer.buffer();
+impl Format for Vec3 {
+    type Item = Vec3;
+    fn read(buffer: &VertexBuffer, index: usize, element_off: usize) -> Vec3 {
+        let offset = offset(buffer, index, element_off);
+        let buf = buffer.as_bytes();
         let x = f32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap());
         let y = f32::from_le_bytes(buf[offset + 4..offset + 8].try_into().unwrap());
         let z = f32::from_le_bytes(buf[offset + 8..offset + 12].try_into().unwrap());
@@ -69,10 +84,11 @@ impl<'a> VertexBufferAccessor<'a, Vec3> {
     }
 }
 
-impl<'a> VertexBufferAccessor<'a, Vec4> {
-    pub fn get(&self, index: usize) -> Vec4 {
-        let offset = self.offset(index);
-        let buf = self.buffer.buffer();
+impl Format for Vec4 {
+    type Item = Vec4;
+    fn read(buffer: &VertexBuffer, index: usize, element_off: usize) -> Vec4 {
+        let offset = offset(buffer, index, element_off);
+        let buf = buffer.as_bytes();
         let x = f32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap());
         let y = f32::from_le_bytes(buf[offset + 4..offset + 8].try_into().unwrap());
         let z = f32::from_le_bytes(buf[offset + 8..offset + 12].try_into().unwrap());
@@ -81,10 +97,11 @@ impl<'a> VertexBufferAccessor<'a, Vec4> {
     }
 }
 
-impl<'a> VertexBufferAccessor<'a, [u8; 4]> {
-    pub fn get(&self, index: usize) -> [u8; 4] {
-        let offset = self.offset(index);
-        let buf = self.buffer.buffer();
+impl Format for [u8; 4] {
+    type Item = [u8; 4];
+    fn read(buffer: &VertexBuffer, index: usize, element_off: usize) -> [u8; 4] {
+        let offset = offset(buffer, index, element_off);
+        let buf = buffer.as_bytes();
         [
             buf[offset],
             buf[offset + 1],
@@ -94,30 +111,21 @@ impl<'a> VertexBufferAccessor<'a, [u8; 4]> {
     }
 }
 
-pub struct VertexBufferViewIter<'a, T> {
+/// Iterator of a [`VertexBufferAccessor`]
+pub struct Iter<'a, T: Format> {
     view: &'a VertexBufferAccessor<'a, T>,
     counter: usize,
 }
 
-macro_rules! impl_iter {
-    ($t:ty) => {
-        impl<'a> Iterator for VertexBufferViewIter<'a, $t> {
-            type Item = $t;
+impl<'a, T: Format> Iterator for Iter<'a, T> {
+    type Item = T::Item;
 
-            fn next(&mut self) -> Option<Self::Item> {
-                if self.counter >= self.view.buffer.count() {
-                    return None;
-                }
-                let item = self.view.get(self.counter);
-                self.counter += 1;
-                Some(item)
-            }
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.counter >= self.view.buffer.count() {
+            return None;
         }
-    };
+        let item = T::read(self.view.buffer, self.counter, self.view.element_off);
+        self.counter += 1;
+        Some(item)
+    }
 }
-
-impl_iter!(f32);
-impl_iter!([u8; 4]);
-impl_iter!(Vec2);
-impl_iter!(Vec3);
-impl_iter!(Vec4);
