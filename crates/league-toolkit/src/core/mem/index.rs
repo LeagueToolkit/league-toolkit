@@ -39,7 +39,7 @@ impl Format for u16 {
     type Item = u16;
     fn get(buf: &[u8], index: usize) -> u16 {
         let off = index * size_of::<u16>();
-        u16::from_le_bytes(buf[off..off + 2].try_into().unwrap()).into()
+        u16::from_le_bytes(buf[off..off + 2].try_into().unwrap())
     }
 }
 impl<F: Format> IndexBuffer<F> {
@@ -104,6 +104,12 @@ impl<F: Format> IndexBuffer<F> {
     /// The raw underlying bytes.
     pub fn as_bytes(&self) -> &[u8] {
         &self.buffer
+    }
+    #[inline(always)]
+    #[must_use]
+    /// Take ownership of the underlying bytes.
+    pub fn into_inner(self) -> Vec<u8> {
+        self.buffer
     }
 }
 
