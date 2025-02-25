@@ -22,6 +22,16 @@ pub enum WadBuilderError {
     UnsupportedCompressionType(WadChunkCompression),
 }
 
+/// Implements a builder interface for creating WAD files.
+///
+/// # Examples
+/// ```
+/// # use league_toolkit::core::wad::*;
+/// #
+/// let builder = WadBuilder::default();
+/// builder.with_chunk(WadChunkBuilder::default().with_path("path/to/chunk"));
+/// builder.build_to_writer(File::create("output.wad").unwrap());
+/// ```
 #[derive(Debug, Default)]
 pub struct WadBuilder {
     chunk_builders: Vec<WadChunkBuilder>,
