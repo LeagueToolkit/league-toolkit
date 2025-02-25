@@ -3,7 +3,10 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 pub use range::*;
 
-use crate::core::mem::{ElementName, IndexBuffer, VertexBuffer, VertexBufferDescription};
+use crate::core::mem::{
+    index::IndexBuffer,
+    vertex::{ElementName, VertexBuffer, VertexBufferDescription},
+};
 use league_primitives::{Sphere, AABB};
 
 use super::Result;
@@ -21,14 +24,14 @@ pub struct SkinnedMesh {
     bounding_sphere: Sphere,
     ranges: Vec<SkinnedMeshRange>,
     vertex_buffer: VertexBuffer,
-    index_buffer: IndexBuffer,
+    index_buffer: IndexBuffer<u16>,
 }
 
 impl SkinnedMesh {
     pub fn new(
         ranges: Vec<SkinnedMeshRange>,
         vertex_buffer: VertexBuffer,
-        index_buffer: IndexBuffer,
+        index_buffer: IndexBuffer<u16>,
     ) -> Self {
         let aabb = AABB::from_vertex_iter(
             vertex_buffer
@@ -61,7 +64,7 @@ impl SkinnedMesh {
         &self.vertex_buffer
     }
 
-    pub fn index_buffer(&self) -> &IndexBuffer {
+    pub fn index_buffer(&self) -> &IndexBuffer<u16> {
         &self.index_buffer
     }
 }

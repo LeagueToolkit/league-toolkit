@@ -1,4 +1,4 @@
-use super::{ElementName, VertexBuffer, VertexElement};
+use crate::core::mem::vertex::{ElementName, VertexBuffer, VertexElement};
 use bitflags::bitflags;
 
 #[repr(usize)]
@@ -33,6 +33,7 @@ bitflags! {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Holds the element descriptions, flags & usage information for a [`VertexBuffer`].
 pub struct VertexBufferDescription {
     usage: VertexBufferUsage,
     description_flags: VertexBufferElementFlags,

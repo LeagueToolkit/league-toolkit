@@ -1,4 +1,4 @@
-use crate::core::mem::{IndexBuffer, IndexFormat, VertexBufferDescription};
+use crate::core::mem::{IndexBuffer, VertexBufferDescription};
 use crate::core::mesh::error::ParseError;
 use crate::core::mesh::skinned::{vertex, SkinnedMeshVertexType, MAGIC};
 use crate::core::mesh::{SkinnedMesh, SkinnedMeshRange};
@@ -72,9 +72,7 @@ impl SkinnedMesh {
             }
         }
 
-        let mut index_buffer = vec![0; (index_count as usize) * IndexFormat::U16.size()];
-        reader.read_exact(&mut index_buffer)?;
-        let index_buffer = IndexBuffer::new(crate::core::mem::IndexFormat::U16, index_buffer);
+        let index_buffer = IndexBuffer::<u16>::read(reader, index_count as _)?;
 
         let mut vertex_buffer = vec![0; vertex_declaration.vertex_size() * vertex_count as usize];
         reader.read_exact(&mut vertex_buffer)?;
