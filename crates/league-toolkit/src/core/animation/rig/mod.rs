@@ -1,3 +1,4 @@
+//! Read/write .skl
 mod builder;
 mod read;
 mod write;
@@ -5,6 +6,7 @@ pub use builder::Builder;
 
 use super::Joint;
 
+/// Encapsulates a .skl file
 #[derive(Debug, Clone, PartialEq)]
 pub struct RigResource {
     flags: u16,
