@@ -6,9 +6,9 @@ use io_ext::measure;
 use itertools::Itertools;
 use xxhash_rust::{xxh3, xxh64};
 
-use super::{WadChunk, WadChunkCompression, WadError};
+use crate::league_file::LeagueFileKind;
 
-use crate::util::league_file::{get_ideal_compression_for_league_file, identify_league_file};
+use super::{WadChunk, WadChunkCompression, WadError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum WadBuilderError {
@@ -127,10 +127,9 @@ impl WadBuilder {
         let compressed_data = match force_compression {
             Some(compression) => Self::compress_chunk_data_by_compression(data, compression)?,
             None => {
-                let kind = identify_league_file(data);
-                let compression = get_ideal_compression_for_league_file(kind);
+                let kind = LeagueFileKind::identify_from_bytes(data);
 
-                Self::compress_chunk_data_by_compression(data, compression)?
+                Self::compress_chunk_data_by_compression(data, kind.ideal_compression())?
             }
         };
 
