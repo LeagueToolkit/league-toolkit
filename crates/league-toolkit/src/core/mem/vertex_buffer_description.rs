@@ -1,4 +1,4 @@
-use super::{ElementName, VertexBuffer, VertexElement};
+use crate::core::mem::vertex::{ElementName, VertexBuffer, VertexElement};
 use bitflags::bitflags;
 
 #[repr(usize)]
