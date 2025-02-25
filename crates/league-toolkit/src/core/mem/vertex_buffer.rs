@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 
-use super::{
+use crate::core::mem::vertex::{
     ElementName, VertexBufferAccessor, VertexBufferDescription, VertexBufferUsage, VertexElement,
 };
 

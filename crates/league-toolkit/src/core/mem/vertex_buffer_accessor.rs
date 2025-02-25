@@ -1,7 +1,7 @@
 use glam::{vec2, vec3, vec4, Vec2, Vec3, Vec4};
 use std::marker::PhantomData;
 
-use super::{VertexBuffer, VertexElement};
+use crate::core::mem::vertex::{VertexBuffer, VertexElement};
 
 /// A view of a single VertexElement over a VertexBuffer
 pub struct VertexBufferAccessor<'a, T> {
