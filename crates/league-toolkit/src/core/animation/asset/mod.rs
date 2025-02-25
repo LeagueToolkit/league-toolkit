@@ -1,3 +1,4 @@
+//! Animation assets
 mod compressed;
 
 pub use compressed::*;
@@ -15,12 +16,15 @@ use error::AssetParseError::UnknownAssetType;
 use std::io;
 use std::io::{Read, Seek, SeekFrom};
 
+/// Encapsulates a .anm file
 #[derive(Clone, Debug)]
 pub enum AnimationAsset {
     Uncompressed(Uncompressed),
     Compressed(Compressed),
 }
 
+/// The type of animation asset
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum AnimationAssetType {
     Uncompressed,
     Compressed,
@@ -40,6 +44,7 @@ impl AnimationAsset {
         }
     }
 
+    /// Reads the animation magic (8 bytes), and identifies the animation asset type
     pub fn identify_from_reader<R: Read + ?Sized>(
         reader: &mut R,
     ) -> io::Result<AnimationAssetType> {
