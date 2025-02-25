@@ -17,7 +17,7 @@ impl ReadProperty for StringValue {
     fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         _legacy: bool,
-    ) -> Result<Self, crate::core::meta::ParseError> {
+    ) -> Result<Self, crate::core::meta::Error> {
         Ok(Self(reader.read_len_prefixed_string::<LE>()?))
     }
 }

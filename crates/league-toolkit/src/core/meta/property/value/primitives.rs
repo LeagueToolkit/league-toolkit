@@ -18,7 +18,7 @@ macro_rules! impl_prim {
             fn from_reader<R: std::io::Read + ?Sized>(
                 reader: &mut R,
                 _legacy: bool,
-            ) -> Result<Self, crate::core::meta::ParseError> {
+            ) -> Result<Self, crate::core::meta::Error> {
                 Ok(Self(paste::paste!(reader.[<read_ $method>]::<$($endian,)*>()?)))
             }
         }

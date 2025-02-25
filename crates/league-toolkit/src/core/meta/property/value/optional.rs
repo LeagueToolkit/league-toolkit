@@ -2,7 +2,7 @@ use super::PropertyValueEnum;
 use crate::core::meta::{
     property::BinPropertyKind,
     traits::{PropertyValue, ReadProperty, ReaderExt, WriteProperty, WriterExt},
-    ParseError,
+    Error,
 };
 use io_ext::{ReaderExt as _, WriterExt as _};
 
@@ -26,10 +26,10 @@ impl ReadProperty for OptionalValue {
     fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         legacy: bool,
-    ) -> Result<Self, ParseError> {
+    ) -> Result<Self, Error> {
         let kind = reader.read_property_kind(legacy)?;
         if kind.is_container() {
-            return Err(ParseError::InvalidNesting(kind));
+            return Err(Error::InvalidNesting(kind));
         }
 
         let is_some = reader.read_bool()?;

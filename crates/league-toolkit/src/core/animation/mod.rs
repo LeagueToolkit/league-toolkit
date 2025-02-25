@@ -1,3 +1,4 @@
+//! Skeletons (rigs, joints) & animations
 pub mod joint;
 
 pub use joint::*;

@@ -1,10 +1,11 @@
-pub mod property;
-pub use property::BinProperty;
+//! Bin file & properties
+mod property;
+pub use property::*;
 
 mod bin_tree;
 pub use bin_tree::*;
 
-pub mod error;
+mod error;
 pub use error::*;
 
 pub mod traits;

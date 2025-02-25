@@ -3,7 +3,7 @@ use std::{collections::HashMap, hash::Hash, io};
 use crate::core::meta::{
     property::BinPropertyKind,
     traits::{PropertyValue, ReadProperty, ReaderExt, WriteProperty, WriterExt},
-    ParseError,
+    Error,
 };
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 use io_ext::{measure, window};
@@ -66,14 +66,14 @@ impl ReadProperty for MapValue {
     fn from_reader<R: io::Read + io::Seek + ?Sized>(
         reader: &mut R,
         legacy: bool,
-    ) -> Result<Self, ParseError> {
+    ) -> Result<Self, Error> {
         let key_kind = reader.read_property_kind(legacy)?;
         if !key_kind.is_primitive() {
-            return Err(ParseError::InvalidKeyType(key_kind));
+            return Err(Error::InvalidKeyType(key_kind));
         }
         let value_kind = reader.read_property_kind(legacy)?;
         if value_kind.is_container() {
-            return Err(ParseError::InvalidNesting(value_kind));
+            return Err(Error::InvalidNesting(value_kind));
         }
         let size = reader.read_u32::<LE>()?;
         let (real_size, value) = measure(reader, |reader| {
@@ -85,7 +85,7 @@ impl ReadProperty for MapValue {
                     value_kind.read(reader, legacy)?,
                 );
             }
-            Ok::<_, ParseError>(Self {
+            Ok::<_, Error>(Self {
                 key_kind,
                 value_kind,
                 entries,
@@ -93,7 +93,7 @@ impl ReadProperty for MapValue {
         })?;
 
         if size as u64 != real_size {
-            return Err(ParseError::InvalidSize(size as _, real_size));
+            return Err(Error::InvalidSize(size as _, real_size));
         }
         Ok(value)
     }

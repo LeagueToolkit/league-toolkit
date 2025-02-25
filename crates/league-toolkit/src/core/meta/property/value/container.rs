@@ -3,7 +3,7 @@ use std::io;
 use crate::core::meta::{
     property::BinPropertyKind,
     traits::{PropertyValue as Value, ReadProperty, ReaderExt, WriteProperty, WriterExt},
-    ParseError,
+    Error,
 };
 
 use super::PropertyValueEnum;
@@ -27,10 +27,10 @@ impl ReadProperty for ContainerValue {
     fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         legacy: bool,
-    ) -> Result<Self, ParseError> {
+    ) -> Result<Self, Error> {
         let item_kind = reader.read_property_kind(legacy)?;
         if item_kind.is_container() {
-            return Err(ParseError::InvalidNesting(item_kind));
+            return Err(Error::InvalidNesting(item_kind));
         }
 
         let size = reader.read_u32::<LE>()?;
@@ -41,11 +41,11 @@ impl ReadProperty for ContainerValue {
                 let prop = PropertyValueEnum::from_reader(reader, item_kind, legacy)?;
                 items.push(prop);
             }
-            Ok::<_, ParseError>(items)
+            Ok::<_, Error>(items)
         })?;
 
         if size as u64 != real_size {
-            return Err(ParseError::InvalidSize(size as _, real_size));
+            return Err(Error::InvalidSize(size as _, real_size));
         }
 
         Ok(Self { item_kind, items })

@@ -1,3 +1,4 @@
+//! Wad file handling
 mod chunk;
 mod decoder;
 mod error;
@@ -15,6 +16,7 @@ use byteorder::{ReadBytesExt as _, LE};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug)]
+/// A wad file
 pub struct Wad<TSource: Read + Seek> {
     chunks: HashMap<u64, WadChunk>,
     #[cfg_attr(feature = "serde", serde(skip))]

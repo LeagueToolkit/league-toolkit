@@ -1,3 +1,4 @@
+//! Value types for [`super::BinProperty`].
 mod container;
 mod embedded;
 mod map;
@@ -21,7 +22,7 @@ pub use unordered_container::*;
 use std::io;
 
 use crate::core::meta::{
-    property::BinPropertyKind, traits::ReadProperty as _, traits::WriteProperty as _, ParseError,
+    property::BinPropertyKind, traits::ReadProperty as _, traits::WriteProperty as _, Error,
 };
 
 use enum_dispatch::enum_dispatch;
@@ -54,6 +55,7 @@ macro_rules! enum_kind {
 #[cfg_attr(feature = "serde", serde(tag = "kind", content = "value"))]
 #[derive(Clone, Debug, PartialEq)]
 #[enum_dispatch(PropertyValue)]
+/// The value part of a [`super::BinProperty`]. Holds the type of the value, and the value itself.
 pub enum PropertyValueEnum {
     None(pub NoneValue),
     Bool(pub BoolValue),
@@ -85,6 +87,7 @@ pub enum PropertyValueEnum {
 }
 
 impl PropertyValueEnum {
+    #[must_use]
     pub fn kind(&self) -> BinPropertyKind {
         enum_kind!(
             self,
@@ -119,11 +122,12 @@ impl PropertyValueEnum {
             ]
         )
     }
+    #[must_use]
     pub fn from_reader<R: io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         kind: BinPropertyKind,
         legacy: bool,
-    ) -> Result<Self, ParseError> {
+    ) -> Result<Self, Error> {
         Ok(enum_construct!(
             kind,
             from_reader(reader, legacy)?,

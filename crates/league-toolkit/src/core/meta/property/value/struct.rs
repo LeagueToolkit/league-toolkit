@@ -2,7 +2,7 @@ use std::{collections::HashMap, io};
 
 use crate::core::meta::{
     traits::{PropertyValue as Value, ReadProperty, WriteProperty},
-    BinProperty, ParseError,
+    BinProperty, Error,
 };
 use byteorder::{ReadBytesExt as _, WriteBytesExt as _, LE};
 use io_ext::{measure, window};
@@ -27,7 +27,7 @@ impl ReadProperty for StructValue {
     fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         legacy: bool,
-    ) -> Result<Self, crate::core::meta::ParseError> {
+    ) -> Result<Self, crate::core::meta::Error> {
         let class_hash = reader.read_u32::<LE>()?;
         if class_hash == 0 {
             return Ok(Self {
@@ -45,16 +45,14 @@ impl ReadProperty for StructValue {
                 let prop = BinProperty::from_reader(reader, legacy)?;
                 properties.insert(prop.name_hash, prop);
             }
-            Ok::<_, ParseError>(Self {
+            Ok::<_, Error>(Self {
                 class_hash,
                 properties,
             })
         })?;
 
         if size as u64 != real_size {
-            return Err(crate::core::meta::ParseError::InvalidSize(
-                size as _, real_size,
-            ));
+            return Err(crate::core::meta::Error::InvalidSize(size as _, real_size));
         }
 
         Ok(value)
