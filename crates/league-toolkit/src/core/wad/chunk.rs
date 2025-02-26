@@ -19,7 +19,13 @@ pub enum WadChunkCompression {
 
 impl fmt::Display for WadChunkCompression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        match self {
+            WadChunkCompression::None => write!(f, "None"),
+            WadChunkCompression::GZip => write!(f, "GZip"),
+            WadChunkCompression::Satellite => write!(f, "Satellite"),
+            WadChunkCompression::Zstd => write!(f, "Zstd"),
+            WadChunkCompression::ZstdMulti => write!(f, "ZstdMulti"),
+        }
     }
 }
 
