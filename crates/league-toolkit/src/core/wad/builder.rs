@@ -24,13 +24,22 @@ pub enum WadBuilderError {
 
 /// Implements a builder interface for creating WAD files.
 ///
-/// # Examples
+/// ## This example builds a WAD file in memory
 /// ```
 /// # use league_toolkit::core::wad::*;
-/// #
-/// let builder = WadBuilder::default();
-/// builder.with_chunk(WadChunkBuilder::default().with_path("path/to/chunk"));
-/// builder.build_to_writer(File::create("output.wad").unwrap());
+/// # use std::io::{Cursor, Write};
+///
+/// let mut builder = WadBuilder::default();
+/// let scratch = Vec::new();
+/// let mut wad_cursor = Cursor::new(scratch);
+///
+/// builder = builder.with_chunk(WadChunkBuilder::default().with_path("path/to/chunk"));
+/// builder.build_to_writer(&mut wad_cursor, |path, cursor| {
+///     cursor.write_all(&[0xAA; 100])?;
+///
+///     Ok(())
+/// })
+/// .expect("Failed to build WAD");
 /// ```
 #[derive(Debug, Default)]
 pub struct WadBuilder {

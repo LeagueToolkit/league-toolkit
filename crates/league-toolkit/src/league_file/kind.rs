@@ -150,6 +150,7 @@ impl LeagueFileKind {
     /// # Examples
     /// ```
     /// # use league_toolkit::league_file::*;
+    /// # use league_toolkit::core::wad::WadChunkCompression;
     /// #
     /// assert_eq!(LeagueFileKind::Animation.ideal_compression(), WadChunkCompression::Zstd);
     /// assert_eq!(LeagueFileKind::WwisePackage.ideal_compression(), WadChunkCompression::None);
