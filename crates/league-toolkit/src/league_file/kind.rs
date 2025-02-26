@@ -1,3 +1,5 @@
+use crate::core::wad::WadChunkCompression;
+
 use super::pattern::LEAGUE_FILE_MAGIC_BYTES;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -141,5 +143,24 @@ impl LeagueFileKind {
         }
 
         LeagueFileKind::Unknown
+    }
+
+    /// Get the ideal compression for this file type.
+    ///
+    /// # Examples
+    /// ```
+    /// # use league_toolkit::league_file::*;
+    /// # use league_toolkit::core::wad::WadChunkCompression;
+    /// #
+    /// assert_eq!(LeagueFileKind::Animation.ideal_compression(), WadChunkCompression::Zstd);
+    /// assert_eq!(LeagueFileKind::WwisePackage.ideal_compression(), WadChunkCompression::None);
+    /// ```
+    pub fn ideal_compression(&self) -> WadChunkCompression {
+        // TODO: Maybe we should move this into the wad module ?
+
+        match self {
+            LeagueFileKind::WwisePackage | LeagueFileKind::WwiseBank => WadChunkCompression::None,
+            _ => WadChunkCompression::Zstd,
+        }
     }
 }

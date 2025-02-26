@@ -1,5 +1,3 @@
-use lazy_static::lazy_static;
-
 use super::LeagueFileKind;
 
 pub static LEAGUE_FILE_MAGIC_BYTES: &[LeagueFilePattern] = &[
@@ -83,6 +81,7 @@ impl LeagueFilePattern {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
 
