@@ -66,7 +66,12 @@ impl<TSource: Read + Seek> Wad<TSource> {
         let chunk_count = reader.read_i32::<LE>()? as usize;
         let mut chunks = HashMap::<u64, WadChunk>::with_capacity(chunk_count);
         for _ in 0..chunk_count {
-            let chunk = WadChunk::read_v3_1(&mut reader)?;
+            let chunk = match (major, minor) {
+                (3, 1) => WadChunk::read_v3_1(&mut reader),
+                (3, 4) => WadChunk::read_v3_4(&mut reader),
+                _ => Err(WadError::InvalidVersion { major, minor }),
+            }?;
+
             chunks
                 .insert(chunk.path_hash(), chunk)
                 .map_or(Ok(()), |chunk| {
