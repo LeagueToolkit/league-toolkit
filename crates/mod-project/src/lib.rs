@@ -41,7 +41,7 @@ pub struct ModProject {
 }
 
 /// Returns the default layers for a mod project
-fn default_layers() -> Vec<ModLayer> {
+pub fn default_layers() -> Vec<ModLayer> {
     vec![ModLayer {
         name: "base".to_string(),
         priority: 0,

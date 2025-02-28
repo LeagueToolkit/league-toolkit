@@ -50,6 +50,8 @@ pub fn init_mod_project(args: InitModProjectArgs) -> eyre::Result<()> {
 
     create_mod_project_file(&mod_project_dir_path, &name, &display_name)?;
 
+    prepare_base_layer_dir(&mod_project_dir_path)?;
+
     Ok(())
 }
 
@@ -61,7 +63,7 @@ fn create_mod_project_file(
     let mod_project =
         create_default_mod_project(Some(name.to_string()), Some(display_name.to_string()));
 
-    let mod_project_file_content = serde_json::to_string(&mod_project)?;
+    let mod_project_file_content = serde_json::to_string_pretty(&mod_project)?;
     std::fs::write(
         mod_project_dir_path.as_ref().join("mod.config.json"),
         mod_project_file_content,
@@ -78,7 +80,7 @@ fn create_default_mod_project(name: Option<String>, display_name: Option<String>
         description: "Short description of the mod".to_string(),
         authors: vec![ModProjectAuthor::Name("<Your Name>".to_string())],
         transformers: vec![],
-        layers: vec![],
+        layers: mod_project::default_layers(),
     }
 }
 
@@ -112,4 +114,11 @@ fn prompt_mod_display_name() -> eyre::Result<String> {
     let name = Text::new("Enter mod display name:").prompt()?;
 
     Ok(name)
+}
+
+fn prepare_base_layer_dir(mod_project_dir_path: impl AsRef<Path>) -> io::Result<PathBuf> {
+    let base_dir_path = mod_project_dir_path.as_ref().join("content").join("base");
+    std::fs::create_dir_all(&base_dir_path)?;
+
+    Ok(base_dir_path)
 }
