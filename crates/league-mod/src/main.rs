@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use commands::{init_mod_project, InitModProjectArgs};
+use commands::{init_mod_project, pack_mod_project, InitModProjectArgs, PackModProjectArgs};
 
 mod commands;
 mod utils;
@@ -22,8 +22,17 @@ pub enum Commands {
         output_dir: Option<String>,
     },
     Pack {
-        #[arg(short, long, default_value = "artifacts")]
-        output: String,
+        /// The path to the mod config file
+        #[arg(short, long)]
+        config_path: Option<String>,
+
+        /// The resulting file name of the mod package
+        #[arg(short, long)]
+        file_name: Option<String>,
+
+        /// The directory to output the mod package to
+        #[arg(short, long, default_value = "/build")]
+        output_dir: String,
     },
 }
 
@@ -40,10 +49,14 @@ fn main() -> eyre::Result<()> {
             display_name,
             output_dir,
         }),
-        Commands::Pack { output } => {
-            println!("Packing mod to directory: {}", output);
-            // Add packing logic here
-            Ok(())
-        }
+        Commands::Pack {
+            config_path,
+            file_name,
+            output_dir,
+        } => pack_mod_project(PackModProjectArgs {
+            config_path,
+            file_name,
+            output_dir,
+        }),
     }
 }

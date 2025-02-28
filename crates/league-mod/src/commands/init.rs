@@ -6,7 +6,7 @@ use std::{
 use colored::Colorize;
 use mod_project::{ModProject, ModProjectAuthor};
 
-use crate::utils::{is_valid_mod_name, validate_mod_name};
+use crate::utils::{is_valid_slug, validate_mod_name};
 use inquire::{validator::Validation, Text};
 
 #[derive(Debug, Clone)]
@@ -90,7 +90,7 @@ fn create_mod_project_dir_path(name: impl AsRef<Path>) -> io::Result<PathBuf> {
 
 pub fn prompt_mod_name(suggested_name: impl AsRef<str>) -> eyre::Result<String> {
     let validator = |input: &str| {
-        if is_valid_mod_name(input) {
+        if is_valid_slug(input) {
             Ok(Validation::Valid)
         } else {
             Ok(Validation::Invalid(
