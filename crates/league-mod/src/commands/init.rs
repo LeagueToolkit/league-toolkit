@@ -40,24 +40,28 @@ fn create_mod_project_file(
     mod_project_dir_path: impl AsRef<Path>,
     args: &InitModProjectArgs,
 ) -> eyre::Result<()> {
-    let mod_project = ModProject {
-        name: args.name.clone(),
-        display_name: match args.display_name {
-            Some(ref display_name) => display_name.clone(),
-            None => args.name.clone(),
-        },
-        version: "0.1.0".to_string(),
-        description: "".to_string(),
-        authors: vec![ModProjectAuthor::Name("<Your Name>".to_string())],
-    };
+    let mod_project =
+        create_default_mod_project(Some(args.name.clone()), args.display_name.clone());
 
-    let mod_project_file_content = toml::to_string(&mod_project)?;
+    let mod_project_file_content = serde_json::to_string(&mod_project)?;
     std::fs::write(
-        mod_project_dir_path.as_ref().join("modproject.toml"),
+        mod_project_dir_path.as_ref().join("mod.config.json"),
         mod_project_file_content,
     )?;
 
     Ok(())
+}
+
+fn create_default_mod_project(name: Option<String>, display_name: Option<String>) -> ModProject {
+    ModProject {
+        name: name.unwrap_or("mod-name".to_string()),
+        display_name: display_name.unwrap_or("Mod Name".to_string()),
+        version: "0.1.0".to_string(),
+        description: "Short description of the mod".to_string(),
+        authors: vec![ModProjectAuthor::Name("<Your Name>".to_string())],
+        transformers: vec![],
+        layers: vec![],
+    }
 }
 
 fn create_mod_project_dir_path(name: impl AsRef<Path>) -> io::Result<PathBuf> {
