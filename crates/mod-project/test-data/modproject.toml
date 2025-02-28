@@ -1,5 +1,0 @@
-name = "test"
-display_name = "Test 123"
-version = "0.1.0"
-description = "test"
-authors = ["test", { name = "test 2", role = "developer" }]
