@@ -8,7 +8,7 @@ use std::{
     fmt::Display,
     io::{Read, Seek},
 };
-use xxhash_rust::xxh3::xxh3_64;
+use xxhash_rust::{xxh3::xxh3_64, xxh64::xxh64};
 
 mod builder;
 mod chunk;
@@ -39,21 +39,22 @@ pub struct Modpkg<TSource: Read + Seek + Default> {
     layer_count: u32,
     #[br(count = layer_count, map = |m: Vec<ModpkgLayer>| m.into_iter().map(|c| (xxh3_64(c.name.as_bytes()), c)).collect())]
     #[bw(map = |m| m.values().cloned().collect_vec())]
-    layers: HashMap<u64, ModpkgLayer>,
+    pub layers: HashMap<u64, ModpkgLayer>,
 
     #[br(temp)]
     #[bw(calc = chunk_paths.len() as u32)]
     chunk_path_count: u32,
-    #[br(count = chunk_path_count)]
-    chunk_paths: Vec<NullString>,
+    #[br(count = chunk_path_count, map = |m: Vec<NullString>| m.into_iter().map(|c| (xxh64(&c.0, 0), c)).collect())]
+    #[bw(map = |m| m.values().cloned().collect_vec())]
+    pub chunk_paths: HashMap<u64, NullString>,
 
-    metadata: ModpkgMetadata,
+    pub metadata: ModpkgMetadata,
 
     // alan: pretty sure this works to align the individual chunks - https://github.com/jam1garner/binrw/issues/68
     #[brw(align_before = 8)]
     #[br(count = chunk_count, map = |m: Vec<ModpkgChunk>| m.into_iter().map(|c| (c.path_hash, c)).collect())]
     #[bw(map = |m| m.values().copied().collect_vec())]
-    chunks: HashMap<u64, ModpkgChunk>,
+    pub chunks: HashMap<u64, ModpkgChunk>,
 
     #[brw(ignore)]
     /// The original byte source.

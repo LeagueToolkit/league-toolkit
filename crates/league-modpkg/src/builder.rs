@@ -316,8 +316,10 @@ impl ModpkgLayerBuilder {
 
 #[cfg(test)]
 mod tests {
+    use crate::ModpkgLayer;
+
     use super::*;
-    use binrw::BinRead;
+    use binrw::{BinRead, NullString};
     use std::io::Cursor;
 
     #[test]
@@ -347,13 +349,30 @@ mod tests {
         let modpkg = Modpkg::<Cursor<Vec<u8>>>::read(&mut cursor).unwrap();
 
         assert_eq!(modpkg.chunks().len(), 1);
+
+        let chunk = modpkg
+            .chunks()
+            .get(&xxh64("test.png".as_bytes(), 0))
+            .unwrap();
+
         assert_eq!(
-            modpkg
-                .chunks()
-                .get(&xxh64("test.png".as_bytes(), 0))
-                .unwrap()
-                .compression,
-            ModpkgCompression::Zstd
+            modpkg.chunk_paths.get(&xxh64("test.png".as_bytes(), 0)),
+            Some(&NullString::from("test.png"))
+        );
+
+        assert_eq!(chunk.compression, ModpkgCompression::Zstd);
+        assert_eq!(chunk.uncompressed_size, 100);
+        assert_eq!(chunk.compressed_size, 17);
+        assert_eq!(chunk.uncompressed_checksum, xxh3_64(&[0xAA; 100]));
+        assert_eq!(chunk.path_index, 0);
+
+        assert_eq!(modpkg.layers.len(), 1);
+        assert_eq!(
+            modpkg.layers.get(&xxh3_64("base".as_bytes())),
+            Some(&ModpkgLayer {
+                name: "base".to_string(),
+                priority: 0,
+            })
         );
     }
 }
