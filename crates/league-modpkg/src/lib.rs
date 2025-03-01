@@ -1,72 +1,120 @@
+use binrw::{binrw, NullString};
 use chunk::ModpkgChunk;
-use license::ModpkgLicense;
-use std::collections::HashMap;
+use error::ModpkgError;
+use itertools::Itertools;
+use metadata::ModpkgMetadata;
+use std::{
+    collections::HashMap,
+    fmt::Display,
+    io::{Read, Seek},
+};
+use xxhash_rust::{xxh3::xxh3_64, xxh64::xxh64};
 
+mod builder;
 mod chunk;
 mod error;
 mod license;
-mod read;
+mod metadata;
+mod utils;
 
+#[binrw]
+#[brw(little, magic = b"_modpkg_")]
 #[derive(Debug, PartialEq)]
-pub struct Modpkg {
-    name: String,
-    display_name: String,
-    description: Option<String>,
-    version: String,
-    distributor: Option<String>,
-    authors: Vec<ModpkgAuthor>,
-    license: ModpkgLicense,
+pub struct Modpkg<TSource: Read + Seek + Default> {
+    #[br(temp, assert(version == 1))]
+    #[bw(calc = 1)]
+    version: u32,
+    #[br(temp)]
+    #[bw(calc = signature.len() as u32)]
+    signature_size: u32,
+    #[br(temp)]
+    #[bw(calc = chunks.len() as u32)]
+    chunk_count: u32,
 
-    chunks: HashMap<u64, ModpkgChunk>,
+    #[br(count = signature_size)]
+    signature: Vec<u8>,
+
+    #[br(temp)]
+    #[bw(calc = layers.len() as u32)]
+    layer_count: u32,
+    #[br(count = layer_count, map = |m: Vec<ModpkgLayer>| m.into_iter().map(|c| (xxh3_64(c.name.as_bytes()), c)).collect())]
+    #[bw(map = |m| m.values().cloned().collect_vec())]
+    pub layers: HashMap<u64, ModpkgLayer>,
+
+    #[br(temp)]
+    #[bw(calc = chunk_paths.len() as u32)]
+    chunk_path_count: u32,
+    #[br(count = chunk_path_count, map = |m: Vec<NullString>| m.into_iter().map(|c| (xxh64(&c.0, 0), c)).collect())]
+    #[bw(map = |m| m.values().cloned().collect_vec())]
+    pub chunk_paths: HashMap<u64, NullString>,
+
+    pub metadata: ModpkgMetadata,
+
+    // alan: pretty sure this works to align the individual chunks - https://github.com/jam1garner/binrw/issues/68
+    #[brw(align_before = 8)]
+    #[br(count = chunk_count, map = |m: Vec<ModpkgChunk>| m.into_iter().map(|c| (c.path_hash, c)).collect())]
+    #[bw(map = |m| m.values().copied().collect_vec())]
+    pub chunks: HashMap<u64, ModpkgChunk>,
+
+    #[brw(ignore)]
+    /// The original byte source.
+    source: TSource,
 }
 
-impl Modpkg {
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-    pub fn display_name(&self) -> &str {
-        &self.display_name
-    }
-    pub fn description(&self) -> Option<&str> {
-        self.description.as_deref()
-    }
-    pub fn version(&self) -> &str {
-        &self.version
-    }
-    pub fn distributor(&self) -> Option<&str> {
-        self.distributor.as_deref()
-    }
-    pub fn authors(&self) -> &[ModpkgAuthor] {
-        &self.authors
-    }
-    pub fn license(&self) -> &ModpkgLicense {
-        &self.license
+#[binrw]
+#[brw(little)]
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct ModpkgLayer {
+    #[br(temp)]
+    #[bw(calc = name.len() as u32)]
+    name_len: u32,
+    #[br(count = name_len, try_map = String::from_utf8)]
+    #[bw(map = |s| s.as_bytes().to_vec())]
+    pub name: String,
+
+    pub priority: i32,
+}
+
+impl<TSource: Read + Seek + Default> Modpkg<TSource> {
+    pub fn metadata(&self) -> &ModpkgMetadata {
+        &self.metadata
     }
     pub fn chunks(&self) -> &HashMap<u64, ModpkgChunk> {
         &self.chunks
     }
 }
 
-#[derive(Debug, PartialEq)]
-pub struct ModpkgAuthor {
-    name: String,
-    role: Option<String>,
-}
-
-#[derive(Debug, PartialEq)]
+#[binrw]
+#[brw(little, repr = u8)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Default)]
 pub enum ModpkgCompression {
+    #[default]
     None = 0,
     Zstd = 1,
 }
 
+impl Display for ModpkgCompression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{:?}",
+            match self {
+                ModpkgCompression::None => "none",
+                ModpkgCompression::Zstd => "zstd",
+            }
+        )
+    }
+}
+
 impl TryFrom<u8> for ModpkgCompression {
-    type Error = &'static str;
+    type Error = ModpkgError;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         Ok(match value {
             0 => ModpkgCompression::None,
             1 => ModpkgCompression::Zstd,
-            _ => return Err("Invalid modpkg compression value"),
+            _ => return Err(ModpkgError::InvalidCompressionType(value)),
         })
     }
 }

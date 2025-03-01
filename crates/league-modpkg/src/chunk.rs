@@ -1,58 +1,45 @@
-use std::{
-    borrow::Cow,
-    io::{BufReader, Read},
-};
+use crate::ModpkgCompression;
+use binrw::binrw;
 
-use byteorder::{ReadBytesExt as _, LE};
-use io_ext::ReaderExt as _;
-
-use crate::error::ModpkgError;
-
-#[derive(Debug, PartialEq, PartialOrd)]
+#[binrw]
+#[brw(little)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Default)]
 pub struct ModpkgChunk {
-    path: Cow<'static, str>,
-    path_hash: u64,
-    compressed_size: usize,
-    uncompressed_size: usize,
-    data_offset: usize,
-    checksum: u64,
+    pub path_hash: u64,
+
+    pub data_offset: u64,
+    pub compression: ModpkgCompression,
+    pub compressed_size: u64,
+    pub uncompressed_size: u64,
+
+    pub compressed_checksum: u64,
+    pub uncompressed_checksum: u64,
+
+    pub path_index: u32,
+    pub layer_hash: u64,
 }
 
 impl ModpkgChunk {
-    pub fn read(reader: &mut BufReader<impl Read>) -> Result<Self, ModpkgError> {
-        let path = reader.read_len_prefixed_string::<LE>()?;
-        let path_hash = reader.read_u64::<LE>()?;
-        let compressed_size = reader.read_u64::<LE>()?;
-        let uncompressed_size = reader.read_u64::<LE>()?;
-        let data_offset = reader.read_u64::<LE>()?;
-        let checksum = reader.read_u64::<LE>()?;
+    pub fn size_of() -> usize {
+        (std::mem::size_of::<u64>() * 7) + (std::mem::size_of::<u32>()) + 1
+    }
+}
 
-        Ok(Self {
-            path: Cow::from(path),
-            path_hash,
-            compressed_size: compressed_size as usize,
-            uncompressed_size: uncompressed_size as usize,
-            data_offset: data_offset as usize,
-            checksum,
-        })
-    }
+#[cfg(test)]
+mod tests {
+    use std::io::Cursor;
 
-    pub fn path(&self) -> &str {
-        &self.path
-    }
-    pub fn path_hash(&self) -> u64 {
-        self.path_hash
-    }
-    pub fn compressed_size(&self) -> usize {
-        self.compressed_size
-    }
-    pub fn uncompressed_size(&self) -> usize {
-        self.uncompressed_size
-    }
-    pub fn data_offset(&self) -> usize {
-        self.data_offset
-    }
-    pub fn checksum(&self) -> u64 {
-        self.checksum
+    use binrw::BinWrite;
+
+    use super::*;
+
+    #[test]
+    fn test_size_of() {
+        let chunk = ModpkgChunk::default();
+
+        let mut writer = Cursor::new(Vec::new());
+        chunk.write(&mut writer).unwrap();
+
+        assert_eq!(writer.position() as usize, ModpkgChunk::size_of());
     }
 }
