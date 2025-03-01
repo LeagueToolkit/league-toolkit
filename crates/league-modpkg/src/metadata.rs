@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 #[binrw]
 #[brw(little)]
-#[derive(Debug, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ModpkgMetadata {
     #[br(temp)]
@@ -16,14 +16,14 @@ pub struct ModpkgMetadata {
     name_len: u32,
     #[br(count = name_len, try_map = String::from_utf8)]
     #[bw(map = |s| s.as_bytes().to_vec())]
-    name: String,
+    pub name: String,
 
     #[br(temp)]
     #[bw(calc = display_name.len() as u32)]
     display_name_len: u32,
     #[br(count = display_name_len, try_map = String::from_utf8)]
     #[bw(map = |s| s.as_bytes().to_vec())]
-    display_name: String,
+    pub display_name: String,
 
     #[br(temp)]
     #[bw(calc = optional_string_len(description) as u32)]
@@ -31,14 +31,14 @@ pub struct ModpkgMetadata {
     #[brw(if(description_len > 0))]
     #[bw(map = optional_string_write)]
     #[br(count = description_len, try_map = optional_string_read)]
-    description: Option<String>,
+    pub description: Option<String>,
 
     #[br(temp)]
     #[bw(calc = version.len() as u32)]
     version_len: u32,
     #[br(count = version_len, try_map = String::from_utf8)]
     #[bw(map = |s| s.as_bytes().to_vec())]
-    version: String,
+    pub version: String,
 
     #[br(temp)]
     #[bw(calc = optional_string_len(distributor) as u32)]
@@ -46,15 +46,15 @@ pub struct ModpkgMetadata {
     #[brw(if(distributor_len> 0))]
     #[bw(map = optional_string_write)]
     #[br(count = distributor_len, try_map = optional_string_read)]
-    distributor: Option<String>,
+    pub distributor: Option<String>,
 
     #[br(temp)]
     #[bw(calc = (authors.len()) as u32)]
     author_count: u32,
     #[br(count = author_count)]
-    authors: Vec<ModpkgAuthor>,
+    pub authors: Vec<ModpkgAuthor>,
 
-    license: ModpkgLicense,
+    pub license: ModpkgLicense,
 }
 
 impl ModpkgMetadata {
@@ -96,7 +96,7 @@ impl ModpkgMetadata {
 
 #[binrw]
 #[brw(little)]
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ModpkgAuthor {
     #[br(temp)]
@@ -104,7 +104,7 @@ pub struct ModpkgAuthor {
     name_len: u32,
     #[br(count = name_len, try_map = String::from_utf8)]
     #[bw( map = |s| s.as_bytes().to_vec() )]
-    name: String,
+    pub name: String,
 
     #[br(temp)]
     #[bw( calc = role.as_ref().map(|n| n.len() as u32).unwrap_or_default() )]
@@ -113,10 +113,13 @@ pub struct ModpkgAuthor {
     #[brw(if(role_len > 0))]
     #[bw( map = |s| s.as_ref().map(|s| s.as_bytes().to_vec()) )]
     #[br(count = role_len, try_map = |s| String::from_utf8(s).map(Some))]
-    role: Option<String>,
+    pub role: Option<String>,
 }
 
 impl ModpkgAuthor {
+    pub fn new(name: String, role: Option<String>) -> Self {
+        Self { name, role }
+    }
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -135,6 +138,8 @@ impl ModpkgAuthor {
 #[cfg(test)]
 mod tests {
     use crate::utils::test;
+    use binrw::{BinRead, BinWrite};
+    use std::io::Cursor;
 
     use super::*;
     use proptest::prelude::*;
@@ -147,5 +152,29 @@ mod tests {
         fn test_author_size(author: ModpkgAuthor) {
             test::written_size(&author, author.size());
         }
+    }
+
+    #[test]
+    fn test_modpkg_metadata_read() {
+        let metadata = ModpkgMetadata {
+            name: "test".to_string(),
+            display_name: "test".to_string(),
+            description: Some("test".to_string()),
+            version: "1.0.0".to_string(),
+            distributor: Some("test".to_string()),
+            authors: vec![ModpkgAuthor {
+                name: "test".to_string(),
+                role: Some("test".to_string()),
+            }],
+            license: ModpkgLicense::Spdx {
+                spdx_id: "MIT".to_string(),
+            },
+        };
+        let mut cursor = Cursor::new(Vec::new());
+        metadata.write(&mut cursor).unwrap();
+
+        cursor.set_position(0);
+        let read_metadata = ModpkgMetadata::read(&mut cursor).unwrap();
+        assert_eq!(metadata, read_metadata);
     }
 }

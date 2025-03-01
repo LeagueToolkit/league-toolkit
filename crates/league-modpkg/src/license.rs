@@ -4,7 +4,7 @@ use crate::utils::{nullstr_read, nullstr_write};
 
 #[binrw]
 #[brw(little)]
-#[derive(Debug, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum ModpkgLicense {
     #[default]

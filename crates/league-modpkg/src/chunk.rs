@@ -3,7 +3,7 @@ use binrw::binrw;
 
 #[binrw]
 #[brw(little)]
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Default)]
 pub struct ModpkgChunk {
     pub path_hash: u64,
 
@@ -16,42 +16,30 @@ pub struct ModpkgChunk {
     pub uncompressed_checksum: u64,
 
     pub path_index: u32,
-    pub wad_paths_index: u32,
-    pub layer_index: u32,
+    pub layer_hash: u64,
 }
 
 impl ModpkgChunk {
-    pub fn path_hash(&self) -> u64 {
-        self.path_hash
+    pub fn size_of() -> usize {
+        (std::mem::size_of::<u64>() * 7) + (std::mem::size_of::<u32>()) + 1
     }
+}
 
-    pub fn data_offset(&self) -> u64 {
-        self.data_offset
-    }
-    pub fn compression(&self) -> ModpkgCompression {
-        self.compression
-    }
-    pub fn compressed_size(&self) -> u64 {
-        self.compressed_size
-    }
-    pub fn uncompressed_size(&self) -> u64 {
-        self.uncompressed_size
-    }
+#[cfg(test)]
+mod tests {
+    use std::io::Cursor;
 
-    pub fn compressed_checksum(&self) -> u64 {
-        self.compressed_checksum
-    }
-    pub fn uncompressed_checksum(&self) -> u64 {
-        self.uncompressed_checksum
-    }
+    use binrw::BinWrite;
 
-    pub fn path_index(&self) -> u32 {
-        self.path_index
-    }
-    pub fn wad_paths_index(&self) -> u32 {
-        self.wad_paths_index
-    }
-    pub fn layer_index(&self) -> u32 {
-        self.layer_index
+    use super::*;
+
+    #[test]
+    fn test_size_of() {
+        let chunk = ModpkgChunk::default();
+
+        let mut writer = Cursor::new(Vec::new());
+        chunk.write(&mut writer).unwrap();
+
+        assert_eq!(writer.position() as usize, ModpkgChunk::size_of());
     }
 }

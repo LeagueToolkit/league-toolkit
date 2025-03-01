@@ -8,6 +8,9 @@ use std::{
     fmt::Display,
     io::{Read, Seek},
 };
+use xxhash_rust::xxh3::xxh3_64;
+
+mod builder;
 mod chunk;
 mod error;
 mod license;
@@ -32,16 +35,19 @@ pub struct Modpkg<TSource: Read + Seek + Default> {
     signature: Vec<u8>,
 
     #[br(temp)]
+    #[bw(calc = layers.len() as u32)]
+    layer_count: u32,
+    #[br(count = layer_count, map = |m: Vec<ModpkgLayer>| m.into_iter().map(|c| (xxh3_64(c.name.as_bytes()), c)).collect())]
+    #[bw(map = |m| m.values().cloned().collect_vec())]
+    layers: HashMap<u64, ModpkgLayer>,
+
+    #[br(temp)]
     #[bw(calc = chunk_paths.len() as u32)]
     chunk_path_count: u32,
     #[br(count = chunk_path_count)]
     chunk_paths: Vec<NullString>,
 
-    #[br(temp)]
-    #[bw(calc = wad_paths.len() as u32)]
-    wad_path_count: u32,
-    #[br(count = wad_path_count)]
-    wad_paths: Vec<NullString>,
+    metadata: ModpkgMetadata,
 
     // alan: pretty sure this works to align the individual chunks - https://github.com/jam1garner/binrw/issues/68
     #[brw(align_before = 8)]
@@ -49,11 +55,24 @@ pub struct Modpkg<TSource: Read + Seek + Default> {
     #[bw(map = |m| m.values().copied().collect_vec())]
     chunks: HashMap<u64, ModpkgChunk>,
 
-    metadata: ModpkgMetadata,
-
     #[brw(ignore)]
     /// The original byte source.
     source: TSource,
+}
+
+#[binrw]
+#[brw(little)]
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct ModpkgLayer {
+    #[br(temp)]
+    #[bw(calc = name.len() as u32)]
+    name_len: u32,
+    #[br(count = name_len, try_map = String::from_utf8)]
+    #[bw(map = |s| s.as_bytes().to_vec())]
+    pub name: String,
+
+    pub priority: i32,
 }
 
 impl<TSource: Read + Seek + Default> Modpkg<TSource> {
@@ -67,8 +86,9 @@ impl<TSource: Read + Seek + Default> Modpkg<TSource> {
 
 #[binrw]
 #[brw(little, repr = u8)]
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Default)]
 pub enum ModpkgCompression {
+    #[default]
     None = 0,
     Zstd = 1,
 }
