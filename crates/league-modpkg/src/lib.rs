@@ -8,7 +8,6 @@ use std::{
     fmt::Display,
     io::{BufReader, Read, Seek, SeekFrom},
 };
-use xxhash_rust::{xxh3::xxh3_64, xxh64::xxh64};
 
 pub mod builder;
 mod chunk;
@@ -241,9 +240,9 @@ mod tests {
 
         let test_data = [0xAA; 100];
         let path = "test.bin";
-        let path_hash = xxh64(path.as_bytes(), 0);
+        let path_hash = hash_chunk_name(path);
         let layer_name = "base";
-        let layer_hash = xxh3_64(layer_name.as_bytes());
+        let layer_hash = hash_layer_name(layer_name);
 
         let builder = ModpkgBuilder::default()
             .with_layer(ModpkgLayerBuilder::base())

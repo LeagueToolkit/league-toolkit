@@ -3,10 +3,9 @@ use byteorder::{WriteBytesExt, LE};
 use std::collections::HashMap;
 use std::io::{self, BufWriter, Cursor, Seek, SeekFrom, Write};
 use xxhash_rust::xxh3::xxh3_64;
-use xxhash_rust::xxh64::xxh64;
 
-use crate::utils;
 use crate::{chunk::ModpkgChunk, metadata::ModpkgMetadata, ModpkgCompression};
+use crate::{hash_chunk_name, hash_layer_name, utils};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ModpkgBuilderError {
@@ -169,7 +168,7 @@ impl ModpkgBuilder {
         let mut layers = Vec::new();
         let mut layer_indices = HashMap::new();
         for chunk in chunks {
-            let hash = xxh64(chunk.layer.as_bytes(), 0);
+            let hash = hash_layer_name(&chunk.layer);
 
             if !layer_indices.contains_key(&hash) {
                 layer_indices.insert(hash, layers.len() as u32);
@@ -241,7 +240,7 @@ impl ModpkgBuilder {
             let data_offset = writer.stream_position()?;
             writer.write_all(&compressed_data)?;
 
-            let path_hash = xxh64(chunk_builder.path.as_bytes(), 0);
+            let path_hash = hash_chunk_name(&chunk_builder.path);
 
             let chunk = ModpkgChunk {
                 path_hash,
@@ -252,7 +251,7 @@ impl ModpkgBuilder {
                 compressed_checksum,
                 uncompressed_checksum,
                 path_index: *chunk_path_indices.get(&path_hash).unwrap_or(&0),
-                layer_hash: xxh3_64(chunk_builder.layer.as_bytes()),
+                layer_hash: hash_layer_name(&chunk_builder.layer),
             };
 
             final_chunks.push(chunk);
@@ -289,7 +288,7 @@ impl ModpkgChunkBuilder {
             self.path_hash = u64::from_str_radix(stripped_path, 16)
                 .map_err(|_| ModpkgBuilderError::InvalidChunkName(path.to_string()))?;
         } else {
-            self.path_hash = xxh64(stripped_path.as_bytes(), 0);
+            self.path_hash = hash_chunk_name(stripped_path);
         }
 
         self.path = path.to_string();
@@ -381,11 +380,11 @@ mod tests {
 
         let chunk = modpkg
             .chunks
-            .get(&(xxh64("test.png".as_bytes(), 0), xxh3_64("base".as_bytes())))
+            .get(&(hash_chunk_name("test.png"), hash_layer_name("base")))
             .unwrap();
 
         assert_eq!(
-            modpkg.chunk_paths.get(&xxh64("test.png".as_bytes(), 0)),
+            modpkg.chunk_paths.get(&hash_chunk_name("test.png")),
             Some(&"test.png".to_string())
         );
 
@@ -397,7 +396,7 @@ mod tests {
 
         assert_eq!(modpkg.layers.len(), 1);
         assert_eq!(
-            modpkg.layers.get(&xxh3_64("base".as_bytes())),
+            modpkg.layers.get(&hash_layer_name("base")),
             Some(&ModpkgLayer {
                 name: "base".to_string(),
                 priority: 0,
