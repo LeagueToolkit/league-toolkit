@@ -14,11 +14,13 @@ pub mod builder;
 mod chunk;
 mod decoder;
 mod error;
+mod extractor;
 mod license;
 mod metadata;
 pub mod utils;
 
 pub use decoder::ModpkgDecoder;
+pub use extractor::ModpkgExtractor;
 pub use license::*;
 pub use metadata::*;
 pub use utils::*;
@@ -91,14 +93,14 @@ impl<TSource: Read + Seek> Modpkg<TSource> {
         let mut layers = HashMap::new();
         for _ in 0..layer_count {
             let layer = ModpkgLayer::read(&mut reader)?;
-            layers.insert(xxh3_64(layer.name.as_bytes()), layer);
+            layers.insert(hash_layer_name(&layer.name), layer);
         }
 
         let chunk_paths_count = reader.read_u32::<LE>()?;
         let mut chunk_paths = HashMap::new();
         for _ in 0..chunk_paths_count {
             let chunk_path = reader.read_str_until_nul()?;
-            let chunk_path_hash = xxh64(chunk_path.as_bytes(), 0);
+            let chunk_path_hash = hash_chunk_name(&chunk_path);
             chunk_paths.insert(chunk_path_hash, chunk_path);
         }
 
@@ -106,7 +108,7 @@ impl<TSource: Read + Seek> Modpkg<TSource> {
 
         // Skip alignment
         let position = reader.stream_position()?;
-        reader.seek(SeekFrom::Current((8 - (position % 8)) as i64))?;
+        reader.seek(SeekFrom::Current(((8 - (position % 8)) % 8) as i64))?;
 
         let mut chunks = HashMap::new();
         for _ in 0..chunk_count {
