@@ -1,12 +1,19 @@
 use std::{
+    collections::HashMap,
     fs::File,
+    io::{BufWriter, Read, Write},
     path::{Path, PathBuf},
 };
 
 use colored::Colorize;
-use mod_project::ModProject;
+use league_modpkg::{
+    builder::{ModpkgBuilder, ModpkgChunkBuilder, ModpkgLayerBuilder},
+    utils::hash_layer_name,
+    ModpkgCompression,
+};
+use mod_project::{default_layers, ModProject, ModProjectLayer};
 
-use crate::utils;
+use crate::utils::{self, validate_mod_name, validate_version_format};
 
 #[derive(Debug)]
 pub struct PackModProjectArgs {
@@ -17,26 +24,61 @@ pub struct PackModProjectArgs {
 
 pub fn pack_mod_project(args: PackModProjectArgs) -> eyre::Result<()> {
     let config_path = resolve_config_path(args.config_path)?;
+    let content_dir = resolve_content_dir(&config_path)?;
 
     let mod_project = load_config(&config_path)?;
 
     validate_layer_presence(&mod_project, &config_path)?;
+    validate_mod_name(&mod_project.name)?;
+    validate_version_format(&mod_project.version)?;
 
     println!("Packing mod project: {}", mod_project.name.bright_yellow());
 
     let output_dir = PathBuf::from(&args.output_dir);
     let output_dir = match output_dir.is_absolute() {
         true => output_dir,
-        false => {
-            let config_dir = config_path.parent().unwrap();
-
-            std::env::current_dir()?.join(config_dir).join(output_dir)
-        }
+        false => config_path.parent().unwrap().join(output_dir),
     };
 
     if !output_dir.exists() {
+        println!("Creating output directory: {}", output_dir.display());
         std::fs::create_dir_all(&output_dir)?;
     }
+
+    let mut modpkg_builder = ModpkgBuilder::default().with_layer(ModpkgLayerBuilder::base());
+    let mut chunk_filepaths = HashMap::new();
+
+    modpkg_builder = build_layers(
+        modpkg_builder,
+        &content_dir,
+        &mod_project,
+        &mut chunk_filepaths,
+    )?;
+
+    let modpkg_file_name = create_modpkg_file_name(&mod_project);
+    let mut writer = BufWriter::new(File::create(output_dir.join(&modpkg_file_name))?);
+
+    modpkg_builder.build_to_writer(&mut writer, |chunk_builder, cursor| {
+        let file_path = chunk_filepaths
+            .get(&(
+                chunk_builder.path_hash(),
+                hash_layer_name(chunk_builder.layer()),
+            ))
+            .unwrap();
+
+        let mut file = File::open(file_path)?;
+        let mut buffer = Vec::new();
+        file.read_to_end(&mut buffer)?;
+        cursor.write_all(&buffer)?;
+
+        Ok(())
+    })?;
+
+    println!(
+        "{}\n{}",
+        "Mod package created successfully!".bright_green().bold(),
+        format!("Path: {}", output_dir.join(modpkg_file_name).display()).bright_green()
+    );
 
     Ok(())
 }
@@ -83,16 +125,13 @@ fn load_config(config_path: &Path) -> eyre::Result<ModProject> {
     }
 }
 
+fn resolve_content_dir(config_path: &Path) -> eyre::Result<PathBuf> {
+    Ok(config_path.parent().unwrap().join("content"))
+}
+
 // Layer utils
 
 fn validate_layer_presence(mod_project: &ModProject, mod_project_dir: &Path) -> eyre::Result<()> {
-    if mod_project.layers.is_empty() {
-        return Err(eyre::eyre!(format!(
-            "No layers found in config, a {} layer is required",
-            "base".bright_red().bold()
-        )));
-    }
-
     for layer in &mod_project.layers {
         if !utils::is_valid_slug(&layer.name) {
             return Err(eyre::eyre!(format!(
@@ -124,4 +163,78 @@ fn validate_layer_dir_presence(mod_project_dir: &Path, layer_name: &str) -> eyre
     }
 
     Ok(())
+}
+
+fn build_layers(
+    mut modpkg_builder: ModpkgBuilder,
+    content_dir: &Path,
+    mod_project: &ModProject,
+    chunk_filepaths: &mut HashMap<(u64, u64), PathBuf>,
+) -> eyre::Result<ModpkgBuilder> {
+    // Process base layer
+    modpkg_builder = build_layer_from_dir(
+        modpkg_builder,
+        content_dir,
+        &ModProjectLayer::base(),
+        chunk_filepaths,
+    )?;
+
+    // Process layers
+    for layer in &mod_project.layers {
+        println!("Building layer: {}", layer.name.bright_yellow());
+        modpkg_builder = modpkg_builder
+            .with_layer(ModpkgLayerBuilder::new(layer.name.as_str()).with_priority(layer.priority));
+        modpkg_builder = build_layer_from_dir(modpkg_builder, content_dir, layer, chunk_filepaths)?;
+    }
+
+    Ok(modpkg_builder)
+}
+
+fn build_layer_from_dir(
+    mut modpkg_builder: ModpkgBuilder,
+    content_dir: &Path,
+    layer: &ModProjectLayer,
+    chunk_filepaths: &mut HashMap<(u64, u64), PathBuf>,
+) -> eyre::Result<ModpkgBuilder> {
+    let layer_dir = content_dir.join(layer.name.as_str());
+
+    for entry in glob::glob(layer_dir.join("**/*").to_str().unwrap())?.filter_map(Result::ok) {
+        if !entry.is_file() {
+            continue;
+        }
+
+        let layer_hash = hash_layer_name(layer.name.as_str());
+        let (modpkg_builder_new, path_hash) =
+            build_chunk_from_file(modpkg_builder, layer, &entry, &layer_dir)?;
+
+        chunk_filepaths
+            .entry((path_hash, layer_hash))
+            .or_insert(entry);
+
+        modpkg_builder = modpkg_builder_new;
+    }
+
+    Ok(modpkg_builder)
+}
+
+fn build_chunk_from_file(
+    modpkg_builder: ModpkgBuilder,
+    layer: &ModProjectLayer,
+    file_path: &Path,
+    layer_dir: &Path,
+) -> eyre::Result<(ModpkgBuilder, u64)> {
+    let relative_path = file_path.strip_prefix(layer_dir)?;
+    let chunk_builder = ModpkgChunkBuilder::new()
+        .with_path(relative_path.to_str().unwrap())?
+        .with_compression(ModpkgCompression::Zstd)
+        .with_layer(layer.name.as_str());
+
+    let path_hash = chunk_builder.path_hash();
+    Ok((modpkg_builder.with_chunk(chunk_builder), path_hash))
+}
+
+fn create_modpkg_file_name(mod_project: &ModProject) -> String {
+    let version = semver::Version::parse(&mod_project.version).unwrap();
+
+    format!("{}_{}.modpkg", mod_project.name, version)
 }

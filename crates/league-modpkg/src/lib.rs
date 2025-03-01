@@ -10,12 +10,12 @@ use std::{
 };
 use xxhash_rust::{xxh3::xxh3_64, xxh64::xxh64};
 
-mod builder;
+pub mod builder;
 mod chunk;
 mod error;
 mod license;
 mod metadata;
-mod utils;
+pub mod utils;
 
 #[binrw]
 #[brw(little, magic = b"_modpkg_")]
@@ -50,11 +50,16 @@ pub struct Modpkg<TSource: Read + Seek + Default> {
 
     pub metadata: ModpkgMetadata,
 
+    /// The chunks in the mod package.
+    ///
+    /// The key is a tuple of the path hash and the layer hash.
     // alan: pretty sure this works to align the individual chunks - https://github.com/jam1garner/binrw/issues/68
     #[brw(align_before = 8)]
-    #[br(count = chunk_count, map = |m: Vec<ModpkgChunk>| m.into_iter().map(|c| (c.path_hash, c)).collect())]
+    #[br(count = chunk_count, map = |m: Vec<ModpkgChunk>| {
+        m.into_iter().map(|c| ((c.path_hash, c.layer_hash), c)).collect()
+    })]
     #[bw(map = |m| m.values().copied().collect_vec())]
-    pub chunks: HashMap<u64, ModpkgChunk>,
+    pub chunks: HashMap<(u64, u64), ModpkgChunk>,
 
     #[brw(ignore)]
     /// The original byte source.
@@ -74,15 +79,6 @@ pub struct ModpkgLayer {
     pub name: String,
 
     pub priority: i32,
-}
-
-impl<TSource: Read + Seek + Default> Modpkg<TSource> {
-    pub fn metadata(&self) -> &ModpkgMetadata {
-        &self.metadata
-    }
-    pub fn chunks(&self) -> &HashMap<u64, ModpkgChunk> {
-        &self.chunks
-    }
 }
 
 #[binrw]

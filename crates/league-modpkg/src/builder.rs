@@ -1,13 +1,13 @@
 use binrw::BinWrite;
 use byteorder::{WriteBytesExt, LE};
-use io_ext::WriterExt;
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::io::{self, BufWriter, Cursor, Read, Seek, SeekFrom, Write};
+use std::io::{self, BufWriter, Cursor, Seek, SeekFrom, Write};
 use xxhash_rust::xxh3::xxh3_64;
 use xxhash_rust::xxh64::xxh64;
 
-use crate::{chunk::ModpkgChunk, metadata::ModpkgMetadata, Modpkg, ModpkgCompression};
+use crate::{chunk::ModpkgChunk, metadata::ModpkgMetadata, ModpkgCompression};
+use crate::{utils, ModpkgLayer};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ModpkgBuilderError {
@@ -25,21 +25,24 @@ pub enum ModpkgBuilderError {
 
     #[error("layer not found: {0}")]
     LayerNotFound(String),
+
+    #[error("invalid chunk name: {0}")]
+    InvalidChunkName(String),
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct ModpkgBuilder<'builder> {
+pub struct ModpkgBuilder {
     metadata: ModpkgMetadata,
-    chunks: Vec<ModpkgChunkBuilder<'builder>>,
+    chunks: Vec<ModpkgChunkBuilder>,
     layers: Vec<ModpkgLayerBuilder>,
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct ModpkgChunkBuilder<'builder> {
+pub struct ModpkgChunkBuilder {
     path_hash: u64,
-    pub path: Cow<'builder, str>,
+    pub path: String,
     pub compression: ModpkgCompression,
-    pub layer: Cow<'builder, str>,
+    pub layer: String,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -48,7 +51,7 @@ pub struct ModpkgLayerBuilder {
     pub priority: i32,
 }
 
-impl<'builder> ModpkgBuilder<'builder> {
+impl ModpkgBuilder {
     pub fn with_metadata(mut self, metadata: ModpkgMetadata) -> Self {
         self.metadata = metadata;
         self
@@ -59,7 +62,7 @@ impl<'builder> ModpkgBuilder<'builder> {
         self
     }
 
-    pub fn with_chunk(mut self, chunk: ModpkgChunkBuilder<'builder>) -> Self {
+    pub fn with_chunk(mut self, chunk: ModpkgChunkBuilder) -> Self {
         self.chunks.push(chunk);
         self
     }
@@ -70,7 +73,7 @@ impl<'builder> ModpkgBuilder<'builder> {
     /// * `provide_chunk_data` - A function that provides the raw data for each chunk.
     pub fn build_to_writer<
         TWriter: io::Write + io::Seek,
-        TChunkDataProvider: Fn(&str, &mut Cursor<Vec<u8>>) -> Result<(), ModpkgBuilderError>,
+        TChunkDataProvider: Fn(&ModpkgChunkBuilder, &mut Cursor<Vec<u8>>) -> Result<(), ModpkgBuilderError>,
     >(
         self,
         writer: &mut TWriter,
@@ -163,9 +166,7 @@ impl<'builder> ModpkgBuilder<'builder> {
         Ok((compressed_data, compression))
     }
 
-    fn collect_unique_layers(
-        chunks: &[ModpkgChunkBuilder<'builder>],
-    ) -> (Vec<Cow<'builder, str>>, HashMap<u64, u32>) {
+    fn collect_unique_layers(chunks: &[ModpkgChunkBuilder]) -> (Vec<String>, HashMap<u64, u32>) {
         let mut layers = Vec::new();
         let mut layer_indices = HashMap::new();
         for chunk in chunks {
@@ -180,9 +181,7 @@ impl<'builder> ModpkgBuilder<'builder> {
         (layers, layer_indices)
     }
 
-    fn collect_unique_paths(
-        chunks: &[ModpkgChunkBuilder<'builder>],
-    ) -> (Vec<Cow<'builder, str>>, HashMap<u64, u32>) {
+    fn collect_unique_paths(chunks: &[ModpkgChunkBuilder]) -> (Vec<String>, HashMap<u64, u32>) {
         let mut paths = Vec::new();
         let mut path_indices = HashMap::new();
 
@@ -199,7 +198,7 @@ impl<'builder> ModpkgBuilder<'builder> {
 
     fn validate_layers(
         defined_layers: &[ModpkgLayerBuilder],
-        unique_layers: &[Cow<'builder, str>],
+        unique_layers: &[String],
     ) -> Result<(), ModpkgBuilderError> {
         // Check if defined layers have base layer
         if !defined_layers.iter().any(|layer| layer.name == "base") {
@@ -209,9 +208,7 @@ impl<'builder> ModpkgBuilder<'builder> {
         // Check if all unique layers are defined
         for layer in unique_layers {
             if !defined_layers.iter().any(|l| l.name == layer.as_ref()) {
-                return Err(ModpkgBuilderError::LayerNotFound(
-                    layer.as_ref().to_string(),
-                ));
+                return Err(ModpkgBuilderError::LayerNotFound(layer.to_string()));
             }
         }
 
@@ -220,9 +217,9 @@ impl<'builder> ModpkgBuilder<'builder> {
 
     fn process_chunks<
         TWriter: io::Write + io::Seek,
-        TChunkDataProvider: Fn(&str, &mut Cursor<Vec<u8>>) -> Result<(), ModpkgBuilderError>,
+        TChunkDataProvider: Fn(&ModpkgChunkBuilder, &mut Cursor<Vec<u8>>) -> Result<(), ModpkgBuilderError>,
     >(
-        chunks: &[ModpkgChunkBuilder<'builder>],
+        chunks: &[ModpkgChunkBuilder],
         writer: &mut BufWriter<TWriter>,
         provide_chunk_data: TChunkDataProvider,
         chunk_path_indices: &HashMap<u64, u32>,
@@ -230,7 +227,7 @@ impl<'builder> ModpkgBuilder<'builder> {
         let mut final_chunks = Vec::new();
         for chunk_builder in chunks {
             let mut data_writer = Cursor::new(Vec::new());
-            provide_chunk_data(&chunk_builder.path, &mut data_writer)?;
+            provide_chunk_data(&chunk_builder, &mut data_writer)?;
 
             let uncompressed_data = data_writer.get_ref();
             let uncompressed_size = uncompressed_data.len();
@@ -266,22 +263,38 @@ impl<'builder> ModpkgBuilder<'builder> {
     }
 }
 
-impl<'builder> ModpkgChunkBuilder<'builder> {
+impl ModpkgChunkBuilder {
     const DEFAULT_LAYER: &'static str = "base";
 
-    pub fn new(path: &'builder str) -> Self {
+    /// Create a new chunk builder with the default layer.
+    pub fn new() -> Self {
         Self {
-            path_hash: xxh64(path.as_bytes(), 0),
-            path: Cow::Borrowed(path),
+            path_hash: 0,
+            path: String::new(),
             compression: ModpkgCompression::None,
-            layer: Cow::Borrowed(Self::DEFAULT_LAYER),
+            layer: Self::DEFAULT_LAYER.to_string(),
         }
     }
 
-    pub fn with_path(mut self, path: &'builder str) -> Self {
-        self.path = Cow::Borrowed(path);
-        self.path_hash = xxh64(path.as_bytes(), 0);
-        self
+    /// Set the path of the chunk.
+    ///
+    /// If the path is a hex string, it will be used as the path hash.
+    /// Otherwise, it will be hashed using xxhash64.
+    pub fn with_path(mut self, path: &str) -> Result<Self, ModpkgBuilderError> {
+        // Strip the path of the extension
+
+        let stripped_path = utils::sanitize_chunk_name(path);
+        let stripped_path = stripped_path.split('.').next().unwrap_or(stripped_path);
+
+        if utils::is_hex_chunk_name(stripped_path) {
+            self.path_hash = u64::from_str_radix(stripped_path, 16)
+                .map_err(|_| ModpkgBuilderError::InvalidChunkName(path.to_string()))?;
+        } else {
+            self.path_hash = xxh64(stripped_path.as_bytes(), 0);
+        }
+
+        self.path = path.to_string();
+        Ok(self)
     }
 
     pub fn with_compression(mut self, compression: ModpkgCompression) -> Self {
@@ -289,9 +302,17 @@ impl<'builder> ModpkgChunkBuilder<'builder> {
         self
     }
 
-    pub fn with_layer(mut self, layer: &'builder str) -> Self {
-        self.layer = Cow::Borrowed(layer);
+    pub fn with_layer(mut self, layer: &str) -> Self {
+        self.layer = layer.to_string();
         self
+    }
+
+    pub fn path_hash(&self) -> u64 {
+        self.path_hash
+    }
+
+    pub fn layer(&self) -> &str {
+        &self.layer
     }
 }
 
@@ -312,11 +333,18 @@ impl ModpkgLayerBuilder {
         self.priority = priority;
         self
     }
+
+    pub fn base() -> Self {
+        Self {
+            name: "base".to_string(),
+            priority: 0,
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::ModpkgLayer;
+    use crate::{Modpkg, ModpkgLayer};
 
     use super::*;
     use binrw::{BinRead, NullString};
@@ -331,7 +359,9 @@ mod tests {
             .with_metadata(ModpkgMetadata::default())
             .with_layer(ModpkgLayerBuilder::new("base").with_priority(0))
             .with_chunk(
-                ModpkgChunkBuilder::new("test.png")
+                ModpkgChunkBuilder::new()
+                    .with_path("test.png")
+                    .unwrap()
                     .with_compression(ModpkgCompression::Zstd)
                     .with_layer("base"),
             );
@@ -348,11 +378,11 @@ mod tests {
 
         let modpkg = Modpkg::<Cursor<Vec<u8>>>::read(&mut cursor).unwrap();
 
-        assert_eq!(modpkg.chunks().len(), 1);
+        assert_eq!(modpkg.chunks.len(), 1);
 
         let chunk = modpkg
-            .chunks()
-            .get(&xxh64("test.png".as_bytes(), 0))
+            .chunks
+            .get(&(xxh64("test.png".as_bytes(), 0), xxh3_64("base".as_bytes())))
             .unwrap();
 
         assert_eq!(

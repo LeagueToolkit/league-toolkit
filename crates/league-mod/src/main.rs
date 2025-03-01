@@ -31,7 +31,7 @@ pub enum Commands {
         file_name: Option<String>,
 
         /// The directory to output the mod package to
-        #[arg(short, long, default_value = "/build")]
+        #[arg(short, long, default_value = "build")]
         output_dir: String,
     },
 }

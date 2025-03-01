@@ -36,13 +36,13 @@ pub struct ModProject {
     /// Layers of the mod project
     /// Layers are loaded in order of priority (highest priority last)
     /// If not specified, a default "base" layer with priority 0 is assumed
-    #[serde(default = "default_layers")]
-    pub layers: Vec<ModLayer>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub layers: Vec<ModProjectLayer>,
 }
 
 /// Returns the default layers for a mod project
-pub fn default_layers() -> Vec<ModLayer> {
-    vec![ModLayer {
+pub fn default_layers() -> Vec<ModProjectLayer> {
+    vec![ModProjectLayer {
         name: "base".to_string(),
         priority: 0,
         description: Some("Base layer of the mod".to_string()),
@@ -51,7 +51,7 @@ pub fn default_layers() -> Vec<ModLayer> {
 
 /// Represents a layer in a mod project
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub struct ModLayer {
+pub struct ModProjectLayer {
     /// The name of the layer
     /// Must not contain spaces or special characters except for underscores and hyphens
     ///
@@ -99,6 +99,17 @@ pub struct FileTransformer {
 
 pub type FileTransformerOptions = HashMap<String, serde_json::Value>;
 
+impl ModProjectLayer {
+    /// Returns the default base layer
+    pub fn base() -> Self {
+        Self {
+            name: "base".to_string(),
+            priority: 0,
+            description: Some("Base layer of the mod".to_string()),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -125,12 +136,12 @@ mod tests {
                 options: None,
             }],
             layers: vec![
-                ModLayer {
+                ModProjectLayer {
                     name: "base".to_string(),
                     priority: 0,
                     description: Some("Base layer of the mod".to_string()),
                 },
-                ModLayer {
+                ModProjectLayer {
                     name: "chroma1".to_string(),
                     priority: 20,
                     description: Some("Chroma 1".to_string()),
