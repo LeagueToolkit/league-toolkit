@@ -8,6 +8,8 @@ pub enum ModpkgError {
     Io(#[from] std::io::Error),
     #[error("IO error: {0}")]
     IoExtError(#[from] io_ext::ReaderError),
+    #[error("Binrw error: {0}")]
+    BinrwError(#[from] binrw::Error),
 
     #[error("Invalid modpkg header size: {header_size}, actual size: {actual_size}")]
     InvalidHeaderSize { header_size: u32, actual_size: u64 },

@@ -1,6 +1,8 @@
 use eyre::eyre;
 use regex::Regex;
 
+pub mod modpkg;
+
 pub fn is_valid_slug(name: impl AsRef<str>) -> bool {
     Regex::new(r"^[[:word:]-]+$")
         .unwrap()

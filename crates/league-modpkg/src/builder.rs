@@ -1,13 +1,12 @@
 use binrw::BinWrite;
 use byteorder::{WriteBytesExt, LE};
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::{self, BufWriter, Cursor, Seek, SeekFrom, Write};
 use xxhash_rust::xxh3::xxh3_64;
 use xxhash_rust::xxh64::xxh64;
 
+use crate::utils;
 use crate::{chunk::ModpkgChunk, metadata::ModpkgMetadata, ModpkgCompression};
-use crate::{utils, ModpkgLayer};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ModpkgBuilderError {
@@ -376,7 +375,7 @@ mod tests {
         // Reset cursor and verify the file was created
         cursor.set_position(0);
 
-        let modpkg = Modpkg::<Cursor<Vec<u8>>>::read(&mut cursor).unwrap();
+        let modpkg = Modpkg::mount_from_reader(&mut cursor).unwrap();
 
         assert_eq!(modpkg.chunks.len(), 1);
 
@@ -387,7 +386,7 @@ mod tests {
 
         assert_eq!(
             modpkg.chunk_paths.get(&xxh64("test.png".as_bytes(), 0)),
-            Some(&NullString::from("test.png"))
+            Some(&"test.png".to_string())
         );
 
         assert_eq!(chunk.compression, ModpkgCompression::Zstd);

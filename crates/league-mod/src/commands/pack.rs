@@ -9,7 +9,7 @@ use colored::Colorize;
 use league_modpkg::{
     builder::{ModpkgBuilder, ModpkgChunkBuilder, ModpkgLayerBuilder},
     utils::hash_layer_name,
-    ModpkgCompression,
+    ModpkgCompression, ModpkgMetadata,
 };
 use mod_project::{default_layers, ModProject, ModProjectLayer};
 
@@ -48,6 +48,7 @@ pub fn pack_mod_project(args: PackModProjectArgs) -> eyre::Result<()> {
     let mut modpkg_builder = ModpkgBuilder::default().with_layer(ModpkgLayerBuilder::base());
     let mut chunk_filepaths = HashMap::new();
 
+    modpkg_builder = build_metadata(modpkg_builder, &mod_project);
     modpkg_builder = build_layers(
         modpkg_builder,
         &content_dir,
@@ -163,6 +164,22 @@ fn validate_layer_dir_presence(mod_project_dir: &Path, layer_name: &str) -> eyre
     }
 
     Ok(())
+}
+
+fn build_metadata(builder: ModpkgBuilder, mod_project: &ModProject) -> ModpkgBuilder {
+    builder.with_metadata(ModpkgMetadata {
+        name: mod_project.name.clone(),
+        display_name: mod_project.display_name.clone(),
+        description: Some(mod_project.description.clone()),
+        version: mod_project.version.clone(),
+        distributor: None,
+        authors: mod_project
+            .authors
+            .iter()
+            .map(|a| utils::modpkg::convert_project_author(a))
+            .collect(),
+        license: utils::modpkg::convert_project_license(&mod_project.license),
+    })
 }
 
 fn build_layers(

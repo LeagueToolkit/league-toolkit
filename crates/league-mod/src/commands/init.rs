@@ -79,6 +79,7 @@ fn create_default_mod_project(name: Option<String>, display_name: Option<String>
         version: "0.1.0".to_string(),
         description: "Short description of the mod".to_string(),
         authors: vec![ModProjectAuthor::Name("<Your Name>".to_string())],
+        license: None,
         transformers: vec![],
         layers: mod_project::default_layers(),
     }

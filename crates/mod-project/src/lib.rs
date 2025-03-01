@@ -28,6 +28,10 @@ pub struct ModProject {
     /// The authors of the mod
     pub authors: Vec<ModProjectAuthor>,
 
+    /// The license of the mod
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub license: Option<ModProjectLicense>,
+
     /// File transformers to be applied during the build process
     /// Optional field - if not provided, no transformers will be applied
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -38,15 +42,6 @@ pub struct ModProject {
     /// If not specified, a default "base" layer with priority 0 is assumed
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub layers: Vec<ModProjectLayer>,
-}
-
-/// Returns the default layers for a mod project
-pub fn default_layers() -> Vec<ModProjectLayer> {
-    vec![ModProjectLayer {
-        name: "base".to_string(),
-        priority: 0,
-        description: Some("Base layer of the mod".to_string()),
-    }]
 }
 
 /// Represents a layer in a mod project
@@ -73,6 +68,13 @@ pub struct ModProjectLayer {
 pub enum ModProjectAuthor {
     Name(String),
     Role { name: String, role: String },
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[serde(untagged)]
+pub enum ModProjectLicense {
+    Spdx(String),
+    Custom { name: String, url: String },
 }
 
 /// Represents a file transformer that can be applied to files during the build process
@@ -110,6 +112,15 @@ impl ModProjectLayer {
     }
 }
 
+/// Returns the default layers for a mod project
+pub fn default_layers() -> Vec<ModProjectLayer> {
+    vec![ModProjectLayer {
+        name: "base".to_string(),
+        priority: 0,
+        description: Some("Base layer of the mod".to_string()),
+    }]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -129,6 +140,7 @@ mod tests {
                     role: "Contributor".to_string(),
                 },
             ],
+            license: Some(ModProjectLicense::Spdx("MIT".to_string())),
             transformers: vec![FileTransformer {
                 name: "tex-converter".to_string(),
                 patterns: vec!["**/*.dds".to_string(), "**/*.png".to_string()],

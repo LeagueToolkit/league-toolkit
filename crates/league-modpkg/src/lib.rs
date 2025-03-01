@@ -1,12 +1,12 @@
-use binrw::{binrw, NullString};
+use binrw::{binrw, BinRead};
+use byteorder::{ReadBytesExt, LE};
 use chunk::ModpkgChunk;
 use error::ModpkgError;
-use itertools::Itertools;
-use metadata::ModpkgMetadata;
+use io_ext::ReaderExt;
 use std::{
     collections::HashMap,
     fmt::Display,
-    io::{Read, Seek},
+    io::{BufReader, Read, Seek, SeekFrom},
 };
 use xxhash_rust::{xxh3::xxh3_64, xxh64::xxh64};
 
@@ -17,51 +17,24 @@ mod license;
 mod metadata;
 pub mod utils;
 
-#[binrw]
-#[brw(little, magic = b"_modpkg_")]
-#[derive(Debug, PartialEq)]
-pub struct Modpkg<TSource: Read + Seek + Default> {
-    #[br(temp, assert(version == 1))]
-    #[bw(calc = 1)]
-    version: u32,
-    #[br(temp)]
-    #[bw(calc = signature.len() as u32)]
-    signature_size: u32,
-    #[br(temp)]
-    #[bw(calc = chunks.len() as u32)]
-    chunk_count: u32,
+pub use license::*;
+pub use metadata::*;
+pub use utils::*;
 
-    #[br(count = signature_size)]
+#[derive(Debug, PartialEq)]
+pub struct Modpkg<TSource: Read + Seek> {
     signature: Vec<u8>,
 
-    #[br(temp)]
-    #[bw(calc = layers.len() as u32)]
-    layer_count: u32,
-    #[br(count = layer_count, map = |m: Vec<ModpkgLayer>| m.into_iter().map(|c| (xxh3_64(c.name.as_bytes()), c)).collect())]
-    #[bw(map = |m| m.values().cloned().collect_vec())]
     pub layers: HashMap<u64, ModpkgLayer>,
-
-    #[br(temp)]
-    #[bw(calc = chunk_paths.len() as u32)]
-    chunk_path_count: u32,
-    #[br(count = chunk_path_count, map = |m: Vec<NullString>| m.into_iter().map(|c| (xxh64(&c.0, 0), c)).collect())]
-    #[bw(map = |m| m.values().cloned().collect_vec())]
-    pub chunk_paths: HashMap<u64, NullString>,
+    pub chunk_paths: HashMap<u64, String>,
 
     pub metadata: ModpkgMetadata,
 
     /// The chunks in the mod package.
     ///
     /// The key is a tuple of the path hash and the layer hash.
-    // alan: pretty sure this works to align the individual chunks - https://github.com/jam1garner/binrw/issues/68
-    #[brw(align_before = 8)]
-    #[br(count = chunk_count, map = |m: Vec<ModpkgChunk>| {
-        m.into_iter().map(|c| ((c.path_hash, c.layer_hash), c)).collect()
-    })]
-    #[bw(map = |m| m.values().copied().collect_vec())]
     pub chunks: HashMap<(u64, u64), ModpkgChunk>,
 
-    #[brw(ignore)]
     /// The original byte source.
     source: TSource,
 }
@@ -88,6 +61,66 @@ pub enum ModpkgCompression {
     #[default]
     None = 0,
     Zstd = 1,
+}
+
+impl<TSource: Read + Seek> Modpkg<TSource> {
+    const MAGIC: [u8; 8] = *b"_modpkg_";
+
+    pub fn mount_from_reader(mut source: TSource) -> Result<Self, ModpkgError> {
+        let mut reader = BufReader::new(&mut source);
+
+        let magic = reader.read_u64::<LE>()?;
+        if magic != u64::from_le_bytes(Self::MAGIC) {
+            return Err(ModpkgError::InvalidMagic(magic));
+        }
+
+        let version = reader.read_u32::<LE>()?;
+        if version != 1 {
+            return Err(ModpkgError::InvalidVersion(version));
+        }
+
+        let signature_size = reader.read_u32::<LE>()?;
+        let chunk_count = reader.read_u32::<LE>()?;
+
+        let mut signature = vec![0; signature_size as usize];
+        reader.read_exact(&mut signature)?;
+
+        let layer_count = reader.read_u32::<LE>()?;
+        let mut layers = HashMap::new();
+        for _ in 0..layer_count {
+            let layer = ModpkgLayer::read(&mut reader)?;
+            layers.insert(xxh3_64(layer.name.as_bytes()), layer);
+        }
+
+        let chunk_paths_count = reader.read_u32::<LE>()?;
+        let mut chunk_paths = HashMap::new();
+        for _ in 0..chunk_paths_count {
+            let chunk_path = reader.read_str_until_nul()?;
+            let chunk_path_hash = xxh64(chunk_path.as_bytes(), 0);
+            chunk_paths.insert(chunk_path_hash, chunk_path);
+        }
+
+        let metadata = ModpkgMetadata::read(&mut reader)?;
+
+        // Skip alignment
+        let position = reader.stream_position()?;
+        reader.seek(SeekFrom::Current((8 - (position % 8)) as i64))?;
+
+        let mut chunks = HashMap::new();
+        for _ in 0..chunk_count {
+            let chunk = ModpkgChunk::read(&mut reader)?;
+            chunks.insert((chunk.path_hash, chunk.layer_hash), chunk);
+        }
+
+        Ok(Self {
+            signature,
+            layers,
+            chunk_paths,
+            metadata,
+            chunks,
+            source,
+        })
+    }
 }
 
 impl Display for ModpkgCompression {
