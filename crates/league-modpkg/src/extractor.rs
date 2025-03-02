@@ -38,8 +38,6 @@ impl<'modpkg, TSource: Read + Seek> ModpkgExtractor<'modpkg, TSource> {
             chunks_by_layer.entry(layer_hash).or_default().push(*chunk);
         }
 
-        println!("chunks_by_layer: {:#?}", chunks_by_layer);
-
         // Extract chunks for each layer
         for (layer_hash, chunks) in chunks_by_layer {
             let layer_name = match self.modpkg.layers.get(&layer_hash) {

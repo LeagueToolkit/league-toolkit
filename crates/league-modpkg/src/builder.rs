@@ -281,17 +281,18 @@ impl ModpkgChunkBuilder {
     pub fn with_path(mut self, path: &str) -> Result<Self, ModpkgBuilderError> {
         // Strip the path of the extension
 
-        let stripped_path = utils::sanitize_chunk_name(path);
+        let path = path.to_lowercase();
+        let stripped_path = utils::sanitize_chunk_name(&path);
         let stripped_path = stripped_path.split('.').next().unwrap_or(stripped_path);
 
         if utils::is_hex_chunk_name(stripped_path) {
             self.path_hash = u64::from_str_radix(stripped_path, 16)
                 .map_err(|_| ModpkgBuilderError::InvalidChunkName(path.to_string()))?;
         } else {
-            self.path_hash = hash_chunk_name(stripped_path);
+            self.path_hash = hash_chunk_name(&path);
         }
 
-        self.path = path.to_string();
+        self.path = path;
         Ok(self)
     }
 
