@@ -1,11 +1,13 @@
+mod commands;
+mod fantome;
+mod utils;
+
 use clap::{Parser, Subcommand};
 use commands::{
-    extract_mod_package, info_mod_package, init_mod_project, pack_mod_project,
-    ExtractModPackageArgs, InfoModPackageArgs, InitModProjectArgs, PackModProjectArgs,
+    extract_mod_package, fantome_to_project, info_mod_package, init_mod_project, pack_mod_project,
+    ExtractModPackageArgs, FantomeToProjectArgs, InfoModPackageArgs, InitModProjectArgs,
+    PackModProjectArgs,
 };
-
-mod commands;
-mod utils;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -53,6 +55,15 @@ pub enum Commands {
         #[arg(short, long, default_value = "extracted")]
         output_dir: String,
     },
+    FantomeToProject {
+        /// The path to the fantome file
+        #[arg(short, long)]
+        fantome_path: String,
+
+        /// Where to create the mod project
+        #[arg(short, long)]
+        output_dir: String,
+    },
 }
 
 fn main() -> eyre::Result<()> {
@@ -83,6 +94,13 @@ fn main() -> eyre::Result<()> {
             output_dir,
         } => extract_mod_package(ExtractModPackageArgs {
             file_path,
+            output_dir,
+        }),
+        Commands::FantomeToProject {
+            fantome_path,
+            output_dir,
+        } => fantome_to_project(FantomeToProjectArgs {
+            fantome_path,
             output_dir,
         }),
     }
