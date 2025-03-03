@@ -59,6 +59,7 @@ impl ElementFormat {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// Describes the name and format of a vertex element.
 pub struct VertexElement {
     pub name: ElementName,
     pub format: ElementFormat,
