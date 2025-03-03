@@ -1,15 +1,18 @@
-use crate::commands::init::prompt_mod_name;
 use crate::fantome::FantomeMetadata;
+use crate::utils::load_wad_hashtable;
 use eyre::{eyre, Result};
 use mod_project::{ModProject, ModProjectAuthor};
+use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use tempfile::TempDir;
 use zip::ZipArchive;
 
 pub struct FantomeToProjectArgs {
     pub fantome_path: String,
     pub output_dir: String,
+    pub hashtable_path: String,
 }
 
 pub fn fantome_to_project(args: FantomeToProjectArgs) -> eyre::Result<()> {
@@ -17,6 +20,8 @@ pub fn fantome_to_project(args: FantomeToProjectArgs) -> eyre::Result<()> {
     let output_dir = Path::new(&args.output_dir);
 
     println!("Converting fantome mod: {}", fantome_path.display());
+
+    let hashtable = load_wad_hashtable(File::open(&args.hashtable_path)?)?;
 
     // Open the fantome file (which is just a renamed zip)
     let file = File::open(fantome_path)?;
@@ -49,7 +54,7 @@ pub fn fantome_to_project(args: FantomeToProjectArgs) -> eyre::Result<()> {
     create_mod_config(&mod_project_dir, &metadata)?;
 
     // Process WAD files
-    process_wad_files(&mut archive, &base_layer_dir)?;
+    process_wad_files(&mut archive, &base_layer_dir, &hashtable)?;
 
     // Process RAW files
     process_raw_files(&mut archive, &base_layer_dir)?;
@@ -98,11 +103,15 @@ fn create_mod_config(mod_project_dir: &Path, metadata: &FantomeMetadata) -> Resu
     Ok(())
 }
 
-fn process_wad_files(archive: &mut ZipArchive<File>, base_layer_dir: &Path) -> Result<()> {
+fn process_wad_files(
+    archive: &mut ZipArchive<File>,
+    base_layer_dir: &Path,
+    hashtable: &HashMap<u64, String>,
+) -> Result<()> {
     // Get all WAD files
     let wad_files: Vec<String> = archive
         .file_names()
-        .filter(|name| name.starts_with("WAD/") && name.ends_with(".wad"))
+        .filter(|name| name.starts_with("WAD/") && name.ends_with(".wad.client"))
         .map(|s| s.to_string())
         .collect();
 
@@ -113,43 +122,13 @@ fn process_wad_files(archive: &mut ZipArchive<File>, base_layer_dir: &Path) -> R
 
     println!("Processing {} WAD files...", wad_files.len());
 
-    // Look for a hashtable file
-    let hashtable_path = "META/hashtable.txt";
-    let mut path_map = std::collections::HashMap::new();
-
-    if let Ok(mut hashtable_file) = archive.by_name(hashtable_path) {
-        let mut contents = String::new();
-        hashtable_file.read_to_string(&mut contents)?;
-
-        // Parse the hashtable
-        for line in contents.lines() {
-            let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() >= 2 {
-                let hash = parts[0].trim();
-                let path = parts[1].trim();
-                path_map.insert(hash.to_string(), path.to_string());
-            }
-        }
-
-        println!("Loaded hashtable with {} entries", path_map.len());
-    } else {
-        println!("No hashtable found, WAD files will be extracted without path information");
-    }
-
     // Process each WAD file
     for wad_file_path in wad_files {
         println!("Extracting WAD file: {}", wad_file_path);
 
         // Create a temporary directory to extract the WAD file
         let temp_dir = tempfile::tempdir()?;
-
-        // Extract the WAD file to the temp directory
-        let mut wad_file = archive.by_name(&wad_file_path)?;
-        let mut wad_content = Vec::new();
-        wad_file.read_to_end(&mut wad_content)?;
-
-        let temp_wad_path = temp_dir.path().join("temp.wad");
-        fs::write(&temp_wad_path, wad_content)?;
+        let temp_wad_path = extract_temp_wad(archive, &wad_file_path, &temp_dir)?;
 
         // TODO: Use the toolkit to read and decode the WAD file
         // For now, we'll just print a message
@@ -161,6 +140,21 @@ fn process_wad_files(archive: &mut ZipArchive<File>, base_layer_dir: &Path) -> R
     }
 
     Ok(())
+}
+
+fn extract_temp_wad(
+    archive: &mut ZipArchive<File>,
+    wad_file_path: &str,
+    temp_dir: &TempDir,
+) -> Result<PathBuf> {
+    let mut wad_file = archive.by_name(wad_file_path)?;
+    let mut wad_content = Vec::new();
+    wad_file.read_to_end(&mut wad_content)?;
+
+    let temp_wad_path = temp_dir.path().join("temp.wad");
+    fs::write(&temp_wad_path, wad_content)?;
+
+    Ok(temp_wad_path)
 }
 
 fn process_raw_files(archive: &mut ZipArchive<File>, base_layer_dir: &Path) -> Result<()> {

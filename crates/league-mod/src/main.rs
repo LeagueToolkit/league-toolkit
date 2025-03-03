@@ -63,6 +63,10 @@ pub enum Commands {
         /// Where to create the mod project
         #[arg(short, long)]
         output_dir: String,
+
+        /// The path to the hashtable file to use for WAD files
+        #[arg(short, long)]
+        hashtable_path: String,
     },
 }
 
@@ -99,9 +103,11 @@ fn main() -> eyre::Result<()> {
         Commands::FantomeToProject {
             fantome_path,
             output_dir,
+            hashtable_path,
         } => fantome_to_project(FantomeToProjectArgs {
             fantome_path,
             output_dir,
+            hashtable_path,
         }),
     }
 }
