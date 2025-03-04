@@ -20,3 +20,4 @@ binrw = "0.14.1"
 serde = { version = "1.0", features = ["derive"] }
 zip = "2.2.3"
 tempfile = "3.17.1"
+league-toolkit = { path = "../league-toolkit" }

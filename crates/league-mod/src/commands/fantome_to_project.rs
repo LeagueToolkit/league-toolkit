@@ -1,6 +1,6 @@
 use crate::fantome::FantomeMetadata;
-use crate::utils::load_wad_hashtable;
 use eyre::{eyre, Result};
+use league_toolkit::core::wad::{WadHashtable, WadHashtableExt};
 use mod_project::{ModProject, ModProjectAuthor};
 use std::collections::HashMap;
 use std::fs::{self, File};
@@ -21,7 +21,7 @@ pub fn fantome_to_project(args: FantomeToProjectArgs) -> eyre::Result<()> {
 
     println!("Converting fantome mod: {}", fantome_path.display());
 
-    let hashtable = load_wad_hashtable(File::open(&args.hashtable_path)?)?;
+    let hashtable = WadHashtable::from_reader(File::open(&args.hashtable_path)?)?;
 
     // Open the fantome file (which is just a renamed zip)
     let file = File::open(fantome_path)?;
@@ -106,7 +106,7 @@ fn create_mod_config(mod_project_dir: &Path, metadata: &FantomeMetadata) -> Resu
 fn process_wad_files(
     archive: &mut ZipArchive<File>,
     base_layer_dir: &Path,
-    hashtable: &HashMap<u64, String>,
+    hashtable: &WadHashtable,
 ) -> Result<()> {
     // Get all WAD files
     let wad_files: Vec<String> = archive

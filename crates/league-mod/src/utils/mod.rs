@@ -34,24 +34,6 @@ pub fn validate_version_format(version: impl AsRef<str>) -> eyre::Result<()> {
     Ok(())
 }
 
-pub fn load_wad_hashtable<R: io::Read>(reader: R) -> eyre::Result<HashMap<u64, String>> {
-    let reader = BufReader::new(reader);
-    let mut hashtable = HashMap::new();
-
-    for line in reader.lines() {
-        let line = line?;
-
-        let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() >= 2 {
-            let hash = parts[0].trim();
-            let path = parts[1].trim();
-            hashtable.insert(u64::from_str_radix(hash, 16)?, path.to_string());
-        }
-    }
-
-    Ok(hashtable)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
