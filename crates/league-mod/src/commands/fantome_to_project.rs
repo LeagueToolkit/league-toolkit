@@ -1,6 +1,6 @@
 use crate::fantome::FantomeMetadata;
 use eyre::{eyre, Result};
-use league_toolkit::core::wad::{WadHashtable, WadHashtableExt};
+use league_toolkit::core::wad::{Wad, WadHashtable, WadHashtableExt};
 use mod_project::{ModProject, ModProjectAuthor};
 use std::collections::HashMap;
 use std::fs::{self, File};
@@ -130,10 +130,8 @@ fn process_wad_files(
         let temp_dir = tempfile::tempdir()?;
         let temp_wad_path = extract_temp_wad(archive, &wad_file_path, &temp_dir)?;
 
-        // TODO: Use the toolkit to read and decode the WAD file
-        // For now, we'll just print a message
-        println!("Note: WAD file processing requires the toolkit to decode the file");
-        println!("WAD file extracted to: {}", temp_wad_path.display());
+        let mut wad = Wad::mount(File::open(&temp_wad_path)?)?;
+        wad.extract_all(base_layer_dir, hashtable)?;
 
         // Clean up the temp directory
         temp_dir.close()?;

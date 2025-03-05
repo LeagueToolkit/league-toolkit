@@ -13,9 +13,10 @@ pub enum WadHashtableError {
     Io(#[from] io::Error),
 }
 
+/// A hashtable that maps hashes to paths.
 pub type WadHashtable = HashMap<u64, String>;
 
-pub enum WadHashtableHash<'a> {
+pub enum WadHashtablePath<'a> {
     Default(&'a str),
     Unknown(String),
 }
@@ -24,7 +25,7 @@ pub trait WadHashtableExt {
     fn from_reader(reader: impl io::Read) -> Result<WadHashtable, WadHashtableError>;
 
     fn resolve(&self, hash: u64) -> Option<&str>;
-    fn resolve_or_default(&self, hash: u64) -> WadHashtableHash;
+    fn resolve_or_default(&self, hash: u64) -> WadHashtablePath;
 }
 
 impl WadHashtableExt for WadHashtable {
@@ -53,10 +54,10 @@ impl WadHashtableExt for WadHashtable {
         }
     }
 
-    fn resolve_or_default(&self, hash: u64) -> WadHashtableHash {
+    fn resolve_or_default(&self, hash: u64) -> WadHashtablePath {
         match self.resolve(hash) {
-            Some(path) => WadHashtableHash::Default(path),
-            None => WadHashtableHash::Unknown(format!("0x{:x}", hash)),
+            Some(path) => WadHashtablePath::Default(path),
+            None => WadHashtablePath::Unknown(format!("0x{:x}", hash)),
         }
     }
 }

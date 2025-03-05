@@ -1,3 +1,5 @@
+use std::ffi::OsStr;
+
 use crate::core::wad::WadChunkCompression;
 
 use super::pattern::LEAGUE_FILE_MAGIC_BYTES;
