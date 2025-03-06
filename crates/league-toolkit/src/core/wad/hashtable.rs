@@ -57,7 +57,7 @@ impl WadHashtableExt for WadHashtable {
     fn resolve_or_default(&self, hash: u64) -> WadHashtablePath {
         match self.resolve(hash) {
             Some(path) => WadHashtablePath::Default(path),
-            None => WadHashtablePath::Unknown(format!("0x{:x}", hash)),
+            None => WadHashtablePath::Unknown(format!("{:x}", hash)),
         }
     }
 }

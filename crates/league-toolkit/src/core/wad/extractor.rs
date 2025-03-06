@@ -65,12 +65,7 @@ impl<TSource: Read + Seek> Wad<TSource> {
 
     fn resolve_unknown_chunk_name(name: &str, data: &[u8]) -> PathBuf {
         let path = Path::new(name);
-        let extension = path.extension().unwrap_or_default();
-
-        let kind = match LeagueFileKind::from_extension(extension.to_str().unwrap_or_default()) {
-            LeagueFileKind::Unknown => LeagueFileKind::identify_from_bytes(data),
-            kind => kind,
-        };
+        let kind = LeagueFileKind::identify_from_bytes(data);
 
         match kind {
             // If the final kind is unknown, prefix with dot

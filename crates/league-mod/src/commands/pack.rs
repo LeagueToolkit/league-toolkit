@@ -133,6 +133,7 @@ fn resolve_content_dir(config_path: &Path) -> eyre::Result<PathBuf> {
 // Layer utils
 
 fn validate_layer_presence(mod_project: &ModProject, mod_project_dir: &Path) -> eyre::Result<()> {
+    let mut has_base = false;
     for layer in &mod_project.layers {
         if !utils::is_valid_slug(&layer.name) {
             return Err(eyre::eyre!(format!(
@@ -142,15 +143,18 @@ fn validate_layer_presence(mod_project: &ModProject, mod_project_dir: &Path) -> 
         }
 
         if layer.name == "base" {
-            return Err(eyre::eyre!(format!(
-                "{} is reserved for the base layer and cannot be used as a custom layer",
-                "base".bright_red().bold()
-            )));
+            has_base = true;
         }
 
         validate_layer_dir_presence(mod_project_dir, &layer.name)?;
     }
 
+    if !has_base {
+        return Err(eyre::eyre!(format!(
+            "{} layer is required but not found in the mod project",
+            "base".bright_red().bold()
+        )));
+    }
     Ok(())
 }
 
