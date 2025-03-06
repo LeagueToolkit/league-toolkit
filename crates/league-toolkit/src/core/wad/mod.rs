@@ -4,11 +4,15 @@ mod builder;
 mod chunk;
 mod decoder;
 mod error;
+mod extractor;
+mod hashtable;
 
 pub use builder::*;
 pub use chunk::*;
 pub use decoder::*;
 pub use error::*;
+pub use extractor::*;
+pub use hashtable::*;
 
 use std::{
     collections::HashMap,
