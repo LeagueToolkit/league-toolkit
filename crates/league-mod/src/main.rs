@@ -8,6 +8,8 @@ use commands::{
     ExtractModPackageArgs, FantomeToProjectArgs, InfoModPackageArgs, InitModProjectArgs,
     PackModProjectArgs,
 };
+use tracing::{error, info, warn, Level};
+use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -71,6 +73,23 @@ pub enum Commands {
 }
 
 fn main() -> eyre::Result<()> {
+    // Initialize tracing
+    FmtSubscriber::builder()
+        .with_env_filter(
+            EnvFilter::from_default_env()
+                .add_directive(Level::INFO.into())
+                .add_directive("league_mod=debug".parse().unwrap()),
+        )
+        .with_file(true)
+        .with_line_number(true)
+        .with_thread_ids(true)
+        .with_thread_names(true)
+        .with_target(true)
+        .pretty()
+        .init();
+
+    info!("Starting League Mod Tool");
+
     let args = Args::parse();
 
     match args.command {
@@ -78,20 +97,26 @@ fn main() -> eyre::Result<()> {
             name,
             display_name,
             output_dir,
-        } => init_mod_project(InitModProjectArgs {
-            name,
-            display_name,
-            output_dir,
-        }),
+        } => {
+            info!("Initializing new mod project");
+            init_mod_project(InitModProjectArgs {
+                name,
+                display_name,
+                output_dir,
+            })
+        }
         Commands::Pack {
             config_path,
             file_name,
             output_dir,
-        } => pack_mod_project(PackModProjectArgs {
-            config_path,
-            file_name,
-            output_dir,
-        }),
+        } => {
+            info!("Packing mod project");
+            pack_mod_project(PackModProjectArgs {
+                config_path,
+                file_name,
+                output_dir,
+            })
+        }
         Commands::Info { file_path } => info_mod_package(InfoModPackageArgs { file_path }),
         Commands::Extract {
             file_path,

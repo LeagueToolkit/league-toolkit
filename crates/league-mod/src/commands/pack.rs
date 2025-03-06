@@ -28,7 +28,7 @@ pub fn pack_mod_project(args: PackModProjectArgs) -> eyre::Result<()> {
 
     let mod_project = load_config(&config_path)?;
 
-    validate_layer_presence(&mod_project, &config_path)?;
+    validate_layer_presence(&mod_project, &content_dir)?;
     validate_mod_name(&mod_project.name)?;
     validate_version_format(&mod_project.version)?;
 
@@ -132,7 +132,7 @@ fn resolve_content_dir(config_path: &Path) -> eyre::Result<PathBuf> {
 
 // Layer utils
 
-fn validate_layer_presence(mod_project: &ModProject, mod_project_dir: &Path) -> eyre::Result<()> {
+fn validate_layer_presence(mod_project: &ModProject, content_dir: &Path) -> eyre::Result<()> {
     let mut has_base = false;
     for layer in &mod_project.layers {
         if !utils::is_valid_slug(&layer.name) {
@@ -146,7 +146,7 @@ fn validate_layer_presence(mod_project: &ModProject, mod_project_dir: &Path) -> 
             has_base = true;
         }
 
-        validate_layer_dir_presence(mod_project_dir, &layer.name)?;
+        validate_layer_dir_presence(content_dir, &layer.name)?;
     }
 
     if !has_base {
@@ -158,12 +158,17 @@ fn validate_layer_presence(mod_project: &ModProject, mod_project_dir: &Path) -> 
     Ok(())
 }
 
-fn validate_layer_dir_presence(mod_project_dir: &Path, layer_name: &str) -> eyre::Result<()> {
-    let layer_dir = mod_project_dir.join("content").join(layer_name);
+fn validate_layer_dir_presence(content_dir: &Path, layer_name: &str) -> eyre::Result<()> {
+    let layer_dir = content_dir.join(layer_name);
     if !layer_dir.exists() {
         return Err(eyre::eyre!(format!(
-            "The directory for layer {} does not exist. Did you forget to create it?",
-            layer_name.bright_red().bold()
+            "The directory for layer {} does not exist. Did you forget to create it?\n{}",
+            layer_name.bright_red().bold(),
+            layer_dir
+                .to_str()
+                .unwrap_or_default()
+                .bright_yellow()
+                .bold()
         )));
     }
 
@@ -244,6 +249,12 @@ fn build_chunk_from_file(
     file_path: &Path,
     layer_dir: &Path,
 ) -> eyre::Result<(ModpkgBuilder, u64)> {
+    tracing::info!(
+        "Building chunk from file: {} in layer: {}",
+        file_path.display(),
+        layer.name
+    );
+
     let relative_path = file_path.strip_prefix(layer_dir)?;
     let chunk_builder = ModpkgChunkBuilder::new()
         .with_path(relative_path.to_str().unwrap())?
