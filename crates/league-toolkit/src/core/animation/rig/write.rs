@@ -41,6 +41,7 @@ impl RigResource {
             writer.write_u32::<LE>(0xFFFFFFFF)?;
         }
 
+        writer.seek(SeekFrom::Start(joint_names_off as u64))?;
         // Write joint names + remember offsets
         let mut joint_name_offs = Vec::with_capacity(self.joints.len());
         for j in &self.joints {
