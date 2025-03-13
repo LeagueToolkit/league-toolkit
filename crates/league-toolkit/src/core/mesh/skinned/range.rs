@@ -6,11 +6,11 @@ use std::io::{Read, Write};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SkinnedMeshRange {
-    material: String,
-    start_vertex: i32,
-    vertex_count: i32,
-    start_index: i32,
-    index_count: i32,
+    pub material: String,
+    pub start_vertex: i32,
+    pub vertex_count: i32,
+    pub start_index: i32,
+    pub index_count: i32,
 }
 
 impl SkinnedMeshRange {
