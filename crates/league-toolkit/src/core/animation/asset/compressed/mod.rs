@@ -13,28 +13,28 @@ pub use primitive::*;
 
 #[derive(Clone, Debug)]
 pub struct Compressed {
-    flags: AnimationFlags,
-    duration: f32,
-    fps: f32,
+    pub flags: AnimationFlags,
+    pub duration: f32,
+    pub fps: f32,
 
-    rotation_error_metric: ErrorMetric,
-    translation_error_metric: ErrorMetric,
-    scale_error_metric: ErrorMetric,
+    pub rotation_error_metric: ErrorMetric,
+    pub translation_error_metric: ErrorMetric,
+    pub scale_error_metric: ErrorMetric,
 
-    translation_min: Vec3,
-    translation_max: Vec3,
+    pub translation_min: Vec3,
+    pub translation_max: Vec3,
 
-    scale_min: Vec3,
-    scale_max: Vec3,
+    pub scale_min: Vec3,
+    pub scale_max: Vec3,
 
-    jump_cache_count: usize,
-    frames: Vec<Frame>,
-    jump_caches: Vec<u8>,
-    joints: Vec<u32>,
+    pub jump_cache_count: usize,
+    pub frames: Vec<Frame>,
+    pub jump_caches: Vec<u8>,
+    pub joints: Vec<u32>,
 }
 
-impl Into<AnimationAsset> for Compressed {
-    fn into(self) -> AnimationAsset {
-        AnimationAsset::Compressed(self)
+impl From<Compressed> for AnimationAsset {
+    fn from(val: Compressed) -> Self {
+        AnimationAsset::Compressed(val)
     }
 }
