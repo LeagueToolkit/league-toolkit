@@ -8,6 +8,9 @@ mod frame;
 mod read;
 mod write;
 
+mod primitive;
+pub use primitive::*;
+
 #[derive(Clone, Debug)]
 pub struct Compressed {
     flags: AnimationFlags,
