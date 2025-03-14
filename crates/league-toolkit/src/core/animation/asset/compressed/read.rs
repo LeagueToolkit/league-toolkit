@@ -83,7 +83,7 @@ impl Compressed {
             if align_of > 0 && (p & (align_of - 1)) != 0 {
                 panic!("bad alignment!");
             }
-            let frame = unsafe { std::mem::transmute::<_, Frame>(frame) };
+            let frame = unsafe { std::mem::transmute::<[u8; 10], Frame>(frame) };
             frames.push(frame);
         }
 
