@@ -7,6 +7,10 @@ use itertools::Itertools;
 pub struct CompressedQuat(pub [u16; 3]);
 
 impl CompressedQuat {
+    pub fn new(compressed: [u16; 3]) -> Self {
+        Self(compressed)
+    }
+
     pub fn compress(mut quat: Quat) -> Self {
         let omit_idx;
         let x_abs = quat.x.abs();

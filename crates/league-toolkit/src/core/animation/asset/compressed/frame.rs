@@ -1,14 +1,18 @@
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
+use crate::core::animation::asset::{Frame, TimedValue};
+
+use super::{CompressedQuat, CompressedVec3};
+
 #[derive(Clone, Debug)]
 #[repr(C, packed)]
-pub struct Frame {
-    time: u16,
-    joint_id: u16,
-    value: [u16; 3],
+pub struct CompressedFrame {
+    pub time: u16,
+    pub joint_id: u16,
+    pub value: [u16; 3],
 }
 
-impl Frame {
+impl CompressedFrame {
     pub fn joint_id(&self) -> u16 {
         self.joint_id & 0x3fff
     }

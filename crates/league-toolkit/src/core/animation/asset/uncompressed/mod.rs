@@ -1,7 +1,10 @@
 use crate::core::animation::AnimationAsset;
 
+mod frame;
 mod read;
 mod write;
+
+pub use frame::*;
 
 #[derive(Clone, Debug)]
 pub struct Uncompressed {}

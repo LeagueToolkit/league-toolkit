@@ -1,4 +1,3 @@
-use crate::core::animation::asset::compressed::frame::Frame;
 use crate::core::animation::asset::compressed::read::AnimationFlags;
 use crate::core::animation::asset::error_metric::ErrorMetric;
 use crate::core::animation::AnimationAsset;
@@ -9,7 +8,11 @@ mod read;
 mod write;
 
 mod primitive;
+
+pub use frame::*;
 pub use primitive::*;
+
+use super::{Frame, TimedValue};
 
 #[derive(Clone, Debug)]
 pub struct Compressed {
@@ -28,7 +31,7 @@ pub struct Compressed {
     pub scale_max: Vec3,
 
     pub jump_cache_count: usize,
-    pub frames: Vec<Frame>,
+    pub compressed_frames: Vec<CompressedFrame>,
     pub jump_caches: Vec<u8>,
     pub joints: Vec<u32>,
 }
@@ -36,5 +39,33 @@ pub struct Compressed {
 impl From<Compressed> for AnimationAsset {
     fn from(val: Compressed) -> Self {
         AnimationAsset::Compressed(val)
+    }
+}
+
+// TODO (alan): make a trait to abstract over compressed/uncompressed animations
+impl Compressed {
+    /// Returns a lazily-decompressed frame iterator
+    pub fn frames(&self) -> impl Iterator<Item = Frame> + use<'_> {
+        self.compressed_frames
+            .iter()
+            .map(|f| self.decompress_frame(f))
+    }
+
+    pub fn decompress_frame(&self, frame: &CompressedFrame) -> Frame {
+        match frame.transform_type() {
+            TransformType::Rotation => Frame::Rotation(TimedValue::new(
+                frame.time,
+                CompressedQuat::new(frame.value).decompress(),
+            )),
+            TransformType::Translation => Frame::Translation(TimedValue::new(
+                frame.time,
+                CompressedVec3::new(frame.value)
+                    .decompress(self.translation_min, self.translation_max),
+            )),
+            TransformType::Scale => Frame::Scale(TimedValue::new(
+                frame.time,
+                CompressedVec3::new(frame.value).decompress(self.scale_min, self.scale_max),
+            )),
+        }
     }
 }

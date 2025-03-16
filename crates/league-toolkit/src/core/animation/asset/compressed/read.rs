@@ -1,4 +1,4 @@
-use crate::core::animation::asset::compressed::frame::Frame;
+use crate::core::animation::asset::compressed::frame::CompressedFrame;
 use crate::core::animation::asset::error_metric::ErrorMetric;
 use crate::core::animation::AssetParseError::{InvalidField, InvalidFileVersion, MissingData};
 use crate::core::animation::{asset, Compressed};
@@ -76,14 +76,14 @@ impl Compressed {
         reader.seek(SeekFrom::Start(frames_off as u64 + 12))?;
         let mut frames = Vec::with_capacity(frame_count as usize);
         for _ in 0..frame_count {
-            let mut frame = [0; size_of::<Frame>()];
+            let mut frame = [0; size_of::<CompressedFrame>()];
             reader.read_exact(&mut frame)?;
             let p = frame.as_ptr() as usize;
-            let align_of = std::mem::align_of::<Frame>();
+            let align_of = std::mem::align_of::<CompressedFrame>();
             if align_of > 0 && (p & (align_of - 1)) != 0 {
                 panic!("bad alignment!");
             }
-            let frame = unsafe { std::mem::transmute::<[u8; 10], Frame>(frame) };
+            let frame = unsafe { std::mem::transmute::<[u8; 10], CompressedFrame>(frame) };
             frames.push(frame);
         }
 
@@ -109,7 +109,7 @@ impl Compressed {
             scale_min,
             scale_max,
             jump_cache_count: 0,
-            frames,
+            compressed_frames: frames,
             jump_caches,
             joints,
         })
