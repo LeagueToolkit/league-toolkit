@@ -2,7 +2,7 @@ use byteorder::{ReadBytesExt, LE};
 use std::io;
 use std::io::Read;
 
-// Represents the optimization settings of a transform component
+/// Represents the optimization settings of a transform component
 #[derive(Clone, Debug)]
 pub struct ErrorMetric {
     /// The max allowed error
