@@ -32,6 +32,9 @@ impl Joint {
     pub fn name(&self) -> &str {
         &self.name
     }
+    pub fn name_hash(&self) -> u32 {
+        self.name_hash
+    }
     pub fn flags(&self) -> u16 {
         self.flags
     }
