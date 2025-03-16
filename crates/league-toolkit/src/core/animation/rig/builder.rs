@@ -1,4 +1,4 @@
-use crate::core::animation::{joint, Joint, RigResource};
+use crate::core::animation::{joint, RigResource};
 use std::collections::VecDeque;
 
 pub struct Builder {
@@ -61,6 +61,7 @@ impl Builder {
 mod tests {
     use super::*;
     use insta::assert_debug_snapshot;
+    use joint::Joint;
 
     #[test]
     fn build_rig() {

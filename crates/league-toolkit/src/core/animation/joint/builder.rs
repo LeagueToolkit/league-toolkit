@@ -1,7 +1,5 @@
-use crate::core::animation::{joint, Joint};
+use crate::core::animation::Joint;
 use glam::Mat4;
-use std::path::Iter;
-use std::process::id;
 
 #[derive(Clone, Debug)]
 pub struct Builder {
@@ -16,8 +14,9 @@ pub struct Builder {
 
 impl Builder {
     pub fn new(name: impl Into<String>) -> Self {
+        let name = name.into();
         Self {
-            name: name.into(),
+            name,
             flags: 0,
             is_influence: false,
             radius: 2.1,

@@ -10,6 +10,7 @@ pub use builder::Builder;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Joint {
     name: String,
+    name_hash: u32,
     flags: u16,
     id: i16,
     parent_id: i16,

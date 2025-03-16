@@ -1,4 +1,5 @@
 use crate::core::animation::Joint;
+use crate::util::hash;
 use byteorder::{ReadBytesExt, LE};
 use glam::Mat4;
 use io_ext::ReaderExt;
@@ -22,6 +23,7 @@ impl Joint {
             inverse_bind_transform.to_scale_rotation_translation();
 
         Self {
+            name_hash: hash::elf(&name) as u32,
             name,
             flags,
             id,
@@ -43,7 +45,7 @@ impl Joint {
         let id = reader.read_i16::<LE>()?;
         let parent_id = reader.read_i16::<LE>()?;
         reader.read_i16::<LE>()?; // padding
-        let _name_hash = reader.read_u32::<LE>()?;
+        let name_hash = reader.read_u32::<LE>()?;
         let radius = reader.read_f32::<LE>()?;
 
         let local_translation = reader.read_vec3::<LE>()?;
@@ -63,6 +65,7 @@ impl Joint {
 
         Ok(Self {
             name,
+            name_hash,
             flags,
             id,
             parent_id,

@@ -1,5 +1,4 @@
 use crate::core::animation::Joint;
-use crate::util::hash;
 use byteorder::{WriteBytesExt, LE};
 use io_ext::WriterExt;
 use std::io;
@@ -17,7 +16,7 @@ impl Joint {
 
         writer.write_i16::<LE>(0)?; // padding
 
-        writer.write_u32::<LE>(hash::elf(&self.name) as u32)?;
+        writer.write_u32::<LE>(self.name_hash)?;
         writer.write_f32::<LE>(self.radius)?;
 
         writer.write_vec3::<LE>(&self.local_translation)?;
