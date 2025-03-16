@@ -76,15 +76,7 @@ impl Compressed {
         reader.seek(SeekFrom::Start(frames_off as u64 + 12))?;
         let mut frames = Vec::with_capacity(frame_count as usize);
         for _ in 0..frame_count {
-            let mut frame = [0; size_of::<CompressedFrame>()];
-            reader.read_exact(&mut frame)?;
-            let p = frame.as_ptr() as usize;
-            let align_of = std::mem::align_of::<CompressedFrame>();
-            if align_of > 0 && (p & (align_of - 1)) != 0 {
-                panic!("bad alignment!");
-            }
-            let frame = unsafe { std::mem::transmute::<[u8; 10], CompressedFrame>(frame) };
-            frames.push(frame);
+            frames.push(CompressedFrame::read(reader)?);
         }
 
         // Read jump caches
