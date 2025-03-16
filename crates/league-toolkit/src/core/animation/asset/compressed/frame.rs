@@ -6,7 +6,7 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 #[repr(C, packed)]
 pub struct CompressedFrame {
     pub time: u16,
-    pub joint_id: u16,
+    joint_id: u16,
     pub value: [u16; 3],
 }
 

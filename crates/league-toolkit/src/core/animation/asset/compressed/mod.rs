@@ -54,14 +54,14 @@ impl Compressed {
     pub fn decompress_frame(&self, frame: &CompressedFrame) -> Frame {
         match frame.transform_type() {
             TransformType::Rotation => Frame {
-                joint: frame.joint_id,
+                joint: frame.joint_id(),
                 value: FrameValue::Rotation(TimedValue::new(
                     CompressedTime::new(frame.time).decompress(self.duration),
                     CompressedQuat::new(frame.value).decompress(),
                 )),
             },
             TransformType::Translation => Frame {
-                joint: frame.joint_id,
+                joint: frame.joint_id(),
                 value: FrameValue::Translation(TimedValue::new(
                     CompressedTime::new(frame.time).decompress(self.duration),
                     CompressedVec3::new(frame.value)
@@ -69,7 +69,7 @@ impl Compressed {
                 )),
             },
             TransformType::Scale => Frame {
-                joint: frame.joint_id,
+                joint: frame.joint_id(),
                 value: FrameValue::Scale(TimedValue::new(
                     CompressedTime::new(frame.time).decompress(self.duration),
                     CompressedVec3::new(frame.value).decompress(self.scale_min, self.scale_max),
