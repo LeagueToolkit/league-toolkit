@@ -5,6 +5,9 @@
 
 pub struct CompressedTime(pub u16);
 impl CompressedTime {
+    pub fn new(time: u16) -> Self {
+        Self(time)
+    }
     pub fn compress(time: f32, duration: f32) -> Self {
         CompressedTime(((time / duration) * u16::MAX as f32) as u16)
     }

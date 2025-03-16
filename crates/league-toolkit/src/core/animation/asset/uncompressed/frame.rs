@@ -1,12 +1,12 @@
 use glam::{Quat, Vec3};
 
 pub struct TimedValue<T> {
-    pub time: u16,
+    pub time: f32,
     pub value: T,
 }
 
 impl<T> TimedValue<T> {
-    pub fn new(time: u16, value: T) -> Self {
+    pub fn new(time: f32, value: T) -> Self {
         Self { time, value }
     }
 }
