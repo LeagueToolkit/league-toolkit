@@ -1,20 +1,23 @@
 use glam::Vec3;
 
-pub struct CompressedVec3(pub u64);
+pub struct CompressedVec3(pub [u16; 3]);
 
 impl CompressedVec3 {
+    pub fn new(compressed: [u16; 3]) -> Self {
+        Self(compressed)
+    }
     pub fn compress(value: Vec3, min: Vec3, max: Vec3) -> Self {
         let scaled = (u16::MAX as f32 * (value - min)) / (max - min);
-        Self((scaled.x as u64) | ((scaled.y as u64) << 16) | ((scaled.z as u64) << 32))
+        Self([scaled.x as u16, scaled.y as u16, scaled.z as u16])
     }
 
     pub fn decompress(self, min: Vec3, max: Vec3) -> Vec3 {
         let mut val = max - min;
         let scale = u16::MAX as f32;
 
-        val.x *= ((self.0 & 0xffff) as f32) / scale;
-        val.y *= (((self.0 >> 16) & 0xffff) as f32) / scale;
-        val.z *= (((self.0 >> 32) & 0xffff) as f32) / scale;
+        val.x *= (self.0[0] as f32) / scale;
+        val.y *= (self.0[1] as f32) / scale;
+        val.z *= (self.0[2] as f32) / scale;
 
         val += min;
         val
