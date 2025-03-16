@@ -26,7 +26,12 @@ pub struct JointFrame {
     pub scale: TimedValue<Vec3>,
 }
 
-pub enum Frame {
+pub struct Frame {
+    pub joint: u16,
+    pub value: FrameValue,
+}
+
+pub enum FrameValue {
     Translation(TimedValue<Vec3>),
     Rotation(TimedValue<Quat>),
     Scale(TimedValue<Vec3>),

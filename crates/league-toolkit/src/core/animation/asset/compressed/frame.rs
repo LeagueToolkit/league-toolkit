@@ -1,9 +1,5 @@
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
-use crate::core::animation::asset::{Frame, TimedValue};
-
-use super::{CompressedQuat, CompressedVec3};
-
 #[derive(Clone, Debug)]
 #[repr(C, packed)]
 pub struct CompressedFrame {

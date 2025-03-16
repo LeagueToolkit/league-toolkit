@@ -12,7 +12,7 @@ mod primitive;
 pub use frame::*;
 pub use primitive::*;
 
-use super::{Frame, TimedValue};
+use super::{Frame, FrameValue, TimedValue};
 
 #[derive(Clone, Debug)]
 pub struct Compressed {
@@ -53,19 +53,28 @@ impl Compressed {
 
     pub fn decompress_frame(&self, frame: &CompressedFrame) -> Frame {
         match frame.transform_type() {
-            TransformType::Rotation => Frame::Rotation(TimedValue::new(
-                frame.time,
-                CompressedQuat::new(frame.value).decompress(),
-            )),
-            TransformType::Translation => Frame::Translation(TimedValue::new(
-                frame.time,
-                CompressedVec3::new(frame.value)
-                    .decompress(self.translation_min, self.translation_max),
-            )),
-            TransformType::Scale => Frame::Scale(TimedValue::new(
-                frame.time,
-                CompressedVec3::new(frame.value).decompress(self.scale_min, self.scale_max),
-            )),
+            TransformType::Rotation => Frame {
+                joint: frame.joint_id,
+                value: FrameValue::Rotation(TimedValue::new(
+                    frame.time,
+                    CompressedQuat::new(frame.value).decompress(),
+                )),
+            },
+            TransformType::Translation => Frame {
+                joint: frame.joint_id,
+                value: FrameValue::Translation(TimedValue::new(
+                    frame.time,
+                    CompressedVec3::new(frame.value)
+                        .decompress(self.translation_min, self.translation_max),
+                )),
+            },
+            TransformType::Scale => Frame {
+                joint: frame.joint_id,
+                value: FrameValue::Scale(TimedValue::new(
+                    frame.time,
+                    CompressedVec3::new(frame.value).decompress(self.scale_min, self.scale_max),
+                )),
+            },
         }
     }
 }
