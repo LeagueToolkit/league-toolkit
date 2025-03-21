@@ -27,9 +27,11 @@ impl Display for TextureFileFormat {
 
 impl TextureFileFormat {
     pub fn from_magic(magic: u32) -> Self {
+        const DDS: u32 = u32::from_le_bytes(*b"DDS ");
+        const TEX: u32 = u32::from_le_bytes(*b"TEX\0");
         match magic {
-            0x20534444 => Self::DDS, // "DDS "
-            0x00584554 => Self::TEX, // "TEX\0"
+            DDS => Self::DDS,
+            TEX => Self::TEX,
             _ => Self::Unknown,
         }
     }
