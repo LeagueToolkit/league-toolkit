@@ -74,23 +74,20 @@ pub enum TextureAddress {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
-
-    use test_log::test;
-
-    use crate::core::render::texture::format::TextureFileFormat;
-
-    use super::*;
-
-    #[test]
-    fn test_tex() {
-        let format = TextureFileFormat::TEX;
-        let mut file =
-            fs::File::open("/home/alan/Downloads/aurora_skin02_weapon_tx_cm.chroma_aurora_battlebunny_animasquad_2024.tex").unwrap();
-        let tex = format.read_no_magic(&mut file).unwrap();
-
-        log::debug!("{tex:?}");
-
-        panic!();
-    }
+    //use std::fs;
+    //use test_log::test;
+    //use crate::core::render::texture::format::TextureFileFormat;
+    //use super::*;
+    //
+    //#[test]
+    //fn test_tex() {
+    //    let format = TextureFileFormat::TEX;
+    //    let mut file =
+    //    fs::File::open("/home/alan/Downloads/aurora_skin02_weapon_tx_cm.chroma_aurora_battlebunny_animasquad_2024.tex").unwrap();
+    //    let tex = format.read_no_magic(&mut file).unwrap();
+    //
+    //    log::debug!("{tex:?}");
+    //
+    //    panic!();
+    //}
 }
