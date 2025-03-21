@@ -1,9 +1,11 @@
 pub mod dds;
+pub mod error;
 pub mod format;
 mod read;
 pub mod tex;
 
 pub use dds::Dds;
+pub use error::*;
 pub use tex::Tex;
 
 pub type Compressed = u8;
@@ -15,14 +17,6 @@ pub enum Texture<C = Compressed> {
     Tex(Tex<C>),
 }
 
-#[derive(thiserror::Error, Debug)]
-pub enum DecompressError {
-    #[error("Error decompressing TEX: {0}")]
-    Tex(#[from] tex::DecodeErr),
-    #[error("Error decompressing DDS: {0}")]
-    Dds(#[from] dds::DecodeErr),
-}
-
 impl Texture<Compressed> {
     pub fn decompress(self) -> Result<Texture<Uncompressed>, DecompressError> {
         match self {
@@ -30,14 +24,6 @@ impl Texture<Compressed> {
             Texture::Tex(tex) => Ok(tex.decompress()?.into()),
         }
     }
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum ToImageError {
-    #[error("Invalid container size")]
-    InvalidContainerSize,
-    #[error(transparent)]
-    Dds(#[from] image_dds::error::CreateImageError),
 }
 
 impl Texture<Uncompressed> {

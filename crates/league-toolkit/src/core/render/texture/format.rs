@@ -3,7 +3,7 @@ use std::{
     io::{self},
 };
 
-use super::{read, Dds, Tex, Texture};
+use super::{Dds, ReadError, Tex, Texture};
 use byteorder::{ReadBytesExt, LE};
 
 #[derive(Clone, Copy, Hash, Debug, PartialEq, Eq)]
@@ -27,22 +27,18 @@ impl Display for TextureFileFormat {
 
 impl TextureFileFormat {
     pub fn from_magic(magic: u32) -> Self {
-        const DDS: u32 = u32::from_le_bytes(*b"DDS ");
-        const TEX: u32 = u32::from_le_bytes(*b"TEX\0");
         match magic {
-            DDS => Self::DDS,
-            TEX => Self::TEX,
+            Dds::<()>::MAGIC => Self::DDS,
+            Tex::<()>::MAGIC => Self::TEX,
             _ => Self::Unknown,
         }
     }
 
-    pub fn read<R: io::Read + io::Seek + ?Sized>(&self, reader: &mut R) -> read::Result<Texture> {
+    pub fn read<R: io::Read + ?Sized>(&self, reader: &mut R) -> Result<Texture, ReadError> {
         let magic = reader.read_u32::<LE>()?;
         let from_magic = TextureFileFormat::from_magic(magic);
         if from_magic != *self {
-            return Err(read::TextureReadError::UnexpectedTextureFormat(
-                *self, from_magic,
-            ));
+            return Err(ReadError::UnexpectedTextureFormat(*self, from_magic));
         }
         self.read_no_magic(reader)
     }
@@ -50,14 +46,14 @@ impl TextureFileFormat {
     /// Attempts to read a texture of this format - without reading the 4 magic bytes.
     ///
     /// **NOTE**: You **must** make sure the reader does not include the magic bytes!
-    pub fn read_no_magic<R: io::Read + io::Seek + ?Sized>(
+    pub fn read_no_magic<R: io::Read + ?Sized>(
         &self,
         reader: &mut R,
-    ) -> read::Result<Texture> {
+    ) -> Result<Texture, ReadError> {
         match self {
-            TextureFileFormat::DDS => Ok(Dds::from_reader(reader)?.into()),
-            TextureFileFormat::TEX => Ok(Tex::from_reader(reader)?.into()),
-            _ => Err(read::TextureReadError::UnsupportedTextureFormat(*self)),
+            TextureFileFormat::DDS => Ok(Dds::from_reader_no_magic(reader)?.into()),
+            TextureFileFormat::TEX => Ok(Tex::from_reader_no_magic(reader)?.into()),
+            _ => Err(ReadError::UnsupportedTextureFormat(*self)),
         }
     }
 }

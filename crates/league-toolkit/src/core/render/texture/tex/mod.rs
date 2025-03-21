@@ -9,7 +9,7 @@ mod format;
 pub use error::*;
 pub use format::*;
 
-use super::{Compressed, ToImageError, Uncompressed};
+use super::{format::TextureFileFormat, Compressed, ReadError, ToImageError, Uncompressed};
 
 #[derive(Debug)]
 pub struct Tex<C> {
@@ -34,6 +34,7 @@ pub enum DecodeErr {
 }
 
 impl<C> Tex<C> {
+    pub const MAGIC: u32 = u32::from_le_bytes(*b"TEX\0");
     pub fn mipmap_count(&self) -> u32 {
         match self.flags.contains(TextureFlags::HasMipMaps) {
             true => ((self.height.max(self.width) as f32).log2().floor() + 1.0) as u32,
@@ -94,8 +95,18 @@ impl Tex<Compressed> {
         })
     }
 
-    pub fn from_reader<R: io::Read + io::Seek + ?Sized>(reader: &mut R) -> Result<Self, Error> {
-        reader.seek_relative(4)?; // skip magic
+    pub fn from_reader<R: io::Read + ?Sized>(reader: &mut R) -> Result<Self, ReadError> {
+        let magic = reader.read_u32::<LE>()?; // skip magic
+        if magic != Self::MAGIC {
+            return Err(ReadError::UnexpectedMagic {
+                expected: Self::MAGIC,
+                got: magic,
+            });
+        }
+
+        Ok(Self::from_reader_no_magic(reader)?)
+    }
+    pub fn from_reader_no_magic<R: io::Read + ?Sized>(reader: &mut R) -> Result<Self, Error> {
         let (width, height) = (reader.read_u16::<LE>()?, reader.read_u16::<LE>()?);
 
         let _is_extended_format = reader.read_u8(); // maybe..

@@ -1,8 +1,9 @@
+use byteorder::{ReadBytesExt, LE};
 use std::{io, marker::PhantomData, mem::MaybeUninit};
 
 use image_dds::{Surface, SurfaceRgba8};
 
-use super::{Compressed, Uncompressed};
+use super::{error::ReadError, Compressed, Uncompressed};
 
 #[derive(Debug)]
 pub struct Dds<C> {
@@ -13,6 +14,7 @@ pub struct Dds<C> {
 }
 
 impl<C> Dds<C> {
+    pub const MAGIC: u32 = u32::from_le_bytes(*b"DDS ");
     pub fn width(&self) -> u32 {
         self.file.get_width()
     }
@@ -58,7 +60,17 @@ impl Dds<Compressed> {
 }
 
 impl Dds<Compressed> {
-    pub fn from_reader<R: io::Read + io::Seek + ?Sized>(
+    pub fn from_reader<R: io::Read + ?Sized>(reader: &mut R) -> Result<Self, ReadError> {
+        let magic = reader.read_u32::<LE>()?; // skip magic
+        if magic != Self::MAGIC {
+            return Err(ReadError::UnexpectedMagic {
+                expected: Self::MAGIC,
+                got: magic,
+            });
+        }
+        Ok(Self::from_reader_no_magic(reader)?)
+    }
+    pub fn from_reader_no_magic<R: io::Read + ?Sized>(
         reader: &mut R,
     ) -> Result<Self, ddsfile::Error> {
         ddsfile::Dds::read(reader).map(|file| Self {

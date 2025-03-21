@@ -3,11 +3,11 @@ use std::io;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    #[error("Unknown extended texture format: {0}")]
+    #[error("Unknown TEX format: {0}")]
     UnknownTextureFormat(u8),
-    #[error("Unsupported extended texture format: {0:?}")]
+    #[error("Unsupported TEX format: {0:?}")]
     UnsupportedTextureFormat(Format),
-    #[error("Invalid texture flags: {0:#b}")]
+    #[error("Invalid TEX flags: {0:#b}")]
     InvalidTextureFlags(u8),
     #[error("IO Error: {0}")]
     IOError(#[from] io::Error),
