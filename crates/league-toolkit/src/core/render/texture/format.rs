@@ -3,10 +3,8 @@ use std::{
     io::{self},
 };
 
-use super::{read, CompressedTexture};
+use super::{read, Tex, Texture};
 use byteorder::{ReadBytesExt, LE};
-
-pub mod tex;
 
 #[derive(Clone, Copy, Hash, Debug, PartialEq, Eq)]
 pub enum TextureFileFormat {
@@ -36,10 +34,7 @@ impl TextureFileFormat {
         }
     }
 
-    pub fn read<R: io::Read + io::Seek + ?Sized>(
-        &self,
-        reader: &mut R,
-    ) -> read::Result<CompressedTexture> {
+    pub fn read<R: io::Read + io::Seek + ?Sized>(&self, reader: &mut R) -> read::Result<Texture> {
         let magic = reader.read_u32::<LE>()?;
         let from_magic = TextureFileFormat::from_magic(magic);
         if from_magic != *self {
@@ -56,13 +51,10 @@ impl TextureFileFormat {
     pub fn read_no_magic<R: io::Read + io::Seek + ?Sized>(
         &self,
         reader: &mut R,
-    ) -> read::Result<CompressedTexture> {
+    ) -> read::Result<Texture> {
         match self {
-            TextureFileFormat::DDS => {
-                let dds = ddsfile::Dds::read(reader).unwrap();
-                Ok(CompressedTexture::Dds(dds))
-            }
-            TextureFileFormat::TEX => Ok(tex::read_tex(reader)?),
+            TextureFileFormat::DDS => Ok(ddsfile::Dds::read(reader)?.into()),
+            TextureFileFormat::TEX => Ok(Tex::from_reader(reader)?.into()),
             _ => Err(read::TextureReadError::UnsupportedTextureFormat(*self)),
         }
     }
@@ -70,10 +62,10 @@ impl TextureFileFormat {
 
 #[cfg(test)]
 mod tests {
-    use image_dds::image_from_dds;
-    use io::BufWriter;
-    use log::debug;
-    use std::fs;
+    //use image::codecs::png::PngEncoder;
+    //use image_dds::image_from_dds;
+    //use io::BufWriter;
+    //use std::fs;
     use test_log::test;
 
     use super::*;
@@ -82,7 +74,7 @@ mod tests {
     fn dds() {
         //let format = TextureFileFormat::DDS;
         //let mut file = fs::File::open("/home/alan/Downloads/aurora_square_0.aurora.dds").unwrap();
-        //let CompressedTexture::Dds(dds) = format.read_no_magic(&mut file).unwrap() else {
+        //let Texture::Dds(dds) = format.read_no_magic(&mut file).unwrap() else {
         //    unreachable!();
         //};
         //

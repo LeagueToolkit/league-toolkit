@@ -1,34 +1,41 @@
 pub mod format;
-
 mod read;
+pub mod tex;
+
+pub use tex::Tex;
 
 #[derive(Debug)]
-pub enum CompressedTexture {
+pub enum Texture {
     Dds(ddsfile::Dds),
-    Tex(image_dds::Surface<Vec<u8>>),
+    Tex(Tex),
 }
 
-impl CompressedTexture {
+impl Texture {
     #[inline]
     #[must_use]
     pub fn width(&self) -> u32 {
         match self {
-            CompressedTexture::Dds(dds) => dds.get_width(),
-            CompressedTexture::Tex(tex) => tex.width,
+            Texture::Dds(dds) => dds.get_width(),
+            Texture::Tex(tex) => tex.width.into(),
         }
     }
     #[inline]
     #[must_use]
     pub fn height(&self) -> u32 {
         match self {
-            CompressedTexture::Dds(dds) => dds.get_height(),
-            CompressedTexture::Tex(tex) => tex.height,
+            Texture::Dds(dds) => dds.get_height(),
+            Texture::Tex(tex) => tex.height.into(),
         }
     }
 }
 
-#[derive(Debug)]
-pub enum UncompressedTexture {
-    Dds(ddsfile::Dds),
-    Tex(image_dds::SurfaceRgba8<Vec<u8>>),
+impl From<Tex> for Texture {
+    fn from(value: Tex) -> Self {
+        Self::Tex(value)
+    }
+}
+impl From<ddsfile::Dds> for Texture {
+    fn from(value: ddsfile::Dds) -> Self {
+        Self::Dds(value)
+    }
 }

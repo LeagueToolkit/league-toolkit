@@ -1,13 +1,13 @@
 use byteorder::{ReadBytesExt, LE};
-use image::GenericImage;
 use image_dds::image_from_dds;
 use std::io;
 
 use crate::core::render::texture::format::TextureFileFormat;
 
-use super::{format::tex, CompressedTexture};
+use super::{tex, Texture};
+use thiserror::Error;
 
-#[derive(thiserror::Error, Debug)]
+#[derive(Error, Debug)]
 pub enum TextureReadError {
     #[error("Invalid texture file format! Got magic: '{0:#x}'")]
     UnknownTextureFormat(u32),
@@ -28,7 +28,7 @@ pub enum TextureReadError {
 
 pub type Result<T> = core::result::Result<T, TextureReadError>;
 
-impl CompressedTexture {
+impl Texture {
     pub fn from_reader<R: io::Read + io::Seek + ?Sized>(reader: &mut R) -> Result<Self> {
         let magic = reader.read_u32::<LE>()?;
         reader.seek(io::SeekFrom::Start(0))?;
@@ -41,8 +41,8 @@ impl CompressedTexture {
 
     pub fn to_rgba_image(&self, mipmap: u32) -> Result<image::RgbaImage> {
         Ok(match self {
-            CompressedTexture::Dds(dds) => image_from_dds(dds, mipmap)?,
-            CompressedTexture::Tex(tex) => unimplemented!(),
+            Self::Dds(dds) => image_from_dds(dds, mipmap)?,
+            Self::Tex(tex) => unimplemented!(),
         })
     }
 }
