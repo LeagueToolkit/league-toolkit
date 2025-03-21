@@ -7,6 +7,7 @@ pub enum Format {
     Etc2Eac,
     Bc1,
     Bc3,
+    /// Uncompressed BGRA8
     Bgra8,
 }
 

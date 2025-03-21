@@ -62,34 +62,31 @@ impl TextureFileFormat {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    //use image::codecs::png::PngEncoder;
-    //use image_dds::image_from_dds;
-    //use io::BufWriter;
-    //use std::fs;
-    //use test_log::test;
-    //
-    //use super::*;
-    //
-    //#[test]
-    //fn dds() {
-    //    let format = TextureFileFormat::DDS;
-    //    let mut file = fs::File::open("/home/alan/Downloads/aurora_square_0.aurora.dds").unwrap();
-    //    let Texture::Dds(dds) = format.read_no_magic(&mut file).unwrap() else {
-    //        unreachable!();
-    //    };
-    //
-    //    let img = image_from_dds(&dds, 0).unwrap();
-    //    let out = PngEncoder::new(
-    //        std::fs::File::create("./out.png")
-    //            .map(BufWriter::new)
-    //            .unwrap(),
-    //    );
-    //    img.write_with_encoder(out).unwrap();
-    //
-    //    println!("{dds:?}");
-    //
-    //    panic!();
-    //}
-}
+//#[cfg(test)]
+//mod tests {
+//    use image::codecs::png::PngEncoder;
+//    use image_dds::image_from_dds;
+//    use io::BufWriter;
+//    use std::fs;
+//    use test_log::test;
+//
+//    use super::*;
+//
+//    #[test]
+//    fn dds() {
+//        let format = TextureFileFormat::DDS;
+//        let mut file = fs::File::open("/home/alan/Downloads/aurora_square_0.aurora.dds").unwrap();
+//        let Texture::Dds(dds) = format.read_no_magic(&mut file).unwrap() else {
+//            unreachable!();
+//        };
+//        let dds = dds.decompress().unwrap();
+//
+//        let img = dds.to_rgba_image(0).unwrap();
+//        let out = PngEncoder::new(
+//            std::fs::File::create("./out.png")
+//                .map(BufWriter::new)
+//                .unwrap(),
+//        );
+//        img.write_with_encoder(out).unwrap();
+//    }
+//}

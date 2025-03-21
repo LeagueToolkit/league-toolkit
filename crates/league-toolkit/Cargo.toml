@@ -38,9 +38,12 @@ image_dds = {version = "0.6.0", default-features = false, features = ["ddsfile",
 paste = "1.0.15"
 miette = "7.2.0"
 enum_dispatch = "0.3.13"
+texture2ddecoder = "0.1.2"
+bytemuck = { version = "1.22.0", features = ["extern_crate_alloc"] }
 
 [dev-dependencies]
 league-toolkit = { path = ".", features = ["serde"] }
+image = { version = "0.25.2", default-features = false, features = ["dds", "png"] }
 approx = "0.5.1"
 test-log = "0.2.16"
 insta = { version = "1.39.0", features = ["ron"] }

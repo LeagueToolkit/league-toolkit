@@ -12,6 +12,11 @@ pub enum Error {
     #[error("IO Error: {0}")]
     IOError(#[from] io::Error),
 
+    #[error("Could not make image - invalid dimensions")]
+    InvalidDimensions,
+
     #[error("Error reading image data: {0}")]
     DDSError(#[from] image_dds::error::SurfaceError),
+    #[error(transparent)]
+    TexError(#[from] super::DecodeErr),
 }

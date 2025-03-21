@@ -37,11 +37,4 @@ impl Texture {
             format => format.read_no_magic(reader),
         }
     }
-
-    pub fn to_rgba_image(&self, mipmap: u32) -> Result<image::RgbaImage> {
-        Ok(match self {
-            Self::Dds(dds) => dds.to_rgba_image(mipmap)?,
-            Self::Tex(tex) => unimplemented!(),
-        })
-    }
 }

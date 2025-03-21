@@ -1,6 +1,7 @@
+use bytemuck::{cast_slice, cast_vec};
 use byteorder::{ReadBytesExt, LE};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use std::{io, marker::PhantomData};
+use std::{hint::unreachable_unchecked, io, marker::PhantomData, mem};
 
 mod error;
 mod format;
@@ -8,7 +9,7 @@ mod format;
 pub use error::*;
 pub use format::*;
 
-use super::Compressed;
+use super::{Compressed, ToImageError, Uncompressed};
 
 #[derive(Debug)]
 pub struct Tex<C> {
@@ -17,8 +18,19 @@ pub struct Tex<C> {
     pub format: Format,
     pub resource_type: u8,
     pub flags: TextureFlags,
-    data: Vec<u8>,
-    _c: PhantomData<C>,
+    data: Vec<C>,
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum DecodeErr {
+    #[error("Could not decode ETC1: {0}")]
+    Etc1(&'static str),
+    #[error("Could not decode ETC2/EAC: {0}")]
+    Etc2Eac(&'static str),
+    #[error("Could not decode BC3: {0}")]
+    Bc3(&'static str),
+    #[error("Could not decode BC1: {0}")]
+    Bc1(&'static str),
 }
 
 impl<C> Tex<C> {
@@ -30,8 +42,60 @@ impl<C> Tex<C> {
     }
 }
 
+impl Tex<Uncompressed> {
+    pub fn to_rgba_image(self) -> Result<image::RgbaImage, ToImageError> {
+        image::RgbaImage::from_raw(
+            self.width.into(),
+            self.height.into(),
+            self.data
+                .into_iter()
+                .flat_map(|pixel| {
+                    let [b, g, r, a] = pixel.to_le_bytes();
+                    [r, g, b, a]
+                })
+                .collect(),
+        )
+        .ok_or(ToImageError::InvalidContainerSize)
+    }
+}
+
 impl Tex<Compressed> {
+    pub fn decompress(self) -> Result<Tex<Uncompressed>, DecodeErr> {
+        let data = match matches!(self.format, Format::Bgra8) {
+            true => cast_vec(self.data),
+            false => {
+                let mut data = vec![0; usize::from(self.width) * usize::from(self.height)];
+                let (w, h) = (self.width.into(), self.height.into());
+                let i = &self.data;
+                let o = &mut data;
+                match self.format {
+                    Format::Etc1 => {
+                        texture2ddecoder::decode_etc1(i, w, h, o).map_err(DecodeErr::Etc1)
+                    }
+                    Format::Bc1 => texture2ddecoder::decode_bc1(i, w, h, o).map_err(DecodeErr::Bc1),
+                    Format::Bc3 => texture2ddecoder::decode_bc3(i, w, h, o).map_err(DecodeErr::Bc3),
+                    Format::Etc2Eac => {
+                        texture2ddecoder::decode_etc2_rgba8(i, w, h, o).map_err(DecodeErr::Etc2Eac)
+                    }
+                    // Safety: the outer match ensures we can't reach this arm
+                    Format::Bgra8 => unsafe { unreachable_unchecked() },
+                }?;
+                data
+            }
+        };
+
+        Ok(Tex {
+            width: self.width,
+            height: self.height,
+            format: self.format,
+            resource_type: self.resource_type,
+            flags: self.flags,
+            data,
+        })
+    }
+
     pub fn from_reader<R: io::Read + io::Seek + ?Sized>(reader: &mut R) -> Result<Self, Error> {
+        reader.seek_relative(4)?; // skip magic
         let (width, height) = (reader.read_u16::<LE>()?, reader.read_u16::<LE>()?);
 
         let _is_extended_format = reader.read_u8(); // maybe..
@@ -52,7 +116,6 @@ impl Tex<Compressed> {
             flags,
             resource_type,
             data,
-            _c: PhantomData,
         })
     }
 }
@@ -80,22 +143,27 @@ pub enum TextureAddress {
     Clamp,
 }
 
-#[cfg(test)]
-mod tests {
-    //use std::fs;
-    //use test_log::test;
-    //use crate::core::render::texture::format::TextureFileFormat;
-    //use super::*;
-    //
-    //#[test]
-    //fn test_tex() {
-    //    let format = TextureFileFormat::TEX;
-    //    let mut file =
-    //    fs::File::open("/home/alan/Downloads/aurora_skin02_weapon_tx_cm.chroma_aurora_battlebunny_animasquad_2024.tex").unwrap();
-    //    let tex = format.read_no_magic(&mut file).unwrap();
-    //
-    //    log::debug!("{tex:?}");
-    //
-    //    panic!();
-    //}
-}
+//#[cfg(test)]
+//mod tests {
+//    use super::*;
+//    use image::{buffer::ConvertBuffer as _, codecs::png::PngEncoder};
+//    use io::BufWriter;
+//    use std::fs;
+//    use test_log::test;
+//
+//    #[test]
+//    fn test_tex() {
+//        let mut file = fs::File::open("/home/alan/Downloads/srbackground.tex").unwrap();
+//        let tex = Tex::from_reader(&mut file).unwrap();
+//
+//        let tex = tex.decompress().unwrap();
+//        let img = tex.to_rgba_image().unwrap();
+//
+//        let out = PngEncoder::new(
+//            std::fs::File::create("./out.png")
+//                .map(BufWriter::new)
+//                .unwrap(),
+//        );
+//        img.write_with_encoder(out).unwrap();
+//    }
+//}
