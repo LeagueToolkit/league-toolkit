@@ -1,6 +1,6 @@
 use byteorder::{ReadBytesExt, LE};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use std::io;
+use std::{io, marker::PhantomData};
 
 mod error;
 mod format;
@@ -8,23 +8,29 @@ mod format;
 pub use error::*;
 pub use format::*;
 
+use super::Compressed;
+
 #[derive(Debug)]
-pub struct Tex {
+pub struct Tex<C> {
     pub width: u16,
     pub height: u16,
     pub format: Format,
     pub resource_type: u8,
     pub flags: TextureFlags,
+    data: Vec<u8>,
+    _c: PhantomData<C>,
 }
 
-impl Tex {
+impl<C> Tex<C> {
     pub fn mipmap_count(&self) -> u32 {
         match self.flags.contains(TextureFlags::HasMipMaps) {
             true => ((self.height.max(self.width) as f32).log2().floor() + 1.0) as u32,
             false => 1,
         }
     }
+}
 
+impl Tex<Compressed> {
     pub fn from_reader<R: io::Read + io::Seek + ?Sized>(reader: &mut R) -> Result<Self, Error> {
         let (width, height) = (reader.read_u16::<LE>()?, reader.read_u16::<LE>()?);
 
@@ -45,6 +51,8 @@ impl Tex {
             format,
             flags,
             resource_type,
+            data,
+            _c: PhantomData,
         })
     }
 }

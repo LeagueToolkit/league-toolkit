@@ -1,5 +1,4 @@
 use byteorder::{ReadBytesExt, LE};
-use image_dds::image_from_dds;
 use std::io;
 
 use crate::core::render::texture::format::TextureFileFormat;
@@ -41,7 +40,7 @@ impl Texture {
 
     pub fn to_rgba_image(&self, mipmap: u32) -> Result<image::RgbaImage> {
         Ok(match self {
-            Self::Dds(dds) => image_from_dds(dds, mipmap)?,
+            Self::Dds(dds) => dds.to_rgba_image(mipmap)?,
             Self::Tex(tex) => unimplemented!(),
         })
     }

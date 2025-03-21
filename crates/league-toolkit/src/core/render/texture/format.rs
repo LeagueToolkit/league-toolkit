@@ -3,7 +3,7 @@ use std::{
     io::{self},
 };
 
-use super::{read, Tex, Texture};
+use super::{read, Dds, Tex, Texture};
 use byteorder::{ReadBytesExt, LE};
 
 #[derive(Clone, Copy, Hash, Debug, PartialEq, Eq)]
@@ -55,7 +55,7 @@ impl TextureFileFormat {
         reader: &mut R,
     ) -> read::Result<Texture> {
         match self {
-            TextureFileFormat::DDS => Ok(ddsfile::Dds::read(reader)?.into()),
+            TextureFileFormat::DDS => Ok(Dds::from_reader(reader)?.into()),
             TextureFileFormat::TEX => Ok(Tex::from_reader(reader)?.into()),
             _ => Err(read::TextureReadError::UnsupportedTextureFormat(*self)),
         }
