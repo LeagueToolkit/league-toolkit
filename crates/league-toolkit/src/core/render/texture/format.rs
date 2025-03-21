@@ -4,7 +4,6 @@ use std::{
 };
 
 use super::{Dds, ReadError, Tex, Texture};
-use byteorder::{ReadBytesExt, LE};
 
 #[derive(Clone, Copy, Hash, Debug, PartialEq, Eq)]
 pub enum TextureFileFormat {
@@ -35,15 +34,15 @@ impl TextureFileFormat {
     }
 
     pub fn read<R: io::Read + ?Sized>(&self, reader: &mut R) -> Result<Texture, ReadError> {
-        let magic = reader.read_u32::<LE>()?;
-        let from_magic = TextureFileFormat::from_magic(magic);
-        if from_magic != *self {
-            return Err(ReadError::UnexpectedTextureFormat(*self, from_magic));
+        match self {
+            TextureFileFormat::DDS => Ok(Dds::from_reader(reader)?.into()),
+            TextureFileFormat::TEX => Ok(Tex::from_reader(reader)?.into()),
+            _ => Err(ReadError::UnsupportedTextureFormat(*self)),
         }
-        self.read_no_magic(reader)
     }
 
-    /// Attempts to read a texture of this format - without reading the 4 magic bytes.
+    /// Attempts to read a texture of this format - without reading the 4 magic bytes at the start
+    /// of the file.
     ///
     /// **NOTE**: You **must** make sure the reader does not include the magic bytes!
     pub fn read_no_magic<R: io::Read + ?Sized>(
