@@ -27,8 +27,8 @@ impl Display for TextureFileFormat {
 impl TextureFileFormat {
     pub fn from_magic(magic: u32) -> Self {
         match magic {
-            Dds::<()>::MAGIC => Self::DDS,
-            Tex::<()>::MAGIC => Self::TEX,
+            Dds::MAGIC => Self::DDS,
+            Tex::MAGIC => Self::TEX,
             _ => Self::Unknown,
         }
     }

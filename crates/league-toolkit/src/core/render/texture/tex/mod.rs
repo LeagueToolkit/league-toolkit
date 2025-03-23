@@ -1,7 +1,6 @@
-use bytemuck::{cast_slice, cast_vec};
 use byteorder::{ReadBytesExt, LE};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use std::{hint::unreachable_unchecked, io, marker::PhantomData, mem};
+use std::{hint::unreachable_unchecked, io};
 
 mod error;
 mod format;
@@ -9,16 +8,17 @@ mod format;
 pub use error::*;
 pub use format::*;
 
-use super::{format::TextureFileFormat, Compressed, ReadError, ToImageError, Uncompressed};
+use super::{ReadError, TexSurface, TexSurfaceData};
 
 #[derive(Debug)]
-pub struct Tex<C> {
+pub struct Tex {
     pub width: u16,
     pub height: u16,
     pub format: Format,
     pub resource_type: u8,
     pub flags: TextureFlags,
-    data: Vec<C>,
+    pub mip_count: u32,
+    data: Vec<u8>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -33,41 +33,45 @@ pub enum DecodeErr {
     Bc1(&'static str),
 }
 
-impl<C> Tex<C> {
+impl Tex {
     pub const MAGIC: u32 = u32::from_le_bytes(*b"TEX\0");
-    pub fn mipmap_count(&self) -> u32 {
-        match self.flags.contains(TextureFlags::HasMipMaps) {
-            true => ((self.height.max(self.width) as f32).log2().floor() + 1.0) as u32,
-            false => 1,
-        }
+
+    pub fn has_mipmaps(&self) -> bool {
+        self.flags.contains(TextureFlags::HasMipMaps)
     }
 }
 
-impl Tex<Uncompressed> {
-    pub fn to_rgba_image(self) -> Result<image::RgbaImage, ToImageError> {
-        image::RgbaImage::from_raw(
-            self.width.into(),
-            self.height.into(),
-            self.data
-                .into_iter()
-                .flat_map(|pixel| {
-                    let [b, g, r, a] = pixel.to_le_bytes();
-                    [r, g, b, a]
-                })
-                .collect(),
-        )
-        .ok_or(ToImageError::InvalidContainerSize)
-    }
-}
+impl Tex {
+    pub fn decode_mipmap(&self, level: u32) -> Result<TexSurface<'_>, DecodeErr> {
+        let level = level.min(self.mip_count - 1);
 
-impl Tex<Compressed> {
-    pub fn decompress(self) -> Result<Tex<Uncompressed>, DecodeErr> {
+        // size of full resolution
+        let (width, height): (usize, usize) = (self.width.into(), self.height.into());
+
+        let (block_w, block_h) = self.format.block_size();
+
+        let mip_dims = |level: u32| ((width >> level).max(1), (height >> level).max(1));
+        let mip_bytes = |dims: (usize, usize)| {
+            (dims.0.div_ceil(block_w)) * (dims.1.div_ceil(block_h)) * self.format.bytes_per_block()
+        };
+
+        // sum all mips before our one
+        // (league sorts mips smallest -> largest so our iterator counts up)
+        let off = (level + 1..self.mip_count)
+            .map(|level| mip_bytes(mip_dims(level)))
+            .sum::<usize>();
+
+        // size of mip
+        let (w, h) = mip_dims(level);
+
         let data = match matches!(self.format, Format::Bgra8) {
-            true => cast_vec(self.data),
+            true => TexSurfaceData::Bgra8Slice(
+                // TODO: test me (this is likely wrong)
+                &self.data[off..off + (w * h * self.format.bytes_per_block())],
+            ),
             false => {
-                let mut data = vec![0; usize::from(self.width) * usize::from(self.height)];
-                let (w, h) = (self.width.into(), self.height.into());
-                let i = &self.data;
+                let mut data = vec![0; w * h];
+                let i = &self.data[off..off + mip_bytes((w, h))];
                 let o = &mut data;
                 match self.format {
                     Format::Etc1 => {
@@ -81,16 +85,13 @@ impl Tex<Compressed> {
                     // Safety: the outer match ensures we can't reach this arm
                     Format::Bgra8 => unsafe { unreachable_unchecked() },
                 }?;
-                data
+                TexSurfaceData::Bgra8Owned(data)
             }
         };
 
-        Ok(Tex {
-            width: self.width,
-            height: self.height,
-            format: self.format,
-            resource_type: self.resource_type,
-            flags: self.flags,
+        Ok(TexSurface {
+            width: w as _,
+            height: h as _,
             data,
         })
     }
@@ -127,12 +128,16 @@ impl Tex<Compressed> {
             flags,
             resource_type,
             data,
+            mip_count: match flags.contains(TextureFlags::HasMipMaps) {
+                true => ((height.max(width) as f32).log2().floor() + 1.0) as u32,
+                false => 1,
+            },
         })
     }
 }
 
 bitflags::bitflags! {
-    #[derive(Debug)]
+    #[derive(Debug, Clone, Copy)]
     pub struct TextureFlags: u8 {
         const HasMipMaps = 1;
         const Mystery = 2;
@@ -157,24 +162,31 @@ pub enum TextureAddress {
 //#[cfg(test)]
 //mod tests {
 //    use super::*;
-//    use image::{buffer::ConvertBuffer as _, codecs::png::PngEncoder};
+//    use image::codecs::png::PngEncoder;
 //    use io::BufWriter;
 //    use std::fs;
 //    use test_log::test;
 //
 //    #[test]
-//    fn test_tex() {
-//        let mut file = fs::File::open("/home/alan/Downloads/srbackground.tex").unwrap();
+//    fn tex() {
+//        let mut file = fs::File::open("/home/alan/Downloads/ashe_base_2011_tx_cm.tex").unwrap();
 //        let tex = Tex::from_reader(&mut file).unwrap();
 //
-//        let tex = tex.decompress().unwrap();
-//        let img = tex.to_rgba_image().unwrap();
+//        dbg!(tex.format);
+//        dbg!(tex.width, tex.height);
+//        dbg!(tex.has_mipmaps());
+//        dbg!(tex.mip_count);
+//        for i in 0..tex.mip_count {
+//            let tex = tex.decode_mipmap(i).unwrap();
+//            let img = tex.into_rgba_image().unwrap();
 //
-//        let out = PngEncoder::new(
-//            std::fs::File::create("./out.png")
-//                .map(BufWriter::new)
-//                .unwrap(),
-//        );
-//        img.write_with_encoder(out).unwrap();
+//            let out = PngEncoder::new(
+//                std::fs::File::create(format!("./out_{i}.png"))
+//                    .map(BufWriter::new)
+//                    .unwrap(),
+//            );
+//            img.write_with_encoder(out).unwrap();
+//        }
+//        panic!("success");
 //    }
 //}
