@@ -23,6 +23,23 @@ impl Format {
         }
     }
 
+    pub fn block_size(&self) -> (usize, usize) {
+        match self {
+            Format::Bgra8 => (1, 1),
+            _ => (4, 4),
+        }
+    }
+
+    pub fn bytes_per_block(&self) -> usize {
+        match self {
+            Format::Etc1 => 8,
+            Format::Etc2Eac => 16,
+            Format::Bc1 => 8,
+            Format::Bc3 => 16,
+            Format::Bgra8 => 4,
+        }
+    }
+
     pub fn try_into_dds_format(self) -> Result<image_dds::ImageFormat, Error> {
         use image_dds::ImageFormat as F;
         match self {
