@@ -12,15 +12,22 @@ pub struct Dds {
 
 impl Dds {
     pub const MAGIC: u32 = u32::from_le_bytes(*b"DDS ");
+
+    #[inline]
+    #[must_use]
     pub fn width(&self) -> u32 {
         self.file.get_width()
     }
+
+    #[inline]
+    #[must_use]
     pub fn height(&self) -> u32 {
         self.file.get_width()
     }
 }
 
 impl Dds {
+    #[inline]
     pub fn decode_mipmap(&self, mipmap: u32) -> Result<SurfaceRgba8<Vec<u8>>, DecodeErr> {
         Ok(image_dds::Surface::from_dds(&self.file)?
             .decode_layers_mipmaps_rgba8(0..self.file.get_num_array_layers(), mipmap..mipmap + 1)?)
@@ -46,6 +53,8 @@ impl Dds {
         }
         Ok(Self::from_reader_no_magic(reader)?)
     }
+
+    #[inline]
     pub fn from_reader_no_magic<R: io::Read + ?Sized>(
         reader: &mut R,
     ) -> Result<Self, ddsfile::Error> {
