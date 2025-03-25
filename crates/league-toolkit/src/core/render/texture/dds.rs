@@ -61,10 +61,25 @@ impl Dds {
         Ok(Self::from_reader_no_magic(reader)?)
     }
 
-    #[inline]
     pub fn from_reader_no_magic<R: io::Read + ?Sized>(
         reader: &mut R,
     ) -> Result<Self, ddsfile::Error> {
-        ddsfile::Dds::read(reader).map(|file| Self { file })
+        let header = ddsfile::Header::read(&mut *reader)?;
+
+        let header10 = if header.spf.fourcc == Some(ddsfile::FourCC(<ddsfile::FourCC>::DX10)) {
+            Some(ddsfile::Header10::read(&mut *reader)?)
+        } else {
+            None
+        };
+
+        let mut data: Vec<u8> = Vec::new();
+        reader.read_to_end(&mut data)?;
+        Ok(Self {
+            file: ddsfile::Dds {
+                header,
+                header10,
+                data,
+            },
+        })
     }
 }
