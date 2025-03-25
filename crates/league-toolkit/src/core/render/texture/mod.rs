@@ -93,6 +93,14 @@ impl Texture {
             Texture::Tex(tex) => tex.height.into(),
         }
     }
+    #[inline]
+    #[must_use]
+    pub fn mip_count(&self) -> u32 {
+        match self {
+            Texture::Dds(dds) => dds.mip_count(),
+            Texture::Tex(tex) => tex.mip_count,
+        }
+    }
 }
 
 impl From<Tex> for Texture {

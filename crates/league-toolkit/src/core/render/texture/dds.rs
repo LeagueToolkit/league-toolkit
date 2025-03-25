@@ -24,6 +24,12 @@ impl Dds {
     pub fn height(&self) -> u32 {
         self.file.get_width()
     }
+
+    #[inline]
+    #[must_use]
+    pub fn mip_count(&self) -> u32 {
+        self.file.get_num_mipmap_levels()
+    }
 }
 
 impl Dds {
