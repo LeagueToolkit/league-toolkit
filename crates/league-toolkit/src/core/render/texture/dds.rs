@@ -35,6 +35,7 @@ impl Dds {
 impl Dds {
     #[inline]
     pub fn decode_mipmap(&self, mipmap: u32) -> Result<SurfaceRgba8<Vec<u8>>, DecodeErr> {
+        let mipmap = mipmap.min(self.file.get_num_mipmap_levels() - 1);
         Ok(image_dds::Surface::from_dds(&self.file)?
             .decode_layers_mipmaps_rgba8(0..self.file.get_num_array_layers(), mipmap..mipmap + 1)?)
     }
