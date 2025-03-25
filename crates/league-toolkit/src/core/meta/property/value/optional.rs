@@ -9,8 +9,8 @@ use io_ext::{ReaderExt as _, WriterExt as _};
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, PartialEq, Debug)]
 pub struct OptionalValue {
-    kind: BinPropertyKind,
-    value: Option<Box<PropertyValueEnum>>,
+    pub kind: BinPropertyKind,
+    pub value: Option<Box<PropertyValueEnum>>,
 }
 
 impl PropertyValue for OptionalValue {
