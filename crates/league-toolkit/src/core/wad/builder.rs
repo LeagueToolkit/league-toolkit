@@ -185,8 +185,11 @@ impl WadBuilder {
                 }
                 #[cfg(feature = "ruzstd")]
                 {
-                    // TODO: impl ruzstd compress for wad
-                    return Err(WadBuilderError::UnsupportedCompressionType(compression));
+                    ruzstd::encoding::compress(
+                        data,
+                        &mut compressed_data,
+                        ruzstd::encoding::CompressionLevel::Fastest,
+                    );
                 }
             }
             WadChunkCompression::Satellite => {
