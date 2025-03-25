@@ -74,9 +74,9 @@ impl TextureFileFormat {
 //        let Texture::Dds(dds) = format.read_no_magic(&mut file).unwrap() else {
 //            unreachable!();
 //        };
-//        let dds = dds.decompress().unwrap();
+//        let dds = dds.decode_mipmap(0).unwrap();
 //
-//        let img = dds.to_rgba_image(0).unwrap();
+//        let img = dds.into_image().unwrap();
 //        let out = PngEncoder::new(
 //            std::fs::File::create("./out.png")
 //                .map(BufWriter::new)
