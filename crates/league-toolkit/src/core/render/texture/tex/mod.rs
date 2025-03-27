@@ -1,0 +1,192 @@
+use byteorder::{ReadBytesExt, LE};
+use num_enum::{IntoPrimitive, TryFromPrimitive};
+use std::{hint::unreachable_unchecked, io};
+
+mod error;
+mod format;
+
+pub use error::*;
+pub use format::*;
+
+use super::{ReadError, TexSurface, TexSurfaceData};
+
+#[derive(Debug)]
+pub struct Tex {
+    pub width: u16,
+    pub height: u16,
+    pub format: Format,
+    pub resource_type: u8,
+    pub flags: TextureFlags,
+    pub mip_count: u32,
+    data: Vec<u8>,
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum DecodeErr {
+    #[error("Could not decode ETC1: {0}")]
+    Etc1(&'static str),
+    #[error("Could not decode ETC2/EAC: {0}")]
+    Etc2Eac(&'static str),
+    #[error("Could not decode BC3: {0}")]
+    Bc3(&'static str),
+    #[error("Could not decode BC1: {0}")]
+    Bc1(&'static str),
+}
+
+impl Tex {
+    pub const MAGIC: u32 = u32::from_le_bytes(*b"TEX\0");
+
+    pub fn has_mipmaps(&self) -> bool {
+        self.flags.contains(TextureFlags::HasMipMaps)
+    }
+}
+
+impl Tex {
+    pub fn decode_mipmap(&self, level: u32) -> Result<TexSurface<'_>, DecodeErr> {
+        let level = level.min(self.mip_count - 1);
+
+        // size of full resolution
+        let (width, height): (usize, usize) = (self.width.into(), self.height.into());
+
+        let (block_w, block_h) = self.format.block_size();
+
+        let mip_dims = |level: u32| ((width >> level).max(1), (height >> level).max(1));
+        let mip_bytes = |dims: (usize, usize)| {
+            (dims.0.div_ceil(block_w)) * (dims.1.div_ceil(block_h)) * self.format.bytes_per_block()
+        };
+
+        // sum all mips before our one
+        // (league sorts mips smallest -> largest so our iterator counts up)
+        let off = (level + 1..self.mip_count)
+            .map(|level| mip_bytes(mip_dims(level)))
+            .sum::<usize>();
+
+        // size of mip
+        let (w, h) = mip_dims(level);
+
+        let data = match matches!(self.format, Format::Bgra8) {
+            true => TexSurfaceData::Bgra8Slice(
+                // TODO: test me (this is likely wrong)
+                &self.data[off..off + (w * h * self.format.bytes_per_block())],
+            ),
+            false => {
+                let mut data = vec![0; w * h];
+                let i = &self.data[off..off + mip_bytes((w, h))];
+                let o = &mut data;
+                match self.format {
+                    Format::Etc1 => {
+                        texture2ddecoder::decode_etc1(i, w, h, o).map_err(DecodeErr::Etc1)
+                    }
+                    Format::Bc1 => texture2ddecoder::decode_bc1(i, w, h, o).map_err(DecodeErr::Bc1),
+                    Format::Bc3 => texture2ddecoder::decode_bc3(i, w, h, o).map_err(DecodeErr::Bc3),
+                    Format::Etc2Eac => {
+                        texture2ddecoder::decode_etc2_rgba8(i, w, h, o).map_err(DecodeErr::Etc2Eac)
+                    }
+                    // Safety: the outer match ensures we can't reach this arm
+                    Format::Bgra8 => unsafe { unreachable_unchecked() },
+                }?;
+                TexSurfaceData::Bgra8Owned(data)
+            }
+        };
+
+        Ok(TexSurface {
+            width: w as _,
+            height: h as _,
+            data,
+        })
+    }
+
+    pub fn from_reader<R: io::Read + ?Sized>(reader: &mut R) -> Result<Self, ReadError> {
+        let magic = reader.read_u32::<LE>()?; // skip magic
+        if magic != Self::MAGIC {
+            return Err(ReadError::UnexpectedMagic {
+                expected: Self::MAGIC,
+                got: magic,
+            });
+        }
+
+        Ok(Self::from_reader_no_magic(reader)?)
+    }
+    pub fn from_reader_no_magic<R: io::Read + ?Sized>(reader: &mut R) -> Result<Self, Error> {
+        let (width, height) = (reader.read_u16::<LE>()?, reader.read_u16::<LE>()?);
+
+        let _is_extended_format = reader.read_u8(); // maybe..
+        let format = Format::from_u8(reader.read_u8()?)?;
+        // (0: texture, 1: cubemap, 2: surface, 3: volumetexture)
+        let resource_type = reader.read_u8()?; // maybe..
+
+        let flags = reader.read_u8()?;
+        let flags = TextureFlags::from_bits(flags).ok_or(Error::InvalidTextureFlags(flags))?;
+
+        let mut data = Vec::new();
+        reader.read_to_end(&mut data)?;
+
+        Ok(Self {
+            width,
+            height,
+            format,
+            flags,
+            resource_type,
+            data,
+            mip_count: match flags.contains(TextureFlags::HasMipMaps) {
+                true => ((height.max(width) as f32).log2().floor() + 1.0) as u32,
+                false => 1,
+            },
+        })
+    }
+}
+
+bitflags::bitflags! {
+    #[derive(Debug, Clone, Copy)]
+    pub struct TextureFlags: u8 {
+        const HasMipMaps = 1;
+        const Mystery = 2;
+    }
+}
+
+#[derive(TryFromPrimitive, IntoPrimitive, Clone, Copy, Debug, Hash, PartialEq, Eq)]
+#[repr(u8)]
+pub enum TextureFilter {
+    None,
+    Nearest,
+    Linear,
+}
+
+#[derive(TryFromPrimitive, IntoPrimitive, Clone, Copy, Debug, Hash, PartialEq, Eq)]
+#[repr(u8)]
+pub enum TextureAddress {
+    Wrap,
+    Clamp,
+}
+
+//#[cfg(test)]
+//mod tests {
+//    use super::*;
+//    use image::codecs::png::PngEncoder;
+//    use io::BufWriter;
+//    use std::fs;
+//    use test_log::test;
+//
+//    #[test]
+//    fn tex() {
+//        let mut file = fs::File::open("/home/alan/Downloads/ashe_base_2011_tx_cm.tex").unwrap();
+//        let tex = Tex::from_reader(&mut file).unwrap();
+//
+//        dbg!(tex.format);
+//        dbg!(tex.width, tex.height);
+//        dbg!(tex.has_mipmaps());
+//        dbg!(tex.mip_count);
+//        for i in 0..tex.mip_count {
+//            let tex = tex.decode_mipmap(i).unwrap();
+//            let img = tex.into_rgba_image().unwrap();
+//
+//            let out = PngEncoder::new(
+//                std::fs::File::create(format!("./out_{i}.png"))
+//                    .map(BufWriter::new)
+//                    .unwrap(),
+//            );
+//            img.write_with_encoder(out).unwrap();
+//        }
+//        panic!("success");
+//    }
+//}
