@@ -13,7 +13,7 @@ pub struct WadDecoder<'wad, TSource: Read + Seek> {
     pub(crate) source: &'wad mut TSource,
 }
 
-impl<'wad, TSource> WadDecoder<'wad, TSource>
+impl<TSource> WadDecoder<'_, TSource>
 where
     TSource: Read + Seek,
 {
@@ -35,7 +35,6 @@ where
             ))),
             WadChunkCompression::Zstd => self.decode_zstd_chunk(chunk),
             WadChunkCompression::ZstdMulti => self.decode_zstd_multi_chunk(chunk),
-            _ => todo!(),
         }
     }
 
@@ -62,7 +61,7 @@ where
         }
         #[cfg(feature = "ruzstd")]
         {
-            ruzstd::StreamingDecoder::new(&mut self.source)
+            ruzstd::decoding::StreamingDecoder::new(&mut self.source)
                 .expect("failed to create ruzstd decoder")
                 .read_exact(&mut data)?;
         }
@@ -98,7 +97,7 @@ where
         }
         #[cfg(feature = "ruzstd")]
         {
-            ruzstd::StreamingDecoder::new(&mut self.source)
+            ruzstd::decoding::StreamingDecoder::new(&mut self.source)
                 .expect("failed to create ruzstd decoder")
                 .read(&mut data[zstd_magic_offset..])?;
         }

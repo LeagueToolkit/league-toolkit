@@ -177,9 +177,20 @@ impl WadBuilder {
                 encoder.read_to_end(&mut compressed_data)?;
             }
             WadChunkCompression::Zstd => {
-                let mut encoder = zstd::Encoder::new(BufWriter::new(&mut compressed_data), 3)?;
-                encoder.write_all(data)?;
-                encoder.finish()?;
+                #[cfg(feature = "zstd")]
+                {
+                    let mut encoder = zstd::Encoder::new(BufWriter::new(&mut compressed_data), 3)?;
+                    encoder.write_all(data)?;
+                    encoder.finish()?;
+                }
+                #[cfg(feature = "ruzstd")]
+                {
+                    ruzstd::encoding::compress(
+                        data,
+                        &mut compressed_data,
+                        ruzstd::encoding::CompressionLevel::Fastest,
+                    );
+                }
             }
             WadChunkCompression::Satellite => {
                 return Err(WadBuilderError::UnsupportedCompressionType(compression));
