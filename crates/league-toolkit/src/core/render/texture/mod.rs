@@ -10,9 +10,6 @@ pub use dds::Dds;
 pub use error::*;
 pub use tex::Tex;
 
-pub type Compressed = u8;
-pub type Uncompressed = u32;
-
 #[derive(Debug)]
 pub enum Texture {
     Dds(Dds),
