@@ -4,11 +4,13 @@ use std::{hint::unreachable_unchecked, io};
 
 mod error;
 mod format;
+mod surface;
 
 pub use error::*;
 pub use format::*;
+pub use surface::*;
 
-use super::{ReadError, TexSurface, TexSurfaceData};
+use super::ReadError;
 
 #[derive(Debug)]
 pub struct Tex {

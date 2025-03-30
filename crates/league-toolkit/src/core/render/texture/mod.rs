@@ -9,54 +9,19 @@ pub mod tex;
 pub use dds::Dds;
 pub use error::*;
 pub use tex::Tex;
+use tex::TexSurface;
 
 #[derive(Debug)]
 pub enum Texture {
     Dds(Dds),
     Tex(Tex),
 }
-pub struct TexSurface<'a> {
-    width: u32,
-    height: u32,
-    data: TexSurfaceData<'a>,
-}
-pub enum TexSurfaceData<'a> {
-    Bgra8Slice(&'a [u8]),
-    Bgra8Owned(Vec<u32>),
-}
+
 pub enum Surface<'a> {
     Tex(TexSurface<'a>),
     DdsRgba8(image_dds::SurfaceRgba8<Vec<u8>>),
 }
 
-impl TexSurface<'_> {
-    pub fn into_rgba_image(self) -> Result<image::RgbaImage, ToImageError> {
-        image::RgbaImage::from_raw(
-            self.width,
-            self.height,
-            match self.data {
-                TexSurfaceData::Bgra8Slice(data) => data
-                    .chunks_exact(4)
-                    .flat_map(|pixel| {
-                        let [b, g, r, a] = pixel else {
-                            unreachable!();
-                        };
-                        [r, g, b, a]
-                    })
-                    .copied()
-                    .collect(),
-                TexSurfaceData::Bgra8Owned(vec) => vec
-                    .into_iter()
-                    .flat_map(|pixel| {
-                        let [b, g, r, a] = pixel.to_le_bytes();
-                        [r, g, b, a]
-                    })
-                    .collect(),
-            },
-        )
-        .ok_or(ToImageError::InvalidContainerSize)
-    }
-}
 impl Surface<'_> {
     pub fn into_rgba_image(self) -> Result<image::RgbaImage, ToImageError> {
         match self {
