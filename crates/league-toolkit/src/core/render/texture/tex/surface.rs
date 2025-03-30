@@ -1,10 +1,12 @@
 use super::super::ToImageError;
 
+/// A decoded tex mipmap
 pub struct TexSurface<'a> {
     pub width: u32,
     pub height: u32,
     pub data: TexSurfaceData<'a>,
 }
+
 pub enum TexSurfaceData<'a> {
     Bgra8Slice(&'a [u8]),
     Bgra8Owned(Vec<u32>),

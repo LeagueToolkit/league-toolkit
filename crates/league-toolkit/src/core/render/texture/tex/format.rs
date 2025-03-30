@@ -39,16 +39,4 @@ impl Format {
             Format::Bgra8 => 4,
         }
     }
-
-    pub fn try_into_dds_format(self) -> Result<image_dds::ImageFormat, Error> {
-        use image_dds::ImageFormat as F;
-        match self {
-            Format::Bgra8 => Some(F::Bgra8Unorm),
-            Format::Etc1 => None,
-            Format::Etc2Eac => None,
-            Format::Bc1 => Some(F::BC1RgbaUnorm),
-            Format::Bc3 => Some(F::BC3RgbaUnorm),
-        }
-        .ok_or(Error::UnsupportedTextureFormat(self))
-    }
 }

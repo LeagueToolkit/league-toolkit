@@ -12,6 +12,7 @@ pub use surface::*;
 
 use super::ReadError;
 
+/// League extended texture file (.tex)
 #[derive(Debug)]
 pub struct Tex {
     pub width: u16,
@@ -23,27 +24,18 @@ pub struct Tex {
     data: Vec<u8>,
 }
 
-#[derive(thiserror::Error, Debug)]
-pub enum DecodeErr {
-    #[error("Could not decode ETC1: {0}")]
-    Etc1(&'static str),
-    #[error("Could not decode ETC2/EAC: {0}")]
-    Etc2Eac(&'static str),
-    #[error("Could not decode BC3: {0}")]
-    Bc3(&'static str),
-    #[error("Could not decode BC1: {0}")]
-    Bc1(&'static str),
-}
-
 impl Tex {
     pub const MAGIC: u32 = u32::from_le_bytes(*b"TEX\0");
 
+    /// Checks the texture flags for whether the texture contains mipmaps
     pub fn has_mipmaps(&self) -> bool {
         self.flags.contains(TextureFlags::HasMipMaps)
     }
 }
 
 impl Tex {
+    /// Try to decode a single mipmap, where 0 is full resolution, and [mip_count] is the smallest
+    /// mip (1x1).
     pub fn decode_mipmap(&self, level: u32) -> Result<TexSurface<'_>, DecodeErr> {
         let level = level.min(self.mip_count - 1);
 

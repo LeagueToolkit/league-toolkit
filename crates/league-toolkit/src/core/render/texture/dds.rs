@@ -5,6 +5,7 @@ use image_dds::SurfaceRgba8;
 
 use super::error::ReadError;
 
+/// .dds texture file
 #[derive(Debug)]
 pub struct Dds {
     file: ddsfile::Dds,

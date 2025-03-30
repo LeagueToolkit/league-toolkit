@@ -20,3 +20,15 @@ pub enum Error {
     #[error(transparent)]
     TexError(#[from] super::DecodeErr),
 }
+
+#[derive(thiserror::Error, Debug)]
+pub enum DecodeErr {
+    #[error("Could not decode ETC1: {0}")]
+    Etc1(&'static str),
+    #[error("Could not decode ETC2/EAC: {0}")]
+    Etc2Eac(&'static str),
+    #[error("Could not decode BC3: {0}")]
+    Bc3(&'static str),
+    #[error("Could not decode BC1: {0}")]
+    Bc1(&'static str),
+}
