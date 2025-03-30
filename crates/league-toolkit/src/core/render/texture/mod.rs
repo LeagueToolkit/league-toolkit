@@ -1,3 +1,5 @@
+//! League extended texture (.tex) & DDS texture handling
+
 pub mod dds;
 pub mod error;
 pub mod format;
