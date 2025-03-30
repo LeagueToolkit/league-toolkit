@@ -33,7 +33,7 @@ impl SkinnedMesh {
         vertex_buffer: VertexBuffer,
         index_buffer: IndexBuffer<u16>,
     ) -> Self {
-        let aabb = AABB::from_vertex_iter(
+        let aabb = AABB::of_points(
             vertex_buffer
                 .accessor::<Vec3>(ElementName::Position)
                 .expect("vertex buffer must have position element")
@@ -48,10 +48,12 @@ impl SkinnedMesh {
         }
     }
 
+    /// Bounding box of this mesh
     pub fn aabb(&self) -> AABB {
         self.aabb
     }
 
+    /// Bounding sphere of this mesh
     pub fn bounding_sphere(&self) -> Sphere {
         self.bounding_sphere
     }
