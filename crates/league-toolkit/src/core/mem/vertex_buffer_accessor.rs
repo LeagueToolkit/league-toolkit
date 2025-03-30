@@ -117,7 +117,7 @@ pub struct Iter<'a, T: Format> {
     counter: usize,
 }
 
-impl<'a, T: Format> Iterator for Iter<'a, T> {
+impl<T: Format> Iterator for Iter<'_, T> {
     type Item = T::Item;
 
     fn next(&mut self) -> Option<Self::Item> {
