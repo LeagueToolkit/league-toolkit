@@ -34,7 +34,7 @@ impl Tex {
 }
 
 impl Tex {
-    /// Try to decode a single mipmap, where 0 is full resolution, and [mip_count] is the smallest
+    /// Try to decode a single mipmap, where 0 is full resolution, and [Self::mip_count] is the smallest
     /// mip (1x1).
     pub fn decode_mipmap(&self, level: u32) -> Result<TexSurface<'_>, DecodeErr> {
         let level = level.min(self.mip_count - 1);
