@@ -1,6 +1,7 @@
 use crate::core::animation::{joint, Joint, RigResource};
 use std::collections::VecDeque;
 
+/// Builder for [`RigResource`]
 pub struct Builder {
     name: String,
     asset_name: String,
@@ -15,11 +16,13 @@ impl Builder {
             root_joints: vec![],
         }
     }
+
     pub fn with_root_joint(mut self, child: joint::Builder) -> Self {
         self.add_root_joint(child);
         self
     }
 
+    /// Mutably add a root joint
     pub fn add_root_joint(&mut self, child: joint::Builder) {
         self.root_joints.push(child);
     }

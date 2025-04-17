@@ -1,8 +1,8 @@
-pub mod color;
+mod color;
 pub use color::*;
 
-pub mod sphere;
+mod sphere;
 pub use sphere::*;
 
-pub mod aabb;
+mod aabb;
 pub use aabb::*;

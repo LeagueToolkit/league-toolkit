@@ -3,7 +3,10 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 pub use range::*;
 
-use crate::core::mem::{ElementName, IndexBuffer, VertexBuffer, VertexBufferDescription};
+use crate::core::mem::{
+    index::IndexBuffer,
+    vertex::{ElementName, VertexBuffer, VertexBufferDescription},
+};
 use league_primitives::{Sphere, AABB};
 
 use super::Result;
@@ -21,16 +24,16 @@ pub struct SkinnedMesh {
     bounding_sphere: Sphere,
     ranges: Vec<SkinnedMeshRange>,
     vertex_buffer: VertexBuffer,
-    index_buffer: IndexBuffer,
+    index_buffer: IndexBuffer<u16>,
 }
 
 impl SkinnedMesh {
     pub fn new(
         ranges: Vec<SkinnedMeshRange>,
         vertex_buffer: VertexBuffer,
-        index_buffer: IndexBuffer,
+        index_buffer: IndexBuffer<u16>,
     ) -> Self {
-        let aabb = AABB::from_vertex_iter(
+        let aabb = AABB::of_points(
             vertex_buffer
                 .accessor::<Vec3>(ElementName::Position)
                 .expect("vertex buffer must have position element")
@@ -45,10 +48,12 @@ impl SkinnedMesh {
         }
     }
 
+    /// Bounding box of this mesh
     pub fn aabb(&self) -> AABB {
         self.aabb
     }
 
+    /// Bounding sphere of this mesh
     pub fn bounding_sphere(&self) -> Sphere {
         self.bounding_sphere
     }
@@ -61,7 +66,7 @@ impl SkinnedMesh {
         &self.vertex_buffer
     }
 
-    pub fn index_buffer(&self) -> &IndexBuffer {
+    pub fn index_buffer(&self) -> &IndexBuffer<u16> {
         &self.index_buffer
     }
 }

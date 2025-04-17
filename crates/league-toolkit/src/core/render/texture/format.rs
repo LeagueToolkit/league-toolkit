@@ -7,7 +7,7 @@ use super::{Dds, ReadError, Tex, Texture};
 
 #[derive(Clone, Copy, Hash, Debug, PartialEq, Eq)]
 pub enum TextureFileFormat {
-    /// https://en.wikipedia.org/wiki/DirectDraw_Surface
+    /// <https://en.wikipedia.org/wiki/DirectDraw_Surface>
     DDS,
     /// League of Legends proprietary format
     TEX,

@@ -109,7 +109,7 @@ impl LeagueFileKind {
     }
 
     /// Identify the type of league file from the magic at the start of the file. You must provide at
-    /// least [`MAX_MAGIC_SIZE`] bytes of data to be able to detect all file types.
+    /// least [`super::MAX_MAGIC_SIZE`] bytes of data to be able to detect all file types.
     ///
     /// # Examples
     /// ```

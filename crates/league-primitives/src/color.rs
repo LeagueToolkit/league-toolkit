@@ -1,6 +1,7 @@
 use byteorder::{ByteOrder, ReadBytesExt, WriteBytesExt};
 use std::io::{self, Write};
 
+/// Generic RGBA Color struct
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct Color<T = f32> {
@@ -12,7 +13,7 @@ pub struct Color<T = f32> {
 
 impl<T> AsRef<Color<T>> for Color<T> {
     fn as_ref(&self) -> &Color<T> {
-        &self
+        self
     }
 }
 
@@ -32,6 +33,7 @@ impl Color<u8> {
         Ok(())
     }
 
+    #[inline]
     pub fn from_reader<R: io::Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         Ok(Self {
             r: reader.read_u8()?,
@@ -55,6 +57,7 @@ impl Color<f32> {
         Ok(())
     }
 
+    #[inline]
     pub fn from_reader<E: ByteOrder, R: io::Read + ?Sized>(reader: &mut R) -> io::Result<Self> {
         Ok(Self {
             r: reader.read_f32::<E>()?,
