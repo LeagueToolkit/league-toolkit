@@ -1,11 +1,15 @@
+mod commands;
+mod fantome;
+mod utils;
+
 use clap::{Parser, Subcommand};
 use commands::{
-    extract_mod_package, info_mod_package, init_mod_project, pack_mod_project,
-    ExtractModPackageArgs, InfoModPackageArgs, InitModProjectArgs, PackModProjectArgs,
+    extract_mod_package, fantome_to_project, info_mod_package, init_mod_project, pack_mod_project,
+    ExtractModPackageArgs, FantomeToProjectArgs, InfoModPackageArgs, InitModProjectArgs,
+    PackModProjectArgs,
 };
-
-mod commands;
-mod utils;
+use tracing::{error, info, warn, Level};
+use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -53,9 +57,39 @@ pub enum Commands {
         #[arg(short, long, default_value = "extracted")]
         output_dir: String,
     },
+    FantomeToProject {
+        /// The path to the fantome file
+        #[arg(short, long)]
+        fantome_path: String,
+
+        /// Where to create the mod project
+        #[arg(short, long)]
+        output_dir: String,
+
+        /// The path to the hashtable file to use for WAD files
+        #[arg(short, long)]
+        hashtable_path: String,
+    },
 }
 
 fn main() -> eyre::Result<()> {
+    // Initialize tracing
+    FmtSubscriber::builder()
+        .with_env_filter(
+            EnvFilter::from_default_env()
+                .add_directive(Level::INFO.into())
+                .add_directive("league_mod=debug".parse().unwrap()),
+        )
+        .with_file(true)
+        .with_line_number(true)
+        .with_thread_ids(true)
+        .with_thread_names(true)
+        .with_target(true)
+        .pretty()
+        .init();
+
+    info!("Starting League Mod Tool");
+
     let args = Args::parse();
 
     match args.command {
@@ -63,20 +97,26 @@ fn main() -> eyre::Result<()> {
             name,
             display_name,
             output_dir,
-        } => init_mod_project(InitModProjectArgs {
-            name,
-            display_name,
-            output_dir,
-        }),
+        } => {
+            info!("Initializing new mod project");
+            init_mod_project(InitModProjectArgs {
+                name,
+                display_name,
+                output_dir,
+            })
+        }
         Commands::Pack {
             config_path,
             file_name,
             output_dir,
-        } => pack_mod_project(PackModProjectArgs {
-            config_path,
-            file_name,
-            output_dir,
-        }),
+        } => {
+            info!("Packing mod project");
+            pack_mod_project(PackModProjectArgs {
+                config_path,
+                file_name,
+                output_dir,
+            })
+        }
         Commands::Info { file_path } => info_mod_package(InfoModPackageArgs { file_path }),
         Commands::Extract {
             file_path,
@@ -84,6 +124,15 @@ fn main() -> eyre::Result<()> {
         } => extract_mod_package(ExtractModPackageArgs {
             file_path,
             output_dir,
+        }),
+        Commands::FantomeToProject {
+            fantome_path,
+            output_dir,
+            hashtable_path,
+        } => fantome_to_project(FantomeToProjectArgs {
+            fantome_path,
+            output_dir,
+            hashtable_path,
         }),
     }
 }
