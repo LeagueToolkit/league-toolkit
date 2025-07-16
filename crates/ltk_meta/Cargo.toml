@@ -20,4 +20,4 @@ paste = { workspace = true }
 serde = { workspace = true, optional = true }
 
 io-ext = { path = "../io-ext" }
-league-primitives = { path = "../league-primitives" }
+ltk_primitives = { path = "../ltk_primitives" }

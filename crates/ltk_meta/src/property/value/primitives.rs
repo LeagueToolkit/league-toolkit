@@ -36,7 +36,7 @@ macro_rules! impl_prim {
 
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 use glam::{Mat4, Vec2, Vec3, Vec4};
-use league_primitives::Color;
+use ltk_primitives::Color;
 
 // A "primitive" in this case is just a PropertyValue that just encapsulates
 // a single struct/rust primitive.

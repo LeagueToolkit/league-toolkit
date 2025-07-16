@@ -2,7 +2,7 @@ use crate::{error::ParseError, r#static::MAGIC, StaticMesh, StaticMeshFace};
 use byteorder::{ReadBytesExt, LE};
 use glam::Vec3;
 use io_ext::ReaderExt;
-use league_primitives::Color;
+use ltk_primitives::Color;
 use std::io::Read;
 
 impl StaticMesh {

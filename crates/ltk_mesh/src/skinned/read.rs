@@ -6,7 +6,7 @@ use crate::{
 };
 use byteorder::{ReadBytesExt, LE};
 use io_ext::ReaderExt;
-use league_primitives::{Sphere, AABB};
+use ltk_primitives::{Sphere, AABB};
 use num_enum::TryFromPrimitiveError;
 use std::io::Read;
 

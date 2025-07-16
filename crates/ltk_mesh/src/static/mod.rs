@@ -1,7 +1,7 @@
 use glam::Vec3;
 
 pub use face::*;
-use league_primitives::Color;
+use ltk_primitives::Color;
 
 mod face;
 mod read;

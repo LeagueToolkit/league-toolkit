@@ -13,4 +13,4 @@ lazy_static = { workspace = true }
 glam = { workspace = true }
 
 io-ext = { path = "../io-ext" }
-league-primitives = { path = "../league-primitives" }
+ltk_primitives = { path = "../ltk_primitives" }

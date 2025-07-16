@@ -7,7 +7,7 @@ use crate::mem::{
     index::IndexBuffer,
     vertex::{ElementName, VertexBuffer, VertexBufferDescription},
 };
-use league_primitives::{Sphere, AABB};
+use ltk_primitives::{Sphere, AABB};
 
 use super::Result;
 

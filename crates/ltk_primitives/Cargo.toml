@@ -1,5 +1,5 @@
 [package]
-name = "league-primitives"
+name = "ltk_primitives"
 version = "0.1.0"
 edition = "2021"
 

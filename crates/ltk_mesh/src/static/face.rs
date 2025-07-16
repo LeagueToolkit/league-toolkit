@@ -4,7 +4,7 @@ use std::io::Read;
 use byteorder::{ReadBytesExt, LE};
 use glam::{vec2, Vec2};
 
-use league_primitives::Color;
+use ltk_primitives::Color;
 
 #[derive(Debug, Clone)]
 pub struct StaticMeshFace {
