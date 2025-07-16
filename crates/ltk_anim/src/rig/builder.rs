@@ -62,6 +62,8 @@ impl Builder {
 
 #[cfg(test)]
 mod tests {
+    use crate::Joint;
+
     use super::*;
     use insta::assert_debug_snapshot;
 
