@@ -1,9 +1,8 @@
-use crate::core::animation;
-use crate::core::animation::rig::RigResource;
+use crate::RigResource;
 use std::io::{Read, Seek};
 
 impl RigResource {
-    pub fn from_reader<R: Read + Seek + ?Sized>(reader: &mut R) -> animation::Result<Self> {
+    pub fn from_reader<R: Read + Seek + ?Sized>(reader: &mut R) -> crate::Result<Self> {
         use byteorder::{ReadBytesExt as _, LE};
         use std::io::SeekFrom;
 
@@ -16,8 +15,8 @@ impl RigResource {
         }
     }
 
-    fn read<R: Read + Seek + ?Sized>(reader: &mut R) -> animation::Result<Self> {
-        use crate::core::animation::{Joint, ParseError};
+    fn read<R: Read + Seek + ?Sized>(reader: &mut R) -> crate::Result<Self> {
+        use crate::{Joint, ParseError};
         use byteorder::{ReadBytesExt, LE};
         use io_ext::ReaderExt;
         use std::io::SeekFrom;
@@ -97,7 +96,7 @@ impl RigResource {
         })
     }
 
-    fn read_legacy<R: Read + ?Sized>(_reader: &mut R) -> animation::Result<Self> {
+    fn read_legacy<R: Read + ?Sized>(_reader: &mut R) -> crate::Result<Self> {
         unimplemented!("TODO: impl legacy skeleton");
     }
 }

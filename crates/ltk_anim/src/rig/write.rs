@@ -1,6 +1,6 @@
-use crate::core::animation::rig::RigResource;
-use crate::util::hash;
+use super::RigResource;
 use byteorder::{WriteBytesExt, LE};
+use elf_hash::hash;
 use io_ext::WriterExt;
 use std::io;
 use std::io::{Seek, SeekFrom, Write};

@@ -1,6 +1,6 @@
-use crate::core::animation::Joint;
-use crate::util::hash;
+use crate::Joint;
 use byteorder::{WriteBytesExt, LE};
+use elf_hash::hash;
 use io_ext::WriterExt;
 use std::io;
 use std::io::{Seek, Write};

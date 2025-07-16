@@ -1,4 +1,4 @@
-use crate::core::animation::{joint, Joint, RigResource};
+use crate::{joint, RigResource};
 use std::collections::VecDeque;
 
 /// Builder for [`RigResource`]

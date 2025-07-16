@@ -1,4 +1,4 @@
-use crate::core::animation::{asset, Uncompressed};
+use crate::{asset, Uncompressed};
 use std::io::Read;
 
 impl Uncompressed {

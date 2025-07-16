@@ -1,7 +1,8 @@
-use crate::core::animation::asset::compressed::frame::Frame;
-use crate::core::animation::asset::error_metric::ErrorMetric;
-use crate::core::animation::AssetParseError::{InvalidField, InvalidFileVersion, MissingData};
-use crate::core::animation::{asset, Compressed};
+use crate::{
+    asset::{self, compressed::frame::Frame, error_metric::ErrorMetric},
+    AssetParseError::{InvalidField, InvalidFileVersion, MissingData},
+    Compressed,
+};
 use bitflags::bitflags;
 use std::io::{Read, Seek, SeekFrom};
 use std::mem::size_of;

@@ -1,7 +1,5 @@
-use crate::core::animation::{joint, Joint};
+use crate::Joint;
 use glam::Mat4;
-use std::path::Iter;
-use std::process::id;
 
 #[derive(Clone, Debug)]
 pub struct Builder {

@@ -1,7 +1,10 @@
-use crate::core::animation::asset::compressed::frame::Frame;
-use crate::core::animation::asset::compressed::read::AnimationFlags;
-use crate::core::animation::asset::error_metric::ErrorMetric;
-use crate::core::animation::AnimationAsset;
+use crate::{
+    asset::{
+        compressed::{frame::Frame, read::AnimationFlags},
+        error_metric::ErrorMetric,
+    },
+    AnimationAsset,
+};
 use glam::Vec3;
 
 mod frame;

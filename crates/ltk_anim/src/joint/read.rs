@@ -1,4 +1,4 @@
-use crate::core::animation::Joint;
+use crate::Joint;
 use byteorder::{ReadBytesExt, LE};
 use glam::Mat4;
 use io_ext::ReaderExt;

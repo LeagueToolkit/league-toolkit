@@ -1,4 +1,4 @@
-use crate::core::animation::AnimationAsset;
+use crate::AnimationAsset;
 
 mod read;
 mod write;
