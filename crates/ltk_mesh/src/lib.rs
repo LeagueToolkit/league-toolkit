@@ -1,6 +1,8 @@
 //! Skinned & static meshes
 mod r#static;
 
+pub mod mem;
+
 use error::ParseError;
 pub use r#static::*;
 

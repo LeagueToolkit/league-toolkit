@@ -1,6 +1,6 @@
 use lazy_static::lazy_static;
 
-use crate::core::mem::{VertexBufferDescription, VertexBufferUsage, VertexElement};
+use crate::mem::{VertexBufferDescription, VertexBufferUsage, VertexElement};
 lazy_static! {
     pub static ref BASIC: VertexBufferDescription = VertexBufferDescription::new(
         VertexBufferUsage::Static,

@@ -3,7 +3,7 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 pub use range::*;
 
-use crate::core::mem::{
+use crate::mem::{
     index::IndexBuffer,
     vertex::{ElementName, VertexBuffer, VertexBufferDescription},
 };

@@ -1,11 +1,13 @@
-use crate::core::mesh::skinned::{vertex, SkinnedMeshVertexType, MAGIC};
-use crate::core::mesh::SkinnedMesh;
+use crate::{
+    skinned::{vertex, SkinnedMeshVertexType, MAGIC},
+    SkinnedMesh,
+};
 use byteorder::{WriteBytesExt, LE};
 use io_ext::WriterExt;
 use std::io::Write;
 
 impl SkinnedMesh {
-    pub fn to_writer<W: Write>(&self, w: &mut W) -> crate::core::mesh::Result<()> {
+    pub fn to_writer<W: Write>(&self, w: &mut W) -> crate::Result<()> {
         w.write_u32::<LE>(MAGIC)?;
 
         w.write_u16::<LE>(4)?; // major

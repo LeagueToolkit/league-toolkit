@@ -15,7 +15,7 @@ pub struct StaticMeshFace {
 }
 
 impl StaticMeshFace {
-    pub fn from_reader<R: Read>(reader: &mut R) -> crate::core::mesh::Result<Self> {
+    pub fn from_reader<R: Read>(reader: &mut R) -> crate::Result<Self> {
         let vertex_ids = (
             reader.read_u32::<LE>()? as u8,
             reader.read_u32::<LE>()? as u8,

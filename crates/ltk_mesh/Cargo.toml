@@ -4,3 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+byteorder = { workspace = true }
+bitflags = { workspace = true }
+num_enum = { workspace = true }
+thiserror = { workspace = true }
+lazy_static = { workspace = true }
+
+glam = { workspace = true }
+
+io-ext = { path = "../io-ext" }
+league-primitives = { path = "../league-primitives" }

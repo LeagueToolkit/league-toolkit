@@ -1,7 +1,7 @@
 use glam::{vec2, vec3, vec4, Vec2, Vec3, Vec4};
 use std::marker::PhantomData;
 
-use crate::core::mem::vertex::{VertexBuffer, VertexElement};
+use super::vertex::{VertexBuffer, VertexElement};
 
 /// A trait for reading vertex element data in a given format
 pub trait Format {
