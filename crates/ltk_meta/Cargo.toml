@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-serde = ["dep:serde"]
+serde = ["dep:serde", "ltk_primitives/serde", "glam/serde"]
 
 [dependencies]
 log = { workspace = true }
@@ -25,3 +25,5 @@ ltk_primitives = { path = "../ltk_primitives" }
 [dev-dependencies]
 approx = { workspace = true }
 insta = { workspace = true }
+
+ltk_meta = { path = ".", features = ["serde"] }

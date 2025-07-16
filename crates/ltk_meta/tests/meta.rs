@@ -1,7 +1,7 @@
 use std::io::{Cursor, Seek};
 
-use crate::BinTree;
 use insta::assert_ron_snapshot;
+use ltk_meta::BinTree;
 #[test]
 pub fn read() {
     let mut r = Cursor::new(include_bytes!("bins/leona_small.bin"));
