@@ -1,9 +1,7 @@
 use byteorder::{ReadBytesExt, LE};
 use std::io;
 
-use crate::core::render::texture::format::TextureFileFormat;
-
-use super::{tex, ReadError, Texture};
+use super::{format::TextureFileFormat, ReadError, Texture};
 
 impl Texture {
     pub fn from_reader<R: io::Read + io::Seek + ?Sized>(reader: &mut R) -> Result<Self, ReadError> {
