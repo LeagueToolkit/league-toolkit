@@ -33,7 +33,7 @@ impl LeagueFileKind {
     #[must_use]
     /// The extension for this file type (anm, mapgeo, bin, etc)
     /// ```
-    /// # use league_toolkit::league_file::LeagueFileKind;
+    /// # use ltk_file::LeagueFileKind;
     /// assert_eq!(LeagueFileKind::Animation.extension(), Some("anm"));
     /// assert_eq!(LeagueFileKind::StaticMeshAscii.extension(), Some("sco"));
     /// assert_eq!(LeagueFileKind::Unknown.extension(), None);
@@ -67,7 +67,7 @@ impl LeagueFileKind {
     #[must_use]
     /// Infer the file type from the extension. Works with or without a preceding `'.'`.
     /// ```
-    /// # use league_toolkit::league_file::LeagueFileKind;
+    /// # use ltk_file::LeagueFileKind;
     /// #
     /// assert_eq!(LeagueFileKind::from_extension("png"), LeagueFileKind::Png);
     /// assert_eq!(LeagueFileKind::from_extension(".png"), LeagueFileKind::Png);
@@ -111,7 +111,7 @@ impl LeagueFileKind {
     ///
     /// # Examples
     /// ```
-    /// # use league_toolkit::league_file::*;
+    /// # use ltk_file::*;
     /// #
     /// let data = b"r3d2skltblahblahblahblah";
     /// let kind = LeagueFileKind::identify_from_bytes(data);
@@ -123,7 +123,7 @@ impl LeagueFileKind {
     /// ```
     /// # use std::fs::File;
     /// # use std::io::{self, Cursor, Read};
-    /// # use league_toolkit::league_file::*;
+    /// # use ltk_file::*;
     /// #
     /// let mut reader = Cursor::new([0x33, 0x22, 0x11, 0x00, 0xDE, 0xAD, 0xBE, 0xEF]);
     /// let mut buffer = [0; MAX_MAGIC_SIZE];
