@@ -21,3 +21,7 @@ serde = { workspace = true, optional = true }
 
 io-ext = { path = "../io-ext" }
 ltk_primitives = { path = "../ltk_primitives" }
+
+[dev-dependencies]
+approx = { workspace = true }
+insta = { workspace = true }
