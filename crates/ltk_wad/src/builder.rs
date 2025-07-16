@@ -28,7 +28,7 @@ pub enum WadBuilderError {
 ///
 /// ## This example builds a WAD file in memory
 /// ```
-/// # use league_toolkit::core::wad::*;
+/// # use ltk_wad::*;
 /// # use std::io::{Cursor, Write};
 ///
 /// let mut builder = WadBuilder::default();
@@ -210,7 +210,7 @@ impl WadBuilder {
 ///
 /// # Examples
 /// ```
-/// # use league_toolkit::core::wad::*;
+/// # use ltk_wad::*;
 /// #
 /// let builder = WadChunkBuilder::default();
 /// builder.with_path("path/to/chunk");
