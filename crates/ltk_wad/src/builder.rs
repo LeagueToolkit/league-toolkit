@@ -239,7 +239,7 @@ impl WadChunkBuilder {
 
 #[cfg(test)]
 mod tests {
-    use crate::core::wad::Wad;
+    use crate::Wad;
 
     use super::*;
 

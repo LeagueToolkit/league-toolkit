@@ -167,7 +167,7 @@ pub(crate) fn write_24_bit_subchunk_start_frame<W: io::Write>(
 mod tests {
     use std::io::{BufReader, Cursor};
 
-    use crate::core::wad::{read_24_bit_subchunk_start_frame, write_24_bit_subchunk_start_frame};
+    use crate::{read_24_bit_subchunk_start_frame, write_24_bit_subchunk_start_frame};
 
     #[test]
     fn test_read_24_bit_subchunk_start_frame() {
