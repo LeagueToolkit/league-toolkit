@@ -1,4 +1,4 @@
-use crate::core::meta::traits::{PropertyValue, ReadProperty, WriteProperty};
+use crate::traits::{PropertyValue, ReadProperty, WriteProperty};
 use byteorder::LE;
 use io_ext::{ReaderExt, WriterExt};
 
@@ -17,7 +17,7 @@ impl ReadProperty for StringValue {
     fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         _legacy: bool,
-    ) -> Result<Self, crate::core::meta::Error> {
+    ) -> Result<Self, crate::Error> {
         Ok(Self(reader.read_len_prefixed_string::<LE>()?))
     }
 }

@@ -1,6 +1,6 @@
 use std::io;
 
-use crate::core::meta::{
+use crate::{
     property::BinPropertyKind,
     traits::{PropertyValue as Value, ReadProperty, ReaderExt, WriteProperty, WriterExt},
     Error,

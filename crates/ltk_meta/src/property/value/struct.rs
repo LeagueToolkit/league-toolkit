@@ -1,6 +1,6 @@
 use std::{collections::HashMap, io};
 
-use crate::core::meta::{
+use crate::{
     traits::{PropertyValue as Value, ReadProperty, WriteProperty},
     BinProperty, Error,
 };
@@ -27,7 +27,7 @@ impl ReadProperty for StructValue {
     fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         legacy: bool,
-    ) -> Result<Self, crate::core::meta::Error> {
+    ) -> Result<Self, crate::Error> {
         let class_hash = reader.read_u32::<LE>()?;
         if class_hash == 0 {
             return Ok(Self {
@@ -52,7 +52,7 @@ impl ReadProperty for StructValue {
         })?;
 
         if size as u64 != real_size {
-            return Err(crate::core::meta::Error::InvalidSize(size as _, real_size));
+            return Err(crate::Error::InvalidSize(size as _, real_size));
         }
 
         Ok(value)

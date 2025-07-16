@@ -1,4 +1,4 @@
-use crate::core::meta::traits::{PropertyValue, ReadProperty, WriteProperty};
+use crate::traits::{PropertyValue, ReadProperty, WriteProperty};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -14,7 +14,7 @@ impl ReadProperty for NoneValue {
     fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
         _reader: &mut R,
         _legacy: bool,
-    ) -> Result<Self, crate::core::meta::Error> {
+    ) -> Result<Self, crate::Error> {
         Ok(Self)
     }
 }

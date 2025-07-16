@@ -1,4 +1,4 @@
-use crate::core::meta::traits::{PropertyValue, ReadProperty, WriteProperty};
+use crate::traits::{PropertyValue, ReadProperty, WriteProperty};
 
 use super::ContainerValue;
 
@@ -16,7 +16,7 @@ impl ReadProperty for UnorderedContainerValue {
     fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         legacy: bool,
-    ) -> Result<Self, crate::core::meta::Error> {
+    ) -> Result<Self, crate::Error> {
         Ok(Self(ContainerValue::from_reader(reader, legacy)?))
     }
 }

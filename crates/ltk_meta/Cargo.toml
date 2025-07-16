@@ -3,4 +3,21 @@ name = "ltk_meta"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+serde = ["dep:serde"]
+
 [dependencies]
+log = { workspace = true }
+num_enum = { workspace = true }
+byteorder = { workspace = true }
+enum_dispatch = { workspace = true }
+miette = { workspace = true }
+thiserror = { workspace = true }
+
+glam = { workspace = true }
+paste = { workspace = true }
+
+serde = { workspace = true, optional = true }
+
+io-ext = { path = "../io-ext" }
+league-primitives = { path = "../league-primitives" }

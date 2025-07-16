@@ -1,6 +1,6 @@
 use std::{collections::HashMap, io};
 
-use crate::core::meta::Error;
+use crate::Error;
 
 use super::{BinTree, BinTreeObject};
 use byteorder::{ReadBytesExt, LE};

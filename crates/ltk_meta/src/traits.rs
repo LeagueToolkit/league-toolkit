@@ -25,16 +25,13 @@ pub trait ReadProperty: Sized {
     fn from_reader<R: io::Read + io::Seek + ?Sized>(
         reader: &mut R,
         legacy: bool,
-    ) -> Result<Self, crate::core::meta::Error>;
+    ) -> Result<Self, crate::Error>;
 }
 
 /// Extension trait for reading property kinds
 pub trait ReaderExt: io::Read {
     /// Reads a u8 as a property kind
-    fn read_property_kind(
-        &mut self,
-        legacy: bool,
-    ) -> Result<BinPropertyKind, crate::core::meta::Error> {
+    fn read_property_kind(&mut self, legacy: bool) -> Result<BinPropertyKind, crate::Error> {
         BinPropertyKind::unpack(self.read_u8()?, legacy)
     }
 }

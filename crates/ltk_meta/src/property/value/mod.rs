@@ -21,7 +21,7 @@ pub use unordered_container::*;
 
 use std::io;
 
-use crate::core::meta::{
+use crate::{
     property::BinPropertyKind, traits::ReadProperty as _, traits::WriteProperty as _, Error,
 };
 

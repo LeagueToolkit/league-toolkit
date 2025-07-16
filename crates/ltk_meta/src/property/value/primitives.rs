@@ -1,4 +1,4 @@
-use crate::core::meta::traits::{PropertyValue, ReadProperty, WriteProperty};
+use crate::traits::{PropertyValue, ReadProperty, WriteProperty};
 use io_ext::{ReaderExt, WriterExt};
 
 macro_rules! impl_prim {
@@ -18,7 +18,7 @@ macro_rules! impl_prim {
             fn from_reader<R: std::io::Read + ?Sized>(
                 reader: &mut R,
                 _legacy: bool,
-            ) -> Result<Self, crate::core::meta::Error> {
+            ) -> Result<Self, crate::Error> {
                 Ok(Self(paste::paste!(reader.[<read_ $method>]::<$($endian,)*>()?)))
             }
         }

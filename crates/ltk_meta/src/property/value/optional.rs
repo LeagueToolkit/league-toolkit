@@ -1,5 +1,5 @@
 use super::PropertyValueEnum;
-use crate::core::meta::{
+use crate::{
     property::BinPropertyKind,
     traits::{PropertyValue, ReadProperty, ReaderExt, WriteProperty, WriterExt},
     Error,
