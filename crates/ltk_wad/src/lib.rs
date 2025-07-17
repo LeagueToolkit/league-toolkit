@@ -47,20 +47,22 @@ impl<TSource: Read + Seek> Wad<TSource> {
 
         let major = reader.read_u8()?;
         let minor = reader.read_u8()?;
-        if major > 3 {
-            return Err(WadError::InvalidVersion { major, minor });
+
+        match major {
+            1 => {}
+            2 => {
+                let _ecdsa_length = reader.seek(SeekFrom::Current(1))?;
+                let _ecdsa_signature = reader.seek(SeekFrom::Current(83))?;
+                let _data_checksum = reader.seek(SeekFrom::Current(8))?;
+            }
+            3 => {
+                let _ecdsa_signature = reader.seek(SeekFrom::Current(256))?;
+                let _data_checksum = reader.seek(SeekFrom::Current(8))?;
+            }
+            major => return Err(WadError::InvalidVersion { major, minor }),
         }
 
-        if major == 2 {
-            let _ecdsa_length = reader.seek(SeekFrom::Current(1))?;
-            let _ecdsa_signature = reader.seek(SeekFrom::Current(83))?;
-            let _data_checksum = reader.seek(SeekFrom::Current(8))?;
-        } else if major == 3 {
-            let _ecdsa_signature = reader.seek(SeekFrom::Current(256))?;
-            let _data_checksum = reader.seek(SeekFrom::Current(8))?;
-        }
-
-        if major == 1 || major == 2 {
+        if matches!(major, 1 | 2) {
             let _toc_start_offset = reader.seek(SeekFrom::Current(2))?;
             let _toc_chunk_size = reader.seek(SeekFrom::Current(2))?;
         }
