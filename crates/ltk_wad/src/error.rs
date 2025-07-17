@@ -5,7 +5,10 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum WadError {
     #[error("invalid header")]
-    InvalidHeader { expected: String, actual: String },
+    InvalidHeader {
+        expected: &'static str,
+        actual: String,
+    },
 
     #[error("invalid version {major:?}.{minor:?}")]
     InvalidVersion { major: u8, minor: u8 },

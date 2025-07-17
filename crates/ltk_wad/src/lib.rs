@@ -40,7 +40,7 @@ impl<TSource: Read + Seek> Wad<TSource> {
         let magic = reader.read_u16::<LE>()?;
         if magic != 0x5752 {
             return Err(WadError::InvalidHeader {
-                expected: String::from("RW"),
+                expected: "0x5752 (b\"RW\")",
                 actual: format!("0x{:x}", magic),
             });
         }
