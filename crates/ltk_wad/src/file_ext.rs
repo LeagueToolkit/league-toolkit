@@ -1,6 +1,7 @@
-use crate::WadChunkCompression;
+use crate::chunk::WadChunkCompression;
 use ltk_file::LeagueFileKind;
 
+/// Extension trait for [`ltk_file::LeagueFileKind`]
 pub trait FileExt {
     /// Get the ideal wad chunk compression for this file type.
     ///

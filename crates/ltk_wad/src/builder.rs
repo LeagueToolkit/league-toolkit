@@ -10,7 +10,8 @@ use ltk_file::LeagueFileKind;
 
 use crate::FileExt as _;
 
-use super::{WadChunk, WadChunkCompression, WadError};
+use super::{WadChunk, WadError};
+use crate::chunk::WadChunkCompression;
 
 #[derive(Debug, thiserror::Error)]
 pub enum WadBuilderError {
