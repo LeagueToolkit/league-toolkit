@@ -1,8 +1,11 @@
-use std::io::{BufReader, Read};
+use std::io::{BufReader, Read, Seek};
 use std::{fmt, io};
 
 use byteorder::{ReadBytesExt as _, WriteBytesExt as _, LE};
+use flate2::bufread::GzDecoder;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+
+use crate::{ChunkDecoder, RawChunkDecoder};
 
 use super::WadError;
 
@@ -10,22 +13,27 @@ use super::WadError;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromPrimitive, IntoPrimitive)]
 #[repr(u8)]
 pub enum WadChunkCompression {
+    /// Uncompressed
     None = 0,
+    /// GZip compressed data
     GZip = 1,
+    /// Satellite compressed
     Satellite = 2,
+    /// zstd compressed
     Zstd = 3,
+    /// zstd compressed data, with some uncompressed data before it
     ZstdMulti = 4,
 }
 
 impl fmt::Display for WadChunkCompression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            WadChunkCompression::None => write!(f, "None"),
-            WadChunkCompression::GZip => write!(f, "GZip"),
-            WadChunkCompression::Satellite => write!(f, "Satellite"),
-            WadChunkCompression::Zstd => write!(f, "Zstd"),
-            WadChunkCompression::ZstdMulti => write!(f, "ZstdMulti"),
-        }
+        f.write_str(match self {
+            WadChunkCompression::None => "None",
+            WadChunkCompression::GZip => "GZip",
+            WadChunkCompression::Satellite => "Satellite",
+            WadChunkCompression::Zstd => "Zstd",
+            WadChunkCompression::ZstdMulti => "ZstdMulti",
+        })
     }
 }
 
@@ -45,6 +53,13 @@ pub struct WadChunk {
 }
 
 impl WadChunk {
+    pub fn decoder<'a, T: Read + Seek>(
+        &self,
+        source: &'a mut T,
+    ) -> Result<ChunkDecoder<'a, T>, WadError> {
+        ChunkDecoder::new(self, source)
+    }
+
     pub fn read_v3_1<R: Read>(reader: &mut BufReader<R>) -> Result<WadChunk, WadError> {
         let path_hash = reader.read_u64::<LE>()?;
         let data_offset = reader.read_u32::<LE>()? as usize;

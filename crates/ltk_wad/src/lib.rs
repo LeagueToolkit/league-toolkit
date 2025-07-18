@@ -88,12 +88,10 @@ impl<TSource: Read + Seek> Wad<TSource> {
         Ok(Wad { chunks, source })
     }
 
-    pub fn decode(&mut self) -> (WadDecoder<'_, TSource>, &HashMap<u64, WadChunk>) {
-        (
-            WadDecoder {
-                source: &mut self.source,
-            },
-            &self.chunks,
-        )
+    pub fn chunk_decoder(
+        &mut self,
+        id: u64,
+    ) -> Option<Result<ChunkDecoder<'_, TSource>, WadError>> {
+        Some(self.chunks.get(&id)?.decoder(&mut self.source))
     }
 }
