@@ -1,5 +1,6 @@
 use std::{
     io::{BufRead, BufReader, Read, Seek, SeekFrom, Write},
+    marker::PhantomData,
     mem::{self},
 };
 
@@ -79,9 +80,10 @@ impl<T: Read + Seek> RawChunkDecoder<'_, T> {
                 zstd::Decoder::new(source).expect("failed to create zstd decoder"),
             ),
             #[cfg(feature = "ruzstd")]
-            WadChunkCompression::Zstd => {
-                RawChunkDecoder::Zstd(ruzstd::decoding::StreamingDecoder::new(source))
-            }
+            WadChunkCompression::Zstd => RawChunkDecoder::Zstd(
+                ruzstd::decoding::StreamingDecoder::new(source)
+                    .expect("failed to create ruzstd decoder"),
+            ),
             WadChunkCompression::ZstdMulti => {
                 RawChunkDecoder::ZstdMulti(ZstdMultiDecoder::new(source))
             }
@@ -111,11 +113,30 @@ enum MultiState<'a, T: Read + Seek> {
         position: usize,
         magic_idx: usize,
         reader: BufReader<T>,
+        _phantom: PhantomData<&'a ()>,
     },
+    #[cfg(feature = "zstd")]
     Zstd(zstd::stream::Decoder<'a, BufReader<T>>),
+    #[cfg(feature = "ruzstd")]
+    Zstd(ruzstd::decoding::StreamingDecoder<BufReader<T>, ruzstd::decoding::FrameDecoder>),
+}
+
+#[cfg(feature = "zstd")]
+#[inline(always)]
+fn make_zstd_decoder<'a, R: BufRead>(reader: R) -> zstd::Decoder<'a, R> {
+    zstd::Decoder::with_buffer(reader).expect("failed to create zstd decoder")
+}
+
+#[cfg(feature = "ruzstd")]
+#[inline(always)]
+fn make_zstd_decoder<R: Read>(
+    reader: R,
+) -> ruzstd::decoding::StreamingDecoder<R, ruzstd::decoding::FrameDecoder> {
+    ruzstd::decoding::StreamingDecoder::new(reader).expect("failed to create ruzstd decoder")
 }
 
 impl<T: Read + Seek> MultiState<'_, T> {
+    #[inline]
     fn read(self, mut buf: &mut [u8]) -> std::io::Result<(Self, usize)> {
         Ok(match self {
             MultiState::Invalid => unreachable!("ZstdMulti reader entered an invalid state!"), // TODO: make this unreachable_unchecked?
@@ -123,6 +144,7 @@ impl<T: Read + Seek> MultiState<'_, T> {
                 mut reader,
                 mut position,
                 mut magic_idx,
+                _phantom,
             } => {
                 let inner_buf = reader.fill_buf()?;
                 let mut found_magic = false;
@@ -147,8 +169,7 @@ impl<T: Read + Seek> MultiState<'_, T> {
                         buf.write_all(&inner_buf[..header_off])?;
                         reader.consume(header_off);
 
-                        let mut decoder = zstd::Decoder::with_buffer(reader)
-                            .expect("failed to create zstd decoder");
+                        let mut decoder = make_zstd_decoder(reader);
 
                         // if there's still room in the buffer,
                         // decode some more zstd data
@@ -173,6 +194,7 @@ impl<T: Read + Seek> MultiState<'_, T> {
                                 reader,
                                 position,
                                 magic_idx,
+                                _phantom,
                             },
                             safe_bytes,
                         )
@@ -199,8 +221,27 @@ impl<T: Read + Seek> ZstdMultiDecoder<'_, T> {
             state: MultiState::Uncompressed {
                 position: 0,
                 magic_idx: 0,
-                reader: BufReader::with_capacity(zstd::zstd_safe::DCtx::in_size(), source),
+                reader: BufReader::with_capacity(Self::buffer_size(), source),
+                _phantom: PhantomData,
             },
+        }
+    }
+
+    #[inline(always)]
+    fn buffer_size() -> usize {
+        #[cfg(feature = "zstd")]
+        {
+            // Since the BufReader is reused between uncompressed/zstd states,
+            // we trade off slower worst-case speed of header searching (O(n)),
+            // for faster zstd decompression
+            // (also in practice there seems to be not much uncompressed data before the zstd
+            // starts, so the header search shouldn't actually be much slower )
+            zstd::zstd_safe::DCtx::in_size()
+        }
+        #[cfg(feature = "ruzstd")]
+        {
+            // TODO: figure out the best size here
+            512
         }
     }
 }
