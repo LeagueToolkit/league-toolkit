@@ -3,7 +3,7 @@ use std::io::{self, Write};
 use byteorder::{ByteOrder, WriteBytesExt};
 use glam::{Mat4, Quat};
 
-use league_primitives::{Color, Sphere, AABB};
+use ltk_primitives::{Color, Sphere, AABB};
 
 pub trait WriterExt: Write {
     fn write_padded_string<const N: usize>(&mut self, str: &str) -> io::Result<()> {

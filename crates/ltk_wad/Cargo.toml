@@ -1,0 +1,31 @@
+[package]
+name = "ltk_wad"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = ["zstd"]
+
+serde = ["dep:serde"]
+rust_backend = ["flate2/rust_backend", "ruzstd"]
+
+zstd = ["dep:zstd"]
+ruzstd = ["dep:ruzstd"]
+
+[dependencies]
+thiserror = { workspace = true }
+itertools = { workspace = true }
+num_enum = { workspace = true }
+memchr = { workspace = true }
+
+byteorder = { workspace = true }
+
+xxhash-rust = { workspace = true }
+zstd = { workspace = true, optional = true }
+ruzstd = { workspace = true, optional = true }
+flate2 = { workspace = true }
+
+serde = { workspace = true, optional = true }
+
+io-ext = { path = "../io-ext" }
+ltk_file = { path = "../ltk_file" }

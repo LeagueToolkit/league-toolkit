@@ -2,7 +2,7 @@ use std::io::{self, Read};
 
 use byteorder::{ByteOrder, ReadBytesExt};
 use glam::{Mat4, Quat, Vec2, Vec3, Vec4};
-use league_primitives::{Color, Sphere, AABB};
+use ltk_primitives::{Color, Sphere, AABB};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ReaderError {

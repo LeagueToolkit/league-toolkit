@@ -1,0 +1,19 @@
+[package]
+name = "ltk_anim"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+thiserror = { workspace = true }
+byteorder = { workspace = true }
+bitflags = { workspace = true }
+num_enum = { workspace = true }
+
+glam = { workspace = true }
+
+elf_hash = { path = "../elf_hash/" }
+io-ext = { path = "../io-ext" }
+
+[dev-dependencies]
+approx = { workspace = true }
+insta = { workspace = true }

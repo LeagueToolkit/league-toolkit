@@ -3,49 +3,28 @@ name = "league-toolkit"
 version = "0.1.0"
 edition = "2021"
 
+
+# wad, file, meta have serde
 [features]
-default = ["zstd"]
+default = ["anim", "file", "mesh", "meta", "primitives", "render", "wad", "hash"]
 
-zstd = ["dep:zstd"]
-ruzstd = ["dep:ruzstd"]
+serde = ["ltk_wad/serde", "ltk_file/serde", "ltk_meta/serde"]
 
-serde = ["dep:serde", "glam/serde", "league-primitives/serde"]
-rust_backends = [
-  "flate2/rust_backend",
-  "ruzstd",
-] # TODO: we might want more granular control here down the line
+anim = ["dep:ltk_anim"]
+file = ["dep:ltk_file"]
+mesh = ["dep:ltk_mesh"]
+meta = ["dep:ltk_meta"]
+primitives = ["dep:ltk_primitives"]
+render = ["dep:ltk_render"]
+wad = ["dep:ltk_wad"]
+hash = ["dep:elf_hash"]
 
 [dependencies]
-bitflags = "2.5.0"
-byteorder = "1.5.0"
-flate2 = "1.0.30"
-glam = { version = "0.27.0", features = ["glam-assert"] }
-lazy_static = "1.5.0"
-log = "0.4.21"
-memchr = "2.7.2"
-num_enum = "0.7.2"
-thiserror = "1.0.60"
-io-ext = { path = "../io-ext" }
-league-primitives = { path = "../league-primitives" }
-zstd = { version = "0.13", default-features = false, optional = true }
-ruzstd = { version = "0.8", optional = true }
-xxhash-rust = { version = "0.8.15", features = ["xxh64", "xxh3"] }
-itertools = "0.14.0"
-serde = { version = "1.0.204", features = ["derive"], optional = true }
-image = { version = "0.25.2", default-features = false, features = ["dds"] }
-ddsfile = "0.5.2"
-image_dds = {version = "0.6.0", default-features = false, features = ["ddsfile", "image"]}
-paste = "1.0.15"
-miette = "7.2.0"
-enum_dispatch = "0.3.13"
-texture2ddecoder = "0.1.2"
-bytemuck = { version = "1.22.0", features = ["extern_crate_alloc"] }
-
-[dev-dependencies]
-league-toolkit = { path = ".", features = ["serde"] }
-image = { version = "0.25.2", default-features = false, features = ["dds", "png"] }
-approx = "0.5.1"
-test-log = "0.2.16"
-insta = { version = "1.39.0", features = ["ron"] }
-serde = { version = "*", features = ["derive"] }
-glam = { version = "*", features = ["glam-assert", "serde"] }
+ltk_anim = {path = "../ltk_anim", optional = true}
+ltk_file = {path = "../ltk_file", optional = true}
+ltk_mesh = {path = "../ltk_mesh", optional = true}
+ltk_meta = {path = "../ltk_meta", optional = true}
+ltk_primitives = {path = "../ltk_primitives", optional = true}
+ltk_render = {path = "../ltk_render", optional = true}
+ltk_wad = {path = "../ltk_wad", optional = true}
+elf_hash = {path = "../elf_hash", optional = true}
