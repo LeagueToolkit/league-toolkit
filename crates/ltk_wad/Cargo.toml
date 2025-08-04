@@ -4,13 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = ["zstd"]
-
 serde = ["dep:serde"]
-rust_backend = ["flate2/rust_backend", "ruzstd"]
+rust_backend = ["flate2/rust_backend"]
 
-zstd = ["dep:zstd"]
-ruzstd = ["dep:ruzstd"]
 
 [dependencies]
 thiserror = { workspace = true }
@@ -21,8 +17,7 @@ memchr = { workspace = true }
 byteorder = { workspace = true }
 
 xxhash-rust = { workspace = true }
-zstd = { workspace = true, optional = true }
-ruzstd = { workspace = true, optional = true }
+zstd = { workspace = true }
 flate2 = { workspace = true }
 
 serde = { workspace = true, optional = true }

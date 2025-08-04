@@ -11,12 +11,22 @@ use crate::{chunk::ChunkDecoder, WadChunk, WadError};
 #[derive(Debug)]
 /// A wad file
 pub struct Wad<TSource: Read + Seek> {
+    version: (u8, u8),
+
     chunks: HashMap<u64, WadChunk>,
     #[cfg_attr(feature = "serde", serde(skip))]
     source: TSource,
 }
 
 impl<TSource: Read + Seek> Wad<TSource> {
+    #[inline(always)]
+    #[must_use]
+    pub fn version(&self) -> (u8, u8) {
+        self.version
+    }
+
+    #[inline(always)]
+    #[must_use]
     pub fn chunks(&self) -> &HashMap<u64, WadChunk> {
         &self.chunks
     }
@@ -73,7 +83,11 @@ impl<TSource: Read + Seek> Wad<TSource> {
                 })?;
         }
 
-        Ok(Wad { chunks, source })
+        Ok(Wad {
+            version: (major, minor),
+            chunks,
+            source,
+        })
     }
 
     pub fn chunk_decoder(

@@ -7,10 +7,7 @@ use super::{zstd::ZstdMultiDecoder, WadChunkCompression};
 pub enum RawChunkDecoder<'a, T: Read + Seek> {
     Uncompressed(T),
     Gzip(GzDecoder<BufReader<T>>),
-    #[cfg(feature = "zstd")]
     Zstd(zstd::stream::Decoder<'a, BufReader<T>>),
-    #[cfg(feature = "ruzstd")]
-    Zstd(ruzstd::decoding::StreamingDecoder<T, ruzstd::decoding::FrameDecoder>),
     ZstdMulti(ZstdMultiDecoder<'a, T>),
 }
 
@@ -22,14 +19,8 @@ impl<T: Read + Seek> RawChunkDecoder<'_, T> {
                 RawChunkDecoder::Gzip(GzDecoder::new(BufReader::new(source)))
             }
             WadChunkCompression::Satellite => todo!(),
-            #[cfg(feature = "zstd")]
             WadChunkCompression::Zstd => RawChunkDecoder::Zstd(
                 zstd::Decoder::new(source).expect("failed to create zstd decoder"),
-            ),
-            #[cfg(feature = "ruzstd")]
-            WadChunkCompression::Zstd => RawChunkDecoder::Zstd(
-                ruzstd::decoding::StreamingDecoder::new(source)
-                    .expect("failed to create ruzstd decoder"),
             ),
             WadChunkCompression::ZstdMulti => {
                 RawChunkDecoder::ZstdMulti(ZstdMultiDecoder::new(source))

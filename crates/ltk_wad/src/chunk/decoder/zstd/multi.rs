@@ -4,7 +4,7 @@ use std::{
     mem,
 };
 
-use super::{make_zstd_decoder, ZSTD_MAGIC};
+use super::ZSTD_MAGIC;
 
 #[derive(Default)]
 enum MultiState<'a, T: Read + Seek> {
@@ -16,10 +16,7 @@ enum MultiState<'a, T: Read + Seek> {
         reader: BufReader<T>,
         _phantom: PhantomData<&'a ()>,
     },
-    #[cfg(feature = "zstd")]
     Zstd(zstd::stream::Decoder<'a, BufReader<T>>),
-    #[cfg(feature = "ruzstd")]
-    Zstd(ruzstd::decoding::StreamingDecoder<BufReader<T>, ruzstd::decoding::FrameDecoder>),
 }
 
 impl<T: Read + Seek> MultiState<'_, T> {
@@ -56,14 +53,16 @@ impl<T: Read + Seek> MultiState<'_, T> {
                         buf.write_all(&inner_buf[..header_off])?;
                         reader.consume(header_off);
 
-                        let mut decoder = make_zstd_decoder(reader);
+                        let mut decoder = zstd::Decoder::with_buffer(reader)
+                            .expect("failed to create zstd decoder");
 
                         // if there's still room in the buffer,
                         // decode some more zstd data
-                        let written = match buf.len() > header_off {
-                            true => decoder.read(buf)?,
+                        let written = match buf.len() > position {
+                            true => decoder.read(&mut buf[header_off..])?,
                             false => 0,
                         };
+                        println!("written: {written}");
                         (Self::Zstd(decoder), written)
                     }
                     false => {
@@ -114,20 +113,12 @@ impl<T: Read + Seek> ZstdMultiDecoder<'_, T> {
 
     #[inline(always)]
     fn buffer_size() -> usize {
-        #[cfg(feature = "zstd")]
-        {
-            // Since the BufReader is reused between uncompressed/zstd states,
-            // we trade off slower worst-case speed of header searching (O(n)),
-            // for faster zstd decompression
-            // (also in practice there seems to be not much uncompressed data before the zstd
-            // starts, so the header search shouldn't actually be much slower )
-            zstd::zstd_safe::DCtx::in_size()
-        }
-        #[cfg(feature = "ruzstd")]
-        {
-            // TODO: figure out the best size here
-            512
-        }
+        // Since the BufReader is reused between uncompressed/zstd states,
+        // we trade off slower worst-case speed of header searching (O(n)),
+        // for faster zstd decompression
+        // (also in practice there seems to be not much uncompressed data before the zstd
+        // starts, so the header search shouldn't actually be much slower )
+        zstd::zstd_safe::DCtx::in_size()
     }
 }
 

@@ -2,13 +2,14 @@ use std::{
     env,
     error::Error,
     fs::File,
-    io::{stdout, Read, Write},
+    io::{stderr, stdout, Read, Write},
     path::PathBuf,
     time::Instant,
 };
 
 use itertools::Itertools;
 use ltk_wad::Wad;
+use xxhash_rust::{xxh3::xxh3_64, xxh64::xxh64};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let file: PathBuf = env::args()
@@ -21,6 +22,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let file = File::open(file).unwrap();
 
     let mut wad = Wad::mount(file).unwrap();
+    println!("v{}.{}", wad.version().0, wad.version().1);
 
     let mut total = 0;
 
@@ -28,7 +30,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let ids = wad.chunks().keys().copied().sorted().collect::<Vec<_>>();
 
     let now = Instant::now();
-    let mut stdout = stdout().lock();
+    let mut stderr = stderr().lock();
 
     for id in ids {
         let mut decoder = wad.chunk_decoder(id)
@@ -36,16 +38,23 @@ fn main() -> Result<(), Box<dyn Error>> {
             .expect("failed to create chunk decoder");
 
         decoder.read_to_end(&mut buf)?;
-        writeln!(
-            stdout,
-            "{id:x}: {:>10} bytes ({})",
-            buf.len(),
-            decoder.compression_type(),
-        )?;
+        //writeln!(
+        //    stderr,
+        //    "{id:0>16x}: {:>10} bytes ({})",
+        //    buf.len(),
+        //    decoder.compression_type(),
+        //)?;
+        drop(decoder);
+        let chunk = wad.chunks().get(&id).unwrap();
+        //writeln!(stderr, "expected: {:0>16x}", chunk.checksum())?;
+        let checksum = xxh3_64(buf.as_slice());
+        //writeln!(stderr, "     got: {:0>16x}", checksum)?;
         total += buf.len();
+
+        // xxh64(input, seed)
         buf.clear();
     }
-    drop(stdout);
+    drop(stderr);
 
     let elapsed = now.elapsed();
     println!("==== [SUMMARY] ====");
