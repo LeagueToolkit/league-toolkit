@@ -15,11 +15,15 @@ pub use v3::*;
 mod v3_4;
 pub use v3_4::*;
 
-mod compression;
-pub use compression::*;
+mod kind;
+pub use kind::*;
+
+mod generic;
+pub use generic::*;
 
 #[derive(BinRead, BinWrite)]
 #[brw(import {major: u8, minor: u8})]
+#[derive(Debug, Clone, Copy)]
 pub enum Entry {
     #[br(pre_assert(major == 3 && minor == 4))]
     V3_4(V3_4),

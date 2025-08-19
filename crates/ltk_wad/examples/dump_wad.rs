@@ -22,10 +22,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut file = File::open(file).unwrap();
 
-    let mut wad = Wad::read(&mut file).unwrap();
+    let mut wad: Wad = Wad::read(&mut file).unwrap();
     println!("v{}.{}", wad.version().0, wad.version().1);
 
-    println!("{wad:?}");
+    let entry = wad.entries.first_key_value().unwrap().1;
+
+    println!("{wad:#?}");
 
     let mut total = 0;
 

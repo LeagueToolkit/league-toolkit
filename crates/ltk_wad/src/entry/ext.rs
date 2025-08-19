@@ -1,3 +1,5 @@
+use std::io;
+
 use super::EntryKind;
 
 pub trait EntryExt {
@@ -21,4 +23,8 @@ pub trait EntryExt {
 
     #[must_use]
     fn checksum(&self) -> Option<u64>;
+}
+
+pub trait Decompress {
+    fn decompress(&self) -> io::Result<Vec<u8>>;
 }
