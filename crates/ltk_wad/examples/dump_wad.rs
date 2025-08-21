@@ -4,6 +4,7 @@ use std::{
     fs::File,
     io::{stderr, stdout, Read, Write},
     path::PathBuf,
+    sync::Arc,
     time::Instant,
 };
 
@@ -22,12 +23,17 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut file = File::open(file).unwrap();
 
-    let mut wad: Wad = Wad::read(&mut file).unwrap();
+    let mut wad: Wad<_> = Wad::mount(Arc::new(file)).unwrap();
     println!("v{}.{}", wad.version().0, wad.version().1);
 
-    let entry = wad.entries.first_key_value().unwrap().1;
+    {
+        let entry = wad.entries.first_key_value().unwrap().1;
+        println!("{entry:#?}");
+    }
 
-    println!("{wad:#?}");
+    let (wad, entries) = wad.explode();
+    let entry = entries.first_key_value().unwrap().1;
+    println!("{entry:#?}");
 
     let mut total = 0;
 

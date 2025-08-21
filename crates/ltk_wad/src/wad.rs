@@ -1,6 +1,6 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, io, sync::Arc};
 
-use binrw::{binrw, BinRead, BinWrite, NamedArgs};
+use binrw::{binrw, BinRead, BinResult, BinWrite, NamedArgs};
 use derive_more::{AsMut, AsRef, Debug, Deref, DerefMut, From, Index, Into};
 use itertools::Itertools;
 
@@ -10,15 +10,25 @@ use crate::{
 };
 
 #[binrw]
-#[brw(magic = b"RW", little)]
+#[brw(little)]
 #[derive(Debug, Clone)]
-pub struct Wad<E = EntriesMap>
+pub struct RawWad<E = EntriesMap>
 where
     for<'a> E: BinRead<Args<'a> = EntriesArgs> + BinWrite<Args<'a> = EntriesArgs>,
 {
     pub header: Header,
     #[brw(args{major: header.major(), minor: header.minor(), count: header.entry_count().try_into().unwrap()})]
     pub entries: E,
+}
+
+#[derive(Deref)]
+pub struct Wad<D = (), E = EntriesMap>
+where
+    for<'a> E: BinRead<Args<'a> = EntriesArgs> + BinWrite<Args<'a> = EntriesArgs>,
+{
+    #[deref]
+    inner: RawWad<E>,
+    data: D,
 }
 
 #[binrw]
@@ -42,7 +52,19 @@ pub struct EntriesArgs {
 
 type EntriesDyn<'a> = Box<dyn Iterator<Item = &'a dyn EntryExt> + 'a>;
 
-impl<E> Wad<E>
+impl<D: io::Read + io::Seek, E> Wad<D, E>
+where
+    for<'a> E: BinRead<Args<'a> = EntriesArgs> + BinWrite<Args<'a> = EntriesArgs>,
+{
+    pub fn mount(mut data: D) -> BinResult<Wad<D, E>> {
+        Ok(Wad {
+            inner: RawWad::read(&mut data)?,
+            data,
+        })
+    }
+}
+
+impl<E, D> Wad<D, E>
 where
     for<'a> E: BinRead<Args<'a> = EntriesArgs> + BinWrite<Args<'a> = EntriesArgs>,
 {
@@ -59,7 +81,31 @@ where
     }
 }
 
-impl Wad<Entries> {
+pub trait Splittable {
+    type Split;
+
+    fn split(&self, entry: &impl EntryExt) -> Self::Split;
+}
+
+impl<E: Into<BTreeMap<u64, entry::Entry>>, D: Splittable> Wad<D, E>
+where
+    for<'a> E: BinRead<Args<'a> = EntriesArgs> + BinWrite<Args<'a> = EntriesArgs>,
+{
+    pub fn explode(self) -> (Header, BTreeMap<u64, entry::OwnedEntry<D::Split>>) {
+        let header = self.inner.header;
+        let entries = self.inner.entries;
+        (
+            header,
+            entries
+                .into()
+                .into_iter()
+                .map(|(k, v)| (k, entry::OwnedEntry::new(v, self.data.split(&v))))
+                .collect(),
+        )
+    }
+}
+
+impl<D> Wad<D, Entries> {
     pub fn entries_dyn(&self) -> EntriesDyn<'_> {
         match &self.entries {
             Entries::V3_4(btree_map) => Box::new(btree_map.values().map(|v| v as &dyn EntryExt)),
@@ -105,4 +151,23 @@ fn vec_to_btree<T: EntryExt>(entries: Vec<T>) -> BTreeMap<u64, T> {
         .into_iter()
         .map(|entry| (entry.path_hash(), entry))
         .collect()
+}
+
+#[derive(Clone, Debug)]
+pub struct FileWithRegion {
+    pub file: Arc<std::fs::File>,
+    pub off: u32,
+    pub length: u32,
+}
+
+impl Splittable for Arc<std::fs::File> {
+    type Split = FileWithRegion;
+
+    fn split(&self, entry: &impl EntryExt) -> Self::Split {
+        FileWithRegion {
+            file: self.clone(),
+            off: entry.data_offset(),
+            length: entry.compressed_size(),
+        }
+    }
 }

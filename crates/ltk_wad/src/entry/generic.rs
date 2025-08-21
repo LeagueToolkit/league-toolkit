@@ -14,6 +14,15 @@ pub struct OwnedEntry<D> {
     data: D,
 }
 
+impl<D: std::fmt::Debug> std::fmt::Debug for OwnedEntry<D> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OwnedEntry")
+            .field("inner", &self.inner)
+            .field("data", &self.data)
+            .finish()
+    }
+}
+
 impl<D> OwnedEntry<D> {
     pub fn new(entry: Entry, data: D) -> Self {
         Self { inner: entry, data }
