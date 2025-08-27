@@ -4,13 +4,13 @@ use std::{
     fs::File,
     io::{stderr, stdout, Read, Write},
     path::PathBuf,
-    sync::Arc,
+    rc::Rc,
     time::Instant,
 };
 
 use binrw::BinRead as _;
 use itertools::Itertools;
-use ltk_wad::Wad;
+use ltk_wad::{entry::Decompress, Wad};
 use xxhash_rust::{xxh3::xxh3_64, xxh64::xxh64};
 
 use memmap::Mmap;
@@ -27,7 +27,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mmap = unsafe { Mmap::map(&file).unwrap() };
 
-    let wad: Wad<_> = Wad::mount(Arc::new(mmap)).unwrap();
+    let wad: Wad<_> = Wad::mount(Rc::new(mmap)).unwrap();
     println!("v{}.{}", wad.version().0, wad.version().1);
 
     {
@@ -38,6 +38,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let (wad, entries) = wad.explode();
     let entry = entries.first_key_value().unwrap().1;
     println!("{entry:#?}");
+    println!("{:?}", entry.raw_data().len());
+
+    let decomp = entry.decompress().unwrap();
+    println!("{}", decomp.len());
+    std::fs::write("./out", decomp).unwrap();
 
     let mut total = 0;
 
