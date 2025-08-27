@@ -13,6 +13,8 @@ use itertools::Itertools;
 use ltk_wad::Wad;
 use xxhash_rust::{xxh3::xxh3_64, xxh64::xxh64};
 
+use memmap::Mmap;
+
 fn main() -> Result<(), Box<dyn Error>> {
     let file: PathBuf = env::args()
         .nth(1)
@@ -21,9 +23,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         .expect("Invalid file path");
     println!("-- {file:?} --");
 
-    let mut file = File::open(file).unwrap();
+    let file = File::open(file).unwrap();
 
-    let mut wad: Wad<_> = Wad::mount(Arc::new(file)).unwrap();
+    let mmap = unsafe { Mmap::map(&file).unwrap() };
+
+    let wad: Wad<_> = Wad::mount(Arc::new(mmap)).unwrap();
     println!("v{}.{}", wad.version().0, wad.version().1);
 
     {

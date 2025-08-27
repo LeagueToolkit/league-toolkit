@@ -1,7 +1,12 @@
-use std::{collections::BTreeMap, io, sync::Arc};
+use std::{
+    collections::BTreeMap,
+    io::{self, Cursor},
+    ops::Deref,
+    sync::Arc,
+};
 
 use binrw::{binrw, BinRead, BinResult, BinWrite, NamedArgs};
-use derive_more::{AsMut, AsRef, Debug, Deref, DerefMut, From, Index, Into};
+use derive_more::{AsMut, AsRef, Debug, DerefMut, From, Index, Into};
 use itertools::Itertools;
 
 use crate::{
@@ -21,7 +26,7 @@ where
     pub entries: E,
 }
 
-#[derive(Deref)]
+#[derive(derive_more::Deref)]
 pub struct Wad<D = (), E = EntriesMap>
 where
     for<'a> E: BinRead<Args<'a> = EntriesArgs> + BinWrite<Args<'a> = EntriesArgs>,
@@ -33,7 +38,7 @@ where
 
 #[binrw]
 #[brw(import_raw(args: EntriesArgs))]
-#[derive(AsMut, AsRef, Debug, Deref, DerefMut, Index, Into, From)]
+#[derive(AsMut, AsRef, Debug, derive_more::Deref, DerefMut, Index, Into, From)]
 pub struct EntriesMap(
     #[br(count = args.count)]
     #[br(args {inner: binrw::args!{major: args.major, minor: args.minor}})]
@@ -56,9 +61,23 @@ impl<D: io::Read + io::Seek, E> Wad<D, E>
 where
     for<'a> E: BinRead<Args<'a> = EntriesArgs> + BinWrite<Args<'a> = EntriesArgs>,
 {
-    pub fn mount(mut data: D) -> BinResult<Wad<D, E>> {
+    pub fn read(mut data: D) -> BinResult<Wad<D, E>> {
         Ok(Wad {
             inner: RawWad::read(&mut data)?,
+            data,
+        })
+    }
+}
+
+impl<D: Deref, E> Wad<D, E>
+where
+    D::Target: AsRef<[u8]>,
+    for<'a> E: BinRead<Args<'a> = EntriesArgs> + BinWrite<Args<'a> = EntriesArgs>,
+{
+    pub fn mount(data: D) -> BinResult<Wad<D, E>> {
+        let mut cursor = Cursor::new(data.deref());
+        Ok(Wad {
+            inner: RawWad::read(&mut cursor)?,
             data,
         })
     }
@@ -154,18 +173,30 @@ fn vec_to_btree<T: EntryExt>(entries: Vec<T>) -> BTreeMap<u64, T> {
 }
 
 #[derive(Clone, Debug)]
-pub struct FileWithRegion {
-    pub file: Arc<std::fs::File>,
+pub struct DataRegion<T> {
+    pub data: T,
     pub off: u32,
     pub length: u32,
 }
 
 impl Splittable for Arc<std::fs::File> {
-    type Split = FileWithRegion;
+    type Split = DataRegion<Self>;
 
     fn split(&self, entry: &impl EntryExt) -> Self::Split {
-        FileWithRegion {
-            file: self.clone(),
+        DataRegion {
+            data: self.clone(),
+            off: entry.data_offset(),
+            length: entry.compressed_size(),
+        }
+    }
+}
+
+impl Splittable for Arc<memmap::Mmap> {
+    type Split = DataRegion<Self>;
+
+    fn split(&self, entry: &impl EntryExt) -> Self::Split {
+        DataRegion {
+            data: self.clone(),
             off: entry.data_offset(),
             length: entry.compressed_size(),
         }
