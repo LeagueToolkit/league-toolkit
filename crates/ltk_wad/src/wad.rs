@@ -106,11 +106,11 @@ pub trait Splittable {
     fn split(&self, entry: &impl EntryExt) -> Self::Split;
 }
 
-impl<E: Into<BTreeMap<u64, entry::Entry>>, D: Splittable> Wad<D, E>
+impl<E: Into<BTreeMap<u64, entry::Entry>>, D: Clone> Wad<D, E>
 where
     for<'a> E: BinRead<Args<'a> = EntriesArgs> + BinWrite<Args<'a> = EntriesArgs>,
 {
-    pub fn explode(self) -> (Header, BTreeMap<u64, entry::OwnedEntry<D::Split>>) {
+    pub fn explode(self) -> (Header, BTreeMap<u64, entry::OwnedEntry<D>>) {
         let header = self.inner.header;
         let entries = self.inner.entries;
         (
@@ -118,7 +118,7 @@ where
             entries
                 .into()
                 .into_iter()
-                .map(|(k, v)| (k, entry::OwnedEntry::new(v, self.data.split(&v))))
+                .map(|(k, v)| (k, entry::OwnedEntry::new(v, self.data.clone())))
                 .collect(),
         )
     }
@@ -170,35 +170,4 @@ fn vec_to_btree<T: EntryExt>(entries: Vec<T>) -> BTreeMap<u64, T> {
         .into_iter()
         .map(|entry| (entry.path_hash(), entry))
         .collect()
-}
-
-#[derive(Clone, Debug)]
-pub struct DataRegion<T> {
-    pub data: T,
-    pub off: u32,
-    pub length: u32,
-}
-
-impl Splittable for Arc<std::fs::File> {
-    type Split = DataRegion<Self>;
-
-    fn split(&self, entry: &impl EntryExt) -> Self::Split {
-        DataRegion {
-            data: self.clone(),
-            off: entry.data_offset(),
-            length: entry.compressed_size(),
-        }
-    }
-}
-
-impl Splittable for Arc<memmap::Mmap> {
-    type Split = DataRegion<Self>;
-
-    fn split(&self, entry: &impl EntryExt) -> Self::Split {
-        DataRegion {
-            data: self.clone(),
-            off: entry.data_offset(),
-            length: entry.compressed_size(),
-        }
-    }
 }

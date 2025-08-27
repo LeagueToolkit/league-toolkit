@@ -1,17 +1,37 @@
-use std::io::{self, Read as _};
+use std::{
+    io::{self, Read as _},
+    ops::Deref,
+};
 
-use derive_more::{Deref, DerefMut};
+use derive_more::DerefMut;
 use flate2::read::GzDecoder;
 use memchr::memmem;
 
 use super::{Decompress, Entry, EntryExt, EntryKind};
 
-#[derive(Deref, DerefMut)]
+#[derive(Clone, Debug)]
+pub struct DataRegion<T> {
+    pub data: T,
+    pub off: u32,
+    pub length: u32,
+}
+
+impl<T> AsRef<[u8]> for DataRegion<T>
+where
+    T: Deref,
+    T::Target: AsRef<[u8]>,
+{
+    fn as_ref(&self) -> &[u8] {
+        &self.data.as_ref()[self.off as usize..self.off as usize + self.length as usize]
+    }
+}
+
+#[derive(derive_more::Deref, DerefMut)]
 pub struct OwnedEntry<D> {
     #[deref_mut]
     #[deref]
     inner: Entry,
-    data: D,
+    data: DataRegion<D>,
 }
 
 impl<D: std::fmt::Debug> std::fmt::Debug for OwnedEntry<D> {
@@ -25,18 +45,33 @@ impl<D: std::fmt::Debug> std::fmt::Debug for OwnedEntry<D> {
 
 impl<D> OwnedEntry<D> {
     pub fn new(entry: Entry, data: D) -> Self {
-        Self { inner: entry, data }
+        Self {
+            data: DataRegion {
+                data,
+                length: entry.compressed_size(),
+                off: entry.data_offset(),
+            },
+            inner: entry,
+        }
     }
 }
 
-impl<D: AsRef<[u8]>> OwnedEntry<D> {
+impl<D> OwnedEntry<D>
+where
+    D: Deref,
+    D::Target: AsRef<[u8]>,
+{
     pub fn raw_data(&self) -> &[u8] {
         self.data.as_ref()
     }
 }
 const ZSTD_MAGIC: [u8; 4] = [0x28, 0xB5, 0x2F, 0xFD];
 
-impl<D: AsRef<[u8]>> Decompress for OwnedEntry<D> {
+impl<D> Decompress for OwnedEntry<D>
+where
+    D: Deref,
+    D::Target: AsRef<[u8]>,
+{
     fn decompress(&self) -> io::Result<Vec<u8>> {
         let mut data = self.data.as_ref();
         Ok(match self.kind() {
