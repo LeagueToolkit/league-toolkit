@@ -6,10 +6,13 @@ mod wad;
 pub use wad::*;
 
 mod error;
-mod file_ext;
-
 pub use error::*;
+
+mod file_ext;
 pub use file_ext::*;
+
+mod builder;
+pub use builder::*;
 
 use std::{
     collections::HashMap,
