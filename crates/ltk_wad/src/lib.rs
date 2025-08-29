@@ -14,7 +14,7 @@ pub use file_ext::*;
 
 use std::{
     collections::HashMap,
-    io::{BufReader, Read, Seek, SeekFrom},
+    io::{self, BufReader, Read, Seek, SeekFrom, Write},
 };
 
 use byteorder::{ReadBytesExt as _, LE};
@@ -23,7 +23,11 @@ use byteorder::{ReadBytesExt as _, LE};
 #[derive(Debug)]
 /// A wad file
 pub struct Wad<TSource: Read + Seek> {
+    pub ecdsa_signature: Option<Vec<u8>>,
+    pub data_checksum: Option<u64>,
+
     chunks: HashMap<u64, WadChunk>,
+
     #[cfg_attr(feature = "serde", serde(skip))]
     source: TSource,
 }
@@ -31,6 +35,24 @@ pub struct Wad<TSource: Read + Seek> {
 impl<TSource: Read + Seek> Wad<TSource> {
     pub fn chunks(&self) -> &HashMap<u64, WadChunk> {
         &self.chunks
+    }
+
+    pub fn source(&self) -> &TSource {
+        &self.source
+    }
+
+    pub fn load_raw(
+        &mut self,
+        chunk: u64,
+    ) -> Result<Option<(Vec<u8>, WadChunkCompression)>, WadError> {
+        let Some(chunk) = self.chunks.get(&chunk) else {
+            return Ok(None);
+        };
+        let mut data = vec![0u8; chunk.compressed_size() as usize];
+        self.source
+            .seek(SeekFrom::Start(chunk.data_offset() as u64))?;
+        self.source.read_exact(&mut data)?;
+        Ok(Some((data, chunk.compression_type())))
     }
 
     pub fn mount(mut source: TSource) -> Result<Wad<TSource>, WadError> {
@@ -51,13 +73,24 @@ impl<TSource: Read + Seek> Wad<TSource> {
             return Err(WadError::InvalidVersion { major, minor });
         }
 
+        let mut ecdsa_signature = None;
+        let mut data_checksum = None;
+
         if major == 2 {
             let _ecdsa_length = reader.seek(SeekFrom::Current(1))?;
-            let _ecdsa_signature = reader.seek(SeekFrom::Current(83))?;
-            let _data_checksum = reader.seek(SeekFrom::Current(8))?;
+            ecdsa_signature.replace({
+                let mut sig = vec![0u8; 81];
+                reader.read_exact(&mut sig)?;
+                sig
+            });
+            data_checksum.replace(reader.read_u64::<LE>()?);
         } else if major == 3 {
-            let _ecdsa_signature = reader.seek(SeekFrom::Current(256))?;
-            let _data_checksum = reader.seek(SeekFrom::Current(8))?;
+            ecdsa_signature.replace({
+                let mut sig = vec![0u8; 256];
+                reader.read_exact(&mut sig)?;
+                sig
+            });
+            data_checksum.replace(reader.read_u64::<LE>()?);
         }
 
         if major == 1 || major == 2 {
@@ -70,6 +103,7 @@ impl<TSource: Read + Seek> Wad<TSource> {
         for _ in 0..chunk_count {
             let chunk = match (major, minor) {
                 (3, 1) => WadChunk::read_v3_1(&mut reader),
+                (3, 3) => WadChunk::read_v3_1(&mut reader), // 3_3 == 3_1 in this context
                 (3, 4) => WadChunk::read_v3_4(&mut reader),
                 _ => Err(WadError::InvalidVersion { major, minor }),
             }?;
@@ -83,7 +117,12 @@ impl<TSource: Read + Seek> Wad<TSource> {
                 })?;
         }
 
-        Ok(Wad { chunks, source })
+        Ok(Wad {
+            ecdsa_signature,
+            data_checksum,
+            chunks,
+            source,
+        })
     }
 
     pub fn decode(&mut self) -> (WadDecoder<'_, TSource>, &HashMap<u64, WadChunk>) {
