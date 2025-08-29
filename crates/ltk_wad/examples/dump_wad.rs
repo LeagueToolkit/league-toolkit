@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     env,
     error::Error,
     fs::File,
@@ -10,7 +11,7 @@ use std::{
 
 use binrw::BinRead as _;
 use itertools::Itertools;
-use ltk_wad::{entry::Decompress, Wad};
+use ltk_wad::{entry::Decompress, Builder as WadBuilder, Wad};
 use xxhash_rust::{xxh3::xxh3_64, xxh64::xxh64};
 
 use memmap::Mmap;
@@ -36,13 +37,18 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     let (wad, entries) = wad.explode();
-    let entry = entries.first_key_value().unwrap().1;
-    println!("{entry:#?}");
-    println!("{:?}", entry.raw_data().len());
 
-    let decomp = entry.decompress().unwrap();
-    println!("{}", decomp.len());
-    std::fs::write("./out", decomp).unwrap();
+    {
+        let entry = entries.first_key_value().unwrap().1;
+        println!("{entry:#?}");
+        println!("{:?}", entry.raw_data().len());
+
+        let decomp = entry.decompress().unwrap();
+        println!("{}", decomp.len());
+        std::fs::write("./out", decomp).unwrap();
+    }
+
+    let new_wad = WadBuilder::from_entries(BTreeMap::from([entries.pop_first().unwrap()]));
 
     let mut total = 0;
 

@@ -1,3 +1,5 @@
+use crate::header::V3;
+
 use super::{EntryExt, EntryKind};
 use binrw::binrw;
 use num_enum::TryFromPrimitive as _;
@@ -26,6 +28,10 @@ pub struct V3_4 {
     #[bw(try_map = |x: &u32| TryInto::<[u8; 3]>::try_into(&x.to_le_bytes()[0..3]) ) ]
     pub subchunk_index: u32,
     pub checksum: u64,
+}
+
+impl V3_4 {
+    pub const LATEST_MINOR: u8 = 4;
 }
 
 impl EntryExt for V3_4 {

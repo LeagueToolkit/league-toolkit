@@ -13,19 +13,28 @@ pub use v2::*;
 mod v3;
 pub use v3::*;
 
+use crate::entry;
+
 #[binrw]
 #[brw(magic = b"RW", little)]
 #[derive(Debug, Clone, Deref, DerefMut)]
 pub struct Header {
     #[bw(calc = self.major())]
-    major: u8,
-    minor: u8,
+    pub major: u8,
+    pub minor: u8,
     #[brw(args(major))]
     #[deref]
     #[deref_mut]
-    inner: Headers,
+    pub inner: Headers,
 }
 impl Header {
+    pub fn new(inner: Latest) -> Self {
+        Self {
+            minor: entry::Latest::LATEST_MINOR,
+            inner: inner.into(),
+        }
+    }
+
     pub fn major(&self) -> u8 {
         self.inner.major()
     }
@@ -51,6 +60,22 @@ pub enum Headers {
     V1(#[brw(args {major})] V1),
 }
 pub type Latest = V3;
+
+impl From<V3> for Headers {
+    fn from(value: V3) -> Self {
+        Self::V3(value)
+    }
+}
+impl From<V2> for Headers {
+    fn from(value: V2) -> Self {
+        Self::V2(value)
+    }
+}
+impl From<V1> for Headers {
+    fn from(value: V1) -> Self {
+        Self::V1(value)
+    }
+}
 
 impl Headers {
     pub fn major(&self) -> u8 {

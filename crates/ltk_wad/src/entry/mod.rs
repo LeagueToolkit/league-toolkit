@@ -21,6 +21,9 @@ pub use kind::*;
 mod generic;
 pub use generic::*;
 
+mod builder;
+pub use builder::*;
+
 #[derive(BinRead, BinWrite)]
 #[brw(import {major: u8, minor: u8})]
 #[derive(Debug, Clone, Copy)]
