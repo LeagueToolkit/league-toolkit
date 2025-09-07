@@ -84,9 +84,11 @@ impl<D: WriteableEntry> Builder<[u8; 256], D> {
         let mut entry_info = Vec::with_capacity(self.entries.len());
         let mut total_written = 0;
         // write data
-        for (_path, entry) in &self.entries {
+        for (path, entry) in &self.entries {
             let (written, entry_checksum) = entry.write_data(writer)?;
             entry_info.push((data_start as u32 + total_written as u32, entry_checksum));
+            checksum.update(&path.to_le_bytes());
+            checksum.update(&entry_checksum.to_le_bytes());
             total_written += written;
         }
 

@@ -27,6 +27,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let file = File::open(file).unwrap();
 
     let mmap = unsafe { Mmap::map(&file).unwrap() };
+    drop(file);
 
     let wad: Wad<_> = Wad::mount(Rc::new(mmap)).unwrap();
     println!("v{}.{}", wad.version().0, wad.version().1);
