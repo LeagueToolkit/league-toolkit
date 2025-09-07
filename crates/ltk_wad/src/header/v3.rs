@@ -19,6 +19,7 @@ pub struct V3 {
 impl V3 {
     pub const TOC_OFFSET: u16 = 272;
     pub const ENTRY_SIZE: u16 = 32;
+    pub const MAJOR: u8 = 3;
 }
 impl HeaderExt for V3 {
     #[inline(always)]

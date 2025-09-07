@@ -6,6 +6,7 @@ use num_enum::TryFromPrimitive as _;
 
 /// >= 3.4 (post the switch to u24 subchunk_index business)
 #[binrw]
+#[brw(little)]
 #[derive(Debug, Clone, Copy)]
 pub struct V3_4 {
     pub path_hash: u64,
@@ -28,6 +29,21 @@ pub struct V3_4 {
     #[bw(try_map = |x: &u32| TryInto::<[u8; 3]>::try_into(&x.to_le_bytes()[0..3]) ) ]
     pub subchunk_index: u32,
     pub checksum: u64,
+}
+
+impl V3_4 {
+    pub fn from_generic_or_default<E: EntryExt>(value: &E) -> Self {
+        Self {
+            path_hash: value.path_hash(),
+            data_offset: value.data_offset(),
+            compressed_size: value.compressed_size(),
+            uncompressed_size: value.uncompressed_size(),
+            kind: value.kind(),
+            subchunk_count: value.subchunk_count().unwrap_or_default(),
+            subchunk_index: value.subchunk_index().unwrap_or_default(),
+            checksum: value.checksum().unwrap_or_default(),
+        }
+    }
 }
 
 impl V3_4 {

@@ -3,6 +3,7 @@
 pub mod entry;
 pub mod header;
 mod wad;
+use binrw::NamedArgs;
 pub use wad::*;
 
 mod error;
@@ -18,3 +19,9 @@ use std::{
     collections::HashMap,
     io::{BufReader, Read, Seek, SeekFrom},
 };
+
+#[derive(Clone, NamedArgs)]
+pub struct VersionArgs {
+    pub major: u8,
+    pub minor: u8,
+}

@@ -3,9 +3,15 @@ use std::{
     ops::Deref,
 };
 
+use binrw::{meta::WriteEndian, BinWrite};
 use derive_more::DerefMut;
 use flate2::read::GzDecoder;
 use memchr::memmem;
+
+use crate::{
+    entry::{self, WriteableEntry},
+    VersionArgs,
+};
 
 use super::{Decompress, Entry, EntryExt, EntryKind};
 
@@ -27,10 +33,10 @@ where
 }
 
 #[derive(derive_more::Deref, DerefMut)]
-pub struct OwnedEntry<D> {
+pub struct OwnedEntry<D, E: EntryExt = Entry> {
     #[deref_mut]
     #[deref]
-    inner: Entry,
+    inner: E,
     data: DataRegion<D>,
 }
 
@@ -43,8 +49,8 @@ impl<D: std::fmt::Debug> std::fmt::Debug for OwnedEntry<D> {
     }
 }
 
-impl<D> OwnedEntry<D> {
-    pub fn new(entry: Entry, data: D) -> Self {
+impl<E: EntryExt, D> OwnedEntry<D, E> {
+    pub fn new(entry: E, data: D) -> Self {
         Self {
             data: DataRegion {
                 data,
@@ -56,13 +62,25 @@ impl<D> OwnedEntry<D> {
     }
 }
 
-impl<D> OwnedEntry<D>
+impl<E: EntryExt, D> WriteableEntry for OwnedEntry<D, E>
 where
     D: Deref,
     D::Target: AsRef<[u8]>,
+    for<'a> E: BinWrite<Args<'a> = VersionArgs> + WriteEndian,
 {
-    pub fn raw_data(&self) -> &[u8] {
-        self.data.as_ref()
+    fn write_entry<W: io::Write + io::Seek>(
+        &self,
+        writer: &mut W,
+        data_off: u32,
+    ) -> io::Result<()> {
+        let mut entry = entry::Latest::from_generic_or_default(&self.inner);
+        entry.data_offset = data_off;
+        entry.write(writer).unwrap();
+        Ok(())
+    }
+
+    fn write_data<W: io::Write>(&self, writer: &mut W) -> io::Result<usize> {
+        writer.write(self.data.as_ref())
     }
 }
 const ZSTD_MAGIC: [u8; 4] = [0x28, 0xB5, 0x2F, 0xFD];

@@ -36,19 +36,23 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("{entry:#?}");
     }
 
-    let (wad, entries) = wad.explode();
+    let (wad, mut entries) = wad.explode();
 
     {
         let entry = entries.first_key_value().unwrap().1;
         println!("{entry:#?}");
-        println!("{:?}", entry.raw_data().len());
+        //println!("{:?}", entry.raw_data().len());
 
         let decomp = entry.decompress().unwrap();
         println!("{}", decomp.len());
         std::fs::write("./out", decomp).unwrap();
     }
 
-    let new_wad = WadBuilder::from_entries(BTreeMap::from([entries.pop_first().unwrap()]));
+    let new_wad = WadBuilder::from_entries(BTreeMap::from([entries.pop_first().unwrap()]))
+        .with_signature([1; 256]);
+
+    let mut file = std::fs::File::create("./out.wad").unwrap();
+    new_wad.write_to(&mut file).unwrap();
 
     let mut total = 0;
 

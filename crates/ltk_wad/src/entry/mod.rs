@@ -24,17 +24,19 @@ pub use generic::*;
 mod builder;
 pub use builder::*;
 
+use crate::VersionArgs;
+
 #[derive(BinRead, BinWrite)]
-#[brw(import {major: u8, minor: u8})]
+#[brw(import_raw(args: VersionArgs), little)]
 #[derive(Debug, Clone, Copy)]
 pub enum Entry {
-    #[br(pre_assert(major == 3 && minor == 4))]
+    #[br(pre_assert(args.major == 3 && args.minor == 4))]
     V3_4(V3_4),
-    #[br(pre_assert(major == 3 && minor < 4))]
+    #[br(pre_assert(args.major == 3 && args.minor < 4))]
     V3(V3),
-    #[br(pre_assert(major == 2))]
+    #[br(pre_assert(args.major == 2))]
     V2(V2),
-    #[br(pre_assert(major == 1))]
+    #[br(pre_assert(args.major == 1))]
     V1(V1),
 }
 impl Entry {
