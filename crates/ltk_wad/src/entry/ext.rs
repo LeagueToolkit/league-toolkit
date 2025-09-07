@@ -33,7 +33,11 @@ pub trait Decompress {
 }
 
 pub trait WriteableEntry {
-    fn write_entry<W: io::Write + io::Seek>(&self, writer: &mut W, data_off: u32)
-        -> io::Result<()>;
-    fn write_data<W: io::Write>(&self, writer: &mut W) -> io::Result<usize>;
+    fn write_entry<W: io::Write + io::Seek>(
+        &self,
+        writer: &mut W,
+        data_off: u32,
+        checksum: u64,
+    ) -> io::Result<()>;
+    fn write_data<W: io::Write>(&self, writer: &mut W) -> io::Result<(usize, u64)>;
 }

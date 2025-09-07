@@ -81,20 +81,20 @@ impl<D: WriteableEntry> Builder<[u8; 256], D> {
 
         let data_start = writer.seek(SeekFrom::Current(toc_size - entry_size))?;
 
-        let mut offsets = Vec::with_capacity(self.entries.len());
+        let mut entry_info = Vec::with_capacity(self.entries.len());
         let mut total_written = 0;
         // write data
         for (_path, entry) in &self.entries {
-            let written = entry.write_data(writer)?;
-            offsets.push(data_start as u32 + total_written as u32);
+            let (written, entry_checksum) = entry.write_data(writer)?;
+            entry_info.push((data_start as u32 + total_written as u32, entry_checksum));
             total_written += written;
         }
 
         writer.seek_relative(-(total_written as i64 + toc_size))?;
 
         // write toc
-        for ((_path, entry), data_off) in self.entries.iter().zip(offsets) {
-            entry.write_entry(writer, data_off)?;
+        for ((_path, entry), (data_off, entry_checksum)) in self.entries.iter().zip(entry_info) {
+            entry.write_entry(writer, data_off, entry_checksum)?;
         }
 
         let header = Header::new(header::Latest {

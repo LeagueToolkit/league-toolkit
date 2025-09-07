@@ -7,6 +7,7 @@ use binrw::{meta::WriteEndian, BinWrite};
 use derive_more::DerefMut;
 use flate2::read::GzDecoder;
 use memchr::memmem;
+use xxhash_rust::xxh3;
 
 use crate::{
     entry::{self, WriteableEntry},
@@ -72,15 +73,20 @@ where
         &self,
         writer: &mut W,
         data_off: u32,
+        checksum: u64,
     ) -> io::Result<()> {
         let mut entry = entry::Latest::from_generic_or_default(&self.inner);
         entry.data_offset = data_off;
+        entry.checksum = checksum;
         entry.write(writer).unwrap();
         Ok(())
     }
 
-    fn write_data<W: io::Write>(&self, writer: &mut W) -> io::Result<usize> {
-        writer.write(self.data.as_ref())
+    fn write_data<W: io::Write>(&self, writer: &mut W) -> io::Result<(usize, u64)> {
+        let data = self.data.as_ref();
+        let checksum = xxh3::xxh3_64(data);
+        let written = writer.write(data)?;
+        Ok((written, checksum))
     }
 }
 const ZSTD_MAGIC: [u8; 4] = [0x28, 0xB5, 0x2F, 0xFD];
