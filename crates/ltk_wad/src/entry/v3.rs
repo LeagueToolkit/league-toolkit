@@ -1,5 +1,6 @@
 use super::{EntryExt, EntryKind};
 use binrw::binrw;
+use num_enum::TryFromPrimitive as _;
 
 #[binrw]
 #[derive(Debug, Clone, Copy)]
@@ -9,8 +10,17 @@ pub struct V3 {
     pub compressed_size: u32,
     pub uncompressed_size: u32,
 
-    pub compression: EntryKind,
+    #[br(temp)]
+    #[bw(calc = (subchunk_count << 4) | (*kind as u8 & 0xF) )]
+    kind_subchunk_count: u8,
+
+    #[br(try_calc = EntryKind::try_from_primitive(kind_subchunk_count & 0xF))]
+    #[bw(ignore)]
+    pub kind: EntryKind,
+    #[br(calc = kind_subchunk_count >> 4)]
+    #[bw(ignore)]
     pub subchunk_count: u8,
+
     #[br(map = |x: u8| x == 1)]
     #[bw(map = |x: &bool| u8::from(*x))]
     pub is_duplicate: bool,
@@ -41,7 +51,7 @@ impl EntryExt for V3 {
 
     #[inline(always)]
     fn kind(&self) -> EntryKind {
-        self.compression
+        self.kind
     }
 
     #[inline(always)]
