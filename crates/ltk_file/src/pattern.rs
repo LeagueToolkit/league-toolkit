@@ -11,6 +11,18 @@ pub static LEAGUE_FILE_MAGIC_BYTES: &[LeagueFilePattern] = &[
         LeagueFileKind::WwisePackage,
     ),
     LeagueFilePattern::from_fn(|data| &data[1..4] == b"PNG", 4, LeagueFileKind::Png),
+    // TGA does not have a fixed magic at the beginning. Heuristics: byte 1 (color map type)
+    // is 0 or 1, and byte 2 (image type) is one of the valid values.
+    LeagueFilePattern::from_fn(
+        |data| {
+            let color_map_type = data[1];
+            let image_type = data[2];
+            (color_map_type == 0 || color_map_type == 1)
+                && matches!(image_type, 1 | 2 | 3 | 9 | 10 | 11)
+        },
+        3,
+        LeagueFileKind::Tga,
+    ),
     LeagueFilePattern::from_bytes(b"DDS ", LeagueFileKind::TextureDds),
     LeagueFilePattern::from_bytes(&[0x33, 0x22, 0x11, 0x00], LeagueFileKind::SimpleSkin),
     LeagueFilePattern::from_bytes(b"PROP", LeagueFileKind::PropertyBin),
