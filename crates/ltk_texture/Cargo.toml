@@ -1,5 +1,5 @@
 [package]
-name = "ltk_render"
+name = "ltk_texture"
 version = "0.1.0"
 edition = "2021"
 
@@ -11,9 +11,15 @@ num_enum = { workspace = true }
 
 image = { version = "0.25.2", default-features = false, features = ["dds"] }
 ddsfile = "0.5.2"
-image_dds = {version = "0.6.0", default-features = false, features = ["ddsfile", "image"]}
+image_dds = { version = "0.6.0", default-features = false, features = [
+    "ddsfile",
+    "image",
+] }
 
 texture2ddecoder = "0.1.2"
 
 [dev-dependencies]
-image = { version = "0.25.2", default-features = false, features = ["dds", "png"] }
+image = { version = "0.25.2", default-features = false, features = [
+    "dds",
+    "png",
+] }

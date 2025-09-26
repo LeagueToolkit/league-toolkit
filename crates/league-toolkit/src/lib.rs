@@ -13,8 +13,8 @@ pub use ltk_meta as meta;
 #[cfg(feature = "primitives")]
 pub use ltk_primitives as primitives;
 
-#[cfg(feature = "render")]
-pub use ltk_render as render;
+#[cfg(feature = "texture")]
+pub use ltk_texture as texture;
 
 #[cfg(feature = "wad")]
 pub use ltk_wad as wad;

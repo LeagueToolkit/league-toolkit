@@ -6,7 +6,16 @@ edition = "2021"
 
 # wad, file, meta have serde
 [features]
-default = ["anim", "file", "mesh", "meta", "primitives", "render", "wad", "hash"]
+default = [
+    "anim",
+    "file",
+    "mesh",
+    "meta",
+    "primitives",
+    "texture",
+    "wad",
+    "hash",
+]
 
 serde = ["ltk_wad/serde", "ltk_file/serde", "ltk_meta/serde"]
 
@@ -15,16 +24,16 @@ file = ["dep:ltk_file"]
 mesh = ["dep:ltk_mesh"]
 meta = ["dep:ltk_meta"]
 primitives = ["dep:ltk_primitives"]
-render = ["dep:ltk_render"]
+texture = ["dep:ltk_texture"]
 wad = ["dep:ltk_wad"]
 hash = ["dep:elf_hash"]
 
 [dependencies]
-ltk_anim = {path = "../ltk_anim", optional = true}
-ltk_file = {path = "../ltk_file", optional = true}
-ltk_mesh = {path = "../ltk_mesh", optional = true}
-ltk_meta = {path = "../ltk_meta", optional = true}
-ltk_primitives = {path = "../ltk_primitives", optional = true}
-ltk_render = {path = "../ltk_render", optional = true}
-ltk_wad = {path = "../ltk_wad", optional = true}
-elf_hash = {path = "../elf_hash", optional = true}
+ltk_anim = { path = "../ltk_anim", optional = true }
+ltk_file = { path = "../ltk_file", optional = true }
+ltk_mesh = { path = "../ltk_mesh", optional = true }
+ltk_meta = { path = "../ltk_meta", optional = true }
+ltk_primitives = { path = "../ltk_primitives", optional = true }
+ltk_texture = { path = "../ltk_texture", optional = true }
+ltk_wad = { path = "../ltk_wad", optional = true }
+elf_hash = { path = "../elf_hash", optional = true }
