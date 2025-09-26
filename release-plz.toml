@@ -1,0 +1,7 @@
+[workspace]
+# Only release when we merge the release PR, not on every push
+release_always = false
+
+[packages]
+# Only publish the main league-toolkit crate
+include = ["path:crates/league-toolkit"]

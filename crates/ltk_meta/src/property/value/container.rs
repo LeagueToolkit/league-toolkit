@@ -8,7 +8,7 @@ use crate::{
 
 use super::PropertyValueEnum;
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
-use io_ext::{measure, window};
+use ltk_io_ext::{measure, window};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]

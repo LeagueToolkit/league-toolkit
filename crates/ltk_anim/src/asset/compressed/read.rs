@@ -20,7 +20,7 @@ impl Compressed {
     /// Only use this if you already know the animation asset is compressed! If you aren't sure, please use AnimationAsset::from_reader
     pub fn from_reader<R: Read + Seek + ?Sized>(reader: &mut R) -> asset::Result<Self> {
         use byteorder::{ReadBytesExt as _, LE};
-        use io_ext::ReaderExt as _;
+        use ltk_io_ext::ReaderExt as _;
 
         let _magic = reader.read_u64::<LE>()?; // magic is an 8 byte string
 

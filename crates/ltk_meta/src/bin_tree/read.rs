@@ -4,7 +4,7 @@ use crate::Error;
 
 use super::{BinTree, BinTreeObject};
 use byteorder::{ReadBytesExt, LE};
-use io_ext::ReaderExt;
+use ltk_io_ext::ReaderExt;
 
 impl BinTree {
     pub const PROP: u32 = u32::from_le_bytes(*b"PROP");

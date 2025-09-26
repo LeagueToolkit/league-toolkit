@@ -2,6 +2,9 @@
 name = "ltk_meta"
 version = "0.1.0"
 edition = "2021"
+description = "Metadata formats and utilities for League Toolkit"
+license = "MIT OR Apache-2.0"
+readme = "../../README.md"
 
 [features]
 serde = ["dep:serde", "ltk_primitives/serde", "glam/serde"]
@@ -19,7 +22,7 @@ paste = { workspace = true }
 
 serde = { workspace = true, optional = true }
 
-io-ext = { path = "../io-ext" }
+ltk_io_ext = { path = "../ltk_io_ext" }
 ltk_primitives = { path = "../ltk_primitives" }
 
 [dev-dependencies]

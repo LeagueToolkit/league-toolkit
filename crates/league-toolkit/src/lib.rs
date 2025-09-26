@@ -20,4 +20,4 @@ pub use ltk_texture as texture;
 pub use ltk_wad as wad;
 
 #[cfg(feature = "hash")]
-pub use elf_hash::hash;
+pub use ltk_hash as hash;

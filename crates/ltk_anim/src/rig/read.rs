@@ -18,7 +18,7 @@ impl RigResource {
     fn read<R: Read + Seek + ?Sized>(reader: &mut R) -> crate::Result<Self> {
         use crate::{Joint, ParseError};
         use byteorder::{ReadBytesExt, LE};
-        use io_ext::ReaderExt;
+        use ltk_io_ext::ReaderExt;
         use std::io::SeekFrom;
 
         let _file_size = reader.read_u32::<LE>()?;

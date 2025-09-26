@@ -1,4 +1,4 @@
-use io_ext::ReaderExt;
+use ltk_io_ext::ReaderExt;
 use std::io::Read;
 
 use byteorder::{ReadBytesExt, LE};

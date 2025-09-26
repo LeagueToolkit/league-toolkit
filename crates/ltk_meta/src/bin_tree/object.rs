@@ -1,6 +1,6 @@
 use std::{collections::HashMap, io};
 
-use io_ext::{measure, window};
+use ltk_io_ext::{measure, window};
 
 use super::super::{BinProperty, Error};
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};

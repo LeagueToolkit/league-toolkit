@@ -3,6 +3,10 @@ name = "league-toolkit"
 version = "0.1.0"
 edition = "2021"
 
+description = "Toolkit library for serializing and editing various League of Legends formats"
+license = "MIT OR Apache-2.0"
+readme = "../../README.md"
+
 
 # wad, file, meta have serde
 [features]
@@ -26,7 +30,7 @@ meta = ["dep:ltk_meta"]
 primitives = ["dep:ltk_primitives"]
 texture = ["dep:ltk_texture"]
 wad = ["dep:ltk_wad"]
-hash = ["dep:elf_hash"]
+hash = ["dep:ltk_hash"]
 
 [dependencies]
 ltk_anim = { path = "../ltk_anim", optional = true }
@@ -36,4 +40,4 @@ ltk_meta = { path = "../ltk_meta", optional = true }
 ltk_primitives = { path = "../ltk_primitives", optional = true }
 ltk_texture = { path = "../ltk_texture", optional = true }
 ltk_wad = { path = "../ltk_wad", optional = true }
-elf_hash = { path = "../elf_hash", optional = true }
+ltk_hash = { path = "../ltk_hash", optional = true }

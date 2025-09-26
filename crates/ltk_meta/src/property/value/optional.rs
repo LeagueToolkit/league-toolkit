@@ -4,7 +4,7 @@ use crate::{
     traits::{PropertyValue, ReadProperty, ReaderExt, WriteProperty, WriterExt},
     Error,
 };
-use io_ext::{ReaderExt as _, WriterExt as _};
+use ltk_io_ext::{ReaderExt as _, WriterExt as _};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, PartialEq, Debug)]

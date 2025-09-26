@@ -1,7 +1,7 @@
 use crate::Joint;
 use byteorder::{ReadBytesExt, LE};
 use glam::Mat4;
-use io_ext::ReaderExt;
+use ltk_io_ext::ReaderExt;
 use std::io;
 use std::io::SeekFrom;
 use std::io::{Read, Seek};

@@ -2,8 +2,8 @@ use std::io::{self, BufReader, BufWriter, Cursor, Read, Seek, SeekFrom, Write};
 
 use byteorder::{WriteBytesExt, LE};
 use flate2::read::GzEncoder;
-use io_ext::measure;
 use itertools::Itertools;
+use ltk_io_ext::measure;
 use xxhash_rust::{xxh3, xxh64};
 
 use ltk_file::LeagueFileKind;

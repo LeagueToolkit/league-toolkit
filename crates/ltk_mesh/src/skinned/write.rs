@@ -3,7 +3,7 @@ use crate::{
     SkinnedMesh,
 };
 use byteorder::{WriteBytesExt, LE};
-use io_ext::WriterExt;
+use ltk_io_ext::WriterExt;
 use std::io::Write;
 
 impl SkinnedMesh {
