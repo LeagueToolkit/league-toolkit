@@ -1,5 +1,5 @@
 use crate::traits::{PropertyValue, ReadProperty, WriteProperty};
-use io_ext::{ReaderExt, WriterExt};
+use ltk_io_ext::{ReaderExt, WriterExt};
 
 macro_rules! impl_prim {
     ($name:tt, $rust:tt, [$($derive:tt),*], $method:ident $(::<$endian:ident>)?, $($write_value:tt)*) => {

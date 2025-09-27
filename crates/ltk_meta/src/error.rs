@@ -21,7 +21,7 @@ pub enum Error {
     InvalidKeyType(BinPropertyKind),
 
     #[error(transparent)]
-    ReaderError(#[from] io_ext::ReaderError),
+    ReaderError(#[from] ltk_io_ext::ReaderError),
     #[error("IO Error - {0}")]
     IOError(#[from] std::io::Error),
     #[error("UTF-8 Error - {0}")]

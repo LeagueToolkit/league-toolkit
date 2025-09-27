@@ -1,7 +1,7 @@
 use super::RigResource;
 use byteorder::{WriteBytesExt, LE};
-use elf_hash::hash;
-use io_ext::WriterExt;
+use ltk_hash::elf;
+use ltk_io_ext::WriterExt;
 use std::io;
 use std::io::{Seek, SeekFrom, Write};
 
@@ -66,7 +66,7 @@ impl RigResource {
         let mut hash_ids = self
             .joints
             .iter()
-            .map(|j| (j.id(), hash::elf(j.name())))
+            .map(|j| (j.id(), elf::elf(j.name())))
             .collect::<Vec<_>>();
         hash_ids.sort_by(|a, b| b.1.cmp(&a.1));
 

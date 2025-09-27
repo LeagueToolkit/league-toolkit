@@ -5,7 +5,7 @@ use crate::{
     BinProperty, Error,
 };
 use byteorder::{ReadBytesExt as _, WriteBytesExt as _, LE};
-use io_ext::{measure, window};
+use ltk_io_ext::{measure, window};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, PartialEq, Debug, Default)]

@@ -1,7 +1,7 @@
 use crate::Joint;
 use byteorder::{WriteBytesExt, LE};
-use elf_hash::hash;
-use io_ext::WriterExt;
+use ltk_hash::elf;
+use ltk_io_ext::WriterExt;
 use std::io;
 use std::io::{Seek, Write};
 
@@ -17,7 +17,7 @@ impl Joint {
 
         writer.write_i16::<LE>(0)?; // padding
 
-        writer.write_u32::<LE>(hash::elf(&self.name) as u32)?;
+        writer.write_u32::<LE>(elf::elf(&self.name) as u32)?;
         writer.write_f32::<LE>(self.radius)?;
 
         writer.write_vec3::<LE>(&self.local_translation)?;

@@ -2,6 +2,9 @@
 name = "ltk_anim"
 version = "0.1.0"
 edition = "2021"
+description = "Animation formats support for League Toolkit"
+license = "MIT OR Apache-2.0"
+readme = "../../README.md"
 
 [dependencies]
 thiserror = { workspace = true }
@@ -11,8 +14,8 @@ num_enum = { workspace = true }
 
 glam = { workspace = true }
 
-elf_hash = { path = "../elf_hash/" }
-io-ext = { path = "../io-ext" }
+ltk_hash = { path = "../ltk_hash/" }
+ltk_io_ext = { path = "../ltk_io_ext" }
 
 [dev-dependencies]
 approx = { workspace = true }

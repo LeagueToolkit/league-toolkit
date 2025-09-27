@@ -5,7 +5,7 @@ use crate::{
     SkinnedMesh, SkinnedMeshRange,
 };
 use byteorder::{ReadBytesExt, LE};
-use io_ext::ReaderExt;
+use ltk_io_ext::ReaderExt;
 use ltk_primitives::{Sphere, AABB};
 use num_enum::TryFromPrimitiveError;
 use std::io::Read;

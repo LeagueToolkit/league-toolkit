@@ -11,5 +11,5 @@ pub enum ParseError {
     #[error("UTF-8 Error - {0}")]
     Utf8Error(#[from] std::str::Utf8Error),
     #[error(transparent)]
-    ReaderError(#[from] io_ext::ReaderError),
+    ReaderError(#[from] ltk_io_ext::ReaderError),
 }

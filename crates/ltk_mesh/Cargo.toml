@@ -2,6 +2,9 @@
 name = "ltk_mesh"
 version = "0.1.0"
 edition = "2021"
+description = "Mesh parsing and structures for League Toolkit"
+license = "MIT OR Apache-2.0"
+readme = "../../README.md"
 
 [dependencies]
 byteorder = { workspace = true }
@@ -12,5 +15,5 @@ lazy_static = { workspace = true }
 
 glam = { workspace = true }
 
-io-ext = { path = "../io-ext" }
+ltk_io_ext = { path = "../ltk_io_ext" }
 ltk_primitives = { path = "../ltk_primitives" }

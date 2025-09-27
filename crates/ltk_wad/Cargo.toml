@@ -2,6 +2,9 @@
 name = "ltk_wad"
 version = "0.1.0"
 edition = "2021"
+description = "WAD archive reading/writing for League Toolkit"
+license = "MIT OR Apache-2.0"
+readme = "../../README.md"
 
 [features]
 default = ["zstd"]
@@ -27,5 +30,5 @@ flate2 = { workspace = true }
 
 serde = { workspace = true, optional = true }
 
-io-ext = { path = "../io-ext" }
+ltk_io_ext = { path = "../ltk_io_ext" }
 ltk_file = { path = "../ltk_file" }

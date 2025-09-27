@@ -2,7 +2,7 @@ use std::io;
 
 use super::BinTree;
 use byteorder::{WriteBytesExt, LE};
-use io_ext::WriterExt;
+use ltk_io_ext::WriterExt;
 
 impl BinTree {
     /// Writes a BinTree to a writer.

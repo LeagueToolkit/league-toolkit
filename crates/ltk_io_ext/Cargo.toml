@@ -1,7 +1,10 @@
 [package]
-name = "io-ext"
+name = "ltk_io_ext"
 version = "0.1.0"
 edition = "2021"
+description = "I/O extensions used by League Toolkit"
+license = "MIT OR Apache-2.0"
+readme = "../../README.md"
 
 [dependencies]
 thiserror = "1.0.60"

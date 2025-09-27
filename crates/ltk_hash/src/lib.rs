@@ -1,2 +1,2 @@
 //! Other utilities (hashing, etc)
-pub mod hash;
+pub mod elf;

@@ -1,6 +1,6 @@
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
-use io_ext::ReaderExt;
-use io_ext::WriterExt;
+use ltk_io_ext::ReaderExt;
+use ltk_io_ext::WriterExt;
 use std::io;
 use std::io::{Read, Write};
 
