@@ -1,7 +1,44 @@
 [workspace]
 # Only release when we merge the release PR, not on every push
 release_always = false
+release = true
 
-[packages]
-# Only publish the main league-toolkit crate
-include = ["path:crates/league-toolkit"]
+[[package]]
+name = "league-toolkit"
+publish = true
+
+[[package]]
+name = "ltk_anim"
+publish = true
+
+[[package]]
+name = "ltk_file"
+publish = true
+
+[[package]]
+name = "ltk_mesh"
+publish = true
+
+[[package]]
+name = "ltk_meta"
+publish = true
+
+[[package]]
+name = "ltk_primitives"
+publish = true
+
+[[package]]
+name = "ltk_texture"
+publish = true
+
+[[package]]
+name = "ltk_wad"
+publish = true
+
+[[package]]
+name = "ltk_hash"
+publish = true
+
+[[package]]
+name = "ltk_io_ext"
+publish = true
