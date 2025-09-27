@@ -2,6 +2,7 @@
 release_always = false
 pr_draft = true
 changelog_update = true
+changelog_path = "./CHANGELOG.md"
 git_release_draft = true
 git_release_enable = true
 git_tag_name = "v{{ version }}"
