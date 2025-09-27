@@ -4,7 +4,7 @@ version = "0.2.0"
 edition = "2021"
 
 description = "Toolkit library for serializing and editing various League of Legends formats"
-license = "MIT OR Apache-2.0"
+license = "AGPL-3.0-only"
 readme = "../../README.md"
 
 
