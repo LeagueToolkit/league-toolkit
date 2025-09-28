@@ -30,5 +30,5 @@ flate2 = { workspace = true }
 
 serde = { workspace = true, optional = true }
 
-ltk_io_ext = { path = "../ltk_io_ext" }
-ltk_file = { path = "../ltk_file" }
+ltk_io_ext = { version = "0.2.0", path = "../ltk_io_ext" }
+ltk_file = { version = "0.2.0", path = "../ltk_file" }

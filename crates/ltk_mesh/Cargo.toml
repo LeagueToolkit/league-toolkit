@@ -15,5 +15,5 @@ lazy_static = { workspace = true }
 
 glam = { workspace = true }
 
-ltk_io_ext = { path = "../ltk_io_ext" }
-ltk_primitives = { path = "../ltk_primitives" }
+ltk_io_ext = { version = "0.2.0", path = "../ltk_io_ext" }
+ltk_primitives = { version = "0.2.0", path = "../ltk_primitives" }

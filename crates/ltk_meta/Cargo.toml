@@ -22,8 +22,8 @@ paste = { workspace = true }
 
 serde = { workspace = true, optional = true }
 
-ltk_io_ext = { path = "../ltk_io_ext" }
-ltk_primitives = { path = "../ltk_primitives" }
+ltk_io_ext = { version = "0.2.0", path = "../ltk_io_ext" }
+ltk_primitives = { version = "0.2.0", path = "../ltk_primitives" }
 
 [dev-dependencies]
 approx = { workspace = true }
