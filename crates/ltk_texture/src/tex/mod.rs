@@ -61,9 +61,6 @@ impl Tex {
     ///         .with_mipmaps()
     ///         .with_mipmap_filter(MipmapFilter::Lanczos3)
     /// ).unwrap();
-    ///
-    /// let bytes = tex.to_bytes();
-    /// std::fs::write("texture.tex", bytes).unwrap();
     /// ```
     pub fn from_rgba_image(
         img: &image::RgbaImage,
