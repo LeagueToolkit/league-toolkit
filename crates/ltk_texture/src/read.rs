@@ -4,6 +4,7 @@ use std::io;
 use super::{format::TextureFileFormat, ReadError, Texture};
 
 impl Texture {
+    /// Read a texture from a reader
     pub fn from_reader<R: io::Read + io::Seek + ?Sized>(reader: &mut R) -> Result<Self, ReadError> {
         let magic = reader.read_u32::<LE>()?;
 

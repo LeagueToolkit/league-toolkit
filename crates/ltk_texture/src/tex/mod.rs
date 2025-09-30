@@ -2,10 +2,12 @@ use byteorder::{ReadBytesExt, LE};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::{hint::unreachable_unchecked, io};
 
+mod encode;
 mod error;
 mod format;
 mod surface;
 
+pub use encode::*;
 pub use error::*;
 pub use format::*;
 pub use surface::*;
@@ -31,6 +33,106 @@ impl Tex {
     pub fn has_mipmaps(&self) -> bool {
         self.flags.contains(TextureFlags::HasMipMaps)
     }
+
+    /// Create a new Tex from an RGBA image with encoding options
+    ///
+    /// # Example
+    /// ```no_run
+    /// use ltk_texture::Tex;
+    /// use ltk_texture::tex::{EncodeOptions, Format, MipmapFilter};
+    /// use image::RgbaImage;
+    ///
+    /// let img = RgbaImage::new(256, 256);
+    ///
+    /// // Without mipmaps
+    /// let tex = Tex::from_rgba_image(&img, EncodeOptions::new(Format::Bc3)).unwrap();
+    ///
+    /// // With mipmaps
+    /// let tex_mips = Tex::from_rgba_image(
+    ///     &img,
+    ///     EncodeOptions::new(Format::Bc3).with_mipmaps()
+    /// ).unwrap();
+    ///
+    /// // With mipmaps and custom filter
+    /// let tex_lanczos = Tex::from_rgba_image(
+    ///     &img,
+    ///     EncodeOptions::new(Format::Bc3)
+    ///         .with_mipmaps()
+    ///         .with_mipmap_filter(MipmapFilter::Lanczos3)
+    /// ).unwrap();
+    ///
+    /// let bytes = tex.to_bytes();
+    /// std::fs::write("texture.tex", bytes).unwrap();
+    /// ```
+    pub fn from_rgba_image(
+        img: &image::RgbaImage,
+        options: EncodeOptions,
+    ) -> Result<Self, EncodeError> {
+        let (width, height) = img.dimensions();
+
+        let (data, mip_count, flags) = if options.generate_mipmaps {
+            let (mip_data, mip_count) =
+                encode_rgba_with_mipmaps(img, options.format, options.mipmap_filter)?;
+            (mip_data, mip_count, TextureFlags::HasMipMaps)
+        } else {
+            let rgba_data = img.as_raw();
+            let encoded = encode_rgba(width, height, rgba_data, options.format)?;
+            (encoded, 1, TextureFlags::empty())
+        };
+
+        Ok(Self {
+            width: width as u16,
+            height: height as u16,
+            format: options.format,
+            resource_type: 0, // texture
+            flags,
+            mip_count,
+            data,
+        })
+    }
+
+    /// Create a new Tex from a DynamicImage with encoding options
+    ///
+    /// # Example
+    /// ```no_run
+    /// use ltk_texture::Tex;
+    /// use ltk_texture::tex::{EncodeOptions, Format};
+    ///
+    /// let img = image::open("texture.png").unwrap();
+    /// let tex = Tex::from_dynamic_image(
+    ///     img,
+    ///     EncodeOptions::new(Format::Bc3).with_mipmaps()
+    /// ).unwrap();
+    /// ```
+    pub fn from_dynamic_image(
+        img: image::DynamicImage,
+        options: EncodeOptions,
+    ) -> Result<Self, EncodeError> {
+        Self::from_rgba_image(&img.to_rgba8(), options)
+    }
+
+    /// Write the Tex to bytes
+    pub fn to_bytes(&self) -> Vec<u8> {
+        use byteorder::WriteBytesExt;
+
+        let mut bytes = Vec::new();
+
+        // Write magic
+        bytes.write_u32::<LE>(Self::MAGIC).unwrap();
+
+        // Write header
+        bytes.write_u16::<LE>(self.width).unwrap();
+        bytes.write_u16::<LE>(self.height).unwrap();
+        bytes.write_u8(0).unwrap(); // is_extended_format (maybe)
+        bytes.write_u8(self.format as u8).unwrap();
+        bytes.write_u8(self.resource_type).unwrap();
+        bytes.write_u8(self.flags.bits()).unwrap();
+
+        // Write data
+        bytes.extend_from_slice(&self.data);
+
+        bytes
+    }
 }
 
 impl Tex {
@@ -38,10 +140,8 @@ impl Tex {
     /// mip (1x1).
     pub fn decode_mipmap(&self, level: u32) -> Result<TexSurface<'_>, DecodeErr> {
         let level = level.min(self.mip_count - 1);
-
-        // size of full resolution
-        let (width, height): (usize, usize) = (self.width.into(), self.height.into());
-
+        let width = self.width as usize;
+        let height = self.height as usize;
         let (block_w, block_h) = self.format.block_size();
 
         let mip_dims = |level: u32| ((width >> level).max(1), (height >> level).max(1));

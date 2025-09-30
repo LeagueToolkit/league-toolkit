@@ -25,6 +25,7 @@ impl Display for TextureFileFormat {
 }
 
 impl TextureFileFormat {
+    /// Get the format from a magic number
     pub fn from_magic(magic: u32) -> Self {
         match magic {
             Dds::MAGIC => Self::DDS,
@@ -33,6 +34,7 @@ impl TextureFileFormat {
         }
     }
 
+    /// Read a texture from a reader
     pub fn read<R: io::Read + ?Sized>(&self, reader: &mut R) -> Result<Texture, ReadError> {
         match self {
             TextureFileFormat::DDS => Ok(Dds::from_reader(reader)?.into()),
@@ -45,6 +47,8 @@ impl TextureFileFormat {
     /// of the file.
     ///
     /// **NOTE**: You **must** make sure the reader does not include the magic bytes!
+    ///
+    /// Returns an error if the texture format is unsupported.
     pub fn read_no_magic<R: io::Read + ?Sized>(
         &self,
         reader: &mut R,

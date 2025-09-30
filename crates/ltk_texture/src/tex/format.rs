@@ -23,6 +23,7 @@ impl Format {
         }
     }
 
+    /// Get the block size of the format
     pub fn block_size(&self) -> (usize, usize) {
         match self {
             Format::Bgra8 => (1, 1),
@@ -30,6 +31,7 @@ impl Format {
         }
     }
 
+    /// Get the bytes per block of the format
     pub fn bytes_per_block(&self) -> usize {
         match self {
             Format::Etc1 => 8,
