@@ -6,6 +6,7 @@ mod encode;
 mod error;
 mod format;
 mod surface;
+mod write;
 
 pub use encode::*;
 pub use error::*;
@@ -109,29 +110,6 @@ impl Tex {
         options: EncodeOptions,
     ) -> Result<Self, EncodeError> {
         Self::from_rgba_image(&img.to_rgba8(), options)
-    }
-
-    /// Write the Tex to bytes
-    pub fn to_bytes(&self) -> Vec<u8> {
-        use byteorder::WriteBytesExt;
-
-        let mut bytes = Vec::new();
-
-        // Write magic
-        bytes.write_u32::<LE>(Self::MAGIC).unwrap();
-
-        // Write header
-        bytes.write_u16::<LE>(self.width).unwrap();
-        bytes.write_u16::<LE>(self.height).unwrap();
-        bytes.write_u8(0).unwrap(); // is_extended_format (maybe)
-        bytes.write_u8(self.format as u8).unwrap();
-        bytes.write_u8(self.resource_type).unwrap();
-        bytes.write_u8(self.flags.bits()).unwrap();
-
-        // Write data
-        bytes.extend_from_slice(&self.data);
-
-        bytes
     }
 }
 
