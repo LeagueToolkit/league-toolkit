@@ -23,6 +23,16 @@ impl Format {
         }
     }
 
+    pub fn to_u8(&self) -> u8 {
+        match self {
+            Format::Etc1 => 1,
+            Format::Etc2Eac => 2,
+            Format::Bc1 => 10,
+            Format::Bc3 => 12,
+            Format::Bgra8 => 20,
+        }
+    }
+
     /// Get the block size of the format
     pub fn block_size(&self) -> (usize, usize) {
         match self {
