@@ -1,36 +1,22 @@
 use super::Error;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+#[derive(TryFromPrimitive, IntoPrimitive, Clone, Copy, Debug, Hash, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Format {
-    Etc1,
-    Etc2Eac,
-    Bc1,
-    Bc3,
+    Etc1 = 1,
+    #[num_enum(alternatives = [3])]
+    Etc2Eac = 2,
+    #[num_enum(alternatives = [11])]
+    Bc1 = 10,
+    Bc3 = 12,
     /// Uncompressed BGRA8
-    Bgra8,
+    Bgra8 = 20,
 }
 
 impl Format {
     pub fn from_u8(format: u8) -> Result<Self, Error> {
-        match format {
-            1 => Ok(Self::Etc1),
-            2 | 3 => Ok(Self::Etc2Eac),
-            10 | 11 => Ok(Self::Bc1),
-            12 => Ok(Self::Bc3),
-            20 => Ok(Self::Bgra8),
-            _ => Err(Error::UnknownTextureFormat(format)),
-        }
-    }
-
-    pub fn to_u8(&self) -> u8 {
-        match self {
-            Format::Etc1 => 1,
-            Format::Etc2Eac => 2,
-            Format::Bc1 => 10,
-            Format::Bc3 => 12,
-            Format::Bgra8 => 20,
-        }
+        Self::try_from(format).map_err(|_| Error::UnknownTextureFormat(format))
     }
 
     /// Get the block size of the format

@@ -179,8 +179,9 @@ impl Tex {
     pub fn from_reader_no_magic<R: io::Read + ?Sized>(reader: &mut R) -> Result<Self, Error> {
         let (width, height) = (reader.read_u16::<LE>()?, reader.read_u16::<LE>()?);
 
-        let _is_extended_format = reader.read_u8(); // maybe..
+        let _is_extended_format = reader.read_u8(); // maybe..s
         let format = Format::from_u8(reader.read_u8()?)?;
+
         // (0: texture, 1: cubemap, 2: surface, 3: volumetexture)
         let resource_type = reader.read_u8()?; // maybe..
 
