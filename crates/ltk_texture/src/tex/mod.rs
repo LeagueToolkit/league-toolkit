@@ -35,7 +35,7 @@ impl Tex {
         self.flags.contains(TextureFlags::HasMipMaps)
     }
 
-    /// Create a new Tex from an RGBA image with encoding options
+    /// Encode a new Tex from an RGBA image with encoding options
     ///
     /// # Example
     /// ```no_run
@@ -46,23 +46,23 @@ impl Tex {
     /// let img = RgbaImage::new(256, 256);
     ///
     /// // Without mipmaps
-    /// let tex = Tex::from_rgba_image(&img, EncodeOptions::new(Format::Bc3)).unwrap();
+    /// let tex = Tex::encode_rgba_image(&img, EncodeOptions::new(Format::Bc3)).unwrap();
     ///
     /// // With mipmaps
-    /// let tex_mips = Tex::from_rgba_image(
+    /// let tex_mips = Tex::encode_rgba_image(
     ///     &img,
     ///     EncodeOptions::new(Format::Bc3).with_mipmaps()
     /// ).unwrap();
     ///
     /// // With mipmaps and custom filter
-    /// let tex_lanczos = Tex::from_rgba_image(
+    /// let tex_lanczos = Tex::encode_rgba_image(
     ///     &img,
     ///     EncodeOptions::new(Format::Bc3)
     ///         .with_mipmaps()
     ///         .with_mipmap_filter(MipmapFilter::Lanczos3)
     /// ).unwrap();
     /// ```
-    pub fn from_rgba_image(
+    pub fn encode_rgba_image(
         img: &image::RgbaImage,
         options: EncodeOptions,
     ) -> Result<Self, EncodeError> {
@@ -89,7 +89,7 @@ impl Tex {
         })
     }
 
-    /// Create a new Tex from a DynamicImage with encoding options
+    /// Encode a new Tex from a DynamicImage with encoding options
     ///
     /// # Example
     /// ```no_run
@@ -97,16 +97,16 @@ impl Tex {
     /// use ltk_texture::tex::{EncodeOptions, Format};
     ///
     /// let img = image::open("texture.png").unwrap();
-    /// let tex = Tex::from_dynamic_image(
+    /// let tex = Tex::encode_dynamic_image(
     ///     img,
     ///     EncodeOptions::new(Format::Bc3).with_mipmaps()
     /// ).unwrap();
     /// ```
-    pub fn from_dynamic_image(
+    pub fn encode_dynamic_image(
         img: image::DynamicImage,
         options: EncodeOptions,
     ) -> Result<Self, EncodeError> {
-        Self::from_rgba_image(&img.to_rgba8(), options)
+        Self::encode_rgba_image(&img.to_rgba8(), options)
     }
 }
 

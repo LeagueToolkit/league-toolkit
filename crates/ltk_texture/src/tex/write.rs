@@ -13,7 +13,7 @@ impl Tex {
     /// use std::fs::File;
     ///
     /// let img = RgbaImage::new(256, 256);
-    /// let tex = Tex::from_rgba_image(&img, EncodeOptions::new(Format::Bc3)).unwrap();
+    /// let tex = Tex::encode_rgba_image(&img, EncodeOptions::new(Format::Bc3)).unwrap();
     ///
     /// // Write to file
     /// let mut file = File::create("texture.tex").unwrap();

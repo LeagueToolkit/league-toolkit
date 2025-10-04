@@ -19,6 +19,10 @@ impl Format {
         Self::try_from(format).map_err(|_| Error::UnknownTextureFormat(format))
     }
 
+    pub fn to_u8(&self) -> u8 {
+        (*self).into()
+    }
+
     /// Get the block size of the format
     pub fn block_size(&self) -> (usize, usize) {
         match self {
