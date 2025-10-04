@@ -1,4 +1,6 @@
 use super::Format;
+
+#[cfg(feature = "intel-tex")]
 use intel_tex_2::{bc1, bc3, RgbaSurface};
 
 /// Options for encoding textures
@@ -156,31 +158,37 @@ pub fn encode_rgba_with_mipmaps(
 }
 
 /// Encode RGBA8 data to BC1 format
+#[cfg(feature = "intel-tex")]
 fn encode_bc1(width: u32, height: u32, rgba_data: &[u8]) -> Result<Vec<u8>, EncodeError> {
-    // Create RgbaSurface view over the input data
     let surface = RgbaSurface {
         data: rgba_data,
         width,
         height,
-        stride: 4 * width, // 4 bytes per pixel (RGBA) * width
+        stride: 4 * width,
     };
-
-    // Compress (BC1 uses 4x4 blocks, 8 bytes per block)
     Ok(bc1::compress_blocks(&surface))
 }
 
+#[cfg(not(feature = "intel-tex"))]
+fn encode_bc1(_width: u32, _height: u32, _rgba_data: &[u8]) -> Result<Vec<u8>, EncodeError> {
+    Err(EncodeError::UnsupportedFormat(Format::Bc1))
+}
+
 /// Encode RGBA8 data to BC3 format
+#[cfg(feature = "intel-tex")]
 fn encode_bc3(width: u32, height: u32, rgba_data: &[u8]) -> Result<Vec<u8>, EncodeError> {
-    // Create RgbaSurface view over the input data
     let surface = RgbaSurface {
         data: rgba_data,
         width,
         height,
-        stride: 4 * width, // 4 bytes per pixel (RGBA) * width
+        stride: 4 * width,
     };
-
-    // Compress (BC3 uses 4x4 blocks, 16 bytes per block)
     Ok(bc3::compress_blocks(&surface))
+}
+
+#[cfg(not(feature = "intel-tex"))]
+fn encode_bc3(_width: u32, _height: u32, _rgba_data: &[u8]) -> Result<Vec<u8>, EncodeError> {
+    Err(EncodeError::UnsupportedFormat(Format::Bc3))
 }
 
 /// Convert RGBA8 to BGRA8 (uncompressed)
