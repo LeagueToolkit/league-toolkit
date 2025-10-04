@@ -2,10 +2,13 @@ use byteorder::{ReadBytesExt, LE};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::{hint::unreachable_unchecked, io};
 
+mod encode;
 mod error;
 mod format;
 mod surface;
+mod write;
 
+pub use encode::*;
 pub use error::*;
 pub use format::*;
 pub use surface::*;
@@ -31,6 +34,80 @@ impl Tex {
     pub fn has_mipmaps(&self) -> bool {
         self.flags.contains(TextureFlags::HasMipMaps)
     }
+
+    /// Encode a new Tex from an RGBA image with encoding options
+    ///
+    /// # Example
+    /// ```no_run
+    /// use ltk_texture::Tex;
+    /// use ltk_texture::tex::{EncodeOptions, Format, MipmapFilter};
+    /// use image::RgbaImage;
+    ///
+    /// let img = RgbaImage::new(256, 256);
+    ///
+    /// // Without mipmaps
+    /// let tex = Tex::encode_rgba_image(&img, EncodeOptions::new(Format::Bc3)).unwrap();
+    ///
+    /// // With mipmaps
+    /// let tex_mips = Tex::encode_rgba_image(
+    ///     &img,
+    ///     EncodeOptions::new(Format::Bc3).with_mipmaps()
+    /// ).unwrap();
+    ///
+    /// // With mipmaps and custom filter
+    /// let tex_lanczos = Tex::encode_rgba_image(
+    ///     &img,
+    ///     EncodeOptions::new(Format::Bc3)
+    ///         .with_mipmaps()
+    ///         .with_mipmap_filter(MipmapFilter::Lanczos3)
+    /// ).unwrap();
+    /// ```
+    pub fn encode_rgba_image(
+        img: &image::RgbaImage,
+        options: EncodeOptions,
+    ) -> Result<Self, EncodeError> {
+        let (width, height) = img.dimensions();
+
+        let (data, mip_count, flags) = if options.generate_mipmaps {
+            let (mip_data, mip_count) =
+                encode_rgba_with_mipmaps(img, options.format, options.mipmap_filter)?;
+            (mip_data, mip_count, TextureFlags::HasMipMaps)
+        } else {
+            let rgba_data = img.as_raw();
+            let encoded = encode_rgba(width, height, rgba_data, options.format)?;
+            (encoded, 1, TextureFlags::empty())
+        };
+
+        Ok(Self {
+            width: width as u16,
+            height: height as u16,
+            format: options.format,
+            resource_type: 0, // texture
+            flags,
+            mip_count,
+            data,
+        })
+    }
+
+    /// Encode a new Tex from a DynamicImage with encoding options
+    ///
+    /// # Example
+    /// ```no_run
+    /// use ltk_texture::Tex;
+    /// use ltk_texture::tex::{EncodeOptions, Format};
+    ///
+    /// let img = image::open("texture.png").unwrap();
+    /// let tex = Tex::encode_dynamic_image(
+    ///     img,
+    ///     EncodeOptions::new(Format::Bc3).with_mipmaps()
+    /// ).unwrap();
+    /// ```
+    pub fn encode_dynamic_image(
+        img: image::DynamicImage,
+        options: EncodeOptions,
+    ) -> Result<Self, EncodeError> {
+        Self::encode_rgba_image(&img.to_rgba8(), options)
+    }
 }
 
 impl Tex {
@@ -38,10 +115,8 @@ impl Tex {
     /// mip (1x1).
     pub fn decode_mipmap(&self, level: u32) -> Result<TexSurface<'_>, DecodeErr> {
         let level = level.min(self.mip_count - 1);
-
-        // size of full resolution
-        let (width, height): (usize, usize) = (self.width.into(), self.height.into());
-
+        let width = self.width as usize;
+        let height = self.height as usize;
         let (block_w, block_h) = self.format.block_size();
 
         let mip_dims = |level: u32| ((width >> level).max(1), (height >> level).max(1));
@@ -106,6 +181,7 @@ impl Tex {
 
         let _is_extended_format = reader.read_u8(); // maybe..
         let format = Format::from_u8(reader.read_u8()?)?;
+
         // (0: texture, 1: cubemap, 2: surface, 3: volumetexture)
         let resource_type = reader.read_u8()?; // maybe..
 

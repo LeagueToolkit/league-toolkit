@@ -20,6 +20,11 @@ image_dds = { version = "0.6.0", default-features = false, features = [
 ] }
 
 texture2ddecoder = "0.1.2"
+intel_tex_2 = { version = "0.5.0", optional = true }
+
+[features]
+default = ["intel-tex"]
+intel-tex = ["dep:intel_tex_2"]
 
 [dev-dependencies]
 image = { version = "0.25.2", default-features = false, features = [

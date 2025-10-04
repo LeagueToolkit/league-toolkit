@@ -7,12 +7,14 @@ pub struct TexSurface<'a> {
     pub data: TexSurfaceData<'a>,
 }
 
+/// The data of a tex surface
 pub enum TexSurfaceData<'a> {
     Bgra8Slice(&'a [u8]),
     Bgra8Owned(Vec<u32>),
 }
 
 impl TexSurface<'_> {
+    /// Convert the surface to an [image::RgbaImage]
     pub fn into_rgba_image(self) -> Result<image::RgbaImage, ToImageError> {
         image::RgbaImage::from_raw(
             self.width,
