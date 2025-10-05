@@ -64,7 +64,7 @@ impl TextureFileFormat {
     ///
     /// # Example
     /// ```no_run
-    /// use ltk_texture::TextureFileFormat;
+    /// use ltk_texture::format::TextureFileFormat;
     /// use std::fs::File;
     ///
     /// let mut file = File::open("texture.tex").unwrap();
