@@ -1,9 +1,9 @@
+use super::{Dds, ReadError, Tex, Texture};
+use byteorder::{ReadBytesExt, LE};
 use std::{
     fmt::Display,
     io::{self},
 };
-
-use super::{Dds, ReadError, Tex, Texture};
 
 #[derive(Clone, Copy, Hash, Debug, PartialEq, Eq)]
 pub enum TextureFileFormat {
@@ -58,6 +58,22 @@ impl TextureFileFormat {
             TextureFileFormat::TEX => Ok(Tex::from_reader_no_magic(reader)?.into()),
             _ => Err(ReadError::UnsupportedTextureFormat(*self)),
         }
+    }
+
+    /// Identify the texture format from a reader
+    ///
+    /// # Example
+    /// ```no_run
+    /// use ltk_texture::TextureFileFormat;
+    /// use std::fs::File;
+    ///
+    /// let mut file = File::open("texture.tex").unwrap();
+    /// let format = TextureFileFormat::identify(&mut file).unwrap();
+    /// assert_eq!(format, TextureFileFormat::TEX);
+    /// ```
+    pub fn identify(reader: &mut impl io::Read) -> Result<Self, ReadError> {
+        let magic = reader.read_u32::<LE>()?;
+        Ok(Self::from_magic(magic))
     }
 }
 
