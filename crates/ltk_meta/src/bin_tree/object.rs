@@ -1,6 +1,6 @@
 use std::{collections::HashMap, io};
 
-use ltk_io_ext::{measure, window};
+use ltk_io_ext::{measure, window_at};
 
 use super::super::{BinProperty, Error};
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
@@ -78,7 +78,7 @@ impl BinTreeObject {
             Ok::<_, io::Error>(())
         })?;
 
-        window(writer, size_pos, |writer| writer.write_u32::<LE>(size as _))?;
+        window_at(writer, size_pos, |writer| writer.write_u32::<LE>(size as _))?;
         Ok(())
     }
 }

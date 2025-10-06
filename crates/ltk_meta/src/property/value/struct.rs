@@ -5,7 +5,7 @@ use crate::{
     BinProperty, Error,
 };
 use byteorder::{ReadBytesExt as _, WriteBytesExt as _, LE};
-use ltk_io_ext::{measure, window};
+use ltk_io_ext::{measure, window_at};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, PartialEq, Debug, Default)]
@@ -83,7 +83,7 @@ impl WriteProperty for StructValue {
             Ok::<_, io::Error>(())
         })?;
 
-        window(writer, size_pos, |writer| writer.write_u32::<LE>(size as _))?;
+        window_at(writer, size_pos, |writer| writer.write_u32::<LE>(size as _))?;
 
         Ok(())
     }
