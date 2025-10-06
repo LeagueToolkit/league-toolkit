@@ -1,5 +1,6 @@
 use super::{Dds, ReadError, Tex, Texture};
 use byteorder::{ReadBytesExt, LE};
+use ltk_io_ext::window;
 use std::{
     fmt::Display,
     io::{self},
@@ -71,8 +72,14 @@ impl TextureFileFormat {
     /// let format = TextureFileFormat::identify(&mut file).unwrap();
     /// assert_eq!(format, TextureFileFormat::TEX);
     /// ```
-    pub fn identify(reader: &mut impl io::Read) -> Result<Self, ReadError> {
-        let magic = reader.read_u32::<LE>()?;
+    ///
+    /// **NOTE**: The reader **must** implement `io::Seek` so we can seek back after reading the magic number.
+    pub fn identify(reader: &mut (impl io::Read + io::Seek)) -> Result<Self, ReadError> {
+        let magic = window(reader, |reader| -> Result<u32, io::Error> {
+            let magic = reader.read_u32::<LE>()?;
+            Ok(magic)
+        })?;
+
         Ok(Self::from_magic(magic))
     }
 }
