@@ -1,6 +1,8 @@
 use nom::{
-    bytes::complete::escaped,
+    branch::alt,
+    bytes::complete::{escaped, tag},
     character::complete::{char, none_of, one_of},
+    combinator::{opt, value},
     sequence::delimited,
     IResult, Parser,
 };
@@ -8,15 +10,22 @@ use nom::{
 mod numeric;
 pub use numeric::*;
 
+mod block;
+pub use block::*;
+
 use crate::ws;
 
 pub fn string(input: &str) -> IResult<&str, &str> {
     ws(delimited(
         char('"'),
-        escaped(none_of("\"\\"), '\\', one_of(r#"n"\"#)),
+        opt(escaped(none_of("\"\\"), '\\', one_of(r#"n"\"#))).map(|v| v.unwrap_or_default()),
         char('"'),
     ))
     .parse(input)
+}
+
+pub fn boolean(input: &str) -> IResult<&str, bool> {
+    ws(alt((value(true, tag("true")), value(false, tag("false"))))).parse(input)
 }
 
 #[cfg(test)]

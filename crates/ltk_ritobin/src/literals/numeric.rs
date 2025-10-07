@@ -39,22 +39,28 @@ pub fn float(input: &str) -> IResult<&str, &str> {
     alt((
         // Case one: .42
         recognize((
+            opt(char('-')),
             char('.'),
             decimal,
             opt((one_of("eE"), opt(one_of("+-")), decimal)),
         )), // Case two: 42e42 and 42.42e42
         recognize((
+            opt(char('-')),
             decimal,
             opt(preceded(char('.'), decimal)),
             one_of("eE"),
             opt(one_of("+-")),
             decimal,
         )), // Case three: 42. and 42.42
-        recognize((decimal, char('.'), opt(decimal))),
+        recognize((opt(char('-')), decimal, char('.'), opt(decimal))),
     ))
     .parse(input)
 }
 
+pub fn integer(input: &str) -> IResult<&str, &str> {
+    recognize((opt(char('-')), decimal)).parse(input)
+}
+
 pub fn decimal(input: &str) -> IResult<&str, &str> {
-    recognize(many1(terminated(one_of("0123456789"), many0(char('_'))))).parse(input)
+    recognize((many1(terminated(one_of("0123456789"), many0(char('_')))),)).parse(input)
 }
