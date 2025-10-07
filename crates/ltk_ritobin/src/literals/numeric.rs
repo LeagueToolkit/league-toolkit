@@ -1,3 +1,4 @@
+use crate::Span;
 use nom::{
     branch::alt,
     bytes::complete::tag,
@@ -8,7 +9,7 @@ use nom::{
     IResult, Parser,
 };
 
-pub fn hexadecimal(input: &str) -> IResult<&str, &str> {
+pub fn hexadecimal(input: Span) -> IResult<Span, Span> {
     preceded(
         alt((tag("0x"), tag("0X"))),
         recognize(many1(terminated(
@@ -19,7 +20,7 @@ pub fn hexadecimal(input: &str) -> IResult<&str, &str> {
     .parse(input)
 }
 
-pub fn octal(input: &str) -> IResult<&str, &str> {
+pub fn octal(input: Span) -> IResult<Span, Span> {
     preceded(
         alt((tag("0o"), tag("0O"))),
         recognize(many1(terminated(one_of("01234567"), many0(char('_'))))),
@@ -27,7 +28,7 @@ pub fn octal(input: &str) -> IResult<&str, &str> {
     .parse(input)
 }
 
-pub fn binary(input: &str) -> IResult<&str, &str> {
+pub fn binary(input: Span) -> IResult<Span, Span> {
     preceded(
         alt((tag("0b"), tag("0B"))),
         recognize(many1(terminated(one_of("01"), many0(char('_'))))),
@@ -35,7 +36,7 @@ pub fn binary(input: &str) -> IResult<&str, &str> {
     .parse(input)
 }
 
-pub fn float(input: &str) -> IResult<&str, &str> {
+pub fn float(input: Span) -> IResult<Span, Span> {
     alt((
         // Case one: .42
         recognize((
@@ -57,10 +58,10 @@ pub fn float(input: &str) -> IResult<&str, &str> {
     .parse(input)
 }
 
-pub fn integer(input: &str) -> IResult<&str, &str> {
+pub fn integer(input: Span) -> IResult<Span, Span> {
     recognize((opt(char('-')), decimal)).parse(input)
 }
 
-pub fn decimal(input: &str) -> IResult<&str, &str> {
+pub fn decimal(input: Span) -> IResult<Span, Span> {
     recognize((many1(terminated(one_of("0123456789"), many0(char('_')))),)).parse(input)
 }

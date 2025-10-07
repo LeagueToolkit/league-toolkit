@@ -1,4 +1,4 @@
-use crate::{bin_value, blank, statement, ws, Statement, Value};
+use crate::{bin_value, blank, statement, ws, Span, Statement, Value};
 use nom::{
     branch::alt,
     character::complete::{alpha1, char},
@@ -10,7 +10,7 @@ use nom::{
 
 #[derive(Debug, Clone)]
 pub struct Block<'a> {
-    pub class: Option<&'a str>,
+    pub class: Option<Span<'a>>,
     pub inner: BlockContent<'a>,
 }
 
@@ -20,7 +20,7 @@ pub enum BlockContent<'a> {
     Statements(Vec<Statement<'a>>),
     Values(Vec<Value<'a>>),
 }
-pub fn block(input: &str) -> IResult<&str, Block> {
+pub fn block(input: Span) -> IResult<Span, Block> {
     (
         ws(opt(alpha1)),
         delimited(

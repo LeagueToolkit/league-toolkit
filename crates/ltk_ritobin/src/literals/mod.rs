@@ -13,32 +13,35 @@ pub use numeric::*;
 mod block;
 pub use block::*;
 
-use crate::ws;
+use crate::{ws, Span};
 
-pub fn string(input: &str) -> IResult<&str, &str> {
+pub fn string(input: Span) -> IResult<Span, Option<Span>> {
     ws(delimited(
         char('"'),
-        opt(escaped(none_of("\"\\"), '\\', one_of(r#"n"\"#))).map(|v| v.unwrap_or_default()),
+        opt(escaped(none_of("\"\\"), '\\', one_of(r#"n"\"#))),
         char('"'),
     ))
     .parse(input)
 }
 
-pub fn boolean(input: &str) -> IResult<&str, bool> {
+pub fn boolean(input: Span) -> IResult<Span, bool> {
     ws(alt((value(true, tag("true")), value(false, tag("false"))))).parse(input)
 }
 
 #[cfg(test)]
 pub mod tests {
+    use crate::Span;
+
     use super::string;
 
     #[test]
     fn string_lit_1() {
-        let input = r#"  "my 40 cool strings are very cooo!!!_--=z-9-021391 23'''; \" \" "  "#;
+        let input =
+            Span::new(r#"  "my 40 cool strings are very cooo!!!_--=z-9-021391 23'''; \" \" "  "#);
         let (_, str) = string(input).unwrap();
         assert_eq!(
-            str,
-            "my 40 cool strings are very cooo!!!_--=z-9-021391 23'''; \\\" \\\" "
+            str.map(|s| s.into_fragment()),
+            Some("my 40 cool strings are very cooo!!!_--=z-9-021391 23'''; \\\" \\\" ")
         );
     }
 }

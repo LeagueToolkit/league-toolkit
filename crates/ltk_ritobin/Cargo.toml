@@ -10,3 +10,4 @@ readme = "../../README.md"
 thiserror = { workspace = true }
 serde = { workspace = true, features = ["derive"], optional = true }
 nom = "8.0.0"
+nom_locate = "5.0.0"
