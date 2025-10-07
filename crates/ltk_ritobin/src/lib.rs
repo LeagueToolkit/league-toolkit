@@ -1,17 +1,13 @@
-use std::io::{Read, Seek};
-
 use literals::Block;
 use nom::{
     branch::alt,
-    bytes::complete::{escaped, is_not, tag, take_till, take_until},
-    character::complete::{
-        alphanumeric0, alphanumeric1, anychar, char, multispace0, multispace1, none_of, one_of,
-    },
+    bytes::complete::{is_not, tag, take_till},
+    character::complete::{alphanumeric1, char, multispace0, multispace1},
     combinator::{opt, recognize, value},
     error::ParseError,
     multi::{many0, separated_list1},
-    sequence::{delimited, preceded, separated_pair, terminated, tuple},
-    AsChar, IResult, Parser,
+    sequence::{delimited, preceded, terminated},
+    IResult, Parser,
 };
 use nom_locate::LocatedSpan;
 
@@ -50,19 +46,24 @@ pub enum Value<'a> {
     Block(Block<'a>),
     Keyword(Span<'a>),
     String(Option<Span<'a>>),
+
+    Decimal(Span<'a>),
+    Hexadecimal(Span<'a>),
+    Octal(Span<'a>),
+    Binary(Span<'a>),
+
     Bool(bool),
-    Other(Span<'a>),
 }
 
 pub fn bin_value(input: Span) -> IResult<Span, Value<'_>> {
     alt((
         literals::boolean.map(Value::Bool),
         literals::string.map(Value::String),
-        literals::hexadecimal.map(Value::Other),
-        literals::binary.map(Value::Other),
-        literals::octal.map(Value::Other),
-        literals::float.map(Value::Other),
-        literals::integer.map(Value::Other),
+        literals::hexadecimal.map(Value::Hexadecimal),
+        literals::binary.map(Value::Binary),
+        literals::octal.map(Value::Octal),
+        literals::float.map(Value::Decimal),
+        literals::integer.map(Value::Decimal),
         literals::block.map(Value::Block),
     ))
     .parse(input)
@@ -85,7 +86,7 @@ pub fn statement(input: Span) -> IResult<Span, Statement<'_>> {
     let (input, (name, kind, value)) = (
         alt((
             ws(literals::string).map(Value::String),
-            ws(literals::hexadecimal).map(Value::Other),
+            ws(literals::hexadecimal).map(Value::Hexadecimal),
             ws(take_till(|c: char| {
                 c.is_whitespace() || c == ':' || c == '='
             }))
