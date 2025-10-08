@@ -1,4 +1,4 @@
-use crate::{bin_value, blank, statement, ws, Span, Statement, Value};
+use crate::{bin_value, blank, statement, ws, Literal, Span, Statement};
 use nom::{
     branch::alt,
     character::complete::{alpha1, char},
@@ -19,7 +19,7 @@ pub struct Block<'a> {
 pub enum BlockContent<'a> {
     Empty,
     Statements(Vec<Statement<'a>>),
-    Values(Vec<Value<'a>>),
+    Values(Vec<Literal<'a>>),
 }
 pub fn block(input: Span) -> IResult<Span, Block> {
     consumed((

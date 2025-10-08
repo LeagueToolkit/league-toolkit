@@ -47,8 +47,8 @@ pub fn bin_type(input: Span) -> IResult<Span, (Span, Option<Vec<Span>>)> {
 }
 
 #[derive(Debug, Clone, EnumKind)]
-#[enum_kind(ValueKind)]
-pub enum Value<'a> {
+#[enum_kind(LiteralKind)]
+pub enum Literal<'a> {
     Block(Block<'a>),
     Keyword(Span<'a>),
     String(Option<Span<'a>>),
@@ -61,64 +61,64 @@ pub enum Value<'a> {
     Bool(bool, Span<'a>),
 }
 
-impl Display for ValueKind {
+impl Display for LiteralKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
-            ValueKind::Block => "block",
-            ValueKind::Keyword => "keyword",
-            ValueKind::String => "string",
-            ValueKind::Decimal => "decimal number",
-            ValueKind::Hexadecimal => "hex number",
-            ValueKind::Octal => "octal number",
-            ValueKind::Binary => "binary number",
-            ValueKind::Bool => "bool",
+            LiteralKind::Block => "block",
+            LiteralKind::Keyword => "keyword",
+            LiteralKind::String => "string",
+            LiteralKind::Decimal => "decimal number",
+            LiteralKind::Hexadecimal => "hex number",
+            LiteralKind::Octal => "octal number",
+            LiteralKind::Binary => "binary number",
+            LiteralKind::Bool => "bool",
         })
     }
 }
 
-impl<'a> Value<'a> {
-    pub fn kind(&self) -> ValueKind {
+impl<'a> Literal<'a> {
+    pub fn kind(&self) -> LiteralKind {
         self.into()
     }
     pub fn span(&self) -> &Span<'a> {
         match self {
-            Value::Block(block) => &block.span,
-            Value::String(span) => span.as_ref().expect("TODO: empty string spans"),
-            Value::Keyword(span)
-            | Value::Decimal(span)
-            | Value::Hexadecimal(span)
-            | Value::Octal(span)
-            | Value::Binary(span)
-            | Value::Bool(_, span) => span,
+            Literal::Block(block) => &block.span,
+            Literal::String(span) => span.as_ref().expect("TODO: empty string spans"),
+            Literal::Keyword(span)
+            | Literal::Decimal(span)
+            | Literal::Hexadecimal(span)
+            | Literal::Octal(span)
+            | Literal::Binary(span)
+            | Literal::Bool(_, span) => span,
         }
     }
 }
 
-pub fn bin_value(input: Span) -> IResult<Span, Value<'_>> {
+pub fn bin_value(input: Span) -> IResult<Span, Literal<'_>> {
     alt((
-        literals::boolean.map(|(b, s)| Value::Bool(b, s)),
-        literals::string.map(Value::String),
-        literals::hexadecimal.map(Value::Hexadecimal),
-        literals::binary.map(Value::Binary),
-        literals::octal.map(Value::Octal),
-        literals::float.map(Value::Decimal),
-        literals::integer.map(Value::Decimal),
-        literals::block.map(Value::Block),
+        literals::boolean.map(|(b, s)| Literal::Bool(b, s)),
+        literals::string.map(Literal::String),
+        literals::hexadecimal.map(Literal::Hexadecimal),
+        literals::binary.map(Literal::Binary),
+        literals::octal.map(Literal::Octal),
+        literals::float.map(Literal::Decimal),
+        literals::integer.map(Literal::Decimal),
+        literals::block.map(Literal::Block),
     ))
     .parse(input)
 }
 
 #[derive(Debug, Clone)]
-pub struct Type<'a> {
+pub struct TypeDefinition<'a> {
     pub value: Span<'a>,
     pub subtypes: Option<Vec<Span<'a>>>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Statement<'a> {
-    pub name: Value<'a>,
-    pub kind: Option<Type<'a>>,
-    pub value: Value<'a>,
+    pub name: Literal<'a>,
+    pub kind: Option<TypeDefinition<'a>>,
+    pub value: Literal<'a>,
 }
 
 pub fn statement(input: Span) -> IResult<Span, Statement<'_>> {
@@ -128,7 +128,7 @@ pub fn statement(input: Span) -> IResult<Span, Statement<'_>> {
             ws(take_till(|c: char| {
                 c.is_whitespace() || c == ':' || c == '='
             }))
-            .map(Value::Keyword),
+            .map(Literal::Keyword),
         )), // name
         opt(preceded(ws(char(':')), ws(bin_type))),
         preceded(ws(char('=')), ws(bin_value)),
@@ -139,7 +139,7 @@ pub fn statement(input: Span) -> IResult<Span, Statement<'_>> {
         input,
         Statement {
             name,
-            kind: kind.map(|(value, subtypes)| Type { value, subtypes }),
+            kind: kind.map(|(value, subtypes)| TypeDefinition { value, subtypes }),
             value,
         },
     ))

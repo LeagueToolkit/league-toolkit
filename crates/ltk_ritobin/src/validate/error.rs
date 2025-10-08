@@ -2,7 +2,7 @@ use std::num::ParseIntError;
 
 use miette::SourceSpan;
 
-use crate::{Span, ValueKind};
+use crate::{LiteralKind, Span};
 
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
 pub enum BinError {
@@ -11,7 +11,7 @@ pub enum BinError {
     InvalidRootEntryName {
         #[label("Root entry name cannot be of type '{kind}'")]
         span: SourceSpan,
-        kind: ValueKind,
+        kind: LiteralKind,
         #[help]
         help: Option<&'static str>,
     },

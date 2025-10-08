@@ -1,6 +1,6 @@
 use error::{BinError, ToMietteSpan as _};
 
-use crate::{Span, Statement, Value};
+use crate::{Literal, Span, Statement};
 
 pub mod error;
 
@@ -26,18 +26,18 @@ pub fn validate(statements: Vec<Statement>) -> miette::Result<(), Vec<BinError>>
         .iter()
         .map(|stmt| {
             let name: Hash = match &stmt.name {
-                Value::Keyword(span) => Hash::Unhash(span.as_ref()),
+                Literal::Keyword(span) | Literal::Bool(_, span) => Hash::Unhash(span.as_ref()),
 
-                Value::Decimal(span) => parse_hash(span, 10)?,
-                Value::Hexadecimal(span) => parse_hash(span, 16)?,
-                Value::Octal(span) => parse_hash(span, 8)?,
-                Value::Binary(span) => parse_hash(span, 2)?,
+                Literal::Decimal(span) => parse_hash(span, 10)?,
+                Literal::Hexadecimal(span) => parse_hash(span, 16)?,
+                Literal::Octal(span) => parse_hash(span, 8)?,
+                Literal::Binary(span) => parse_hash(span, 2)?,
                 name => {
                     return Err(BinError::InvalidRootEntryName {
                         span: name.span().into_miette(),
                         kind: name.kind(),
                         help: match name {
-                            Value::String(_) => Some("did you mean to add quotes?"),
+                            Literal::String(_) => Some("try without the double quotes"),
                             _ => None,
                         },
                     })
