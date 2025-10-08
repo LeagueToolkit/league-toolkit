@@ -1,4 +1,4 @@
-use crate::{bin_value, blank, statement, ws, Literal, Span, Statement};
+use crate::parse::{blank, statement, ws, Span, Statement};
 use nom::{
     branch::alt,
     character::complete::{alpha1, char},
@@ -7,6 +7,8 @@ use nom::{
     sequence::{delimited, preceded},
     IResult, Parser,
 };
+
+use super::{literal, Literal};
 
 #[derive(Debug, Clone)]
 pub struct Block<'a> {
@@ -28,7 +30,7 @@ pub fn block(input: Span) -> IResult<Span, Block> {
             delimited(blank, char('{'), blank),
             opt(alt((
                 many1(preceded(blank, statement)).map(BlockContent::Statements),
-                many1(preceded(blank, bin_value)).map(BlockContent::Values),
+                many1(preceded(blank, literal)).map(BlockContent::Values),
             ))),
             preceded(blank, char('}')),
         ),

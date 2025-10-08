@@ -1,4 +1,3 @@
-use crate::Span;
 use nom::{
     branch::alt,
     bytes::complete::tag,
@@ -8,6 +7,8 @@ use nom::{
     sequence::{preceded, terminated},
     IResult, Parser,
 };
+
+use crate::parse::Span;
 
 pub fn hexadecimal(input: Span) -> IResult<Span, Span> {
     preceded(

@@ -2,7 +2,7 @@ use std::num::ParseIntError;
 
 use miette::SourceSpan;
 
-use crate::{LiteralKind, Span};
+use crate::parse::{literals::LiteralKind, Span};
 
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
 pub enum BinError {

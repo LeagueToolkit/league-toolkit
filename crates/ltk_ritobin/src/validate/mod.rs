@@ -1,6 +1,6 @@
 use error::{BinError, ToMietteSpan as _};
 
-use crate::{Literal, Span, Statement};
+use crate::parse::{literals::Literal, statement::Statement, Span};
 
 pub mod error;
 
