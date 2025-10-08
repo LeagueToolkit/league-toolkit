@@ -1,3 +1,6 @@
+use std::fmt::Display;
+
+use enum_kinds::EnumKind;
 use literals::Block;
 use nom::{
     branch::alt,
@@ -12,6 +15,8 @@ use nom::{
 use nom_locate::LocatedSpan;
 
 mod literals;
+pub mod validate;
+pub use validate::validate;
 
 /// A combinator that takes a parser `inner` and produces a parser that also consumes both leading and
 /// trailing whitespace, returning the output of `inner`.
@@ -41,7 +46,8 @@ pub fn bin_type(input: Span) -> IResult<Span, (Span, Option<Vec<Span>>)> {
     .parse(input)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, EnumKind)]
+#[enum_kind(ValueKind)]
 pub enum Value<'a> {
     Block(Block<'a>),
     Keyword(Span<'a>),
@@ -52,12 +58,45 @@ pub enum Value<'a> {
     Octal(Span<'a>),
     Binary(Span<'a>),
 
-    Bool(bool),
+    Bool(bool, Span<'a>),
+}
+
+impl Display for ValueKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            ValueKind::Block => "block",
+            ValueKind::Keyword => "keyword",
+            ValueKind::String => "string",
+            ValueKind::Decimal => "decimal number",
+            ValueKind::Hexadecimal => "hex number",
+            ValueKind::Octal => "octal number",
+            ValueKind::Binary => "binary number",
+            ValueKind::Bool => "bool",
+        })
+    }
+}
+
+impl<'a> Value<'a> {
+    pub fn kind(&self) -> ValueKind {
+        self.into()
+    }
+    pub fn span(&self) -> &Span<'a> {
+        match self {
+            Value::Block(block) => &block.span,
+            Value::String(span) => span.as_ref().expect("TODO: empty string spans"),
+            Value::Keyword(span)
+            | Value::Decimal(span)
+            | Value::Hexadecimal(span)
+            | Value::Octal(span)
+            | Value::Binary(span)
+            | Value::Bool(_, span) => span,
+        }
+    }
 }
 
 pub fn bin_value(input: Span) -> IResult<Span, Value<'_>> {
     alt((
-        literals::boolean.map(Value::Bool),
+        literals::boolean.map(|(b, s)| Value::Bool(b, s)),
         literals::string.map(Value::String),
         literals::hexadecimal.map(Value::Hexadecimal),
         literals::binary.map(Value::Binary),
@@ -85,8 +124,7 @@ pub struct Statement<'a> {
 pub fn statement(input: Span) -> IResult<Span, Statement<'_>> {
     let (input, (name, kind, value)) = (
         alt((
-            ws(literals::string).map(Value::String),
-            ws(literals::hexadecimal).map(Value::Hexadecimal),
+            ws(bin_value),
             ws(take_till(|c: char| {
                 c.is_whitespace() || c == ':' || c == '='
             }))
@@ -118,14 +156,13 @@ pub fn blank(input: Span) -> IResult<Span, ()> {
 }
 
 type Span<'a> = LocatedSpan<&'a str>;
-pub fn parse(text: &str) -> IResult<Span, Span> {
+
+pub fn parse(text: &str) -> IResult<Span, Vec<Statement>> {
     let text = Span::new(text);
     let mut statements = many0(preceded(blank, statement));
 
     let (input, stmts) = statements.parse(text)?;
-    println!("stmt: {stmts:#?}");
-    println!("left: {:?}", input.split_once('\n').map(|a| a.0));
-    Ok((input, input))
+    Ok((input, stmts))
 }
 
 #[cfg(test)]

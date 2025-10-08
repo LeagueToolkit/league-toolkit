@@ -2,7 +2,7 @@ use crate::{bin_value, blank, statement, ws, Span, Statement, Value};
 use nom::{
     branch::alt,
     character::complete::{alpha1, char},
-    combinator::opt,
+    combinator::{consumed, opt},
     multi::many1,
     sequence::{delimited, preceded},
     IResult, Parser,
@@ -10,6 +10,7 @@ use nom::{
 
 #[derive(Debug, Clone)]
 pub struct Block<'a> {
+    pub span: Span<'a>,
     pub class: Option<Span<'a>>,
     pub inner: BlockContent<'a>,
 }
@@ -21,7 +22,7 @@ pub enum BlockContent<'a> {
     Values(Vec<Value<'a>>),
 }
 pub fn block(input: Span) -> IResult<Span, Block> {
-    (
+    consumed((
         ws(opt(alpha1)),
         delimited(
             delimited(blank, char('{'), blank),
@@ -31,10 +32,11 @@ pub fn block(input: Span) -> IResult<Span, Block> {
             ))),
             preceded(blank, char('}')),
         ),
-    )
-        .map(|(class, statements)| Block {
-            class,
-            inner: statements.unwrap_or(BlockContent::Empty),
-        })
-        .parse(input)
+    ))
+    .map(|(span, (class, statements))| Block {
+        span,
+        class,
+        inner: statements.unwrap_or(BlockContent::Empty),
+    })
+    .parse(input)
 }

@@ -24,8 +24,12 @@ pub fn string(input: Span) -> IResult<Span, Option<Span>> {
     .parse(input)
 }
 
-pub fn boolean(input: Span) -> IResult<Span, bool> {
-    ws(alt((value(true, tag("true")), value(false, tag("false"))))).parse(input)
+pub fn boolean(input: Span) -> IResult<Span, (bool, Span)> {
+    ws(alt((
+        tag("true").map(|s| (true, s)),
+        tag("false").map(|s| (false, s)),
+    )))
+    .parse(input)
 }
 
 #[cfg(test)]
