@@ -7,8 +7,10 @@ license = "AGPL-3.0-only"
 readme = "../../README.md"
 
 [dependencies]
-thiserror.workspace = true
-miette.workspace = true
+ltk_meta = { path = "../ltk_meta" }
+
+thiserror = { workspace = true }
+miette = { workspace = true }
 serde = { workspace = true, features = ["derive"], optional = true }
 
 nom = "8.0.0"
@@ -16,4 +18,4 @@ nom_locate = "5.0.0"
 enum-kinds = "0.5.1"
 
 [dev-dependencies]
-miette = {workspace = true, features = ["fancy"]}
+miette = { workspace = true, features = ["fancy"] }

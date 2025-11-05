@@ -34,6 +34,30 @@ pub enum BinError {
         #[label("Root entries must have type definitions")]
         span: SourceSpan,
     },
+
+    #[error("Unknown type '{value}'")]
+    #[diagnostic()]
+    UnknownType {
+        #[label]
+        span: SourceSpan,
+        value: String,
+    },
+
+    #[error("Insufficient type arguments")]
+    #[diagnostic()]
+    InsufficientTypeArguments {
+        #[label("got {got}, need {need} arguments")]
+        span: SourceSpan,
+        got: usize,
+        need: usize,
+    },
+    #[error("Too many type arguments")]
+    #[diagnostic()]
+    TooManyTypeArguments {
+        #[label("extraneous type arguments")]
+        span: SourceSpan,
+        need: usize,
+    },
 }
 
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
