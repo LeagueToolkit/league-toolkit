@@ -11,6 +11,7 @@ mod unordered_container;
 
 pub use container::*;
 pub use embedded::*;
+use enum_kinds::EnumKind;
 pub use map::*;
 pub use none::*;
 pub use optional::*;
@@ -53,7 +54,8 @@ macro_rules! enum_kind {
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(tag = "kind", content = "value"))]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, EnumKind)]
+#[enum_kind(PropertyValueKind)]
 #[enum_dispatch(PropertyValue)]
 /// The value part of a [`super::BinProperty`]. Holds the type of the value, and the value itself.
 pub enum PropertyValueEnum {
@@ -78,7 +80,7 @@ pub enum PropertyValueEnum {
     WadChunkLink(pub WadChunkLinkValue),
     Container(pub ContainerValue),
     UnorderedContainer(pub UnorderedContainerValue),
-    Struct(pub StructValue),
+    Object(pub ObjectValue),
     Embedded(pub EmbeddedValue),
     ObjectLink(pub ObjectLinkValue),
     Optional(pub OptionalValue),
@@ -113,7 +115,7 @@ impl PropertyValueEnum {
                 WadChunkLink,
                 Container,
                 UnorderedContainer,
-                Struct,
+                Object,
                 Embedded,
                 ObjectLink,
                 Optional,
@@ -122,7 +124,7 @@ impl PropertyValueEnum {
             ]
         )
     }
-    #[must_use]
+
     pub fn from_reader<R: io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         kind: BinPropertyKind,
@@ -153,7 +155,7 @@ impl PropertyValueEnum {
                 WadChunkLink,
                 Container,
                 UnorderedContainer,
-                Struct,
+                Object,
                 Embedded,
                 ObjectLink,
                 Optional,
@@ -192,7 +194,7 @@ impl PropertyValueEnum {
                 WadChunkLink,
                 Container,
                 UnorderedContainer,
-                Struct,
+                Object,
                 Embedded,
                 ObjectLink,
                 Optional,

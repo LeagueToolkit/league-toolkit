@@ -9,12 +9,13 @@ use ltk_io_ext::{measure, window_at};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, PartialEq, Debug, Default)]
-pub struct StructValue {
+/// Object - deserializes into a pointer to a heap allocated struct.
+pub struct ObjectValue {
     pub class_hash: u32,
     pub properties: HashMap<u32, BinProperty>,
 }
 
-impl Value for StructValue {
+impl Value for ObjectValue {
     fn size_no_header(&self) -> usize {
         match self.class_hash {
             0 => 4,
@@ -23,7 +24,7 @@ impl Value for StructValue {
     }
 }
 
-impl ReadProperty for StructValue {
+impl ReadProperty for ObjectValue {
     fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         legacy: bool,
@@ -58,7 +59,7 @@ impl ReadProperty for StructValue {
         Ok(value)
     }
 }
-impl WriteProperty for StructValue {
+impl WriteProperty for ObjectValue {
     fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
         &self,
         writer: &mut R,
