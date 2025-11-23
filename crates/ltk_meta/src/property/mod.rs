@@ -36,7 +36,7 @@ pub enum BinPropertyKind {
     // COMPLEX TYPES
     Container = 128,
     UnorderedContainer = 128 | 1,
-    Struct = 128 | 2,
+    Object = 128 | 2,
     Embedded = 128 | 3,
     ObjectLink = 128 | 4,
     Optional = 128 | 5,
@@ -121,6 +121,15 @@ pub struct BinProperty {
     pub name_hash: u32,
     #[cfg_attr(feature = "serde", serde(flatten))]
     pub value: PropertyValueEnum,
+}
+
+impl BinProperty {
+    pub fn new(name_hash: u32, value: impl Into<PropertyValueEnum>) -> Self {
+        Self {
+            name_hash,
+            value: value.into(),
+        }
+    }
 }
 
 use super::traits::PropertyValue as _;

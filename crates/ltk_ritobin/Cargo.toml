@@ -1,0 +1,21 @@
+[package]
+name = "ltk_ritobin"
+version = "0.0.1"
+edition = "2021"
+description = "Ritobin support for League Toolkit"
+license = "AGPL-3.0-only"
+readme = "../../README.md"
+
+[dependencies]
+ltk_meta = { path = "../ltk_meta" }
+
+thiserror = { workspace = true }
+miette = { workspace = true }
+serde = { workspace = true, features = ["derive"], optional = true }
+
+nom = "8.0.0"
+nom_locate = "5.0.0"
+enum-kinds = "0.5.1"
+
+[dev-dependencies]
+miette = { workspace = true, features = ["fancy"] }

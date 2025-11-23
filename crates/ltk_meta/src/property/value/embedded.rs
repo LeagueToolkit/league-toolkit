@@ -1,10 +1,10 @@
 use crate::traits::{PropertyValue, ReadProperty, WriteProperty};
 
-use super::StructValue;
+use super::ObjectValue;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, PartialEq, Debug)]
-pub struct EmbeddedValue(pub StructValue);
+pub struct EmbeddedValue(pub ObjectValue);
 
 impl PropertyValue for EmbeddedValue {
     fn size_no_header(&self) -> usize {
@@ -17,7 +17,7 @@ impl ReadProperty for EmbeddedValue {
         reader: &mut R,
         legacy: bool,
     ) -> Result<Self, crate::Error> {
-        StructValue::from_reader(reader, legacy).map(Self)
+        ObjectValue::from_reader(reader, legacy).map(Self)
     }
 }
 impl WriteProperty for EmbeddedValue {
@@ -26,6 +26,6 @@ impl WriteProperty for EmbeddedValue {
         writer: &mut R,
         legacy: bool,
     ) -> Result<(), std::io::Error> {
-        StructValue::to_writer(&self.0, writer, legacy)
+        ObjectValue::to_writer(&self.0, writer, legacy)
     }
 }

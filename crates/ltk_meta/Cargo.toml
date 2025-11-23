@@ -24,6 +24,7 @@ serde = { workspace = true, optional = true }
 
 ltk_io_ext = { version = "0.3.0", path = "../ltk_io_ext" }
 ltk_primitives = { version = "0.2.1", path = "../ltk_primitives" }
+enum-kinds = "0.5.1"
 
 [dev-dependencies]
 approx = { workspace = true }
