@@ -1,6 +1,6 @@
 use super::pattern::LEAGUE_FILE_MAGIC_BYTES;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, strum::EnumIter)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 /// The kind of league file (animation, mapgeo, bin, etc)
@@ -30,6 +30,11 @@ pub enum LeagueFileKind {
 }
 
 impl LeagueFileKind {
+    /// Returns an iterator over all [`LeagueFileKind`] variants.
+    pub fn iter() -> impl Iterator<Item = Self> {
+        <Self as strum::IntoEnumIterator>::iter()
+    }
+
     #[inline]
     #[must_use]
     /// The extension for this file type (anm, mapgeo, bin, etc)
