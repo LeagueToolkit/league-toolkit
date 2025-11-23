@@ -1,5 +1,10 @@
 # league-toolkit
 
+[![CI](https://img.shields.io/github/actions/workflow/status/LeagueToolkit/league-toolkit/ci.yml?style=flat-square)](https://github.com/LeagueToolkit/league-toolkit/actions/workflows/ci.yml)
+[![Crates.io](https://img.shields.io/crates/v/league-toolkit.svg?style=flat-square)](https://crates.io/crates/league-toolkit)
+[![Docs](https://img.shields.io/docsrs/league-toolkit?style=flat-square)](https://docs.rs/league-toolkit)
+[![License](https://img.shields.io/crates/l/league-toolkit.svg?style=flat-square)](https://github.com/LeagueToolkit/league-toolkit/blob/main/LICENSE)
+
 Rust workspace for parsing, editing, and writing League of Legends file formats.
 
 This repository hosts a set of crates that can be used individually or together via the umbrella crate `league-toolkit`.
