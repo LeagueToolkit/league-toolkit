@@ -1,0 +1,13 @@
+[package]
+name = "ltk_shader"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ltk_io_ext = { path = "../ltk_io_ext" }
+ltk_wad = { path = "../ltk_wad" }
+ltk_hash = { path = "../ltk_hash" }
+byteorder = { workspace = true }
+thiserror = { workspace = true }
+xxhash-rust = { workspace = true }
+itertools = { workspace = true }
