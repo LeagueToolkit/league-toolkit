@@ -1,6 +1,6 @@
 [package]
 name = "ltk_texture"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2021"
 description = "Texture decoding/encoding utilities for League Toolkit"
 license = "AGPL-3.0-only"
@@ -11,7 +11,7 @@ bitflags = { workspace = true }
 byteorder = { workspace = true }
 thiserror = { workspace = true }
 num_enum = { workspace = true }
-ltk_io_ext = { version = "0.3.0", path = "../ltk_io_ext" }
+ltk_io_ext = { version = "0.3.1", path = "../ltk_io_ext" }
 
 image = { version = "0.25.2", default-features = false, features = ["dds"] }
 ddsfile = "0.5.2"
