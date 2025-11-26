@@ -11,7 +11,7 @@ pub struct ShaderMacroDefinition {
 
 impl ShaderMacroDefinition {
     pub fn new(name: String, value: String) -> Self {
-        let hash = Self::calculate_hash(&value, &name);
+        let hash = Self::calculate_hash(&name, &value);
         Self { name, value, hash }
     }
 
@@ -21,7 +21,7 @@ impl ShaderMacroDefinition {
         Ok(Self::new(name, value))
     }
 
-    pub fn calculate_hash(value: &str, name: &str) -> u32 {
+    pub fn calculate_hash(name: &str, value: &str) -> u32 {
         let s = if value.is_empty() {
             name.to_string()
         } else {
@@ -42,6 +42,10 @@ impl Eq for ShaderMacroDefinition {}
 
 impl fmt::Display for ShaderMacroDefinition {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}={}", self.name, self.value)
+        if self.value.is_empty() {
+            write!(f, "{}", self.name)
+        } else {
+            write!(f, "{}={}", self.name, self.value)
+        }
     }
 }

@@ -4,41 +4,10 @@ use xxhash_rust::xxh64::xxh64;
 
 use crate::defines::ShaderMacroDefinition;
 use crate::toc::ShaderToc;
+use crate::{create_shader_bundle_path, create_shader_object_path, GraphicsPlatform, ShaderType};
 use ltk_wad::Wad;
 
-#[derive(Debug, Clone, Copy)]
-pub enum ShaderType {
-    Vertex,
-    Pixel,
-}
-
-impl ShaderType {
-    pub fn extension(&self) -> &'static str {
-        match self {
-            ShaderType::Vertex => "vs",
-            ShaderType::Pixel => "ps",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum GraphicsPlatform {
-    Dx9,
-    Dx11,
-    Glsl,
-    Metal,
-}
-
-impl GraphicsPlatform {
-    pub fn extension(&self) -> &'static str {
-        match self {
-            GraphicsPlatform::Dx9 => "dx9",
-            GraphicsPlatform::Dx11 => "dx11",
-            GraphicsPlatform::Glsl => "glsl",
-            GraphicsPlatform::Metal => "metal",
-        }
-    }
-}
+const SHADERS_PER_BUNDLE: u32 = 100;
 
 pub struct ShaderLoader;
 
@@ -62,12 +31,10 @@ impl ShaderLoader {
         wad: &mut Wad<R>,
     ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         let (mut wad_decoder, wad_chunks) = wad.decode();
-        let shader_ext = shader_type.extension();
-        let platform_ext = platform.extension();
         let full_shader_object_path =
-            format!("{}.{}.{}", shader_object_path, shader_ext, platform_ext);
+            create_shader_object_path(shader_object_path, shader_type, platform);
 
-        let path_hash = xxh64(full_shader_object_path.to_lowercase().as_bytes(), 0);
+        let path_hash = xxh64(full_shader_object_path.as_bytes(), 0);
 
         let chunk = wad_chunks
             .get(&path_hash)
@@ -97,11 +64,12 @@ impl ShaderLoader {
         };
 
         let shader_id = shader_toc.shader_ids[shader_index];
-        let shader_bundle_id = 100 * (shader_id / 100);
-        let shader_index_in_bundle = shader_id % 100;
-        let shader_bundle_path = format!("{}_{}", full_shader_object_path, shader_bundle_id);
+        let shader_bundle_id = SHADERS_PER_BUNDLE * (shader_id / SHADERS_PER_BUNDLE);
+        let shader_index_in_bundle = shader_id % SHADERS_PER_BUNDLE;
+        let shader_bundle_path =
+            create_shader_bundle_path(&full_shader_object_path, shader_bundle_id);
 
-        let bundle_path_hash = xxh64(shader_bundle_path.to_lowercase().as_bytes(), 0);
+        let bundle_path_hash = xxh64(shader_bundle_path.as_bytes(), 0);
         let bundle_chunk = wad_chunks
             .get(&bundle_path_hash)
             .ok_or_else(|| format!("Shader bundle not found: {}", shader_bundle_path))?;
@@ -114,13 +82,19 @@ impl ShaderLoader {
             shader_bundle_reader.seek(SeekFrom::Current(shader_size as i64))?;
         }
 
-        let requested_shader_size = shader_bundle_reader.read_i32::<LE>()?;
-        let mut bytecode = vec![0u8; requested_shader_size as usize];
+        let requested_shader_size = shader_bundle_reader.read_u32::<LE>()? as usize;
+        let mut bytecode = Vec::with_capacity(requested_shader_size);
         shader_bundle_reader.read_exact(&mut bytecode)?;
 
         Ok(bytecode)
     }
 
+    /// Filters the defines to only include the defines that are in the base defines.
+    /// # Arguments
+    /// * `defines` - The defines to filter.
+    /// * `base_defines` - The base defines to filter the defines against.
+    /// # Returns
+    /// A string containing the filtered defines.
     fn filter_defines(
         defines: &[ShaderMacroDefinition],
         base_defines: &[ShaderMacroDefinition],

@@ -32,8 +32,8 @@ impl ShaderToc {
             ));
         }
 
-        let shader_count = reader.read_u32::<LE>()?;
-        let base_defines_count = reader.read_u32::<LE>()?;
+        let shader_count = reader.read_u32::<LE>()? as usize;
+        let base_defines_count = reader.read_u32::<LE>()? as usize;
         let _bundled_shader_count = reader.read_u32::<LE>()?; // unused
         let _shader_type = reader.read_u32::<LE>()?; // 0=vs, 1=ps
 
@@ -45,7 +45,7 @@ impl ShaderToc {
             ));
         }
 
-        let mut base_defines = Vec::with_capacity(base_defines_count as usize);
+        let mut base_defines = Vec::with_capacity(base_defines_count);
         for _ in 0..base_defines_count {
             base_defines.push(ShaderMacroDefinition::read(reader)?);
         }
@@ -58,11 +58,23 @@ impl ShaderToc {
             ));
         }
 
-        let mut shader_hashes = vec![0u64; shader_count as usize];
-        let mut shader_ids = vec![0u32; shader_count as usize];
+        let mut shader_hashes = vec![0u64; shader_count];
+        let mut shader_ids = vec![0u32; shader_count];
 
         reader.read_u64_into::<LE>(&mut shader_hashes)?;
         reader.read_u32_into::<LE>(&mut shader_ids)?;
+
+        if shader_hashes.len() != shader_count || shader_ids.len() != shader_count {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "Mismatch in shader vector lengths: expected {}, got {} hashes and {} ids",
+                    shader_count,
+                    shader_hashes.len(),
+                    shader_ids.len()
+                ),
+            ));
+        }
 
         Ok(Self {
             base_defines,
