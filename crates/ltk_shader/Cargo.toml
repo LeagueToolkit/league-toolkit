@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-ltk_io_ext = { path = "../ltk_io_ext" }
-ltk_wad = { path = "../ltk_wad" }
-ltk_hash = { path = "../ltk_hash" }
+ltk_io_ext = { version = "0.3.1", path = "../ltk_io_ext" }
+ltk_wad = { version = "0.2.4", path = "../ltk_wad" }
+ltk_hash = { version = "0.2.2", path = "../ltk_hash" }
 byteorder = { workspace = true }
 thiserror = { workspace = true }
 xxhash-rust = { workspace = true }
