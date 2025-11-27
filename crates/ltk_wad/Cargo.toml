@@ -3,7 +3,7 @@ name = "ltk_wad"
 version = "0.2.4"
 edition = "2021"
 description = "WAD archive reading/writing for League Toolkit"
-license = "AGPL-3.0-only"
+license = "MIT OR Apache-2.0"
 readme = "../../README.md"
 
 [features]
