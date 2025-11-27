@@ -2,6 +2,9 @@
 name = "ltk_shader"
 version = "0.1.0"
 edition = "2021"
+description = "Shader loading and parsing for League Toolkit"
+license = "AGPL-3.0-only"
+readme = "../../README.md"
 
 [dependencies]
 ltk_io_ext = { version = "0.3.1", path = "../ltk_io_ext" }
