@@ -4,12 +4,14 @@ mod builder;
 mod chunk;
 mod decoder;
 mod error;
+mod extractor;
 mod file_ext;
 
 pub use builder::*;
 pub use chunk::*;
 pub use decoder::*;
 pub use error::*;
+pub use extractor::*;
 pub use file_ext::*;
 
 use std::{

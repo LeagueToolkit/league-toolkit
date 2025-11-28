@@ -28,3 +28,4 @@ serde = { version = "1.0.204", features = ["derive"] }
 
 approx = "0.5.1"
 insta = { version = "1.39.0", features = ["ron"] }
+camino = "1.2.1"
