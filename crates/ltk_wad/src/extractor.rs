@@ -385,10 +385,11 @@ impl<'a, R: PathResolver, F: PathFilter> WadExtractor<'a, R, F> {
 ///
 /// ```
 /// use ltk_wad::is_hex_chunk_path;
+/// use camino::Utf8Path;
 ///
-/// assert!(is_hex_chunk_path("0123456789abcdef"));
-/// assert!(is_hex_chunk_path("0123456789abcdef.bin"));
-/// assert!(!is_hex_chunk_path("assets/champions/aatrox.bin"));
+/// assert!(is_hex_chunk_path(Utf8Path::new("0123456789abcdef")));
+/// assert!(is_hex_chunk_path(Utf8Path::new("0123456789abcdef.bin")));
+/// assert!(!is_hex_chunk_path(Utf8Path::new("assets/champions/aatrox.bin")));
 /// ```
 pub fn is_hex_chunk_path(path: &Utf8Path) -> bool {
     let file_stem = path.file_stem().unwrap_or("");

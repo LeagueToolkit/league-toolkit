@@ -29,8 +29,8 @@ impl Compressed {
             return Err(InvalidFileVersion(version));
         }
 
-        let resource_size = reader.read_u32::<LE>()?;
-        let format_token = reader.read_u32::<LE>()?;
+        let _resource_size = reader.read_u32::<LE>()?;
+        let _format_token = reader.read_u32::<LE>()?;
         let flags = reader.read_u32::<LE>()?;
         let flags = AnimationFlags::from_bits(flags)
             .ok_or_else(|| InvalidField("flags", flags.to_string()))?;
@@ -84,7 +84,7 @@ impl Compressed {
             if align_of > 0 && (p & (align_of - 1)) != 0 {
                 panic!("bad alignment!");
             }
-            let frame = unsafe { std::mem::transmute::<_, Frame>(frame) };
+            let frame = unsafe { std::mem::transmute::<[u8; 10], Frame>(frame) };
             frames.push(frame);
         }
 

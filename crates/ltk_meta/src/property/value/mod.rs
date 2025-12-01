@@ -122,7 +122,6 @@ impl PropertyValueEnum {
             ]
         )
     }
-    #[must_use]
     pub fn from_reader<R: io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         kind: BinPropertyKind,

@@ -4,6 +4,7 @@ use std::io::Read;
 
 // Represents the optimization settings of a transform component
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub struct ErrorMetric {
     /// The max allowed error
     pub margin: f32,

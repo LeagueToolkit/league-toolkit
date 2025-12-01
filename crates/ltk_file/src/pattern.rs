@@ -40,7 +40,7 @@ pub static LEAGUE_FILE_MAGIC_BYTES: &[LeagueFilePattern] = &[
     LeagueFilePattern::from_bytes(b"RST", LeagueFileKind::RiotStringTable),
     LeagueFilePattern::from_bytes(b"PTCH", LeagueFileKind::PropertyBinOverride),
     LeagueFilePattern::from_fn(
-        |data| ((u32::from_le_bytes(data[..4].try_into().unwrap()) & 0x00FFFFFF) == 0x00FFD8FF),
+        |data| (u32::from_le_bytes(data[..4].try_into().unwrap()) & 0x00FFFFFF) == 0x00FFD8FF,
         3,
         LeagueFileKind::Jpeg,
     ),

@@ -15,22 +15,17 @@ pub struct EncodeOptions {
 }
 
 /// Filter types for mipmap generation
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum MipmapFilter {
     /// Nearest neighbor (fastest, lowest quality)
     Nearest,
     /// Triangle/Bilinear (good balance of speed and quality)
+    #[default]
     Triangle,
     /// Cubic/Bicubic (slower, higher quality)
     CatmullRom,
     /// Lanczos3 (slowest, highest quality)
     Lanczos3,
-}
-
-impl Default for MipmapFilter {
-    fn default() -> Self {
-        Self::Triangle
-    }
 }
 
 impl MipmapFilter {

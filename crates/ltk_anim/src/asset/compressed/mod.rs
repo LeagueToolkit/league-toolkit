@@ -12,6 +12,7 @@ mod read;
 mod write;
 
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub struct Compressed {
     flags: AnimationFlags,
     duration: f32,
@@ -33,8 +34,8 @@ pub struct Compressed {
     joints: Vec<u32>,
 }
 
-impl Into<AnimationAsset> for Compressed {
-    fn into(self) -> AnimationAsset {
-        AnimationAsset::Compressed(self)
+impl From<Compressed> for AnimationAsset {
+    fn from(val: Compressed) -> Self {
+        AnimationAsset::Compressed(val)
     }
 }

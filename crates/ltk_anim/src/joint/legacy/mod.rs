@@ -23,8 +23,8 @@ impl LegacyJoint {
         let mut transform = [[0.0; 4]; 4];
         transform[3][3] = 1.0;
         for i in 0..3 {
-            for j in 0..4 {
-                transform[j][i] = reader.read_f32::<LE>()?;
+            for row in &mut transform {
+                row[i] = reader.read_f32::<LE>()?;
             }
         }
 

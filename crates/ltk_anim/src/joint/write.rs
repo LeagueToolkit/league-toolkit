@@ -97,7 +97,7 @@ mod test {
 
         println!("{buf:?}");
 
-        let mut b = Joint::from_reader(&mut buf).unwrap();
+        let b = Joint::from_reader(&mut buf).unwrap();
         /*
          Because assert_eq isn't good with floats,
          we first check the float values with the 'approx' crate (see above macros),
