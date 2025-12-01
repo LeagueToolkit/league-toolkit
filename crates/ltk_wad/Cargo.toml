@@ -36,3 +36,6 @@ ltk_file = { version = "0.2.4", path = "../ltk_file" }
 
 regex = { version = "1", optional = true }
 camino = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
