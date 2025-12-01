@@ -391,8 +391,8 @@ impl<'a, R: PathResolver, F: PathFilter> WadExtractor<'a, R, F> {
 /// assert!(!is_hex_chunk_path("assets/champions/aatrox.bin"));
 /// ```
 pub fn is_hex_chunk_path(path: &Utf8Path) -> bool {
-    let file_name = path.file_name().unwrap_or("");
-    file_name.len() == 16 && file_name.chars().all(|c| c.is_ascii_hexdigit())
+    let file_stem = path.file_stem().unwrap_or("");
+    file_stem.len() == 16 && file_stem.chars().all(|c| c.is_ascii_hexdigit())
 }
 
 /// Build a filename with `.ltk` suffix and optional type extension.
