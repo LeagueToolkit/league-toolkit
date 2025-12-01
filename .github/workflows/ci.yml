@@ -20,7 +20,7 @@ jobs:
         with:
           profile: minimal
           toolchain: stable
-          components: rustfmt
+          components: rustfmt, clippy
           override: true
 
       - name: Cache dependencies
@@ -36,6 +36,9 @@ jobs:
 
       - name: Check formatting
         run: cargo fmt -- --check
+
+      - name: Run Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Build
         run: cargo build --verbose
