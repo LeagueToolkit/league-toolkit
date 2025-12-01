@@ -11,6 +11,7 @@ default = ["zstd"]
 
 serde = ["dep:serde"]
 rust_backend = ["flate2/rust_backend", "ruzstd"]
+regex = ["dep:regex"]
 
 zstd = ["dep:zstd"]
 ruzstd = ["dep:ruzstd"]
@@ -32,3 +33,9 @@ serde = { workspace = true, optional = true }
 
 ltk_io_ext = { version = "0.3.2", path = "../ltk_io_ext" }
 ltk_file = { version = "0.2.4", path = "../ltk_file" }
+
+regex = { version = "1", optional = true }
+camino = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

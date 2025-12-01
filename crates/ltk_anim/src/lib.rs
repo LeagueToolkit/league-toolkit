@@ -1,7 +1,7 @@
 //! Skeletons (rigs, joints) & animations
 pub mod joint;
 
-pub use joint::*;
+pub use joint::{legacy, Joint};
 
 pub mod error;
 
@@ -12,4 +12,9 @@ pub mod rig;
 
 pub use asset::{AnimationAsset, AnimationAssetType, AssetParseError, Compressed, Uncompressed};
 
-pub use rig::*;
+pub use rig::RigResource;
+
+/// Joint builder
+pub use joint::Builder as JointBuilder;
+/// Rig builder
+pub use rig::Builder as RigBuilder;

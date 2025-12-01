@@ -8,6 +8,7 @@ pub struct Frame {
     value: [u16; 3],
 }
 
+#[allow(dead_code)]
 impl Frame {
     pub fn joint_id(&self) -> u16 {
         self.joint_id & 0x3fff

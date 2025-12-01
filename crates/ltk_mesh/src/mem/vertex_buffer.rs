@@ -58,7 +58,7 @@ impl VertexBuffer {
         }
         let stride = off; // off collects the sizes of all the elements, which also happens to be the stride
 
-        if buffer.len() % stride != 0 {
+        if !buffer.len().is_multiple_of(stride) {
             panic!("Buffer size must be a multiple of it's stride! size: {}, stride: {stride} FIXME (alan): don't panic here", buffer.len());
         }
         Self {

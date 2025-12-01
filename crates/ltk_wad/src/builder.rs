@@ -254,7 +254,7 @@ mod tests {
         builder = builder.with_chunk(WadChunkBuilder::default().with_path("test3"));
 
         builder
-            .build_to_writer(&mut cursor, |path, cursor| {
+            .build_to_writer(&mut cursor, |_path, cursor| {
                 cursor.write_all(&[0xAA; 100])?;
 
                 Ok(())

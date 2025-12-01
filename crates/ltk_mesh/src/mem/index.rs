@@ -47,7 +47,7 @@ impl<F: Format> IndexBuffer<F> {
     /// Creates a new index buffer from a buffer
     pub fn new(buffer: Vec<u8>) -> Self {
         let stride = size_of::<F>();
-        if buffer.len() % stride != 0 {
+        if !buffer.len().is_multiple_of(stride) {
             panic!("Index buffer size must be a multiple of index size!");
         }
         Self {
@@ -78,7 +78,7 @@ impl<F: Format> IndexBuffer<F> {
     #[inline(always)]
     #[must_use]
     /// An iterator over the indices in the buffer.
-    pub fn iter(&self) -> IndexBufferIter<F> {
+    pub fn iter(&self) -> IndexBufferIter<'_, F> {
         IndexBufferIter {
             buffer: self,
             counter: 0,
