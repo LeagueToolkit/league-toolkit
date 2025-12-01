@@ -832,8 +832,7 @@ mod tests {
         let mut source = MockWadSource::new();
         let (offset, compressed_size) = source.write_gzip_at(1000, test_data);
 
-        let chunk =
-            create_gzip_chunk(0xabcdef1234567890, offset, compressed_size, test_data.len());
+        let chunk = create_gzip_chunk(0xabcdef1234567890, offset, compressed_size, test_data.len());
 
         // Create resolver and extractor
         let mut resolver = HashMapPathResolver::default();
@@ -989,8 +988,7 @@ mod tests {
         resolver.insert(0x2222, "text/readme.txt".to_string());
 
         // Create extractor with type filter (only PNG)
-        let extractor =
-            WadExtractor::new(&resolver).with_type_filter(vec![LeagueFileKind::Png]);
+        let extractor = WadExtractor::new(&resolver).with_type_filter(vec![LeagueFileKind::Png]);
 
         // Extract all chunks
         let mut decoder = WadDecoder {
