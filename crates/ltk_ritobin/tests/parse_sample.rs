@@ -1,6 +1,6 @@
 //! Integration test for parsing a sample ritobin file.
 
-use ltk_ritobin::{parse, write};
+use ltk_ritobin::{parse, write, ParseError};
 
 const SAMPLE_RITOBIN: &str = r#"#PROP_text
 type: string = "PROP"
@@ -188,3 +188,54 @@ entries: map[hash,embed] = {
     assert!(file.entries.contains_key("entries"));
 }
 
+#[test]
+fn test_error_span_unknown_type() {
+    let input = "test: badtype = 42";
+    let err = parse(input).unwrap_err();
+
+    // Verify we get an UnknownType error with correct span
+    match err {
+        ParseError::UnknownType {
+            type_name, span, ..
+        } => {
+            assert_eq!(type_name, "badtype");
+            // "badtype" starts at position 6 (after "test: ")
+            assert_eq!(span.offset(), 6);
+            assert_eq!(span.len(), 7); // "badtype" is 7 chars
+        }
+        _ => panic!("Expected UnknownType error, got: {:?}", err),
+    }
+}
+
+#[test]
+fn test_error_span_multiline() {
+    let input = r#"
+valid: string = "hello"
+broken: unknowntype = 123
+"#;
+    let err = parse(input).unwrap_err();
+
+    match err {
+        ParseError::UnknownType {
+            type_name, span, ..
+        } => {
+            assert_eq!(type_name, "unknowntype");
+            // The span offset should point into the second line
+            assert!(span.offset() > 20); // After first line
+        }
+        _ => panic!("Expected UnknownType error, got: {:?}", err),
+    }
+}
+
+#[test]
+fn test_error_is_miette_diagnostic() {
+    use miette::Diagnostic;
+
+    let input = "test: badtype = 42";
+    let err = parse(input).unwrap_err();
+
+    // ParseError implements Diagnostic
+    let _code = err.code();
+    let _labels = err.labels();
+    let _source = err.source_code();
+}

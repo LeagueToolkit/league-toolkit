@@ -12,7 +12,9 @@ serde = ["dep:serde", "ltk_meta/serde"]
 
 [dependencies]
 nom = "7.1"
+nom_locate = "4.2"
 thiserror = { workspace = true }
+miette = { workspace = true }
 
 glam = { workspace = true }
 xxhash-rust = { workspace = true }
