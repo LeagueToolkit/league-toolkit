@@ -1,7 +1,8 @@
+use super::traits::{ReaderExt as _, WriterExt as _};
+use super::Error;
+use byteorder::{ReadBytesExt as _, WriteBytesExt as _, LE};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::io;
-
-use super::Error;
 
 pub mod value;
 pub use value::PropertyValueEnum;
@@ -130,8 +131,6 @@ impl BinProperty {
         reader: &mut R,
         legacy: bool,
     ) -> Result<Self, Error> {
-        use super::traits::ReaderExt;
-        use byteorder::{ReadBytesExt as _, LE};
         let name_hash = reader.read_u32::<LE>()?;
         let kind = reader.read_property_kind(legacy)?;
 
@@ -144,9 +143,6 @@ impl BinProperty {
         &self,
         writer: &mut W,
     ) -> Result<(), io::Error> {
-        use super::traits::WriterExt;
-        use byteorder::{WriteBytesExt as _, LE};
-
         writer.write_u32::<LE>(self.name_hash)?;
         writer.write_property_kind(self.value.kind())?;
 
