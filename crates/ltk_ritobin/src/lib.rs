@@ -45,11 +45,13 @@
 #![allow(mismatched_lifetime_syntaxes)]
 
 pub mod error;
+pub mod hashes;
 pub mod parser;
 pub mod types;
 pub mod writer;
 
-pub use error::{ParseError, Span, WriteError};
+pub use error::*;
+pub use hashes::*;
 pub use parser::{parse, parse_to_bin_tree, RitobinFile};
-pub use types::{kind_to_type_name, type_name_to_kind, RitobinType};
-pub use writer::{write, write_with_config, RitobinBuilder, WriterConfig};
+pub use types::*;
+pub use writer::*;

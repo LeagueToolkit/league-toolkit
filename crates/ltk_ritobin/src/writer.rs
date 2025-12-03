@@ -10,48 +10,75 @@ use ltk_meta::{
     BinProperty, BinTree, BinTreeObject,
 };
 
-use crate::{error::WriteError, types::kind_to_type_name};
+use crate::{
+    error::WriteError,
+    hashes::{HashMapProvider, HashProvider, HexHashProvider},
+    types::kind_to_type_name,
+};
 
 /// Configuration for the text writer.
 #[derive(Debug, Clone)]
 pub struct WriterConfig {
     /// Number of spaces per indent level.
     pub indent_size: usize,
-    /// Whether to use named hashes when available (requires hash lookup).
-    pub use_named_hashes: bool,
 }
 
 impl Default for WriterConfig {
     fn default() -> Self {
+        Self { indent_size: 4 }
+    }
+}
+
+/// Text writer for ritobin format with hash provider support.
+pub struct TextWriter<'a, H: HashProvider = HexHashProvider> {
+    buffer: String,
+    indent_level: usize,
+    config: WriterConfig,
+    hashes: &'a H,
+}
+
+impl<'a> TextWriter<'a, HexHashProvider> {
+    /// Create a new text writer without hash lookup (all hashes written as hex).
+    pub fn new() -> Self {
+        static HEX_PROVIDER: HexHashProvider = HexHashProvider;
         Self {
-            indent_size: 4,
-            use_named_hashes: false,
+            buffer: String::new(),
+            indent_level: 0,
+            config: WriterConfig::default(),
+            hashes: &HEX_PROVIDER,
         }
     }
 }
 
-/// Text writer for ritobin format.
-pub struct TextWriter {
-    buffer: String,
-    indent_level: usize,
-    config: WriterConfig,
-}
-
-impl TextWriter {
-    pub fn new() -> Self {
-        Self::with_config(WriterConfig::default())
+impl<'a, H: HashProvider> TextWriter<'a, H> {
+    /// Create a new text writer with a hash provider for name lookup.
+    pub fn with_hashes(hashes: &'a H) -> Self {
+        Self {
+            buffer: String::new(),
+            indent_level: 0,
+            config: WriterConfig::default(),
+            hashes,
+        }
     }
 
-    pub fn with_config(config: WriterConfig) -> Self {
+    /// Create a new text writer with custom configuration and hash provider.
+    pub fn with_config_and_hashes(config: WriterConfig, hashes: &'a H) -> Self {
         Self {
             buffer: String::new(),
             indent_level: 0,
             config,
+            hashes,
         }
     }
 
+    /// Consume the writer and return the generated string.
     pub fn into_string(self) -> String {
         self.buffer
+    }
+
+    /// Get a reference to the generated string.
+    pub fn as_str(&self) -> &str {
+        &self.buffer
     }
 
     fn indent(&mut self) {
@@ -104,6 +131,56 @@ impl TextWriter {
             }
             _ => {}
         }
+    }
+
+    /// Write an entry/object path hash (looks up in entries table).
+    fn write_entry_hash(&mut self, hash: u32) -> Result<(), WriteError> {
+        if let Some(name) = self.hashes.lookup_entry(hash) {
+            write!(self.buffer, "{:?}", name)?;
+        } else {
+            write!(self.buffer, "{:#x}", hash)?;
+        }
+        Ok(())
+    }
+
+    /// Write a field/property name hash (looks up in fields table).
+    fn write_field_hash(&mut self, hash: u32) -> Result<(), WriteError> {
+        if let Some(name) = self.hashes.lookup_field(hash) {
+            self.write_raw(name);
+        } else {
+            write!(self.buffer, "{:#x}", hash)?;
+        }
+        Ok(())
+    }
+
+    /// Write a hash property value (looks up in hashes table).
+    fn write_hash_value(&mut self, hash: u32) -> Result<(), WriteError> {
+        if let Some(name) = self.hashes.lookup_hash(hash) {
+            write!(self.buffer, "{:?}", name)?;
+        } else {
+            write!(self.buffer, "{:#x}", hash)?;
+        }
+        Ok(())
+    }
+
+    /// Write a type/class hash (looks up in types table).
+    fn write_type_hash(&mut self, hash: u32) -> Result<(), WriteError> {
+        if let Some(name) = self.hashes.lookup_type(hash) {
+            self.write_raw(name);
+        } else {
+            write!(self.buffer, "{:#x}", hash)?;
+        }
+        Ok(())
+    }
+
+    /// Write a link hash (looks up in entries table, same as entry paths).
+    fn write_link_hash(&mut self, hash: u32) -> Result<(), WriteError> {
+        if let Some(name) = self.hashes.lookup_entry(hash) {
+            write!(self.buffer, "{:?}", name)?;
+        } else {
+            write!(self.buffer, "{:#x}", hash)?;
+        }
+        Ok(())
     }
 
     fn write_value(&mut self, value: &PropertyValueEnum) -> Result<(), WriteError> {
@@ -164,15 +241,14 @@ impl TextWriter {
                 write!(self.buffer, "{:?}", v.0)?;
             }
             PropertyValueEnum::Hash(v) => {
-                write!(self.buffer, "{:#x}", v.0)?;
+                self.write_hash_value(v.0)?;
             }
             PropertyValueEnum::WadChunkLink(v) => {
+                // WAD chunk links are u64 xxhash, we don't have lookup for these yet
                 write!(self.buffer, "{:#x}", v.0)?;
             }
             PropertyValueEnum::ObjectLink(v) => {
-                // For links, we try to output as quoted string if we have the name
-                // For now, output as hex
-                write!(self.buffer, "{:#x}", v.0)?;
+                self.write_link_hash(v.0)?;
             }
             PropertyValueEnum::BitBool(v) => self.write_raw(if v.0 { "true" } else { "false" }),
 
@@ -242,19 +318,15 @@ impl TextWriter {
         if v.class_hash == 0 && v.properties.is_empty() {
             self.write_raw("null");
         } else {
-            write!(self.buffer, "{:#x} ", v.class_hash)?;
+            self.write_type_hash(v.class_hash)?;
+            self.write_raw(" ");
             if v.properties.is_empty() {
                 self.write_raw("{}");
             } else {
                 self.write_raw("{\n");
                 self.indent();
                 for prop in v.properties.values() {
-                    self.pad();
-                    write!(self.buffer, "{:#x}: ", prop.name_hash)?;
-                    self.write_type(&prop.value);
-                    self.write_raw(" = ");
-                    self.write_value(&prop.value)?;
-                    self.write_raw("\n");
+                    self.write_property(prop)?;
                 }
                 self.dedent();
                 self.pad();
@@ -264,10 +336,9 @@ impl TextWriter {
         Ok(())
     }
 
-    #[allow(dead_code)]
-    fn write_property(&mut self, name: &str, prop: &BinProperty) -> Result<(), WriteError> {
+    fn write_property(&mut self, prop: &BinProperty) -> Result<(), WriteError> {
         self.pad();
-        self.write_raw(name);
+        self.write_field_hash(prop.name_hash)?;
         self.write_raw(": ");
         self.write_type(&prop.value);
         self.write_raw(" = ");
@@ -276,82 +347,117 @@ impl TextWriter {
         Ok(())
     }
 
-    fn write_property_with_hash(&mut self, prop: &BinProperty) -> Result<(), WriteError> {
+    /// Write a BinTree to the buffer.
+    pub fn write_tree(&mut self, tree: &BinTree) -> Result<(), WriteError> {
+        // Header
+        self.write_raw("#PROP_text\n");
+
+        // Type
+        self.write_raw("type: string = \"PROP\"\n");
+
+        // Version
+        writeln!(self.buffer, "version: u32 = {}", tree.version)?;
+
+        // Dependencies (linked)
+        if !tree.dependencies.is_empty() {
+            self.write_raw("linked: list[string] = {\n");
+            self.indent();
+            for dep in &tree.dependencies {
+                self.pad();
+                writeln!(self.buffer, "{:?}", dep)?;
+            }
+            self.dedent();
+            self.write_raw("}\n");
+        }
+
+        // Entries (objects)
+        if !tree.objects.is_empty() {
+            self.write_raw("entries: map[hash,embed] = {\n");
+            self.indent();
+            for obj in tree.objects.values() {
+                self.write_object(obj)?;
+            }
+            self.dedent();
+            self.write_raw("}\n");
+        }
+
+        Ok(())
+    }
+
+    /// Write a single BinTreeObject.
+    fn write_object(&mut self, obj: &BinTreeObject) -> Result<(), WriteError> {
         self.pad();
-        write!(self.buffer, "{:#x}: ", prop.name_hash)?;
-        self.write_type(&prop.value);
+        self.write_entry_hash(obj.path_hash)?;
         self.write_raw(" = ");
-        self.write_value(&prop.value)?;
-        self.write_raw("\n");
+        self.write_type_hash(obj.class_hash)?;
+        self.write_raw(" ");
+
+        if obj.properties.is_empty() {
+            self.write_raw("{}\n");
+        } else {
+            self.write_raw("{\n");
+            self.indent();
+            for prop in obj.properties.values() {
+                self.write_property(prop)?;
+            }
+            self.dedent();
+            self.pad();
+            self.write_raw("}\n");
+        }
+
         Ok(())
     }
 }
 
-impl Default for TextWriter {
+impl Default for TextWriter<'_, HexHashProvider> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-/// Write a BinTree to ritobin text format.
+// ============================================================================
+// Public API Functions
+// ============================================================================
+
+/// Write a BinTree to ritobin text format (hashes as hex).
 pub fn write(tree: &BinTree) -> Result<String, WriteError> {
-    write_with_config(tree, WriterConfig::default())
+    let mut writer = TextWriter::new();
+    writer.write_tree(tree)?;
+    Ok(writer.into_string())
 }
 
 /// Write a BinTree to ritobin text format with custom configuration.
 pub fn write_with_config(tree: &BinTree, config: WriterConfig) -> Result<String, WriteError> {
-    let mut writer = TextWriter::with_config(config);
-
-    // Header
-    writer.write_raw("#PROP_text\n");
-
-    // Type
-    writer.write_raw("type: string = \"PROP\"\n");
-
-    // Version
-    writeln!(writer.buffer, "version: u32 = {}", tree.version)?;
-
-    // Dependencies (linked)
-    if !tree.dependencies.is_empty() {
-        writer.write_raw("linked: list[string] = {\n");
-        writer.indent();
-        for dep in &tree.dependencies {
-            writer.pad();
-            writeln!(writer.buffer, "{:?}", dep)?;
-        }
-        writer.dedent();
-        writer.write_raw("}\n");
-    }
-
-    // Entries (objects)
-    if !tree.objects.is_empty() {
-        writer.write_raw("entries: map[hash,embed] = {\n");
-        writer.indent();
-        for obj in tree.objects.values() {
-            writer.pad();
-            write!(writer.buffer, "{:#x} = ", obj.path_hash)?;
-
-            // Write the object as an embed
-            write!(writer.buffer, "{:#x} ", obj.class_hash)?;
-            if obj.properties.is_empty() {
-                writer.write_raw("{}\n");
-            } else {
-                writer.write_raw("{\n");
-                writer.indent();
-                for prop in obj.properties.values() {
-                    writer.write_property_with_hash(prop)?;
-                }
-                writer.dedent();
-                writer.pad();
-                writer.write_raw("}\n");
-            }
-        }
-        writer.dedent();
-        writer.write_raw("}\n");
-    }
-
+    static HEX_PROVIDER: HexHashProvider = HexHashProvider;
+    let mut writer = TextWriter::with_config_and_hashes(config, &HEX_PROVIDER);
+    writer.write_tree(tree)?;
     Ok(writer.into_string())
 }
+
+/// Write a BinTree to ritobin text format with hash name lookup.
+pub fn write_with_hashes<H: HashProvider>(
+    tree: &BinTree,
+    hashes: &H,
+) -> Result<String, WriteError> {
+    let mut writer = TextWriter::with_hashes(hashes);
+    writer.write_tree(tree)?;
+    Ok(writer.into_string())
+}
+
+/// Write a BinTree to ritobin text format with configuration and hash name lookup.
+pub fn write_with_config_and_hashes<H: HashProvider>(
+    tree: &BinTree,
+    config: WriterConfig,
+    hashes: &H,
+) -> Result<String, WriteError> {
+    let mut writer = TextWriter::with_config_and_hashes(config, hashes);
+    writer.write_tree(tree)?;
+    Ok(writer.into_string())
+}
+
+// ============================================================================
+// Builder
+// ============================================================================
 
 /// A builder for creating ritobin files programmatically.
 #[derive(Debug, Default)]
@@ -401,14 +507,31 @@ impl RitobinBuilder {
         BinTree::new(self.objects, self.dependencies)
     }
 
+    /// Build and write to text (hashes as hex).
     pub fn to_text(self) -> Result<String, WriteError> {
         write(&self.build())
     }
+
+    /// Build and write to text with hash name lookup.
+    pub fn to_text_with_hashes<H: HashProvider>(self, hashes: &H) -> Result<String, WriteError> {
+        write_with_hashes(&self.build(), hashes)
+    }
 }
+
+// ============================================================================
+// Convenience type aliases
+// ============================================================================
+
+/// A pre-configured writer that outputs all hashes as hex values.
+pub type HexWriter<'a> = TextWriter<'a, HexHashProvider>;
+
+/// A pre-configured writer that looks up hashes from HashMaps.
+pub type NamedWriter<'a> = TextWriter<'a, HashMapProvider>;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::hashes::HashMapProvider;
 
     #[test]
     fn test_write_simple() {
@@ -442,5 +565,48 @@ mod tests {
             .build();
 
         assert_eq!(tree.dependencies.len(), 1);
+    }
+
+    #[test]
+    fn test_write_with_hash_lookup() {
+        use ltk_meta::value::{HashValue, StringValue};
+        use std::collections::HashMap as StdHashMap;
+
+        // Create a simple tree with a hash value
+        let mut properties = StdHashMap::new();
+        let name_hash = ltk_hash::fnv1a::hash_lower("testField");
+        properties.insert(
+            name_hash,
+            BinProperty {
+                name_hash,
+                value: PropertyValueEnum::String(StringValue("hello".to_string())),
+            },
+        );
+
+        let path_hash = ltk_hash::fnv1a::hash_lower("Test/Path");
+        let class_hash = ltk_hash::fnv1a::hash_lower("TestClass");
+
+        let obj = BinTreeObject {
+            path_hash,
+            class_hash,
+            properties,
+        };
+
+        let tree = BinTree::new(std::iter::once(obj), std::iter::empty());
+
+        // Without hash lookup - should have hex values
+        let text_hex = write(&tree).unwrap();
+        assert!(text_hex.contains(&format!("{:#x}", path_hash)));
+
+        // With hash lookup - should have named values
+        let mut hashes = HashMapProvider::new();
+        hashes.insert_entry(path_hash, "Test/Path");
+        hashes.insert_field(name_hash, "testField");
+        hashes.insert_type(class_hash, "TestClass");
+
+        let text_named = write_with_hashes(&tree, &hashes).unwrap();
+        assert!(text_named.contains("\"Test/Path\""));
+        assert!(text_named.contains("testField:"));
+        assert!(text_named.contains("TestClass {"));
     }
 }
