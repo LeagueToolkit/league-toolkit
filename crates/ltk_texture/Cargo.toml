@@ -25,7 +25,7 @@ intel_tex_2 = { version = "0.5.0", optional = true }
 
 
 [features]
-default = ["intel-tex"]
+default = []
 intel-tex = ["dep:intel_tex_2"]
 
 [dev-dependencies]
