@@ -138,7 +138,7 @@ impl Tex {
                 // TODO: test me (this is likely wrong)
                 &self.data[off..off + (w * h * self.format.bytes_per_block())],
             ),
-            Format::Bgra16 => TexSurfaceData::Bgra16fSlice(
+            Format::Bgra16 => TexSurfaceData::Bgra16Slice(
                 &self.data[off..off + (w * h * self.format.bytes_per_block())],
             ),
             _ => {

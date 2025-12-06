@@ -12,7 +12,6 @@ byteorder = { workspace = true }
 thiserror = { workspace = true }
 num_enum = { workspace = true }
 ltk_io_ext = { version = "0.3.2", path = "../ltk_io_ext" }
-half = "2.6"
 
 image = { version = "0.25.2", default-features = false, features = ["dds"] }
 ddsfile = "0.5.2"
