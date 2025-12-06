@@ -71,10 +71,12 @@ impl ReadProperty for MapValue {
         if !key_kind.is_primitive() {
             return Err(Error::InvalidKeyType(key_kind));
         }
+
         let value_kind = reader.read_property_kind(legacy)?;
         if value_kind.is_container() {
             return Err(Error::InvalidNesting(value_kind));
         }
+
         let size = reader.read_u32::<LE>()?;
         let (real_size, value) = measure(reader, |reader| {
             let len = reader.read_u32::<LE>()? as _;
@@ -85,6 +87,7 @@ impl ReadProperty for MapValue {
                     value_kind.read(reader, legacy)?,
                 );
             }
+
             Ok::<_, Error>(Self {
                 key_kind,
                 value_kind,
@@ -95,6 +98,7 @@ impl ReadProperty for MapValue {
         if size as u64 != real_size {
             return Err(Error::InvalidSize(size as _, real_size));
         }
+
         Ok(value)
     }
 }
