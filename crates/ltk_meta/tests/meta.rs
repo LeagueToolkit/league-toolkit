@@ -18,7 +18,7 @@ pub fn round_trip() {
     r.rewind().unwrap();
 
     let mut out = Cursor::new(Vec::new());
-    a.to_writer(&mut out, false).unwrap();
+    a.to_writer(&mut out).unwrap();
 
     out.rewind().unwrap();
     let b = BinTree::from_reader(&mut out).unwrap();
