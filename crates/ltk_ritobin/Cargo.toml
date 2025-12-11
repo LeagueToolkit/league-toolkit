@@ -19,7 +19,7 @@ miette = { workspace = true }
 glam = { workspace = true }
 xxhash-rust = { workspace = true }
 
-ltk_meta = { version = "0.2.5", path = "../ltk_meta" }
+ltk_meta = { version = "0.2.6", path = "../ltk_meta" }
 ltk_hash = { version = "0.2.3", path = "../ltk_hash" }
 ltk_primitives = { version = "0.2.3", path = "../ltk_primitives" }
 
