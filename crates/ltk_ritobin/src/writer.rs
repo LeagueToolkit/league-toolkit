@@ -459,60 +459,85 @@ pub fn write_with_config_and_hashes<H: HashProvider>(
 // Builder
 // ============================================================================
 
-/// A builder for creating ritobin files programmatically.
-#[derive(Debug, Default)]
+/// A builder for creating ritobin files programmatically and converting to text.
+///
+/// This is a convenience wrapper around [`ltk_meta::bin_tree::BinTreeBuilder`]
+/// that adds methods for direct text output.
+///
+/// # Examples
+///
+/// ```
+/// use ltk_ritobin::writer::RitobinBuilder;
+/// use ltk_meta::BinTreeObject;
+///
+/// let text = RitobinBuilder::new()
+///     .dependency("base.bin")
+///     .object(BinTreeObject::new(0x1234, 0x5678))
+///     .to_text()
+///     .unwrap();
+/// ```
+#[derive(Debug, Default, Clone)]
 pub struct RitobinBuilder {
-    version: u32,
+    is_override: bool,
     dependencies: Vec<String>,
     objects: Vec<BinTreeObject>,
 }
 
 impl RitobinBuilder {
+    /// Creates a new `RitobinBuilder` with default values.
     pub fn new() -> Self {
-        Self {
-            version: 3,
-            dependencies: Vec::new(),
-            objects: Vec::new(),
-        }
+        Self::default()
     }
 
-    pub fn version(mut self, version: u32) -> Self {
-        self.version = version;
+    /// Sets whether this is an override bin file.
+    ///
+    /// Default is `false`.
+    pub fn is_override(mut self, is_override: bool) -> Self {
+        self.is_override = is_override;
         self
     }
 
+    /// Adds a single dependency.
     pub fn dependency(mut self, dep: impl Into<String>) -> Self {
         self.dependencies.push(dep.into());
         self
     }
 
+    /// Adds multiple dependencies.
     pub fn dependencies(mut self, deps: impl IntoIterator<Item = impl Into<String>>) -> Self {
         self.dependencies.extend(deps.into_iter().map(Into::into));
         self
     }
 
+    /// Adds a single object.
     pub fn object(mut self, obj: BinTreeObject) -> Self {
         self.objects.push(obj);
         self
     }
 
+    /// Adds multiple objects.
     pub fn objects(mut self, objs: impl IntoIterator<Item = BinTreeObject>) -> Self {
         self.objects.extend(objs);
         self
     }
 
+    /// Builds the [`BinTree`].
+    ///
+    /// The resulting tree will have version 3, which is always used when writing.
     pub fn build(self) -> BinTree {
-        // Note: BinTree::new sets version to 3, but we want to allow overriding
-        // For now this is a limitation
-        BinTree::new(self.objects, self.dependencies)
+        BinTree::builder()
+            .is_override(self.is_override)
+            .dependencies(self.dependencies)
+            .objects(self.objects)
+            .build()
     }
 
-    /// Build and write to text (hashes as hex).
+    /// Build and write to ritobin text format (hashes as hex).
     pub fn to_text(self) -> Result<String, WriteError> {
         write(&self.build())
     }
 
-    /// Build and write to text with hash name lookup.
+    /// Build and write to ritobin text format with hash name lookup.
     pub fn to_text_with_hashes<H: HashProvider>(self, hashes: &H) -> Result<String, WriteError> {
         write_with_hashes(&self.build(), hashes)
     }
@@ -535,7 +560,7 @@ mod tests {
 
     #[test]
     fn test_write_simple() {
-        let tree = BinTree::new(std::iter::empty(), std::iter::empty());
+        let tree = BinTree::new([], std::iter::empty::<&str>());
         let text = write(&tree).unwrap();
         assert!(text.contains("#PROP_text"));
         assert!(text.contains("type: string = \"PROP\""));
@@ -559,12 +584,10 @@ mod tests {
 
     #[test]
     fn test_builder() {
-        let tree = RitobinBuilder::new()
-            .version(3)
-            .dependency("path/to/dep.bin")
-            .build();
+        let tree = RitobinBuilder::new().dependency("path/to/dep.bin").build();
 
         assert_eq!(tree.dependencies.len(), 1);
+        assert_eq!(tree.version, 3); // Version is always 3
     }
 
     #[test]
@@ -592,7 +615,7 @@ mod tests {
             properties,
         };
 
-        let tree = BinTree::new(std::iter::once(obj), std::iter::empty());
+        let tree = BinTree::new(std::iter::once(obj), std::iter::empty::<&str>());
 
         // Without hash lookup - should have hex values
         let text_hex = write(&tree).unwrap();

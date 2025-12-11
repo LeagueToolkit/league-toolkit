@@ -24,7 +24,7 @@ fn roundtrip_property(prop: &BinProperty) -> BinProperty {
 fn roundtrip_tree(tree: &BinTree) -> BinTree {
     let mut buffer = Vec::new();
     let mut cursor = Cursor::new(&mut buffer);
-    tree.to_writer(&mut cursor, false).expect("write failed");
+    tree.to_writer(&mut cursor).expect("write failed");
 
     cursor.set_position(0);
     BinTree::from_reader(&mut cursor).expect("read failed")
@@ -634,7 +634,7 @@ fn test_bin_tree_object_empty_roundtrip() {
 
     let mut buffer = Vec::new();
     let mut cursor = Cursor::new(&mut buffer);
-    obj.to_writer(&mut cursor, false).expect("write failed");
+    obj.to_writer(&mut cursor).expect("write failed");
 
     cursor.set_position(0);
     let result =
@@ -668,7 +668,7 @@ fn test_bin_tree_object_with_properties_roundtrip() {
 
     let mut buffer = Vec::new();
     let mut cursor = Cursor::new(&mut buffer);
-    obj.to_writer(&mut cursor, false).expect("write failed");
+    obj.to_writer(&mut cursor).expect("write failed");
 
     cursor.set_position(0);
     let result =
