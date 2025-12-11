@@ -1,5 +1,8 @@
 //! Error types for ritobin parsing and writing.
 
+// The miette Diagnostic derive macro generates code that triggers this warning
+#![allow(unused_assignments)]
+
 use miette::{Diagnostic, SourceSpan};
 use thiserror::Error;
 

@@ -569,7 +569,7 @@ mod tests {
 
     #[test]
     fn test_write_with_hash_lookup() {
-        use ltk_meta::value::{HashValue, StringValue};
+        use ltk_meta::value::StringValue;
         use std::collections::HashMap as StdHashMap;
 
         // Create a simple tree with a hash value
