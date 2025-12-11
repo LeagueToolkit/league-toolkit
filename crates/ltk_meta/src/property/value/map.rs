@@ -121,7 +121,7 @@ impl WriteProperty for MapValue {
         writer.write_u32::<LE>(0)?;
 
         let (size, _) = measure(writer, |writer| {
-            writer.write_u16::<LE>(self.entries.len() as _)?;
+            writer.write_u32::<LE>(self.entries.len() as _)?;
 
             for (k, v) in self.entries.iter() {
                 k.0.to_writer(writer)?;

@@ -6,6 +6,9 @@ pub use object::*;
 mod read;
 mod write;
 
+#[cfg(test)]
+mod tests;
+
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, PartialEq)]
 /// The top level tree of a bin file
