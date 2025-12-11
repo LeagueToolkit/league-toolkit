@@ -32,10 +32,7 @@ impl BinTree {
     /// tree.to_writer(&mut buffer)?;
     /// # Ok::<(), std::io::Error>(())
     /// ```
-    pub fn to_writer<W: io::Write + io::Seek + ?Sized>(
-        &self,
-        writer: &mut W,
-    ) -> io::Result<()> {
+    pub fn to_writer<W: io::Write + io::Seek + ?Sized>(&self, writer: &mut W) -> io::Result<()> {
         match self.is_override {
             true => todo!("implement is_override BinTree write"),
             false => {

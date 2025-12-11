@@ -584,9 +584,7 @@ mod tests {
 
     #[test]
     fn test_builder() {
-        let tree = RitobinBuilder::new()
-            .dependency("path/to/dep.bin")
-            .build();
+        let tree = RitobinBuilder::new().dependency("path/to/dep.bin").build();
 
         assert_eq!(tree.dependencies.len(), 1);
         assert_eq!(tree.version, 3); // Version is always 3
