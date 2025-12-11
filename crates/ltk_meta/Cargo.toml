@@ -1,6 +1,6 @@
 [package]
 name = "ltk_meta"
-version = "0.2.5"
+version = "0.2.6"
 edition = "2021"
 description = "Metadata formats and utilities for League Toolkit"
 license = "MIT OR Apache-2.0"
