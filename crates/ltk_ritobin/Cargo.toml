@@ -1,6 +1,6 @@
 [package]
 name = "ltk_ritobin"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "Ritobin text format parser and writer for League Toolkit"
 license = "MIT OR Apache-2.0"
@@ -19,9 +19,9 @@ miette = { workspace = true }
 glam = { workspace = true }
 xxhash-rust = { workspace = true }
 
-ltk_meta = { version = "0.3.0", path = "../ltk_meta" }
-ltk_hash = { version = "0.2.3", path = "../ltk_hash" }
-ltk_primitives = { version = "0.2.3", path = "../ltk_primitives" }
+ltk_meta = { version = "0.3.1", path = "../ltk_meta" }
+ltk_hash = { version = "0.2.4", path = "../ltk_hash" }
+ltk_primitives = { version = "0.2.4", path = "../ltk_primitives" }
 
 serde = { workspace = true, optional = true }
 
