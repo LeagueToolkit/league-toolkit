@@ -1,6 +1,6 @@
 [package]
 name = "ltk_wad"
-version = "0.2.6"
+version = "0.2.7"
 edition = "2021"
 description = "WAD archive reading/writing for League Toolkit"
 license = "MIT OR Apache-2.0"
@@ -31,8 +31,8 @@ flate2 = { workspace = true }
 
 serde = { workspace = true, optional = true }
 
-ltk_io_ext = { version = "0.3.2", path = "../ltk_io_ext" }
-ltk_file = { version = "0.2.5", path = "../ltk_file" }
+ltk_io_ext = { version = "0.3.3", path = "../ltk_io_ext" }
+ltk_file = { version = "0.2.6", path = "../ltk_file" }
 
 regex = { version = "1", optional = true }
 camino = { workspace = true }
