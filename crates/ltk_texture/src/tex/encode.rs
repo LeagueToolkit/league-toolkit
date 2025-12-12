@@ -19,9 +19,9 @@ fn quantize_to_bits(x: f32, bits: u8) -> f32 {
 
 /// Dither RGB toward 5/6/5 (BC1/BC3 color endpoint-ish). Alpha is untouched.
 ///
-/// This uses **8×8 Bayer ordered dithering** (deterministic thresholding).
+/// Floyd–Steinberg error diffusion with serpentine scan to reduce directional artifacts.
 #[cfg(any(feature = "intel-tex", test))]
-fn ordered_dither_rgb565_bayer8_in_place(width: u32, height: u32, rgba: &mut [u8]) {
+fn floyd_steinberg_dither_rgb565_in_place(width: u32, height: u32, rgba: &mut [u8]) {
     let w = width as usize;
     let h = height as usize;
     if w == 0 || h == 0 {
@@ -29,46 +29,90 @@ fn ordered_dither_rgb565_bayer8_in_place(width: u32, height: u32, rgba: &mut [u8
     }
     debug_assert_eq!(rgba.len(), w * h * 4);
 
-    // 8×8 Bayer matrix values in [0, 63]
-    // (classic ordered dithering threshold map)
-    const BAYER8: [[u8; 8]; 8] = [
-        [0, 48, 12, 60, 3, 51, 15, 63],
-        [32, 16, 44, 28, 35, 19, 47, 31],
-        [8, 56, 4, 52, 11, 59, 7, 55],
-        [40, 24, 36, 20, 43, 27, 39, 23],
-        [2, 50, 14, 62, 1, 49, 13, 61],
-        [34, 18, 46, 30, 33, 17, 45, 29],
-        [10, 58, 6, 54, 9, 57, 5, 53],
-        [42, 26, 38, 22, 41, 25, 37, 21],
-    ];
-
-    // Dither amplitude: half of one quantization step in normalized space.
-    // For bits b: step = 1/((2^b)-1), so we apply ±0.5*step.
-    let step_r = 1.0 / ((1u32 << 5) - 1) as f32;
-    let step_g = 1.0 / ((1u32 << 6) - 1) as f32;
-    let step_b = 1.0 / ((1u32 << 5) - 1) as f32;
+    // Error buffers for current and next row: per-x accumulated error for RGB.
+    let mut err_curr = vec![[0.0f32; 3]; w];
+    let mut err_next = vec![[0.0f32; 3]; w];
 
     for y in 0..h {
-        for x in 0..w {
-            let idx = (y * w + x) * 4;
-            let t = (BAYER8[y & 7][x & 7] as f32 + 0.5) / 64.0 - 0.5; // [-0.5, +0.5)
+        let left_to_right = (y & 1) == 0;
 
-            let r = rgba[idx] as f32 / 255.0;
-            let g = rgba[idx + 1] as f32 / 255.0;
-            let b = rgba[idx + 2] as f32 / 255.0;
+        let (x_start, x_end, step): (isize, isize, isize) = if left_to_right {
+            (0, w as isize, 1)
+        } else {
+            (w as isize - 1, -1, -1)
+        };
 
-            let r_d = clamp01(r + t * step_r);
-            let g_d = clamp01(g + t * step_g);
-            let b_d = clamp01(b + t * step_b);
+        let mut x = x_start;
+        while x != x_end {
+            let xi = x as usize;
+            let idx = (y * w + xi) * 4;
 
-            let rq = quantize_to_bits(r_d, 5);
-            let gq = quantize_to_bits(g_d, 6);
-            let bq = quantize_to_bits(b_d, 5);
+            let r0 = rgba[idx] as f32 / 255.0 + err_curr[xi][0];
+            let g0 = rgba[idx + 1] as f32 / 255.0 + err_curr[xi][1];
+            let b0 = rgba[idx + 2] as f32 / 255.0 + err_curr[xi][2];
 
+            let r = clamp01(r0);
+            let g = clamp01(g0);
+            let b = clamp01(b0);
+
+            // Quantize to 5/6/5
+            let rq = quantize_to_bits(r, 5);
+            let gq = quantize_to_bits(g, 6);
+            let bq = quantize_to_bits(b, 5);
+
+            // Write back (alpha untouched)
             rgba[idx] = (rq * 255.0).round().clamp(0.0, 255.0) as u8;
             rgba[idx + 1] = (gq * 255.0).round().clamp(0.0, 255.0) as u8;
             rgba[idx + 2] = (bq * 255.0).round().clamp(0.0, 255.0) as u8;
+
+            // Error
+            let er = r - rq;
+            let eg = g - gq;
+            let eb = b - bq;
+
+            // Floyd–Steinberg weights:
+            // right 7/16, down-left 3/16, down 5/16, down-right 1/16
+            let xr = x + step; // "right" in scan direction
+            let xl = x - step; // "left" in scan direction
+
+            // right (same row)
+            if xr >= 0 && (xr as usize) < w {
+                let xri = xr as usize;
+                err_curr[xri][0] += er * (7.0 / 16.0);
+                err_curr[xri][1] += eg * (7.0 / 16.0);
+                err_curr[xri][2] += eb * (7.0 / 16.0);
+            }
+
+            // next row
+            if y + 1 < h {
+                // down
+                err_next[xi][0] += er * (5.0 / 16.0);
+                err_next[xi][1] += eg * (5.0 / 16.0);
+                err_next[xi][2] += eb * (5.0 / 16.0);
+
+                // down-left (relative to scan direction)
+                if xl >= 0 && (xl as usize) < w {
+                    let xli = xl as usize;
+                    err_next[xli][0] += er * (3.0 / 16.0);
+                    err_next[xli][1] += eg * (3.0 / 16.0);
+                    err_next[xli][2] += eb * (3.0 / 16.0);
+                }
+
+                // down-right
+                if xr >= 0 && (xr as usize) < w {
+                    let xri = xr as usize;
+                    err_next[xri][0] += er * (1.0 / 16.0);
+                    err_next[xri][1] += eg * (1.0 / 16.0);
+                    err_next[xri][2] += eb * (1.0 / 16.0);
+                }
+            }
+
+            x += step;
         }
+
+        // Rotate error buffers
+        std::mem::swap(&mut err_curr, &mut err_next);
+        err_next.fill([0.0; 3]);
     }
 }
 
@@ -231,7 +275,7 @@ fn encode_bc1(width: u32, height: u32, rgba_data: &[u8]) -> Result<Vec<u8>, Enco
 
     // Pre-dither toward RGB565 to reduce visible block artifacts in BC1.
     let mut rgba = rgba_data.to_vec();
-    ordered_dither_rgb565_bayer8_in_place(width, height, &mut rgba);
+    floyd_steinberg_dither_rgb565_in_place(width, height, &mut rgba);
 
     let surface = RgbaSurface {
         data: &rgba,
@@ -257,7 +301,7 @@ fn encode_bc3(width: u32, height: u32, rgba_data: &[u8]) -> Result<Vec<u8>, Enco
 
     // Pre-dither toward RGB565 to reduce visible block artifacts in BC3 (color endpoints).
     let mut rgba = rgba_data.to_vec();
-    ordered_dither_rgb565_bayer8_in_place(width, height, &mut rgba);
+    floyd_steinberg_dither_rgb565_in_place(width, height, &mut rgba);
 
     let surface = RgbaSurface {
         data: &rgba,
@@ -300,7 +344,7 @@ mod tests {
         }
 
         let alpha_before: Vec<u8> = rgba.chunks_exact(4).map(|p| p[3]).collect();
-        ordered_dither_rgb565_bayer8_in_place(w, h, &mut rgba);
+        floyd_steinberg_dither_rgb565_in_place(w, h, &mut rgba);
         let alpha_after: Vec<u8> = rgba.chunks_exact(4).map(|p| p[3]).collect();
         assert_eq!(alpha_before, alpha_after);
 
