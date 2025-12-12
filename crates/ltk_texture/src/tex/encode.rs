@@ -9,6 +9,30 @@ fn clamp01(x: f32) -> f32 {
     x.clamp(0.0, 1.0)
 }
 
+/// Convert sRGB (0..1) to linear (0..1).
+#[cfg(any(feature = "intel-tex", test))]
+#[inline]
+fn srgb_to_linear(x: f32) -> f32 {
+    // IEC 61966-2-1:1999
+    if x <= 0.04045 {
+        x / 12.92
+    } else {
+        ((x + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+/// Convert linear (0..1) to sRGB (0..1).
+#[cfg(any(feature = "intel-tex", test))]
+#[inline]
+fn linear_to_srgb(x: f32) -> f32 {
+    // IEC 61966-2-1:1999
+    if x <= 0.0031308 {
+        x * 12.92
+    } else {
+        1.055 * x.powf(1.0 / 2.4) - 0.055
+    }
+}
+
 #[cfg(any(feature = "intel-tex", test))]
 #[inline]
 fn quantize_to_bits(x: f32, bits: u8) -> f32 {
@@ -20,7 +44,7 @@ fn quantize_to_bits(x: f32, bits: u8) -> f32 {
 /// Dither RGB toward 5/6/5 (BC1/BC3 color endpoint-ish). Alpha is untouched.
 /// Serpentine scan reduces directional artifacts.
 #[cfg(any(feature = "intel-tex", test))]
-fn floyd_steinberg_dither_rgb565_in_place(width: u32, height: u32, rgba: &mut [u8]) {
+fn stucki_dither_rgb565_in_place(width: u32, height: u32, rgba: &mut [u8]) {
     let w = width as usize;
     let h = height as usize;
     if w == 0 || h == 0 {
@@ -29,15 +53,22 @@ fn floyd_steinberg_dither_rgb565_in_place(width: u32, height: u32, rgba: &mut [u
 
     debug_assert_eq!(rgba.len(), w * h * 4);
 
-    // Error buffers for current and next row: per-x accumulated error for RGB.
-    let mut err_curr = vec![[0.0f32; 3]; w];
-    let mut err_next = vec![[0.0f32; 3]; w];
+    // Stucki diffusion kernel (denominator 42):
+    //        x   8   4
+    // 2   4   8   4   2
+    // 1   2   4   2   1
+    //
+    // We diffuse error in *linear* space, but quantize in sRGB space toward RGB565,
+    // which tends to look smoother in gradients while still matching BC1/BC3 endpoints well.
+    const DEN: f32 = 42.0;
+
+    // Error buffers for current row and the next two rows: per-x accumulated error for RGB (linear).
+    let mut err0 = vec![[0.0f32; 3]; w];
+    let mut err1 = vec![[0.0f32; 3]; w];
+    let mut err2 = vec![[0.0f32; 3]; w];
 
     for y in 0..h {
         let left_to_right = (y & 1) == 0;
-
-        // Clear next-row errors
-        err_next.fill([0.0; 3]);
 
         let (x_start, x_end, step): (isize, isize, isize) = if left_to_right {
             (0, w as isize, 1)
@@ -45,20 +76,37 @@ fn floyd_steinberg_dither_rgb565_in_place(width: u32, height: u32, rgba: &mut [u
             (w as isize - 1, -1, -1)
         };
 
+        // Helper to add error to a specific row buffer at x if in bounds.
+        #[inline]
+        fn add_err(row: &mut [[f32; 3]], x: isize, w: usize, er: [f32; 3], wgt: f32) {
+            if x >= 0 && (x as usize) < w {
+                let xi = x as usize;
+                row[xi][0] += er[0] * wgt;
+                row[xi][1] += er[1] * wgt;
+                row[xi][2] += er[2] * wgt;
+            }
+        }
+
         let mut x = x_start;
         while x != x_end {
             let xi = x as usize;
             let idx = (y * w + xi) * 4;
 
-            let r0 = rgba[idx] as f32 / 255.0 + err_curr[xi][0];
-            let g0 = rgba[idx + 1] as f32 / 255.0 + err_curr[xi][1];
-            let b0 = rgba[idx + 2] as f32 / 255.0 + err_curr[xi][2];
+            // Current color in linear, plus accumulated error (also linear).
+            let r_lin0 = srgb_to_linear(rgba[idx] as f32 / 255.0) + err0[xi][0];
+            let g_lin0 = srgb_to_linear(rgba[idx + 1] as f32 / 255.0) + err0[xi][1];
+            let b_lin0 = srgb_to_linear(rgba[idx + 2] as f32 / 255.0) + err0[xi][2];
 
-            let r = clamp01(r0);
-            let g = clamp01(g0);
-            let b = clamp01(b0);
+            let r_lin = clamp01(r_lin0);
+            let g_lin = clamp01(g_lin0);
+            let b_lin = clamp01(b_lin0);
 
-            // Quantize to 5/6/5
+            // Convert to sRGB for quantization toward RGB565.
+            let r = clamp01(linear_to_srgb(r_lin));
+            let g = clamp01(linear_to_srgb(g_lin));
+            let b = clamp01(linear_to_srgb(b_lin));
+
+            // Quantize to 5/6/5 in sRGB space.
             let rq = quantize_to_bits(r, 5);
             let gq = quantize_to_bits(g, 6);
             let bq = quantize_to_bits(b, 5);
@@ -68,54 +116,52 @@ fn floyd_steinberg_dither_rgb565_in_place(width: u32, height: u32, rgba: &mut [u
             rgba[idx + 1] = (gq * 255.0).round().clamp(0.0, 255.0) as u8;
             rgba[idx + 2] = (bq * 255.0).round().clamp(0.0, 255.0) as u8;
 
-            // Error
-            let er = r - rq;
-            let eg = g - gq;
-            let eb = b - bq;
+            // Error in linear (error diffusion works best in linear light).
+            let rq_lin = srgb_to_linear(rq);
+            let gq_lin = srgb_to_linear(gq);
+            let bq_lin = srgb_to_linear(bq);
+            let er = [r_lin - rq_lin, g_lin - gq_lin, b_lin - bq_lin];
 
-            // Floyd–Steinberg weights:
-            // right 7/16, down-left 3/16, down 5/16, down-right 1/16
-            let xr = x + step; // "right" in scan direction
-            let xl = x - step; // "left" in scan direction
+            // Offsets in scan-direction coordinates.
+            let s = step;
+            let x1 = x + s;
+            let x2 = x + 2 * s;
+            let xm1 = x - s;
+            let xm2 = x - 2 * s;
 
-            // right (same row)
-            if xr >= 0 && (xr as usize) < w {
-                let xri = xr as usize;
-                err_curr[xri][0] += er * (7.0 / 16.0);
-                err_curr[xri][1] += eg * (7.0 / 16.0);
-                err_curr[xri][2] += eb * (7.0 / 16.0);
+            // Same row (to the "right" in scan direction): 8/42 and 4/42
+            add_err(&mut err0, x1, w, er, 8.0 / DEN);
+            add_err(&mut err0, x2, w, er, 4.0 / DEN);
+
+            // Next row (y+1): 2 4 8 4 2
+            if y + 1 < h {
+                add_err(&mut err1, xm2, w, er, 2.0 / DEN);
+                add_err(&mut err1, xm1, w, er, 4.0 / DEN);
+                add_err(&mut err1, x, w, er, 8.0 / DEN);
+                add_err(&mut err1, x1, w, er, 4.0 / DEN);
+                add_err(&mut err1, x2, w, er, 2.0 / DEN);
             }
 
-            // next row
-            if y + 1 < h {
-                // down
-                err_next[xi][0] += er * (5.0 / 16.0);
-                err_next[xi][1] += eg * (5.0 / 16.0);
-                err_next[xi][2] += eb * (5.0 / 16.0);
-
-                // down-left (relative to scan direction)
-                if xl >= 0 && (xl as usize) < w {
-                    let xli = xl as usize;
-                    err_next[xli][0] += er * (3.0 / 16.0);
-                    err_next[xli][1] += eg * (3.0 / 16.0);
-                    err_next[xli][2] += eb * (3.0 / 16.0);
-                }
-
-                // down-right
-                if xr >= 0 && (xr as usize) < w {
-                    let xri = xr as usize;
-                    err_next[xri][0] += er * (1.0 / 16.0);
-                    err_next[xri][1] += eg * (1.0 / 16.0);
-                    err_next[xri][2] += eb * (1.0 / 16.0);
-                }
+            // Next-next row (y+2): 1 2 4 2 1
+            if y + 2 < h {
+                add_err(&mut err2, xm2, w, er, 1.0 / DEN);
+                add_err(&mut err2, xm1, w, er, 2.0 / DEN);
+                add_err(&mut err2, x, w, er, 4.0 / DEN);
+                add_err(&mut err2, x1, w, er, 2.0 / DEN);
+                add_err(&mut err2, x2, w, er, 1.0 / DEN);
             }
 
             x += step;
         }
 
-        // Move next-row errors into current-row buffer
-        err_curr.fill([0.0; 3]);
-        std::mem::swap(&mut err_curr, &mut err_next);
+        // Rotate error rows:
+        // - err0 (current) is consumed, so replace it with err1
+        // - err1 becomes err2
+        // - err2 becomes cleared
+        err0.fill([0.0; 3]);
+        std::mem::swap(&mut err0, &mut err1);
+        std::mem::swap(&mut err1, &mut err2);
+        err2.fill([0.0; 3]);
     }
 }
 
@@ -278,7 +324,7 @@ fn encode_bc1(width: u32, height: u32, rgba_data: &[u8]) -> Result<Vec<u8>, Enco
 
     // Pre-dither toward RGB565 to reduce visible block artifacts in BC1.
     let mut rgba = rgba_data.to_vec();
-    floyd_steinberg_dither_rgb565_in_place(width, height, &mut rgba);
+    stucki_dither_rgb565_in_place(width, height, &mut rgba);
 
     let surface = RgbaSurface {
         data: &rgba,
@@ -304,7 +350,7 @@ fn encode_bc3(width: u32, height: u32, rgba_data: &[u8]) -> Result<Vec<u8>, Enco
 
     // Pre-dither toward RGB565 to reduce visible block artifacts in BC3 (color endpoints).
     let mut rgba = rgba_data.to_vec();
-    floyd_steinberg_dither_rgb565_in_place(width, height, &mut rgba);
+    stucki_dither_rgb565_in_place(width, height, &mut rgba);
 
     let surface = RgbaSurface {
         data: &rgba,
@@ -347,7 +393,7 @@ mod tests {
         }
 
         let alpha_before: Vec<u8> = rgba.chunks_exact(4).map(|p| p[3]).collect();
-        floyd_steinberg_dither_rgb565_in_place(w, h, &mut rgba);
+        stucki_dither_rgb565_in_place(w, h, &mut rgba);
         let alpha_after: Vec<u8> = rgba.chunks_exact(4).map(|p| p[3]).collect();
         assert_eq!(alpha_before, alpha_after);
 
