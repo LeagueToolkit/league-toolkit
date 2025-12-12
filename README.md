@@ -70,6 +70,18 @@ The default feature set enables most subsystems. Disable default features and op
 league-toolkit = { version = "0.1", default-features = false, features = ["wad", "mesh"] }
 ```
 
+## Texture encoding (BC1/BC3) with `intel-tex`
+
+BC1/BC3 encoding in `ltk_texture` is backed by the optional `intel_tex_2` dependency behind the **`intel-tex`** feature on **`ltk_texture`**.
+
+If you use the umbrella crate re-export (`league_toolkit::texture`), you still enable the `texture` feature on `league-toolkit`, but you enable `intel-tex` on `ltk_texture` directly:
+
+```toml
+[dependencies]
+league-toolkit = { version = "0.5.0", features = ["texture"] }
+ltk_texture = { version = "*", features = ["intel-tex"] }
+```
+
 ## Development
 
 - Prerequisites: Rust stable toolchain

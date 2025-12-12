@@ -3,6 +3,119 @@ use super::Format;
 #[cfg(feature = "intel-tex")]
 use intel_tex_2::{bc1, bc3, RgbaSurface};
 
+#[cfg(any(feature = "intel-tex", test))]
+#[inline]
+fn clamp01(x: f32) -> f32 {
+    x.clamp(0.0, 1.0)
+}
+
+#[cfg(any(feature = "intel-tex", test))]
+#[inline]
+fn quantize_to_bits(x: f32, bits: u8) -> f32 {
+    debug_assert!((1..=8).contains(&bits));
+    let levels = (1u32 << bits) - 1;
+    (x * levels as f32).round() / levels as f32
+}
+
+/// Dither RGB toward 5/6/5 (BC1/BC3 color endpoint-ish). Alpha is untouched.
+///
+/// Floyd–Steinberg error diffusion with serpentine scan to reduce directional artifacts.
+#[cfg(any(feature = "intel-tex", test))]
+fn floyd_steinberg_dither_rgb565_in_place(width: u32, height: u32, rgba: &mut [u8]) {
+    let w = width as usize;
+    let h = height as usize;
+    if w == 0 || h == 0 {
+        return;
+    }
+    debug_assert_eq!(rgba.len(), w * h * 4);
+
+    // Error buffers for current and next row: per-x accumulated error for RGB.
+    let mut err_curr = vec![[0.0f32; 3]; w];
+    let mut err_next = vec![[0.0f32; 3]; w];
+
+    for y in 0..h {
+        let left_to_right = (y & 1) == 0;
+
+        let (x_start, x_end, step): (isize, isize, isize) = if left_to_right {
+            (0, w as isize, 1)
+        } else {
+            (w as isize - 1, -1, -1)
+        };
+
+        let mut x = x_start;
+        while x != x_end {
+            let xi = x as usize;
+            let idx = (y * w + xi) * 4;
+
+            let r0 = rgba[idx] as f32 / 255.0 + err_curr[xi][0];
+            let g0 = rgba[idx + 1] as f32 / 255.0 + err_curr[xi][1];
+            let b0 = rgba[idx + 2] as f32 / 255.0 + err_curr[xi][2];
+
+            let r = clamp01(r0);
+            let g = clamp01(g0);
+            let b = clamp01(b0);
+
+            // Quantize to 5/6/5
+            let rq = quantize_to_bits(r, 5);
+            let gq = quantize_to_bits(g, 6);
+            let bq = quantize_to_bits(b, 5);
+
+            // Write back (alpha untouched)
+            rgba[idx] = (rq * 255.0).round().clamp(0.0, 255.0) as u8;
+            rgba[idx + 1] = (gq * 255.0).round().clamp(0.0, 255.0) as u8;
+            rgba[idx + 2] = (bq * 255.0).round().clamp(0.0, 255.0) as u8;
+
+            // Error
+            let er = r - rq;
+            let eg = g - gq;
+            let eb = b - bq;
+
+            // Floyd–Steinberg weights:
+            // right 7/16, down-left 3/16, down 5/16, down-right 1/16
+            let xr = x + step; // "right" in scan direction
+            let xl = x - step; // "left" in scan direction
+
+            // right (same row)
+            if xr >= 0 && (xr as usize) < w {
+                let xri = xr as usize;
+                err_curr[xri][0] += er * (7.0 / 16.0);
+                err_curr[xri][1] += eg * (7.0 / 16.0);
+                err_curr[xri][2] += eb * (7.0 / 16.0);
+            }
+
+            // next row
+            if y + 1 < h {
+                // down
+                err_next[xi][0] += er * (5.0 / 16.0);
+                err_next[xi][1] += eg * (5.0 / 16.0);
+                err_next[xi][2] += eb * (5.0 / 16.0);
+
+                // down-left (relative to scan direction)
+                if xl >= 0 && (xl as usize) < w {
+                    let xli = xl as usize;
+                    err_next[xli][0] += er * (3.0 / 16.0);
+                    err_next[xli][1] += eg * (3.0 / 16.0);
+                    err_next[xli][2] += eb * (3.0 / 16.0);
+                }
+
+                // down-right
+                if xr >= 0 && (xr as usize) < w {
+                    let xri = xr as usize;
+                    err_next[xri][0] += er * (1.0 / 16.0);
+                    err_next[xri][1] += eg * (1.0 / 16.0);
+                    err_next[xri][2] += eb * (1.0 / 16.0);
+                }
+            }
+
+            x += step;
+        }
+
+        // Rotate error buffers
+        std::mem::swap(&mut err_curr, &mut err_next);
+        err_next.fill([0.0; 3]);
+    }
+}
+
 /// Options for encoding textures
 #[derive(Debug, Clone)]
 pub struct EncodeOptions {
@@ -155,8 +268,17 @@ pub fn encode_rgba_with_mipmaps(
 /// Encode RGBA8 data to BC1 format
 #[cfg(feature = "intel-tex")]
 fn encode_bc1(width: u32, height: u32, rgba_data: &[u8]) -> Result<Vec<u8>, EncodeError> {
+    let expected_len = width as usize * height as usize * 4;
+    if rgba_data.len() != expected_len {
+        return Err(EncodeError::InvalidPixelData);
+    }
+
+    // Pre-dither toward RGB565 to reduce visible block artifacts in BC1.
+    let mut rgba = rgba_data.to_vec();
+    floyd_steinberg_dither_rgb565_in_place(width, height, &mut rgba);
+
     let surface = RgbaSurface {
-        data: rgba_data,
+        data: &rgba,
         width,
         height,
         stride: 4 * width,
@@ -172,13 +294,70 @@ fn encode_bc1(_width: u32, _height: u32, _rgba_data: &[u8]) -> Result<Vec<u8>, E
 /// Encode RGBA8 data to BC3 format
 #[cfg(feature = "intel-tex")]
 fn encode_bc3(width: u32, height: u32, rgba_data: &[u8]) -> Result<Vec<u8>, EncodeError> {
+    let expected_len = width as usize * height as usize * 4;
+    if rgba_data.len() != expected_len {
+        return Err(EncodeError::InvalidPixelData);
+    }
+
+    // Pre-dither toward RGB565 to reduce visible block artifacts in BC3 (color endpoints).
+    let mut rgba = rgba_data.to_vec();
+    floyd_steinberg_dither_rgb565_in_place(width, height, &mut rgba);
+
     let surface = RgbaSurface {
-        data: rgba_data,
+        data: &rgba,
         width,
         height,
         stride: 4 * width,
     };
     Ok(bc3::compress_blocks(&surface))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn allowed_levels(bits: u8) -> std::collections::HashSet<u8> {
+        let levels = (1u32 << bits) - 1;
+        (0..=levels)
+            .map(|n| {
+                ((n as f32 / levels as f32) * 255.0)
+                    .round()
+                    .clamp(0.0, 255.0) as u8
+            })
+            .collect()
+    }
+
+    #[test]
+    fn dither_preserves_alpha_and_quantizes_rgb_to_565_levels() {
+        let (w, h) = (8u32, 4u32);
+        let mut rgba = vec![0u8; (w * h * 4) as usize];
+
+        // Fill with a gradient-ish pattern and varying alpha
+        for y in 0..h as usize {
+            for x in 0..w as usize {
+                let idx = (y * w as usize + x) * 4;
+                rgba[idx] = (x as u8).wrapping_mul(31);
+                rgba[idx + 1] = (y as u8).wrapping_mul(47);
+                rgba[idx + 2] = ((x + y) as u8).wrapping_mul(19);
+                rgba[idx + 3] = (255u8).wrapping_sub((x as u8).wrapping_mul(17));
+            }
+        }
+
+        let alpha_before: Vec<u8> = rgba.chunks_exact(4).map(|p| p[3]).collect();
+        floyd_steinberg_dither_rgb565_in_place(w, h, &mut rgba);
+        let alpha_after: Vec<u8> = rgba.chunks_exact(4).map(|p| p[3]).collect();
+        assert_eq!(alpha_before, alpha_after);
+
+        let allowed_r = allowed_levels(5);
+        let allowed_g = allowed_levels(6);
+        let allowed_b = allowed_levels(5);
+
+        for px in rgba.chunks_exact(4) {
+            assert!(allowed_r.contains(&px[0]));
+            assert!(allowed_g.contains(&px[1]));
+            assert!(allowed_b.contains(&px[2]));
+        }
+    }
 }
 
 #[cfg(not(feature = "intel-tex"))]
