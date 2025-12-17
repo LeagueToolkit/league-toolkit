@@ -53,6 +53,14 @@ pub trait WriterExt: Write {
     fn write_color_f32<E: ByteOrder>(&mut self, color: &Color<f32>) -> io::Result<()> {
         color.to_writer::<E>(self)
     }
+    /// Writes color as BGRA u8 (4 bytes)
+    fn write_color_bgra_u8(&mut self, color: &Color<u8>) -> io::Result<()> {
+        color.to_writer_bgra(self)
+    }
+    /// Writes color as RGB u8 (3 bytes, no alpha)
+    fn write_color_rgb_u8(&mut self, color: &Color<u8>) -> io::Result<()> {
+        color.to_writer_rgb(self)
+    }
 
     fn write_vec2<E: ByteOrder>(&mut self, vec: impl AsRef<[f32; 2]>) -> io::Result<()> {
         for i in vec.as_ref() {
