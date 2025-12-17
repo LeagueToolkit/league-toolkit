@@ -70,7 +70,7 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
-use std::collections::HashMap;
+use indexmap::IndexMap;
 
 mod object;
 pub use object::*;
@@ -113,7 +113,7 @@ pub struct BinTree {
     pub version: u32,
 
     /// The objects in this bin tree, keyed by their path hash.
-    pub objects: HashMap<u32, BinTreeObject>,
+    pub objects: IndexMap<u32, BinTreeObject>,
 
     /// List of other property bins this file depends on.
     ///
@@ -130,7 +130,7 @@ impl Default for BinTree {
         Self {
             version: 3,
             is_override: false,
-            objects: HashMap::new(),
+            objects: IndexMap::new(),
             dependencies: Vec::new(),
             data_overrides: Vec::new(),
         }
@@ -224,7 +224,7 @@ impl BinTree {
 
     /// Removes and returns the object with the given path hash, if it exists.
     pub fn remove_object(&mut self, path_hash: u32) -> Option<BinTreeObject> {
-        self.objects.remove(&path_hash)
+        self.objects.shift_remove(&path_hash)
     }
 
     /// Adds a dependency to the tree.
@@ -247,7 +247,7 @@ impl BinTree {
 
 impl<'a> IntoIterator for &'a BinTree {
     type Item = (&'a u32, &'a BinTreeObject);
-    type IntoIter = std::collections::hash_map::Iter<'a, u32, BinTreeObject>;
+    type IntoIter = indexmap::map::Iter<'a, u32, BinTreeObject>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.objects.iter()
@@ -256,7 +256,7 @@ impl<'a> IntoIterator for &'a BinTree {
 
 impl<'a> IntoIterator for &'a mut BinTree {
     type Item = (&'a u32, &'a mut BinTreeObject);
-    type IntoIter = std::collections::hash_map::IterMut<'a, u32, BinTreeObject>;
+    type IntoIter = indexmap::map::IterMut<'a, u32, BinTreeObject>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.objects.iter_mut()
@@ -265,7 +265,7 @@ impl<'a> IntoIterator for &'a mut BinTree {
 
 impl IntoIterator for BinTree {
     type Item = (u32, BinTreeObject);
-    type IntoIter = std::collections::hash_map::IntoIter<u32, BinTreeObject>;
+    type IntoIter = indexmap::map::IntoIter<u32, BinTreeObject>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.objects.into_iter()

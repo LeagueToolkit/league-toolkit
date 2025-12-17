@@ -1,4 +1,4 @@
-use std::{collections::HashMap, hash::Hash, io};
+use std::{hash::Hash, io};
 
 use crate::{
     property::BinPropertyKind,
@@ -6,6 +6,7 @@ use crate::{
     Error,
 };
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
+use indexmap::IndexMap;
 use ltk_io_ext::{measure, window_at};
 
 use super::PropertyValueEnum;
@@ -47,7 +48,7 @@ impl PropertyValue for PropertyValueUnsafeEq {
 pub struct MapValue {
     pub key_kind: BinPropertyKind,
     pub value_kind: BinPropertyKind,
-    pub entries: HashMap<PropertyValueUnsafeEq, PropertyValueEnum>,
+    pub entries: IndexMap<PropertyValueUnsafeEq, PropertyValueEnum>,
 }
 
 impl PropertyValue for MapValue {
@@ -80,7 +81,7 @@ impl ReadProperty for MapValue {
         let size = reader.read_u32::<LE>()?;
         let (real_size, value) = measure(reader, |reader| {
             let len = reader.read_u32::<LE>()? as _;
-            let mut entries = HashMap::with_capacity(len);
+            let mut entries = IndexMap::with_capacity(len);
             for _ in 0..len {
                 entries.insert(
                     key_kind.read(reader, legacy).map(PropertyValueUnsafeEq)?,

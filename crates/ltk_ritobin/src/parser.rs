@@ -3,9 +3,8 @@
 // Nom-style parsers use elided lifetimes extensively
 #![allow(clippy::type_complexity)]
 
-use std::collections::HashMap;
-
 use glam::{Mat4, Vec2, Vec3, Vec4};
+use indexmap::IndexMap;
 use ltk_hash::fnv1a::hash_lower;
 use ltk_meta::{
     value::{
@@ -518,11 +517,11 @@ fn parse_map_entries(
     input: Span,
     key_kind: BinPropertyKind,
     value_kind: BinPropertyKind,
-) -> ParseResult<HashMap<PropertyValueUnsafeEq, PropertyValueEnum>> {
+) -> ParseResult<IndexMap<PropertyValueUnsafeEq, PropertyValueEnum>> {
     let (input, _) = preceded(ws, char('{'))(input)?;
     let (input, _) = ws(input)?;
 
-    let mut entries = HashMap::new();
+    let mut entries = IndexMap::new();
     let mut remaining = input;
 
     loop {
@@ -577,11 +576,11 @@ fn parse_optional_value(input: Span, inner_kind: BinPropertyKind) -> ParseResult
 }
 
 /// Parse struct/embed fields.
-fn parse_struct_fields(input: Span) -> ParseResult<HashMap<u32, BinProperty>> {
+fn parse_struct_fields(input: Span) -> ParseResult<IndexMap<u32, BinProperty>> {
     let (input, _) = preceded(ws, char('{'))(input)?;
     let (input, _) = ws(input)?;
 
-    let mut properties = HashMap::new();
+    let mut properties = IndexMap::new();
     let mut remaining = input;
 
     loop {
@@ -633,7 +632,7 @@ fn parse_pointer_value(input: Span) -> ParseResult<StructValue> {
             input,
             StructValue {
                 class_hash: 0,
-                properties: HashMap::new(),
+                properties: IndexMap::new(),
             },
         ));
     }
@@ -654,7 +653,7 @@ fn parse_pointer_value(input: Span) -> ParseResult<StructValue> {
             input,
             StructValue {
                 class_hash,
-                properties: HashMap::new(),
+                properties: IndexMap::new(),
             },
         ));
     }
@@ -878,13 +877,13 @@ fn parse_ritobin(input: Span) -> ParseResult<RitobinFile> {
 /// A ritobin file representation (intermediate format before conversion to BinTree).
 #[derive(Debug, Clone, Default)]
 pub struct RitobinFile {
-    pub entries: HashMap<String, BinProperty>,
+    pub entries: IndexMap<String, BinProperty>,
 }
 
 impl RitobinFile {
     pub fn new() -> Self {
         Self {
-            entries: HashMap::new(),
+            entries: IndexMap::new(),
         }
     }
 
@@ -936,7 +935,7 @@ impl RitobinFile {
     }
 
     /// Get the "entries" map as BinTreeObjects.
-    pub fn objects(&self) -> HashMap<u32, BinTreeObject> {
+    pub fn objects(&self) -> IndexMap<u32, BinTreeObject> {
         self.entries
             .get("entries")
             .and_then(|p| {

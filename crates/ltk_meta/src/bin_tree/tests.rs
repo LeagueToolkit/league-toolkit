@@ -1,9 +1,9 @@
 //! Tests for BinTree reading and writing
 
-use std::collections::HashMap;
 use std::io::Cursor;
 
 use glam::{Mat4, Vec2, Vec3, Vec4};
+use indexmap::IndexMap;
 use ltk_primitives::Color;
 
 use crate::property::value::*;
@@ -324,7 +324,7 @@ fn test_container_with_strings_roundtrip() {
 
 #[test]
 fn test_container_with_structs_roundtrip() {
-    let mut properties = HashMap::new();
+    let mut properties = IndexMap::new();
     properties.insert(
         0xAAAA,
         BinProperty {
@@ -410,7 +410,7 @@ fn test_optional_some_string_roundtrip() {
 
 #[test]
 fn test_optional_some_struct_roundtrip() {
-    let mut properties = HashMap::new();
+    let mut properties = IndexMap::new();
     properties.insert(
         0xAAAA,
         BinProperty {
@@ -444,7 +444,7 @@ fn test_map_empty_roundtrip() {
         PropertyValueEnum::Map(MapValue {
             key_kind: BinPropertyKind::U32,
             value_kind: BinPropertyKind::String,
-            entries: HashMap::new(),
+            entries: IndexMap::new(),
         }),
     );
     let result = roundtrip_property(&prop);
@@ -453,7 +453,7 @@ fn test_map_empty_roundtrip() {
 
 #[test]
 fn test_map_u32_to_string_roundtrip() {
-    let mut entries = HashMap::new();
+    let mut entries = IndexMap::new();
     entries.insert(
         PropertyValueUnsafeEq(PropertyValueEnum::U32(U32Value(1))),
         PropertyValueEnum::String(StringValue("one".into())),
@@ -477,7 +477,7 @@ fn test_map_u32_to_string_roundtrip() {
 
 #[test]
 fn test_map_hash_to_struct_roundtrip() {
-    let mut struct_props = HashMap::new();
+    let mut struct_props = IndexMap::new();
     struct_props.insert(
         0x1111,
         BinProperty {
@@ -486,7 +486,7 @@ fn test_map_hash_to_struct_roundtrip() {
         },
     );
 
-    let mut entries = HashMap::new();
+    let mut entries = IndexMap::new();
     entries.insert(
         PropertyValueUnsafeEq(PropertyValueEnum::Hash(HashValue(0xDEAD))),
         PropertyValueEnum::Struct(StructValue {
@@ -517,7 +517,7 @@ fn test_struct_empty_roundtrip() {
         0x1234,
         PropertyValueEnum::Struct(StructValue {
             class_hash: 0,
-            properties: HashMap::new(),
+            properties: IndexMap::new(),
         }),
     );
     let result = roundtrip_property(&prop);
@@ -526,7 +526,7 @@ fn test_struct_empty_roundtrip() {
 
 #[test]
 fn test_struct_with_properties_roundtrip() {
-    let mut properties = HashMap::new();
+    let mut properties = IndexMap::new();
     properties.insert(
         0x1111,
         BinProperty {
@@ -562,7 +562,7 @@ fn test_struct_with_properties_roundtrip() {
 
 #[test]
 fn test_struct_nested_roundtrip() {
-    let mut inner_props = HashMap::new();
+    let mut inner_props = IndexMap::new();
     inner_props.insert(
         0xAAAA,
         BinProperty {
@@ -571,7 +571,7 @@ fn test_struct_nested_roundtrip() {
         },
     );
 
-    let mut outer_props = HashMap::new();
+    let mut outer_props = IndexMap::new();
     outer_props.insert(
         0xBBBB,
         BinProperty {
@@ -600,7 +600,7 @@ fn test_struct_nested_roundtrip() {
 
 #[test]
 fn test_embedded_roundtrip() {
-    let mut properties = HashMap::new();
+    let mut properties = IndexMap::new();
     properties.insert(
         0x1111,
         BinProperty {
@@ -629,7 +629,7 @@ fn test_bin_tree_object_empty_roundtrip() {
     let obj = BinTreeObject {
         path_hash: 0x1234,
         class_hash: 0x5678,
-        properties: HashMap::new(),
+        properties: IndexMap::new(),
     };
 
     let mut buffer = Vec::new();
@@ -644,7 +644,7 @@ fn test_bin_tree_object_empty_roundtrip() {
 
 #[test]
 fn test_bin_tree_object_with_properties_roundtrip() {
-    let mut properties = HashMap::new();
+    let mut properties = IndexMap::new();
     properties.insert(
         0xAAAA,
         BinProperty {
@@ -699,7 +699,7 @@ fn test_bin_tree_with_dependencies_roundtrip() {
 
 #[test]
 fn test_bin_tree_with_objects_roundtrip() {
-    let mut properties = HashMap::new();
+    let mut properties = IndexMap::new();
     properties.insert(
         0xAAAA,
         BinProperty {
@@ -722,7 +722,7 @@ fn test_bin_tree_with_objects_roundtrip() {
 #[test]
 fn test_bin_tree_complex_roundtrip() {
     // Create a complex tree with multiple objects and various property types
-    let mut obj1_props = HashMap::new();
+    let mut obj1_props = IndexMap::new();
     obj1_props.insert(
         0x1111,
         BinProperty {
@@ -758,7 +758,7 @@ fn test_bin_tree_complex_roundtrip() {
         properties: obj1_props,
     };
 
-    let mut obj2_props = HashMap::new();
+    let mut obj2_props = IndexMap::new();
     obj2_props.insert(
         0x4444,
         BinProperty {
@@ -849,7 +849,7 @@ fn test_property_kind_roundtrip() {
 #[test]
 fn test_deeply_nested_struct() {
     // Create a deeply nested struct to test recursion handling
-    let mut deepest_props = HashMap::new();
+    let mut deepest_props = IndexMap::new();
     deepest_props.insert(
         0x1111,
         BinProperty {
@@ -858,7 +858,7 @@ fn test_deeply_nested_struct() {
         },
     );
 
-    let mut level2_props = HashMap::new();
+    let mut level2_props = IndexMap::new();
     level2_props.insert(
         0x2222,
         BinProperty {
@@ -870,7 +870,7 @@ fn test_deeply_nested_struct() {
         },
     );
 
-    let mut level1_props = HashMap::new();
+    let mut level1_props = IndexMap::new();
     level1_props.insert(
         0x3333,
         BinProperty {
@@ -895,7 +895,7 @@ fn test_deeply_nested_struct() {
 
 #[test]
 fn test_container_with_embedded_roundtrip() {
-    let mut embedded_props = HashMap::new();
+    let mut embedded_props = IndexMap::new();
     embedded_props.insert(
         0x1111,
         BinProperty {

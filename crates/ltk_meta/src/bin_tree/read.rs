@@ -1,9 +1,10 @@
-use std::{collections::HashMap, io};
+use std::io;
 
 use crate::Error;
 
 use super::{BinTree, BinTreeObject};
 use byteorder::{ReadBytesExt, LE};
+use indexmap::IndexMap;
 use ltk_io_ext::ReaderExt;
 
 impl BinTree {
@@ -72,7 +73,7 @@ impl BinTree {
             obj_classes.push(reader.read_u32::<LE>()?);
         }
 
-        let mut objects = HashMap::with_capacity(obj_count);
+        let mut objects = IndexMap::with_capacity(obj_count);
         match Self::try_read_objects(reader, &obj_classes, &mut objects, false) {
             Ok(_) => {}
             Err(Error::InvalidPropertyTypePrimitive(kind)) => {
@@ -106,7 +107,7 @@ impl BinTree {
     fn try_read_objects<R: io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         obj_classes: &[u32],
-        objects: &mut HashMap<u32, BinTreeObject>,
+        objects: &mut IndexMap<u32, BinTreeObject>,
         legacy: bool,
     ) -> Result<(), Error> {
         objects.clear();
