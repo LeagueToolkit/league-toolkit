@@ -1,7 +1,8 @@
 //! BinTree object types and builders.
 
-use std::{collections::HashMap, io};
+use std::io;
 
+use indexmap::IndexMap;
 use ltk_io_ext::{measure, window_at};
 
 use super::super::{BinProperty, Error, PropertyValueEnum};
@@ -40,7 +41,7 @@ pub struct BinTreeObject {
     pub class_hash: u32,
 
     /// The properties of this object, keyed by their name hash.
-    pub properties: HashMap<u32, BinProperty>,
+    pub properties: IndexMap<u32, BinProperty>,
 }
 
 impl BinTreeObject {
@@ -60,7 +61,7 @@ impl BinTreeObject {
         Self {
             path_hash,
             class_hash,
-            properties: HashMap::new(),
+            properties: IndexMap::new(),
         }
     }
 
@@ -97,7 +98,7 @@ impl BinTreeObject {
             let path_hash = reader.read_u32::<LE>()?;
 
             let prop_count = reader.read_u16::<LE>()? as usize;
-            let mut properties = HashMap::with_capacity(prop_count);
+            let mut properties = IndexMap::with_capacity(prop_count);
             for _ in 0..prop_count {
                 let prop = BinProperty::from_reader(reader, legacy)?;
                 properties.insert(prop.name_hash, prop);
@@ -211,7 +212,7 @@ impl BinTreeObject {
 
     /// Removes and returns the property with the given name hash, if it exists.
     pub fn remove_property(&mut self, name_hash: u32) -> Option<BinProperty> {
-        self.properties.remove(&name_hash)
+        self.properties.shift_remove(&name_hash)
     }
 
     /// Returns an iterator over the properties in this object.
@@ -229,7 +230,7 @@ impl BinTreeObject {
 
 impl<'a> IntoIterator for &'a BinTreeObject {
     type Item = (&'a u32, &'a BinProperty);
-    type IntoIter = std::collections::hash_map::Iter<'a, u32, BinProperty>;
+    type IntoIter = indexmap::map::Iter<'a, u32, BinProperty>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.properties.iter()
@@ -238,7 +239,7 @@ impl<'a> IntoIterator for &'a BinTreeObject {
 
 impl<'a> IntoIterator for &'a mut BinTreeObject {
     type Item = (&'a u32, &'a mut BinProperty);
-    type IntoIter = std::collections::hash_map::IterMut<'a, u32, BinProperty>;
+    type IntoIter = indexmap::map::IterMut<'a, u32, BinProperty>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.properties.iter_mut()
@@ -247,7 +248,7 @@ impl<'a> IntoIterator for &'a mut BinTreeObject {
 
 impl IntoIterator for BinTreeObject {
     type Item = (u32, BinProperty);
-    type IntoIter = std::collections::hash_map::IntoIter<u32, BinProperty>;
+    type IntoIter = indexmap::map::IntoIter<u32, BinProperty>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.properties.into_iter()
@@ -274,7 +275,7 @@ impl IntoIterator for BinTreeObject {
 pub struct BinTreeObjectBuilder {
     path_hash: u32,
     class_hash: u32,
-    properties: HashMap<u32, BinProperty>,
+    properties: IndexMap<u32, BinProperty>,
 }
 
 impl BinTreeObjectBuilder {
@@ -283,7 +284,7 @@ impl BinTreeObjectBuilder {
         Self {
             path_hash,
             class_hash,
-            properties: HashMap::new(),
+            properties: IndexMap::new(),
         }
     }
 

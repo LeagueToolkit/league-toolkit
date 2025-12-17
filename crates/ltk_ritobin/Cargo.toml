@@ -15,6 +15,7 @@ nom = "7.1"
 nom_locate = "4.2"
 thiserror = { workspace = true }
 miette = { workspace = true }
+indexmap = { workspace = true }
 
 glam = { workspace = true }
 xxhash-rust = { workspace = true }

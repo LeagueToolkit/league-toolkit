@@ -592,11 +592,11 @@ mod tests {
 
     #[test]
     fn test_write_with_hash_lookup() {
+        use indexmap::IndexMap;
         use ltk_meta::value::StringValue;
-        use std::collections::HashMap as StdHashMap;
 
         // Create a simple tree with a hash value
-        let mut properties = StdHashMap::new();
+        let mut properties = IndexMap::new();
         let name_hash = ltk_hash::fnv1a::hash_lower("testField");
         properties.insert(
             name_hash,

@@ -1,17 +1,18 @@
-use std::{collections::HashMap, io};
+use std::io;
 
 use crate::{
     traits::{PropertyValue as Value, ReadProperty, WriteProperty},
     BinProperty, Error,
 };
 use byteorder::{ReadBytesExt as _, WriteBytesExt as _, LE};
+use indexmap::IndexMap;
 use ltk_io_ext::{measure, window_at};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, PartialEq, Debug, Default)]
 pub struct StructValue {
     pub class_hash: u32,
-    pub properties: HashMap<u32, BinProperty>,
+    pub properties: IndexMap<u32, BinProperty>,
 }
 
 impl Value for StructValue {
@@ -40,7 +41,7 @@ impl ReadProperty for StructValue {
 
         let (real_size, value) = measure(reader, |reader| {
             let prop_count = reader.read_u16::<LE>()?;
-            let mut properties = HashMap::with_capacity(prop_count as _);
+            let mut properties = IndexMap::with_capacity(prop_count as _);
             for _ in 0..prop_count {
                 let prop = BinProperty::from_reader(reader, legacy)?;
                 properties.insert(prop.name_hash, prop);

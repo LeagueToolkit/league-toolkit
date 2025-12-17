@@ -7,7 +7,7 @@ license = "MIT OR Apache-2.0"
 readme = "../../README.md"
 
 [features]
-serde = ["dep:serde", "ltk_primitives/serde", "glam/serde"]
+serde = ["dep:serde", "ltk_primitives/serde", "glam/serde", "indexmap/serde"]
 
 [dependencies]
 log = { workspace = true }
@@ -19,6 +19,7 @@ thiserror = { workspace = true }
 
 glam = { workspace = true }
 paste = { workspace = true }
+indexmap = { workspace = true }
 
 serde = { workspace = true, optional = true }
 
