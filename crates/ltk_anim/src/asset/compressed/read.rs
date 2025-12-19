@@ -109,7 +109,7 @@ impl Compressed {
             translation_max,
             scale_min,
             scale_max,
-            jump_cache_count: 0,
+            jump_cache_count: jump_cache_count as usize,
             frames,
             jump_caches,
             joints,
