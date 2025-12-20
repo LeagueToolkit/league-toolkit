@@ -145,6 +145,12 @@ impl StaticMesh {
             line.clear();
             reader.read_line(&mut line)?;
             let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() < 3 {
+                return Err(ParseError::InvalidField(
+                    "vertex",
+                    format!("expected 3 components, got {}", parts.len()),
+                ));
+            }
             vertices.push(vec3(
                 parts[0]
                     .parse()

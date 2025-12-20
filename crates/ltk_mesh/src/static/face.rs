@@ -100,6 +100,22 @@ impl StaticMeshFace {
 
         let parts: Vec<&str> = line.split([' ', '\t']).filter(|s| !s.is_empty()).collect();
 
+        // Validate format: must have exactly 11 parts
+        if parts.len() < 11 {
+            return Err(crate::error::ParseError::InvalidField(
+                "face format",
+                format!("expected 11 fields, got {}", parts.len()),
+            ));
+        }
+
+        // Validate vertex count (must be 3 for triangles)
+        if parts[0] != "3" {
+            return Err(crate::error::ParseError::InvalidField(
+                "vertex count",
+                parts[0].to_string(),
+            ));
+        }
+
         // parts[0] = "3" (vertex count, always 3 for triangles)
         // parts[1..4] = indices
         // parts[4] = material
