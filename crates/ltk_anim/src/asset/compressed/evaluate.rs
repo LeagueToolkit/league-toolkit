@@ -11,6 +11,9 @@ pub fn decompress_time(compressed_time: u16, duration: f32) -> f32 {
 
 /// Compresses a time value to u16 range
 pub fn compress_time(time: f32, duration: f32) -> u16 {
+    if duration <= 0.0 {
+        return 0;
+    }
     ((time / duration) * u16::MAX as f32) as u16
 }
 
