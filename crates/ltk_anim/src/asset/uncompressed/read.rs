@@ -16,6 +16,24 @@ use ltk_io_ext::ReaderExt;
 use std::collections::HashMap;
 use std::io::{Read, Seek, SeekFrom};
 
+/// Calculates element count from section size, validating alignment
+fn section_count(
+    section_name: &'static str,
+    size: usize,
+    element_size: usize,
+) -> asset::Result<usize> {
+    if size % element_size != 0 {
+        return Err(asset::AssetParseError::InvalidField(
+            section_name,
+            format!(
+                "invalid size {}; expected multiple of {} bytes",
+                size, element_size
+            ),
+        ));
+    }
+    Ok(size / element_size)
+}
+
 impl Uncompressed {
     /// Parses an uncompressed animation from a reader
     ///
@@ -70,10 +88,21 @@ impl Uncompressed {
             return Err(asset::AssetParseError::MissingData("frames"));
         }
 
-        // Calculate counts from offsets
-        let joint_hash_count = (frames_offset - joint_hashes_offset) as usize / 4;
-        let vector_count = (quat_palette_offset - vector_palette_offset) as usize / 12;
-        let quat_count = (joint_hashes_offset - quat_palette_offset) as usize / 6;
+        let joint_hash_count = section_count(
+            "joint hashes",
+            (frames_offset - joint_hashes_offset) as usize,
+            4,
+        )?;
+        let vector_count = section_count(
+            "vector palette",
+            (quat_palette_offset - vector_palette_offset) as usize,
+            12,
+        )?;
+        let quat_count = section_count(
+            "quaternion palette",
+            (joint_hashes_offset - quat_palette_offset) as usize,
+            6,
+        )?;
 
         // Read joint hashes
         reader.seek(SeekFrom::Start(joint_hashes_offset as u64 + 12))?;
