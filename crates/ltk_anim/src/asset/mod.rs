@@ -7,12 +7,19 @@ mod uncompressed;
 
 pub use uncompressed::*;
 
+mod traits;
+
+pub use traits::Animation;
+
 pub mod error;
 mod error_metric;
 
 pub use error::*;
 
 use error::AssetParseError::UnknownAssetType;
+use glam::{Quat, Vec3};
+use std::borrow::Cow;
+use std::collections::HashMap;
 use std::io;
 use std::io::{Read, Seek, SeekFrom};
 
@@ -56,5 +63,50 @@ impl AnimationAsset {
             b"r3d2canm" => AnimationAssetType::Compressed,
             _ => AnimationAssetType::Unknown,
         })
+    }
+
+    /// Returns the type of animation asset
+    pub fn asset_type(&self) -> AnimationAssetType {
+        match self {
+            AnimationAsset::Uncompressed(_) => AnimationAssetType::Uncompressed,
+            AnimationAsset::Compressed(_) => AnimationAssetType::Compressed,
+        }
+    }
+}
+
+impl Animation for AnimationAsset {
+    fn duration(&self) -> f32 {
+        match self {
+            AnimationAsset::Uncompressed(u) => u.duration(),
+            AnimationAsset::Compressed(c) => c.duration(),
+        }
+    }
+
+    fn fps(&self) -> f32 {
+        match self {
+            AnimationAsset::Uncompressed(u) => u.fps(),
+            AnimationAsset::Compressed(c) => c.fps(),
+        }
+    }
+
+    fn joint_count(&self) -> usize {
+        match self {
+            AnimationAsset::Uncompressed(u) => u.joint_count(),
+            AnimationAsset::Compressed(c) => c.joint_count(),
+        }
+    }
+
+    fn joints(&self) -> Cow<'_, [u32]> {
+        match self {
+            AnimationAsset::Uncompressed(u) => u.joints(),
+            AnimationAsset::Compressed(c) => Animation::joints(c),
+        }
+    }
+
+    fn evaluate(&self, time: f32) -> HashMap<u32, (Quat, Vec3, Vec3)> {
+        match self {
+            AnimationAsset::Uncompressed(u) => u.evaluate(time),
+            AnimationAsset::Compressed(c) => c.evaluate(time),
+        }
     }
 }

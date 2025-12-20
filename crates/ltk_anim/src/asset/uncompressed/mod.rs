@@ -1,6 +1,7 @@
 //! Uncompressed animation asset (r3d2anmd)
-use crate::AnimationAsset;
+use crate::{asset::Animation, AnimationAsset};
 use glam::{Quat, Vec3};
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 mod read;
@@ -107,6 +108,93 @@ impl Uncompressed {
         let scale = self.vector_palette.get(frame.scale_id as usize)?;
 
         Some((*rotation, *translation, *scale))
+    }
+
+    /// Returns the number of joints in the animation
+    pub fn joint_count(&self) -> usize {
+        self.joint_frames.len()
+    }
+
+    /// Returns the joint hashes as a slice
+    ///
+    /// Note: This allocates a new Vec since joints are stored in a HashMap.
+    pub fn joints(&self) -> Cow<'_, [u32]> {
+        Cow::Owned(self.joint_frames.keys().copied().collect())
+    }
+
+    /// Evaluates the animation at the given time for all joints
+    ///
+    /// Interpolates between frames using linear interpolation for vectors
+    /// and slerp for rotations.
+    ///
+    /// The time is clamped to `[0, duration]`.
+    pub fn evaluate(&self, time: f32) -> HashMap<u32, (Quat, Vec3, Vec3)> {
+        let time = time.clamp(0.0, self.duration);
+        let frame_pos = time * self.fps;
+        let frame_a = (frame_pos.floor() as usize).min(self.frame_count.saturating_sub(1));
+        let frame_b = (frame_a + 1).min(self.frame_count.saturating_sub(1));
+        let t = frame_pos.fract();
+
+        self.joint_frames
+            .iter()
+            .filter_map(|(&hash, frames)| {
+                let transform = self.sample_joint(frames, frame_a, frame_b, t)?;
+                Some((hash, transform))
+            })
+            .collect()
+    }
+
+    /// Samples a joint's transform, interpolating between two frames
+    fn sample_joint(
+        &self,
+        frames: &[UncompressedFrame],
+        frame_a: usize,
+        frame_b: usize,
+        t: f32,
+    ) -> Option<(Quat, Vec3, Vec3)> {
+        let fa = frames.get(frame_a)?;
+
+        // No interpolation needed
+        if frame_a == frame_b || t < f32::EPSILON {
+            return Some((
+                *self.quat_palette.get(fa.rotation_id as usize)?,
+                *self.vector_palette.get(fa.translation_id as usize)?,
+                *self.vector_palette.get(fa.scale_id as usize)?,
+            ));
+        }
+
+        let fb = frames.get(frame_b)?;
+
+        let ra = self.quat_palette.get(fa.rotation_id as usize)?;
+        let rb = self.quat_palette.get(fb.rotation_id as usize)?;
+        let ta = self.vector_palette.get(fa.translation_id as usize)?;
+        let tb = self.vector_palette.get(fb.translation_id as usize)?;
+        let sa = self.vector_palette.get(fa.scale_id as usize)?;
+        let sb = self.vector_palette.get(fb.scale_id as usize)?;
+
+        Some((ra.slerp(*rb, t), ta.lerp(*tb, t), sa.lerp(*sb, t)))
+    }
+}
+
+impl Animation for Uncompressed {
+    fn duration(&self) -> f32 {
+        self.duration
+    }
+
+    fn fps(&self) -> f32 {
+        self.fps
+    }
+
+    fn joint_count(&self) -> usize {
+        self.joint_frames.len()
+    }
+
+    fn joints(&self) -> Cow<'_, [u32]> {
+        Uncompressed::joints(self)
+    }
+
+    fn evaluate(&self, time: f32) -> HashMap<u32, (Quat, Vec3, Vec3)> {
+        Uncompressed::evaluate(self, time)
     }
 }
 

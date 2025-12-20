@@ -99,7 +99,8 @@ impl Uncompressed {
         }
 
         // Initialize joint frames map
-        let mut joint_frames: HashMap<u32, Vec<UncompressedFrame>> = HashMap::with_capacity(track_count);
+        let mut joint_frames: HashMap<u32, Vec<UncompressedFrame>> =
+            HashMap::with_capacity(track_count);
         for i in 0..track_count {
             let hash = joint_hashes.get(i).copied().unwrap_or(0);
             joint_frames.insert(hash, vec![UncompressedFrame::default(); frame_count]);
@@ -187,7 +188,8 @@ impl Uncompressed {
         }
 
         // Read frames - joint hash is embedded in each frame
-        let mut joint_frames: HashMap<u32, Vec<UncompressedFrame>> = HashMap::with_capacity(track_count);
+        let mut joint_frames: HashMap<u32, Vec<UncompressedFrame>> =
+            HashMap::with_capacity(track_count);
 
         reader.seek(SeekFrom::Start(frames_offset as u64 + 12))?;
         for frame_id in 0..frame_count {
@@ -198,9 +200,9 @@ impl Uncompressed {
                 let rotation_id = reader.read_u16::<LE>()?;
                 let _padding = reader.read_u16::<LE>()?;
 
-                let frames = joint_frames.entry(joint_hash).or_insert_with(|| {
-                    vec![UncompressedFrame::default(); frame_count]
-                });
+                let frames = joint_frames
+                    .entry(joint_hash)
+                    .or_insert_with(|| vec![UncompressedFrame::default(); frame_count]);
                 frames[frame_id] = UncompressedFrame {
                     translation_id,
                     scale_id,
@@ -235,7 +237,8 @@ impl Uncompressed {
         // Build palettes and frames as we read
         let mut quat_palette = Vec::with_capacity(frame_count * track_count);
         let mut vector_palette = Vec::with_capacity(frame_count * track_count + 1);
-        let mut joint_frames: HashMap<u32, Vec<UncompressedFrame>> = HashMap::with_capacity(track_count);
+        let mut joint_frames: HashMap<u32, Vec<UncompressedFrame>> =
+            HashMap::with_capacity(track_count);
 
         // Add artificial static scale vector at index 0
         vector_palette.push(Vec3::ONE);

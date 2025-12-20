@@ -66,14 +66,33 @@ impl Default for JointHotFrame {
 }
 
 impl JointHotFrame {
+    /// Samples all transforms at the given time
+    ///
+    /// Returns (rotation, translation, scale)
+    pub fn sample(&self, time: u16, parametrized: bool) -> (Quat, Vec3, Vec3) {
+        if parametrized {
+            (
+                self.sample_rotation_parametrized(time),
+                self.sample_translation_parametrized(time),
+                self.sample_scale_parametrized(time),
+            )
+        } else {
+            (
+                self.sample_rotation_uniform(time),
+                self.sample_translation_uniform(time),
+                self.sample_scale_uniform(time),
+            )
+        }
+    }
+
     /// Samples rotation using uniform Catmull-Rom interpolation
-    pub fn sample_rotation_uniform(&self, time: u16) -> Quat {
+    fn sample_rotation_uniform(&self, time: u16) -> Quat {
         let t_d = self.rotation[2].time.saturating_sub(self.rotation[1].time);
         if t_d == 0 {
             return self.rotation[1].value;
         }
         let amount = (time.saturating_sub(self.rotation[1].time)) as f32 / t_d as f32;
-        
+
         interpolate_quat_catmull(
             amount,
             0.5,
@@ -86,13 +105,15 @@ impl JointHotFrame {
     }
 
     /// Samples translation using uniform Catmull-Rom interpolation
-    pub fn sample_translation_uniform(&self, time: u16) -> Vec3 {
-        let t_d = self.translation[2].time.saturating_sub(self.translation[1].time);
+    fn sample_translation_uniform(&self, time: u16) -> Vec3 {
+        let t_d = self.translation[2]
+            .time
+            .saturating_sub(self.translation[1].time);
         if t_d == 0 {
             return self.translation[1].value;
         }
         let amount = (time.saturating_sub(self.translation[1].time)) as f32 / t_d as f32;
-        
+
         interpolate_vec3_catmull(
             amount,
             0.5,
@@ -105,13 +126,13 @@ impl JointHotFrame {
     }
 
     /// Samples scale using uniform Catmull-Rom interpolation
-    pub fn sample_scale_uniform(&self, time: u16) -> Vec3 {
+    fn sample_scale_uniform(&self, time: u16) -> Vec3 {
         let t_d = self.scale[2].time.saturating_sub(self.scale[1].time);
         if t_d == 0 {
             return self.scale[1].value;
         }
         let amount = (time.saturating_sub(self.scale[1].time)) as f32 / t_d as f32;
-        
+
         interpolate_vec3_catmull(
             amount,
             0.5,
@@ -124,7 +145,7 @@ impl JointHotFrame {
     }
 
     /// Samples rotation using parametrized Catmull-Rom interpolation
-    pub fn sample_rotation_parametrized(&self, time: u16) -> Quat {
+    fn sample_rotation_parametrized(&self, time: u16) -> Quat {
         let (amount, scale_in, scale_out) = create_keyframe_weights(
             time,
             self.rotation[0].time,
@@ -132,7 +153,7 @@ impl JointHotFrame {
             self.rotation[2].time,
             self.rotation[3].time,
         );
-        
+
         interpolate_quat_catmull(
             amount,
             scale_in,
@@ -145,7 +166,7 @@ impl JointHotFrame {
     }
 
     /// Samples translation using parametrized Catmull-Rom interpolation
-    pub fn sample_translation_parametrized(&self, time: u16) -> Vec3 {
+    fn sample_translation_parametrized(&self, time: u16) -> Vec3 {
         let (amount, scale_in, scale_out) = create_keyframe_weights(
             time,
             self.translation[0].time,
@@ -153,7 +174,7 @@ impl JointHotFrame {
             self.translation[2].time,
             self.translation[3].time,
         );
-        
+
         interpolate_vec3_catmull(
             amount,
             scale_in,
@@ -166,7 +187,7 @@ impl JointHotFrame {
     }
 
     /// Samples scale using parametrized Catmull-Rom interpolation
-    pub fn sample_scale_parametrized(&self, time: u16) -> Vec3 {
+    fn sample_scale_parametrized(&self, time: u16) -> Vec3 {
         let (amount, scale_in, scale_out) = create_keyframe_weights(
             time,
             self.scale[0].time,
@@ -174,7 +195,7 @@ impl JointHotFrame {
             self.scale[2].time,
             self.scale[3].time,
         );
-        
+
         interpolate_vec3_catmull(
             amount,
             scale_in,

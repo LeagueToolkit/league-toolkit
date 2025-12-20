@@ -144,13 +144,19 @@ impl Uncompressed {
         for (&joint_hash, frames) in &self.joint_frames {
             for (frame_id, frame) in frames.iter().enumerate() {
                 // Get actual values from palettes
-                let translation = self.vector_palette.get(frame.translation_id as usize)
+                let translation = self
+                    .vector_palette
+                    .get(frame.translation_id as usize)
                     .copied()
                     .unwrap_or(Vec3::ZERO);
-                let scale = self.vector_palette.get(frame.scale_id as usize)
+                let scale = self
+                    .vector_palette
+                    .get(frame.scale_id as usize)
                     .copied()
                     .unwrap_or(Vec3::ONE);
-                let rotation = self.quat_palette.get(frame.rotation_id as usize)
+                let rotation = self
+                    .quat_palette
+                    .get(frame.rotation_id as usize)
                     .copied()
                     .unwrap_or(Quat::IDENTITY);
 
@@ -177,7 +183,10 @@ impl Uncompressed {
                     idx
                 });
 
-                frame_map.insert((joint_hash, frame_id), (translation_idx, scale_idx, rotation_idx));
+                frame_map.insert(
+                    (joint_hash, frame_id),
+                    (translation_idx, scale_idx, rotation_idx),
+                );
             }
         }
 
@@ -228,10 +237,7 @@ mod tests {
                 Vec3::new(1.0, 1.0, 1.0),
                 Vec3::new(1.0, 2.0, 3.0),
             ],
-            vec![
-                Quat::IDENTITY,
-                Quat::from_xyzw(0.5, 0.5, 0.5, 0.5),
-            ],
+            vec![Quat::IDENTITY, Quat::from_xyzw(0.5, 0.5, 0.5, 0.5)],
             joint_frames,
         );
 

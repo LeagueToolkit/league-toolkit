@@ -17,15 +17,15 @@ const TEST_FILES: &[&str] = &[
 fn test_parse_all_sample_animations() {
     for file_path in TEST_FILES {
         let full_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(file_path);
-        
+
         if !full_path.exists() {
             println!("Skipping missing file: {:?}", full_path);
             continue;
         }
-        
+
         let file = File::open(&full_path).expect(&format!("Failed to open {:?}", full_path));
         let mut reader = BufReader::new(file);
-        
+
         match AnimationAsset::from_reader(&mut reader) {
             Ok(asset) => {
                 match asset {
@@ -47,7 +47,7 @@ fn test_parse_all_sample_animations() {
                             c.fps(),
                             c.joint_count()
                         );
-                        
+
                         // Test evaluation at time 0
                         let pose = c.evaluate(0.0);
                         println!("  Evaluated {} joints at t=0", pose.len());

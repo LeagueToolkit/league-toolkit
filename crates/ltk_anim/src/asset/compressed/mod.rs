@@ -1,26 +1,26 @@
 use crate::{
     asset::{
         compressed::{
+            evaluate::{
+                compress_time, decompress_vector3, HotFrameEvaluator, JointHotFrame, JumpFrameU16,
+                JumpFrameU32, QuaternionHotFrame, VectorHotFrame,
+            },
             frame::Frame,
             read::AnimationFlags,
-            evaluate::{
-                compress_time, decompress_vector3, HotFrameEvaluator, JointHotFrame,
-                JumpFrameU16, JumpFrameU32, QuaternionHotFrame, VectorHotFrame,
-            },
         },
         error_metric::ErrorMetric,
+        Animation,
     },
     quantized, AnimationAsset,
 };
 use glam::{Quat, Vec3};
+use std::borrow::Cow;
 use std::collections::HashMap;
 
+mod evaluate;
 mod frame;
 mod read;
 mod write;
-mod evaluate;
-
-pub use evaluate::*;
 
 #[derive(Clone, Debug)]
 #[allow(dead_code)]
@@ -71,37 +71,25 @@ impl Compressed {
     /// Returns a map of joint hash -> (rotation, translation, scale)
     pub fn evaluate(&self, time: f32) -> HashMap<u32, (Quat, Vec3, Vec3)> {
         let time = time.clamp(0.0, self.duration);
-        let use_parametrized = self.flags.contains(AnimationFlags::UseKeyframeParametrization);
+        let parametrized = self
+            .flags
+            .contains(AnimationFlags::UseKeyframeParametrization);
 
-        // Create evaluator and initialize hot frames
         let mut evaluator = HotFrameEvaluator::new(self.joints.len());
         self.initialize_hot_frame_evaluator(&mut evaluator, time);
 
         let compressed_time = compress_time(time, self.duration);
 
-        // Evaluate each joint
-        let mut result = HashMap::with_capacity(self.joints.len());
-        for (joint_id, &joint_hash) in self.joints.iter().enumerate() {
-            let hot_frame = &evaluator.hot_frames[joint_id];
-
-            let (rotation, translation, scale) = if use_parametrized {
+        self.joints
+            .iter()
+            .enumerate()
+            .map(|(id, &hash)| {
                 (
-                    hot_frame.sample_rotation_parametrized(compressed_time),
-                    hot_frame.sample_translation_parametrized(compressed_time),
-                    hot_frame.sample_scale_parametrized(compressed_time),
+                    hash,
+                    evaluator.hot_frames[id].sample(compressed_time, parametrized),
                 )
-            } else {
-                (
-                    hot_frame.sample_rotation_uniform(compressed_time),
-                    hot_frame.sample_translation_uniform(compressed_time),
-                    hot_frame.sample_scale_uniform(compressed_time),
-                )
-            };
-
-            result.insert(joint_hash, (rotation, translation, scale));
-        }
-
-        result
+            })
+            .collect()
     }
 
     /// Initializes the hot frame evaluator from jump caches
@@ -120,13 +108,13 @@ impl Compressed {
             // 16-bit frame keys
             let jump_cache_size = 24 * self.joints.len();
             let cache_start = jump_cache_id * jump_cache_size;
-            
+
             for joint_id in 0..self.joints.len() {
                 let offset = cache_start + joint_id * 24;
                 if offset + 24 > self.jump_caches.len() {
                     continue;
                 }
-                
+
                 // Read JumpFrameU16 (12 u16 values = 24 bytes)
                 let bytes = &self.jump_caches[offset..offset + 24];
                 let jump_frame = JumpFrameU16 {
@@ -326,9 +314,30 @@ impl Compressed {
     }
 }
 
+impl Animation for Compressed {
+    fn duration(&self) -> f32 {
+        self.duration
+    }
+
+    fn fps(&self) -> f32 {
+        self.fps
+    }
+
+    fn joint_count(&self) -> usize {
+        self.joints.len()
+    }
+
+    fn joints(&self) -> Cow<'_, [u32]> {
+        Cow::Borrowed(&self.joints)
+    }
+
+    fn evaluate(&self, time: f32) -> HashMap<u32, (Quat, Vec3, Vec3)> {
+        Compressed::evaluate(self, time)
+    }
+}
+
 impl From<Compressed> for AnimationAsset {
     fn from(val: Compressed) -> Self {
         AnimationAsset::Compressed(val)
     }
 }
-
