@@ -1,6 +1,6 @@
 [package]
 name = "ltk_meta"
-version = "0.3.2"
+version = "0.3.3"
 edition = "2021"
 description = "Metadata formats and utilities for League Toolkit"
 license = "MIT OR Apache-2.0"
@@ -23,8 +23,8 @@ indexmap = { workspace = true }
 
 serde = { workspace = true, optional = true }
 
-ltk_io_ext = { version = "0.3.3", path = "../ltk_io_ext" }
-ltk_primitives = { version = "0.2.4", path = "../ltk_primitives" }
+ltk_io_ext = { version = "0.3.4", path = "../ltk_io_ext" }
+ltk_primitives = { version = "0.3.0", path = "../ltk_primitives" }
 
 [dev-dependencies]
 approx = { workspace = true }

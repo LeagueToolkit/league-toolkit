@@ -1,14 +1,14 @@
 [package]
 name = "ltk_shader"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2021"
 description = "Shader loading and parsing for League Toolkit"
 license = "MIT OR Apache-2.0"
 readme = "../../README.md"
 
 [dependencies]
-ltk_io_ext = { version = "0.3.3", path = "../ltk_io_ext" }
-ltk_wad = { version = "0.2.7", path = "../ltk_wad" }
+ltk_io_ext = { version = "0.3.4", path = "../ltk_io_ext" }
+ltk_wad = { version = "0.2.8", path = "../ltk_wad" }
 ltk_hash = { version = "0.2.4", path = "../ltk_hash" }
 byteorder = { workspace = true }
 thiserror = { workspace = true }
