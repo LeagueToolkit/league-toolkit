@@ -94,7 +94,7 @@ impl Compressed {
 
     /// Initializes the hot frame evaluator from jump caches
     fn initialize_hot_frame_evaluator(&self, evaluator: &mut HotFrameEvaluator, time: f32) {
-        if self.jump_cache_count == 0 {
+        if self.jump_cache_count == 0 || self.duration <= 0.0 {
             return;
         }
 
