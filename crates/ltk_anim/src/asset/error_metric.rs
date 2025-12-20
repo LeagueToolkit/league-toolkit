@@ -2,13 +2,31 @@ use byteorder::{ReadBytesExt, LE};
 use std::io;
 use std::io::Read;
 
-// Represents the optimization settings of a transform component
+/// Error metric for animation transform components.
+///
+/// These values are used by the engine's rig pose modifier system to control
+/// data-driven animation behaviors. Each transform type (rotation, translation, scale)
+/// has its own error metric.
+///
+/// # Engine Integration
+///
+/// The metrics feed into `BaseRigPoseModifierData` and its subtypes:
+/// - `JointSnapRigPoseModifierData` - Snapping joints to IK targets or attach points
+/// - `ConformToPathRigPoseModifierData` - Path following with blend distances and activation thresholds
+/// - `SpringPhysicsRigPoseModifierData` - Spring dynamics with stiffness/damping
+/// - `LockRootOrientationRigPoseModifierData` - Locking root bone orientation
+/// - `SyncedAnimationRigPoseModifierData` - Synchronized animation blending
+/// - `VertexAnimationRigPoseModifierData` - Vertex-level animation
 #[derive(Clone, Debug)]
 #[allow(dead_code)]
 pub struct ErrorMetric {
-    /// The max allowed error
+    /// Tolerance margin for snapping and blending behaviors.
+    /// Controls how much deviation is allowed before correction is applied.
     pub margin: f32,
-    /// The distance at which the error is measured
+
+    /// Threshold that triggers discontinuity handling.
+    /// When the change between keyframes exceeds this, special transition
+    /// logic is applied (e.g., instant snaps, path waypoint transitions).
     pub discontinuity_threshold: f32,
 }
 

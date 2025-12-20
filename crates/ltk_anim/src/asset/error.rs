@@ -14,6 +14,8 @@ pub enum AssetParseError {
     ReaderError(#[from] std::io::Error),
     #[error("UTF-8 Error - {0}")]
     Utf8Error(#[from] std::str::Utf8Error),
+    #[error("Reader Error - {0}")]
+    IoReaderError(#[from] ltk_io_ext::ReaderError),
 }
 
 pub type Result<T> = core::result::Result<T, AssetParseError>;

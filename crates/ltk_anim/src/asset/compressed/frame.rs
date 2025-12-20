@@ -10,6 +10,12 @@ pub struct Frame {
 
 #[allow(dead_code)]
 impl Frame {
+    pub fn time(&self) -> u16 {
+        self.time
+    }
+    pub fn value(&self) -> [u16; 3] {
+        self.value
+    }
     pub fn joint_id(&self) -> u16 {
         self.joint_id & 0x3fff
     }

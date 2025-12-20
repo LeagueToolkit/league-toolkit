@@ -8,9 +8,13 @@ pub mod error;
 pub use error::*;
 
 pub mod asset;
+pub mod quantized;
 pub mod rig;
 
-pub use asset::{AnimationAsset, AnimationAssetType, AssetParseError, Compressed, Uncompressed};
+pub use asset::{
+    Animation, AnimationAsset, AnimationAssetType, AssetParseError, Compressed,
+    CompressedEvaluator, ErrorMetric, Uncompressed,
+};
 
 pub use rig::RigResource;
 

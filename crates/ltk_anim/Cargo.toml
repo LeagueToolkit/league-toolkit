@@ -11,6 +11,7 @@ thiserror = { workspace = true }
 byteorder = { workspace = true }
 bitflags = { workspace = true }
 num_enum = { workspace = true }
+bytemuck = { workspace = true }
 
 glam = { workspace = true }
 
