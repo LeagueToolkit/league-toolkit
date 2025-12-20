@@ -260,6 +260,13 @@ fn interpolate_quat_catmull(
     .normalize()
 }
 
+/// Trait for jump frames that provide frame indices for hot frame initialization
+pub trait JumpFrame: bytemuck::Pod {
+    fn rotation_keys(&self) -> [usize; 4];
+    fn translation_keys(&self) -> [usize; 4];
+    fn scale_keys(&self) -> [usize; 4];
+}
+
 /// Jump frame with 16-bit keys (used when frame_count < 0x10001)
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 #[repr(C)]
@@ -269,6 +276,18 @@ pub struct JumpFrameU16 {
     pub scale_keys: [u16; 4],
 }
 
+impl JumpFrame for JumpFrameU16 {
+    fn rotation_keys(&self) -> [usize; 4] {
+        self.rotation_keys.map(|k| k as usize)
+    }
+    fn translation_keys(&self) -> [usize; 4] {
+        self.translation_keys.map(|k| k as usize)
+    }
+    fn scale_keys(&self) -> [usize; 4] {
+        self.scale_keys.map(|k| k as usize)
+    }
+}
+
 /// Jump frame with 32-bit keys (used when frame_count >= 0x10001)
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 #[repr(C)]
@@ -276,6 +295,18 @@ pub struct JumpFrameU32 {
     pub rotation_keys: [u32; 4],
     pub translation_keys: [u32; 4],
     pub scale_keys: [u32; 4],
+}
+
+impl JumpFrame for JumpFrameU32 {
+    fn rotation_keys(&self) -> [usize; 4] {
+        self.rotation_keys.map(|k| k as usize)
+    }
+    fn translation_keys(&self) -> [usize; 4] {
+        self.translation_keys.map(|k| k as usize)
+    }
+    fn scale_keys(&self) -> [usize; 4] {
+        self.scale_keys.map(|k| k as usize)
+    }
 }
 
 /// Hot frame evaluator state

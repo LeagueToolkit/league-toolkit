@@ -2,8 +2,8 @@ use crate::{
     asset::{
         compressed::{
             evaluate::{
-                compress_time, decompress_vector3, HotFrameEvaluator, JointHotFrame, JumpFrameU16,
-                JumpFrameU32, QuaternionHotFrame, VectorHotFrame,
+                compress_time, decompress_vector3, HotFrameEvaluator, JointHotFrame, JumpFrame,
+                JumpFrameU16, JumpFrameU32, QuaternionHotFrame, VectorHotFrame,
             },
             frame::Frame,
             read::AnimationFlags,
@@ -106,113 +106,41 @@ impl Compressed {
         evaluator.cursor = 0;
 
         if self.frames.len() < 0x10001 {
-            // 16-bit frame keys
-            const SIZE: usize = size_of::<JumpFrameU16>();
-            let cache_start = jump_cache_id * SIZE * self.joints.len();
-
-            for joint_id in 0..self.joints.len() {
-                let offset = cache_start + joint_id * SIZE;
-                let Some(bytes) = self.jump_caches.get(offset..offset + SIZE) else {
-                    continue;
-                };
-                let jump_frame: &JumpFrameU16 = bytemuck::from_bytes(bytes);
-                self.initialize_joint_hot_frame_u16(evaluator, joint_id, jump_frame);
-            }
+            self.initialize_hot_frames_from_cache::<JumpFrameU16>(evaluator, jump_cache_id);
         } else {
-            // 32-bit frame keys
-            const SIZE: usize = size_of::<JumpFrameU32>();
-            let cache_start = jump_cache_id * SIZE * self.joints.len();
-
-            for joint_id in 0..self.joints.len() {
-                let offset = cache_start + joint_id * SIZE;
-                let Some(bytes) = self.jump_caches.get(offset..offset + SIZE) else {
-                    continue;
-                };
-                let jump_frame: &JumpFrameU32 = bytemuck::from_bytes(bytes);
-                self.initialize_joint_hot_frame_u32(evaluator, joint_id, jump_frame);
-            }
+            self.initialize_hot_frames_from_cache::<JumpFrameU32>(evaluator, jump_cache_id);
         }
 
         evaluator.cursor += 1;
     }
 
-    fn initialize_joint_hot_frame_u16(
+    fn initialize_hot_frames_from_cache<J: JumpFrame>(
         &self,
         evaluator: &mut HotFrameEvaluator,
-        joint_id: usize,
-        jump_frame: &JumpFrameU16,
+        jump_cache_id: usize,
     ) {
-        let mut hot_frame = JointHotFrame::default();
+        let cache_start = jump_cache_id * size_of::<J>() * self.joints.len();
 
-        // Initialize rotation hot frames
-        for i in 0..4 {
-            let frame_idx = jump_frame.rotation_keys[i] as usize;
-            evaluator.cursor = evaluator.cursor.max(frame_idx);
-            if let Some(frame) = self.frames.get(frame_idx) {
-                let quat = quantized::decompress_quat(&[
-                    frame.value()[0] as u8,
-                    (frame.value()[0] >> 8) as u8,
-                    frame.value()[1] as u8,
-                    (frame.value()[1] >> 8) as u8,
-                    frame.value()[2] as u8,
-                    (frame.value()[2] >> 8) as u8,
-                ]);
-                hot_frame.rotation[i] = QuaternionHotFrame {
-                    time: frame.time(),
-                    value: quat,
-                };
-            }
+        for joint_id in 0..self.joints.len() {
+            let offset = cache_start + joint_id * size_of::<J>();
+            let Some(bytes) = self.jump_caches.get(offset..offset + size_of::<J>()) else {
+                continue;
+            };
+            let jump_frame: &J = bytemuck::from_bytes(bytes);
+            self.initialize_joint_hot_frame(evaluator, joint_id, jump_frame);
         }
-
-        // Initialize translation hot frames
-        for i in 0..4 {
-            let frame_idx = jump_frame.translation_keys[i] as usize;
-            evaluator.cursor = evaluator.cursor.max(frame_idx);
-            if let Some(frame) = self.frames.get(frame_idx) {
-                hot_frame.translation[i] = VectorHotFrame {
-                    time: frame.time(),
-                    value: decompress_vector3(
-                        &frame.value(),
-                        self.translation_min,
-                        self.translation_max,
-                    ),
-                };
-            }
-        }
-
-        // Initialize scale hot frames
-        for i in 0..4 {
-            let frame_idx = jump_frame.scale_keys[i] as usize;
-            evaluator.cursor = evaluator.cursor.max(frame_idx);
-            if let Some(frame) = self.frames.get(frame_idx) {
-                hot_frame.scale[i] = VectorHotFrame {
-                    time: frame.time(),
-                    value: decompress_vector3(&frame.value(), self.scale_min, self.scale_max),
-                };
-            }
-        }
-
-        // Rotate quaternions along shortest path
-        for i in 1..4 {
-            if hot_frame.rotation[i].value.dot(hot_frame.rotation[0].value) < 0.0 {
-                hot_frame.rotation[i].value = -hot_frame.rotation[i].value;
-            }
-        }
-
-        evaluator.hot_frames[joint_id] = hot_frame;
     }
 
-    fn initialize_joint_hot_frame_u32(
+    fn initialize_joint_hot_frame<J: JumpFrame>(
         &self,
         evaluator: &mut HotFrameEvaluator,
         joint_id: usize,
-        jump_frame: &JumpFrameU32,
+        jump_frame: &J,
     ) {
         let mut hot_frame = JointHotFrame::default();
 
         // Initialize rotation hot frames
-        for i in 0..4 {
-            let frame_idx = jump_frame.rotation_keys[i] as usize;
+        for (i, &frame_idx) in jump_frame.rotation_keys().iter().enumerate() {
             evaluator.cursor = evaluator.cursor.max(frame_idx);
             if let Some(frame) = self.frames.get(frame_idx) {
                 let quat = quantized::decompress_quat(&[
@@ -231,8 +159,7 @@ impl Compressed {
         }
 
         // Initialize translation hot frames
-        for i in 0..4 {
-            let frame_idx = jump_frame.translation_keys[i] as usize;
+        for (i, &frame_idx) in jump_frame.translation_keys().iter().enumerate() {
             evaluator.cursor = evaluator.cursor.max(frame_idx);
             if let Some(frame) = self.frames.get(frame_idx) {
                 hot_frame.translation[i] = VectorHotFrame {
@@ -247,8 +174,7 @@ impl Compressed {
         }
 
         // Initialize scale hot frames
-        for i in 0..4 {
-            let frame_idx = jump_frame.scale_keys[i] as usize;
+        for (i, &frame_idx) in jump_frame.scale_keys().iter().enumerate() {
             evaluator.cursor = evaluator.cursor.max(frame_idx);
             if let Some(frame) = self.frames.get(frame_idx) {
                 hot_frame.scale[i] = VectorHotFrame {
