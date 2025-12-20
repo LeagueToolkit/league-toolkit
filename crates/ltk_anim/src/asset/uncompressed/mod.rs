@@ -129,10 +129,14 @@ impl Uncompressed {
     ///
     /// The time is clamped to `[0, duration]`.
     pub fn evaluate(&self, time: f32) -> HashMap<u32, (Quat, Vec3, Vec3)> {
+        if self.frame_count == 0 {
+            return HashMap::new();
+        }
+
         let time = time.clamp(0.0, self.duration);
         let frame_pos = time * self.fps;
-        let frame_a = (frame_pos.floor() as usize).min(self.frame_count.saturating_sub(1));
-        let frame_b = (frame_a + 1).min(self.frame_count.saturating_sub(1));
+        let frame_a = (frame_pos.floor() as usize).min(self.frame_count - 1);
+        let frame_b = (frame_a + 1).min(self.frame_count - 1);
         let t = frame_pos.fract();
 
         self.joint_frames
