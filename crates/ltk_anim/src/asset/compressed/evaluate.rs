@@ -270,7 +270,7 @@ fn interpolate_quat_catmull(
 }
 
 /// Jump frame with 16-bit keys (used when frame_count < 0x10001)
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 #[repr(C)]
 pub struct JumpFrameU16 {
     pub rotation_keys: [u16; 4],
@@ -279,7 +279,7 @@ pub struct JumpFrameU16 {
 }
 
 /// Jump frame with 32-bit keys (used when frame_count >= 0x10001)
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 #[repr(C)]
 pub struct JumpFrameU32 {
     pub rotation_keys: [u32; 4],

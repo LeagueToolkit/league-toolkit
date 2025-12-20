@@ -16,6 +16,7 @@ use crate::{
 use glam::{Quat, Vec3};
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::mem::size_of;
 
 mod evaluate;
 mod frame;
@@ -106,75 +107,29 @@ impl Compressed {
 
         if self.frames.len() < 0x10001 {
             // 16-bit frame keys
-            let jump_cache_size = 24 * self.joints.len();
-            let cache_start = jump_cache_id * jump_cache_size;
+            const SIZE: usize = size_of::<JumpFrameU16>();
+            let cache_start = jump_cache_id * SIZE * self.joints.len();
 
             for joint_id in 0..self.joints.len() {
-                let offset = cache_start + joint_id * 24;
-                if offset + 24 > self.jump_caches.len() {
+                let offset = cache_start + joint_id * SIZE;
+                let Some(bytes) = self.jump_caches.get(offset..offset + SIZE) else {
                     continue;
-                }
-
-                // Read JumpFrameU16 (12 u16 values = 24 bytes)
-                let bytes = &self.jump_caches[offset..offset + 24];
-                let jump_frame = JumpFrameU16 {
-                    rotation_keys: [
-                        u16::from_le_bytes([bytes[0], bytes[1]]),
-                        u16::from_le_bytes([bytes[2], bytes[3]]),
-                        u16::from_le_bytes([bytes[4], bytes[5]]),
-                        u16::from_le_bytes([bytes[6], bytes[7]]),
-                    ],
-                    translation_keys: [
-                        u16::from_le_bytes([bytes[8], bytes[9]]),
-                        u16::from_le_bytes([bytes[10], bytes[11]]),
-                        u16::from_le_bytes([bytes[12], bytes[13]]),
-                        u16::from_le_bytes([bytes[14], bytes[15]]),
-                    ],
-                    scale_keys: [
-                        u16::from_le_bytes([bytes[16], bytes[17]]),
-                        u16::from_le_bytes([bytes[18], bytes[19]]),
-                        u16::from_le_bytes([bytes[20], bytes[21]]),
-                        u16::from_le_bytes([bytes[22], bytes[23]]),
-                    ],
                 };
-
-                self.initialize_joint_hot_frame_u16(evaluator, joint_id, &jump_frame);
+                let jump_frame: &JumpFrameU16 = bytemuck::from_bytes(bytes);
+                self.initialize_joint_hot_frame_u16(evaluator, joint_id, jump_frame);
             }
         } else {
             // 32-bit frame keys
-            let jump_cache_size = 48 * self.joints.len();
-            let cache_start = jump_cache_id * jump_cache_size;
+            const SIZE: usize = size_of::<JumpFrameU32>();
+            let cache_start = jump_cache_id * SIZE * self.joints.len();
 
             for joint_id in 0..self.joints.len() {
-                let offset = cache_start + joint_id * 48;
-                if offset + 48 > self.jump_caches.len() {
+                let offset = cache_start + joint_id * SIZE;
+                let Some(bytes) = self.jump_caches.get(offset..offset + SIZE) else {
                     continue;
-                }
-
-                // Read JumpFrameU32 (12 u32 values = 48 bytes)
-                let bytes = &self.jump_caches[offset..offset + 48];
-                let jump_frame = JumpFrameU32 {
-                    rotation_keys: [
-                        u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]),
-                        u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]),
-                        u32::from_le_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]),
-                        u32::from_le_bytes([bytes[12], bytes[13], bytes[14], bytes[15]]),
-                    ],
-                    translation_keys: [
-                        u32::from_le_bytes([bytes[16], bytes[17], bytes[18], bytes[19]]),
-                        u32::from_le_bytes([bytes[20], bytes[21], bytes[22], bytes[23]]),
-                        u32::from_le_bytes([bytes[24], bytes[25], bytes[26], bytes[27]]),
-                        u32::from_le_bytes([bytes[28], bytes[29], bytes[30], bytes[31]]),
-                    ],
-                    scale_keys: [
-                        u32::from_le_bytes([bytes[32], bytes[33], bytes[34], bytes[35]]),
-                        u32::from_le_bytes([bytes[36], bytes[37], bytes[38], bytes[39]]),
-                        u32::from_le_bytes([bytes[40], bytes[41], bytes[42], bytes[43]]),
-                        u32::from_le_bytes([bytes[44], bytes[45], bytes[46], bytes[47]]),
-                    ],
                 };
-
-                self.initialize_joint_hot_frame_u32(evaluator, joint_id, &jump_frame);
+                let jump_frame: &JumpFrameU32 = bytemuck::from_bytes(bytes);
+                self.initialize_joint_hot_frame_u32(evaluator, joint_id, jump_frame);
             }
         }
 
