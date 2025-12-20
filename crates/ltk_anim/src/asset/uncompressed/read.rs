@@ -200,9 +200,16 @@ impl Uncompressed {
             return Err(asset::AssetParseError::MissingData("frames"));
         }
 
-        // Calculate counts from offsets
-        let vector_count = (quat_palette_offset - vector_palette_offset) as usize / 12;
-        let quat_count = (frames_offset - quat_palette_offset) as usize / 16;
+        let vector_count = section_count(
+            "vector palette",
+            (quat_palette_offset - vector_palette_offset) as usize,
+            12,
+        )?;
+        let quat_count = section_count(
+            "quaternion palette",
+            (frames_offset - quat_palette_offset) as usize,
+            16, // v4 uses full 16-byte quaternions
+        )?;
 
         // Read vector palette
         reader.seek(SeekFrom::Start(vector_palette_offset as u64 + 12))?;
