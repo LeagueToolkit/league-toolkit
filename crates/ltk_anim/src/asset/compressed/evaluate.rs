@@ -212,10 +212,10 @@ const SLERP_EPSILON: f32 = 0.000001;
 
 /// Creates Catmull-Rom keyframe weights for parametrized interpolation
 fn create_keyframe_weights(time: u16, t0: u16, t1: u16, t2: u16, t3: u16) -> (f32, f32, f32) {
-    let t_d = (t2 - t1) as f32;
-    let amount = (time.saturating_sub(t1)) as f32 / (t_d + SLERP_EPSILON);
-    let scale_in = t_d / ((t2 - t0) as f32 + SLERP_EPSILON);
-    let scale_out = t_d / ((t3 - t1) as f32 + SLERP_EPSILON);
+    let t_d = t2.saturating_sub(t1) as f32;
+    let amount = time.saturating_sub(t1) as f32 / (t_d + SLERP_EPSILON);
+    let scale_in = t_d / (t2.saturating_sub(t0) as f32 + SLERP_EPSILON);
+    let scale_out = t_d / (t3.saturating_sub(t1) as f32 + SLERP_EPSILON);
     (amount, scale_in, scale_out)
 }
 
