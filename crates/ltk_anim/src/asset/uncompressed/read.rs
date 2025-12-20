@@ -101,8 +101,7 @@ impl Uncompressed {
         // Initialize joint frames map
         let mut joint_frames: HashMap<u32, Vec<UncompressedFrame>> =
             HashMap::with_capacity(track_count);
-        for i in 0..track_count {
-            let hash = joint_hashes.get(i).copied().unwrap_or(0);
+        for &hash in &joint_hashes {
             joint_frames.insert(hash, vec![UncompressedFrame::default(); frame_count]);
         }
 
@@ -114,7 +113,10 @@ impl Uncompressed {
                 let scale_id = reader.read_u16::<LE>()?;
                 let rotation_id = reader.read_u16::<LE>()?;
 
-                let joint_hash = joint_hashes.get(track_id).copied().unwrap_or(0);
+                // Skip tracks without a valid joint hash
+                let Some(&joint_hash) = joint_hashes.get(track_id) else {
+                    continue;
+                };
                 if let Some(frames) = joint_frames.get_mut(&joint_hash) {
                     frames[frame_id] = UncompressedFrame {
                         translation_id,
