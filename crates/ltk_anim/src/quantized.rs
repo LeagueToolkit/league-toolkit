@@ -7,11 +7,13 @@
 
 use glam::Quat;
 
+const SQRT_2: f32 = std::f32::consts::SQRT_2;
+
 /// One divided by sqrt(2), used for quaternion compression range
-const ONE_DIV_SQRT2: f32 = 0.70710678118;
+const ONE_DIV_SQRT2: f32 = SQRT_2 / 2.0;
 
 /// sqrt(2) divided by 32767, used for decompression scaling
-const SQRT2_DIV_32767: f32 = 0.00004315969;
+const SQRT2_DIV_32767: f32 = SQRT_2 / 32767.0;
 
 /// Decompresses a 48-bit (6 byte) quantized quaternion
 ///
@@ -50,8 +52,6 @@ pub fn decompress_quat(bytes: &[u8; 6]) -> Quat {
 /// Finds the largest component, stores the other 3 in 15 bits each,
 /// and uses 2 bits to identify which was omitted.
 pub fn compress_quat(quat: Quat) -> [u8; 6] {
-    let sqrt_2 = std::f32::consts::SQRT_2;
-
     // Find component with largest absolute value
     let abs_x = quat.x.abs();
     let abs_y = quat.y.abs();
@@ -76,7 +76,7 @@ pub fn compress_quat(quat: Quat) -> [u8; 6] {
         if i as u64 == max_index {
             continue;
         }
-        let temp = ((16383.5 * (sqrt_2 * val + 1.0)).round() as u64) & 32767;
+        let temp = ((16383.5 * (SQRT_2 * val + 1.0)).round() as u64) & 32767;
         bits |= temp << (30 - 15 * compressed_index);
         compressed_index += 1;
     }
