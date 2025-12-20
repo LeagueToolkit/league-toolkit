@@ -304,7 +304,7 @@ impl Compressed {
         }
 
         // Rotate quaternions along shortest path
-        for i in 1..3 {
+        for i in 1..4 {
             if hot_frame.rotation[i].value.dot(hot_frame.rotation[0].value) < 0.0 {
                 hot_frame.rotation[i].value = -hot_frame.rotation[i].value;
             }
