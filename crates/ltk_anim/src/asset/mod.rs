@@ -15,6 +15,7 @@ pub mod error;
 mod error_metric;
 
 pub use error::*;
+pub use error_metric::ErrorMetric;
 
 use error::AssetParseError::UnknownAssetType;
 use glam::{Quat, Vec3};

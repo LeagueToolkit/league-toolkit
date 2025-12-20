@@ -12,7 +12,8 @@ pub mod quantized;
 pub mod rig;
 
 pub use asset::{
-    Animation, AnimationAsset, AnimationAssetType, AssetParseError, Compressed, Uncompressed,
+    Animation, AnimationAsset, AnimationAssetType, AssetParseError, Compressed, ErrorMetric,
+    Uncompressed,
 };
 
 pub use rig::RigResource;
