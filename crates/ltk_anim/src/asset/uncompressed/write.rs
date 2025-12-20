@@ -82,7 +82,8 @@ impl Uncompressed {
 
         // Write joint hashes
         let joint_hashes_offset = writer.stream_position()? as i32 - 12;
-        let joint_hashes: Vec<u32> = self.joint_frames.keys().copied().collect();
+        let mut joint_hashes: Vec<u32> = self.joint_frames.keys().copied().collect();
+        joint_hashes.sort_unstable();
         for hash in &joint_hashes {
             writer.write_u32::<LE>(*hash)?;
         }

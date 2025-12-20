@@ -48,7 +48,11 @@ impl Uncompressed {
         joint_frames: HashMap<u32, Vec<UncompressedFrame>>,
     ) -> Self {
         let frame_count = joint_frames.values().next().map(|f| f.len()).unwrap_or(0);
-        let duration = frame_count as f32 / fps;
+        let duration = if fps > 0.0 {
+            frame_count as f32 / fps
+        } else {
+            0.0
+        };
         Self {
             duration,
             fps,

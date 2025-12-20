@@ -77,13 +77,8 @@ impl<'a> CompressedEvaluator<'a> {
         self.animation
             .joints
             .iter()
-            .enumerate()
-            .map(|(id, &hash)| {
-                (
-                    hash,
-                    self.state.hot_frames[id].sample(compressed_time, parametrized),
-                )
-            })
+            .zip(self.state.hot_frames.iter())
+            .map(|(&hash, hot_frame)| (hash, hot_frame.sample(compressed_time, parametrized)))
             .collect()
     }
 
