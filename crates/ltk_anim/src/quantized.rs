@@ -15,13 +15,17 @@ const ONE_DIV_SQRT2: f32 = SQRT_2 / 2.0;
 /// sqrt(2) divided by 32767, used for decompression scaling
 const SQRT2_DIV_32767: f32 = SQRT_2 / 32767.0;
 
+/// Decompresses a 48-bit quantized quaternion from packed u16 values
+pub fn decompress_quat_u16(values: &[u16; 3]) -> Quat {
+    decompress_quat(bytemuck::bytes_of(values).try_into().unwrap())
+}
+
 /// Decompresses a 48-bit (6 byte) quantized quaternion
 ///
 /// The format stores 3 components in 15 bits each, with 2 bits identifying
 /// which component was the largest (and omitted). The omitted component is
 /// reconstructed to ensure the quaternion is normalized.
 pub fn decompress_quat(bytes: &[u8; 6]) -> Quat {
-    // Combine bytes into a 48-bit value (little-endian)
     let first = bytes[0] as u64 | ((bytes[1] as u64) << 8);
     let second = bytes[2] as u64 | ((bytes[3] as u64) << 8);
     let third = bytes[4] as u64 | ((bytes[5] as u64) << 8);
@@ -81,7 +85,6 @@ pub fn compress_quat(quat: Quat) -> [u8; 6] {
         compressed_index += 1;
     }
 
-    // Convert to bytes (little-endian)
     [
         (bits & 0xFF) as u8,
         ((bits >> 8) & 0xFF) as u8,

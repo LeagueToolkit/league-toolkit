@@ -309,10 +309,9 @@ impl JumpFrame for JumpFrameU32 {
     }
 }
 
-/// Hot frame evaluator state
+/// Hot frame evaluator state (internal)
 #[derive(Clone, Debug)]
-pub struct HotFrameEvaluator {
-    #[allow(dead_code)]
+pub(crate) struct HotFrameEvaluator {
     pub last_evaluation_time: f32,
     pub cursor: usize,
     pub hot_frames: Vec<JointHotFrame>,
@@ -327,7 +326,6 @@ impl HotFrameEvaluator {
         }
     }
 
-    #[allow(dead_code)]
     pub fn reset(&mut self) {
         self.last_evaluation_time = -1.0;
         self.cursor = 0;

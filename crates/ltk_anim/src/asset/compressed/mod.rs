@@ -1,49 +1,41 @@
 use crate::{
-    asset::{
-        compressed::{
-            evaluate::{
-                compress_time, decompress_vector3, HotFrameEvaluator, JointHotFrame, JumpFrame,
-                JumpFrameU16, JumpFrameU32, QuaternionHotFrame, VectorHotFrame,
-            },
-            frame::Frame,
-            read::AnimationFlags,
-        },
-        error_metric::ErrorMetric,
-        Animation,
-    },
-    quantized, AnimationAsset,
+    asset::{compressed::read::AnimationFlags, error_metric::ErrorMetric, Animation},
+    AnimationAsset,
 };
+use frame::Frame;
 use glam::{Quat, Vec3};
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::mem::size_of;
 
 mod evaluate;
+mod evaluator;
 mod frame;
 mod read;
 mod write;
 
+pub use evaluator::CompressedEvaluator;
+
 #[derive(Clone, Debug)]
 #[allow(dead_code)]
 pub struct Compressed {
-    flags: AnimationFlags,
-    duration: f32,
-    fps: f32,
+    pub(crate) flags: AnimationFlags,
+    pub(crate) duration: f32,
+    pub(crate) fps: f32,
 
-    rotation_error_metric: ErrorMetric,
-    translation_error_metric: ErrorMetric,
-    scale_error_metric: ErrorMetric,
+    pub(crate) rotation_error_metric: ErrorMetric,
+    pub(crate) translation_error_metric: ErrorMetric,
+    pub(crate) scale_error_metric: ErrorMetric,
 
-    translation_min: Vec3,
-    translation_max: Vec3,
+    pub(crate) translation_min: Vec3,
+    pub(crate) translation_max: Vec3,
 
-    scale_min: Vec3,
-    scale_max: Vec3,
+    pub(crate) scale_min: Vec3,
+    pub(crate) scale_max: Vec3,
 
-    jump_cache_count: usize,
-    frames: Vec<Frame>,
-    jump_caches: Vec<u8>,
-    joints: Vec<u32>,
+    pub(crate) jump_cache_count: usize,
+    pub(crate) frames: Vec<Frame>,
+    pub(crate) jump_caches: Vec<u8>,
+    pub(crate) joints: Vec<u32>,
 }
 
 impl Compressed {
@@ -67,131 +59,22 @@ impl Compressed {
         self.joints.len()
     }
 
-    /// Evaluates the animation at the given time
+    /// Evaluates the animation at the given time.
     ///
-    /// Returns a map of joint hash -> (rotation, translation, scale)
+    /// Returns a map of joint hash -> (rotation, translation, scale).
+    ///
+    /// This is a convenience method for one-shot evaluation. For efficient
+    /// sequential playback, use [`CompressedEvaluator`] instead.
     pub fn evaluate(&self, time: f32) -> HashMap<u32, (Quat, Vec3, Vec3)> {
-        let time = time.clamp(0.0, self.duration);
-        let parametrized = self
-            .flags
-            .contains(AnimationFlags::UseKeyframeParametrization);
-
-        let mut evaluator = HotFrameEvaluator::new(self.joints.len());
-        self.initialize_hot_frame_evaluator(&mut evaluator, time);
-
-        let compressed_time = compress_time(time, self.duration);
-
-        self.joints
-            .iter()
-            .enumerate()
-            .map(|(id, &hash)| {
-                (
-                    hash,
-                    evaluator.hot_frames[id].sample(compressed_time, parametrized),
-                )
-            })
-            .collect()
+        CompressedEvaluator::new(self).evaluate(time)
     }
 
-    /// Initializes the hot frame evaluator from jump caches
-    fn initialize_hot_frame_evaluator(&self, evaluator: &mut HotFrameEvaluator, time: f32) {
-        if self.jump_cache_count == 0 || self.duration <= 0.0 {
-            return;
-        }
-
-        // Get cache id based on time
-        let jump_cache_id = ((self.jump_cache_count as f32 * (time / self.duration)) as usize)
-            .min(self.jump_cache_count - 1);
-
-        evaluator.cursor = 0;
-
-        if self.frames.len() < 0x10001 {
-            self.initialize_hot_frames_from_cache::<JumpFrameU16>(evaluator, jump_cache_id);
-        } else {
-            self.initialize_hot_frames_from_cache::<JumpFrameU32>(evaluator, jump_cache_id);
-        }
-
-        evaluator.cursor += 1;
-    }
-
-    fn initialize_hot_frames_from_cache<J: JumpFrame>(
-        &self,
-        evaluator: &mut HotFrameEvaluator,
-        jump_cache_id: usize,
-    ) {
-        let cache_start = jump_cache_id * size_of::<J>() * self.joints.len();
-
-        for joint_id in 0..self.joints.len() {
-            let offset = cache_start + joint_id * size_of::<J>();
-            let Some(bytes) = self.jump_caches.get(offset..offset + size_of::<J>()) else {
-                continue;
-            };
-            let jump_frame: &J = bytemuck::from_bytes(bytes);
-            self.initialize_joint_hot_frame(evaluator, joint_id, jump_frame);
-        }
-    }
-
-    fn initialize_joint_hot_frame<J: JumpFrame>(
-        &self,
-        evaluator: &mut HotFrameEvaluator,
-        joint_id: usize,
-        jump_frame: &J,
-    ) {
-        let mut hot_frame = JointHotFrame::default();
-
-        // Initialize rotation hot frames
-        for (i, &frame_idx) in jump_frame.rotation_keys().iter().enumerate() {
-            evaluator.cursor = evaluator.cursor.max(frame_idx);
-            if let Some(frame) = self.frames.get(frame_idx) {
-                let quat = quantized::decompress_quat(&[
-                    frame.value()[0] as u8,
-                    (frame.value()[0] >> 8) as u8,
-                    frame.value()[1] as u8,
-                    (frame.value()[1] >> 8) as u8,
-                    frame.value()[2] as u8,
-                    (frame.value()[2] >> 8) as u8,
-                ]);
-                hot_frame.rotation[i] = QuaternionHotFrame {
-                    time: frame.time(),
-                    value: quat,
-                };
-            }
-        }
-
-        // Initialize translation hot frames
-        for (i, &frame_idx) in jump_frame.translation_keys().iter().enumerate() {
-            evaluator.cursor = evaluator.cursor.max(frame_idx);
-            if let Some(frame) = self.frames.get(frame_idx) {
-                hot_frame.translation[i] = VectorHotFrame {
-                    time: frame.time(),
-                    value: decompress_vector3(
-                        &frame.value(),
-                        self.translation_min,
-                        self.translation_max,
-                    ),
-                };
-            }
-        }
-
-        // Initialize scale hot frames
-        for (i, &frame_idx) in jump_frame.scale_keys().iter().enumerate() {
-            evaluator.cursor = evaluator.cursor.max(frame_idx);
-            if let Some(frame) = self.frames.get(frame_idx) {
-                hot_frame.scale[i] = VectorHotFrame {
-                    time: frame.time(),
-                    value: decompress_vector3(&frame.value(), self.scale_min, self.scale_max),
-                };
-            }
-        }
-
-        // Rotate quaternions along shortest path
-        for i in 1..4 {
-            if hot_frame.rotation[i].value.dot(hot_frame.rotation[0].value) < 0.0 {
-                hot_frame.rotation[i].value = -hot_frame.rotation[i].value;
-            }
-        }
-
-        evaluator.hot_frames[joint_id] = hot_frame;
+    /// Creates a new evaluator for this animation.
+    ///
+    /// Use this for efficient sequential playback where hot frame state
+    /// is maintained between evaluations.
+    pub fn evaluator(&self) -> CompressedEvaluator<'_> {
+        CompressedEvaluator::new(self)
     }
 }
 
