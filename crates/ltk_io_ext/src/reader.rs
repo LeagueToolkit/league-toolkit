@@ -53,6 +53,14 @@ pub trait ReaderExt: Read {
     fn read_color_u8(&mut self) -> io::Result<Color<u8>> {
         Color::<u8>::from_reader(self)
     }
+    /// Reads color as BGRA u8 (4 bytes) - common in DirectX formats
+    fn read_color_bgra_u8(&mut self) -> io::Result<Color<u8>> {
+        Color::<u8>::from_reader_bgra(self)
+    }
+    /// Reads color as RGB u8 (3 bytes, alpha defaults to 255)
+    fn read_color_rgb_u8(&mut self) -> io::Result<Color<u8>> {
+        Color::<u8>::from_reader_rgb(self)
+    }
 
     fn read_vec2<T: ByteOrder>(&mut self) -> io::Result<Vec2> {
         Ok(Vec2::new(self.read_f32::<T>()?, self.read_f32::<T>()?))
