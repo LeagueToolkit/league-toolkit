@@ -5,6 +5,7 @@
 use glam::{Quat, Vec3};
 
 /// Decompresses a compressed time value to actual time
+#[allow(dead_code)]
 pub fn decompress_time(compressed_time: u16, duration: f32) -> f32 {
     (compressed_time as f32 / u16::MAX as f32) * duration
 }
@@ -51,21 +52,11 @@ impl Default for QuaternionHotFrame {
 }
 
 /// Joint hot frame state containing 4 control points for each transform
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct JointHotFrame {
     pub rotation: [QuaternionHotFrame; 4],
     pub translation: [VectorHotFrame; 4],
     pub scale: [VectorHotFrame; 4],
-}
-
-impl Default for JointHotFrame {
-    fn default() -> Self {
-        Self {
-            rotation: [QuaternionHotFrame::default(); 4],
-            translation: [VectorHotFrame::default(); 4],
-            scale: [VectorHotFrame::default(); 4],
-        }
-    }
 }
 
 impl JointHotFrame {
@@ -290,6 +281,7 @@ pub struct JumpFrameU32 {
 /// Hot frame evaluator state
 #[derive(Clone, Debug)]
 pub struct HotFrameEvaluator {
+    #[allow(dead_code)]
     pub last_evaluation_time: f32,
     pub cursor: usize,
     pub hot_frames: Vec<JointHotFrame>,
@@ -304,6 +296,7 @@ impl HotFrameEvaluator {
         }
     }
 
+    #[allow(dead_code)]
     pub fn reset(&mut self) {
         self.last_evaluation_time = -1.0;
         self.cursor = 0;

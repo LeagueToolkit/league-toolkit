@@ -22,7 +22,7 @@ fn section_count(
     size: usize,
     element_size: usize,
 ) -> asset::Result<usize> {
-    if size % element_size != 0 {
+    if !size.is_multiple_of(element_size) {
         return Err(asset::AssetParseError::InvalidField(
             section_name,
             format!(

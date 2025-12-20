@@ -12,6 +12,9 @@ use ltk_io_ext::WriterExt;
 use std::collections::HashMap;
 use std::io::{self, Seek, SeekFrom, Write};
 
+/// Maps (joint_hash, frame_id) -> (translation_idx, scale_idx, rotation_idx)
+type FrameMap = HashMap<(u32, usize), (u16, u16, u16)>;
+
 impl Uncompressed {
     /// Writes the animation to a writer in v5 format
     pub fn to_writer<W: Write + Seek + ?Sized>(&self, writer: &mut W) -> io::Result<()> {
@@ -87,7 +90,7 @@ impl Uncompressed {
         // Write frames
         let frames_offset = writer.stream_position()? as i32 - 12;
         for frame_id in 0..self.frame_count {
-            for (_track_id, joint_hash) in joint_hashes.iter().enumerate() {
+            for joint_hash in joint_hashes.iter() {
                 if let Some(frame_data) = frames.get(&(*joint_hash, frame_id)) {
                     writer.write_u16::<LE>(frame_data.0)?; // translation_id
                     writer.write_u16::<LE>(frame_data.1)?; // scale_id
@@ -125,8 +128,7 @@ impl Uncompressed {
 
     /// Builds deduplicated vector and quaternion palettes
     /// Returns (vec_palette, quat_palette, frame_map)
-    /// where frame_map maps (joint_hash, frame_id) -> (translation_idx, scale_idx, rotation_idx)
-    fn build_palettes(&self) -> (Vec<Vec3>, Vec<Quat>, HashMap<(u32, usize), (u16, u16, u16)>) {
+    fn build_palettes(&self) -> (Vec<Vec3>, Vec<Quat>, FrameMap) {
         let mut vec_bank: HashMap<[u32; 3], u16> = HashMap::new();
         let mut quat_bank: HashMap<[u32; 4], u16> = HashMap::new();
         let mut vec_palette = Vec::new();

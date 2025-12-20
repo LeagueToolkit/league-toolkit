@@ -23,7 +23,8 @@ fn test_parse_all_sample_animations() {
             continue;
         }
 
-        let file = File::open(&full_path).expect(&format!("Failed to open {:?}", full_path));
+        let file =
+            File::open(&full_path).unwrap_or_else(|_| panic!("Failed to open {:?}", full_path));
         let mut reader = BufReader::new(file);
 
         match AnimationAsset::from_reader(&mut reader) {
