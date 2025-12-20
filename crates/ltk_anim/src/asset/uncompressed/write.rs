@@ -93,18 +93,10 @@ impl Uncompressed {
                     writer.write_u16::<LE>(frame_data.1)?; // scale_id
                     writer.write_u16::<LE>(frame_data.2)?; // rotation_id
                 } else {
-                    // Fallback to original data
-                    if let Some(joint_frames) = self.joint_frames.get(joint_hash) {
-                        if let Some(frame) = joint_frames.get(frame_id) {
-                            writer.write_u16::<LE>(frame.translation_id)?;
-                            writer.write_u16::<LE>(frame.scale_id)?;
-                            writer.write_u16::<LE>(frame.rotation_id)?;
-                        } else {
-                            writer.write_u16::<LE>(0)?;
-                            writer.write_u16::<LE>(0)?;
-                            writer.write_u16::<LE>(0)?;
-                        }
-                    }
+                    // Missing frame (joint has fewer frames than frame_count) - write identity
+                    writer.write_u16::<LE>(0)?;
+                    writer.write_u16::<LE>(0)?;
+                    writer.write_u16::<LE>(0)?;
                 }
             }
         }
