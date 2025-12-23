@@ -24,8 +24,15 @@ pub trait ReaderExt: Read {
         Ok(std::str::from_utf8(&buf[..i])?.to_string())
     }
 
-    fn read_len_prefixed_string<T: ByteOrder>(&mut self) -> ReaderResult<String> {
+    fn read_sized_string_u16<T: ByteOrder>(&mut self) -> ReaderResult<String> {
         let len = self.read_u16::<T>()?;
+        let mut buf = vec![0; len as _];
+        self.read_exact(&mut buf)?;
+        Ok(String::from_utf8(buf)?)
+    }
+
+    fn read_sized_string_u32<T: ByteOrder>(&mut self) -> ReaderResult<String> {
+        let len = self.read_u32::<T>()?;
         let mut buf = vec![0; len as _];
         self.read_exact(&mut buf)?;
         Ok(String::from_utf8(buf)?)
