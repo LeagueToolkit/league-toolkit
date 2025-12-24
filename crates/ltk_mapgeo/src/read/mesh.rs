@@ -114,7 +114,7 @@ impl EnvironmentMesh {
         let spherical_harmonics;
         let baked_light;
         let stationary_light;
-        let baked_paint;
+        let mut baked_paint;
         let mut texture_overrides = Vec::new();
 
         if version.has_spherical_harmonics() {

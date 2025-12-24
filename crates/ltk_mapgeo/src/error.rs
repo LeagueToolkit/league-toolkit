@@ -31,6 +31,27 @@ pub enum ParseError {
     #[error("Vertex declaration index out of bounds: {index} (max: {max})")]
     VertexDeclarationIndexOutOfBounds { index: usize, max: usize },
 
+    /// Vertex declarations reserve space for 15 elements; counts above that are invalid.
+    #[error("Invalid vertex element count in declaration: {count} (max: 15)")]
+    InvalidVertexElementCount { count: u32 },
+
+    /// A vertex buffer was present in the file but never referenced by any mesh,
+    /// so we cannot infer its vertex declaration (elements/stride).
+    #[error("Vertex buffer {index} is not referenced by any mesh")]
+    UnreferencedVertexBuffer { index: usize },
+
+    /// A vertex buffer was referenced by meshes with conflicting vertex declarations.
+    #[error("Vertex buffer {index} is referenced with conflicting vertex declarations")]
+    AmbiguousVertexBufferDeclaration { index: usize },
+
+    /// A vertex buffer's decoded vertex count does not match the mesh's declared vertex count.
+    #[error("Vertex buffer {index} vertex count mismatch: decoded={decoded}, expected={expected}")]
+    VertexBufferVertexCountMismatch {
+        index: usize,
+        decoded: usize,
+        expected: usize,
+    },
+
     /// An IO error occurred
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
@@ -43,4 +64,3 @@ pub enum ParseError {
     #[error("Reader error: {0}")]
     Reader(#[from] ltk_io_ext::ReaderError),
 }
-

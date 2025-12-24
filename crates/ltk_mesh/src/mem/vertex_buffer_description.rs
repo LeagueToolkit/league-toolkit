@@ -1,8 +1,9 @@
 use super::vertex::{ElementName, VertexBuffer, VertexElement};
 use bitflags::bitflags;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 
-#[repr(usize)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[repr(u32)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, TryFromPrimitive, IntoPrimitive)]
 pub enum VertexBufferUsage {
     Static,
     Dynamic,
