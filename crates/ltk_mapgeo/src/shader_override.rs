@@ -33,4 +33,3 @@ impl ShaderTextureOverride {
         &self.texture_path
     }
 }
-

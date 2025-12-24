@@ -96,4 +96,3 @@ impl GeometryBucket {
         self.total_face_count() * 3
     }
 }
-
