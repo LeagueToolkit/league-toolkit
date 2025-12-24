@@ -56,6 +56,7 @@ pub struct BucketedGeometry {
     is_disabled: bool,
 
     /// Flags for this bucketed geometry
+    #[allow(dead_code)]
     flags: BucketedGeometryFlags,
 
     /// Simplified vertex positions for spatial queries
@@ -101,11 +102,6 @@ impl BucketedGeometry {
             buckets: Vec::new(),
             face_visibility_flags: None,
         }
-    }
-
-    /// Creates a new bucketed geometry builder
-    pub(crate) fn builder() -> BucketedGeometryBuilder {
-        BucketedGeometryBuilder::default()
     }
 
     /// Hash of the visibility controller path
@@ -254,7 +250,7 @@ impl BucketedGeometryBuilder {
         self
     }
 
-    pub fn is_disabled(mut self, disabled: bool) -> Self {
+    pub fn set_disabled(mut self, disabled: bool) -> Self {
         self.is_disabled = disabled;
         self
     }

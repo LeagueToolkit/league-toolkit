@@ -67,6 +67,7 @@ impl MapGeoVersion {
 
     /// Version has stationary light channel
     #[inline]
+    #[allow(dead_code)]
     pub fn has_stationary_light(&self) -> bool {
         self.0 >= 9
     }

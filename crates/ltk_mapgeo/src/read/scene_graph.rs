@@ -40,7 +40,7 @@ impl BucketedGeometry {
                 .max_stick_out(max_stick_out_x, max_stick_out_z)
                 .bucket_size(bucket_size_x, bucket_size_z)
                 .buckets_per_side(buckets_per_side)
-                .is_disabled(true)
+                .set_disabled(true)
                 .flags(flags)
                 .build());
         }
@@ -79,7 +79,7 @@ impl BucketedGeometry {
             .max_stick_out(max_stick_out_x, max_stick_out_z)
             .bucket_size(bucket_size_x, bucket_size_z)
             .buckets_per_side(buckets_per_side)
-            .is_disabled(false)
+            .set_disabled(false)
             .flags(flags)
             .vertices(vertices)
             .indices(indices)
