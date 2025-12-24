@@ -60,7 +60,7 @@ impl BinTree {
                 let dep_count = reader.read_u32::<LE>()?;
                 let mut dependencies = Vec::with_capacity(dep_count as _);
                 for _ in 0..dep_count {
-                    dependencies.push(reader.read_len_prefixed_string::<LE>()?);
+                    dependencies.push(reader.read_sized_string_u16::<LE>()?);
                 }
                 dependencies
             }

@@ -25,7 +25,6 @@ pub enum ElementName {
     Tangent, // Riot's enum doesn't have this so not sure how they map it
 }
 
-//Riot::Renderer::Mesh::ElemFormat
 // Riot::Renderer::Mesh::ElemFormat
 #[allow(non_camel_case_types)]
 #[repr(u32)]
@@ -33,14 +32,19 @@ pub enum ElementName {
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, TryFromPrimitive, IntoPrimitive,
 )]
 pub enum ElementFormat {
-    X_Float32,
-    XY_Float32,
-    XYZ_Float32,
-    XYZW_Float32,
-    BGRA_Packed8888,
-    ZYXW_Packed8888,
-    RGBA_Packed8888,
-    XYZW_Packed8888,
+    X_Float32,           // 0
+    XY_Float32,          // 1
+    XYZ_Float32,         // 2
+    XYZW_Float32,        // 3
+    BGRA_Packed8888,     // 4
+    ZYXW_Packed8888,     // 5
+    RGBA_Packed8888,     // 6
+    XY_Packed1616,       // 7
+    XYZ_Packed161616,    // 8
+    XYZW_Packed16161616, // 9
+    XY_Packed88,         // 10
+    XYZ_Packed888,       // 11
+    XYZW_Packed8888,     // 12
 }
 
 impl ElementFormat {
@@ -53,6 +57,11 @@ impl ElementFormat {
             ElementFormat::BGRA_Packed8888 => 4,
             ElementFormat::ZYXW_Packed8888 => 4,
             ElementFormat::RGBA_Packed8888 => 4,
+            ElementFormat::XY_Packed1616 => 4,
+            ElementFormat::XYZ_Packed161616 => 8,
+            ElementFormat::XYZW_Packed16161616 => 8,
+            ElementFormat::XY_Packed88 => 2,
+            ElementFormat::XYZ_Packed888 => 3,
             ElementFormat::XYZW_Packed8888 => 4,
         }
     }

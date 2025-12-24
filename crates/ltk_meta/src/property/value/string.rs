@@ -18,7 +18,7 @@ impl ReadProperty for StringValue {
         reader: &mut R,
         _legacy: bool,
     ) -> Result<Self, crate::Error> {
-        Ok(Self(reader.read_len_prefixed_string::<LE>()?))
+        Ok(Self(reader.read_sized_string_u16::<LE>()?))
     }
 }
 
