@@ -1,16 +1,38 @@
 use super::LeagueFileKind;
 
 pub static LEAGUE_FILE_MAGIC_BYTES: &[LeagueFilePattern] = &[
-    LeagueFilePattern::from_bytes(b"r3d2Mesh", LeagueFileKind::StaticMeshBinary),
-    LeagueFilePattern::from_bytes(b"r3d2sklt", LeagueFileKind::Skeleton),
-    LeagueFilePattern::from_bytes(b"r3d2ammd", LeagueFileKind::Animation),
+    // Fixed headers have highest prio since they have the most confidence
+    LeagueFilePattern::from_bytes(b"r3d2anmd", LeagueFileKind::Animation),
     LeagueFilePattern::from_bytes(b"r3d2canm", LeagueFileKind::Animation),
-    LeagueFilePattern::from_fn(
-        |data| u32::from_le_bytes(data[4..8].try_into().unwrap()) == 1,
-        8,
-        LeagueFileKind::WwisePackage,
-    ),
+    LeagueFilePattern::from_bytes(b"OEGM", LeagueFileKind::MapGeometry),
+    LeagueFilePattern::from_bytes(b"PreLoad", LeagueFileKind::Preload),
+    LeagueFilePattern::from_bytes(b"PROP", LeagueFileKind::PropertyBin),
+    LeagueFilePattern::from_bytes(b"PTCH", LeagueFileKind::PropertyBinOverride),
+    LeagueFilePattern::from_bytes(b"RST", LeagueFileKind::RiotStringTable),
+    LeagueFilePattern::from_bytes(&[0x33, 0x22, 0x11, 0x00], LeagueFileKind::SimpleSkin),
+    LeagueFilePattern::from_bytes(b"r3d2sklt", LeagueFileKind::Skeleton),
+    LeagueFilePattern::from_bytes(b"[Obj", LeagueFileKind::StaticMeshAscii),
+    LeagueFilePattern::from_bytes(b"r3d2Mesh", LeagueFileKind::StaticMeshBinary),
+    LeagueFilePattern::from_bytes(b"<svg", LeagueFileKind::Svg),
+    LeagueFilePattern::from_bytes(b"TEX\0", LeagueFileKind::Texture),
+    LeagueFilePattern::from_bytes(b"DDS ", LeagueFileKind::TextureDds),
+    LeagueFilePattern::from_bytes(b"WGEO", LeagueFileKind::WorldGeometry),
+    LeagueFilePattern::from_bytes(b"BKHD", LeagueFileKind::WwiseBank),
+    // These are also effectively fixed headers
+    LeagueFilePattern::from_fn(|data| &data[1..5] == b"LuaQ", 5, LeagueFileKind::LuaObj),
     LeagueFilePattern::from_fn(|data| &data[1..4] == b"PNG", 4, LeagueFileKind::Png),
+    // Slightly less confident fixed headers
+    LeagueFilePattern::from_fn(
+        |data| u32::from_le_bytes(data[4..8].try_into().unwrap()) == 0x22FD4FC3,
+        8,
+        LeagueFileKind::Skeleton,
+    ),
+    LeagueFilePattern::from_fn(
+        |data| (u32::from_le_bytes(data[..4].try_into().unwrap()) & 0x00FFFFFF) == 0x00FFD8FF,
+        3,
+        LeagueFileKind::Jpeg,
+    ),
+    // Much higher entropy patterns
     // TGA does not have a fixed magic at the beginning. Heuristics: byte 1 (color map type)
     // is 0 or 1, and byte 2 (image type) is one of the valid values.
     LeagueFilePattern::from_fn(
@@ -23,34 +45,16 @@ pub static LEAGUE_FILE_MAGIC_BYTES: &[LeagueFilePattern] = &[
         3,
         LeagueFileKind::Tga,
     ),
-    LeagueFilePattern::from_bytes(b"DDS ", LeagueFileKind::TextureDds),
-    LeagueFilePattern::from_bytes(&[0x33, 0x22, 0x11, 0x00], LeagueFileKind::SimpleSkin),
-    LeagueFilePattern::from_bytes(b"PROP", LeagueFileKind::PropertyBin),
-    LeagueFilePattern::from_bytes(b"BKHD", LeagueFileKind::WwiseBank),
-    LeagueFilePattern::from_bytes(b"WGEO", LeagueFileKind::WorldGeometry),
-    LeagueFilePattern::from_bytes(b"OEGM", LeagueFileKind::MapGeometry),
-    LeagueFilePattern::from_bytes(b"[Obj", LeagueFileKind::StaticMeshAscii),
-    LeagueFilePattern::from_fn(|data| &data[1..5] == b"LuaQ", 5, LeagueFileKind::LuaObj),
-    LeagueFilePattern::from_bytes(b"PreLoad", LeagueFileKind::Preload),
     LeagueFilePattern::from_fn(
         |data| u32::from_le_bytes(data[..4].try_into().unwrap()) == 3,
         4,
         LeagueFileKind::LightGrid,
     ),
-    LeagueFilePattern::from_bytes(b"RST", LeagueFileKind::RiotStringTable),
-    LeagueFilePattern::from_bytes(b"PTCH", LeagueFileKind::PropertyBinOverride),
     LeagueFilePattern::from_fn(
-        |data| (u32::from_le_bytes(data[..4].try_into().unwrap()) & 0x00FFFFFF) == 0x00FFD8FF,
-        3,
-        LeagueFileKind::Jpeg,
-    ),
-    LeagueFilePattern::from_fn(
-        |data| u32::from_le_bytes(data[4..8].try_into().unwrap()) == 0x22FD4FC3,
+        |data| u32::from_le_bytes(data[4..8].try_into().unwrap()) == 1,
         8,
-        LeagueFileKind::Skeleton,
+        LeagueFileKind::WwisePackage,
     ),
-    LeagueFilePattern::from_bytes(b"TEX\0", LeagueFileKind::Texture),
-    LeagueFilePattern::from_bytes(b"<svg", LeagueFileKind::Svg),
 ];
 
 /// The length of the largest possible file type magic, in bytes.
