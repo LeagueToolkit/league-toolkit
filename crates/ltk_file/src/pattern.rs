@@ -2,7 +2,7 @@ use super::LeagueFileKind;
 
 pub static LEAGUE_FILE_MAGIC_BYTES: &[LeagueFilePattern] = &[
     // Fixed headers have highest prio since they have the most confidence
-    LeagueFilePattern::from_bytes(b"r3d2ammd", LeagueFileKind::Animation),
+    LeagueFilePattern::from_bytes(b"r3d2anmd", LeagueFileKind::Animation),
     LeagueFilePattern::from_bytes(b"r3d2canm", LeagueFileKind::Animation),
     LeagueFilePattern::from_bytes(b"OEGM", LeagueFileKind::MapGeometry),
     LeagueFilePattern::from_bytes(b"PreLoad", LeagueFileKind::Preload),
