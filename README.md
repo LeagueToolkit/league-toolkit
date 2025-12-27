@@ -1,115 +1,253 @@
-# league-toolkit
+<div align="center">
 
-[![CI](https://img.shields.io/github/actions/workflow/status/LeagueToolkit/league-toolkit/ci.yml?style=flat-square)](https://github.com/LeagueToolkit/league-toolkit/actions/workflows/ci.yml)
-[![Crates.io](https://img.shields.io/crates/v/league-toolkit.svg?style=flat-square)](https://crates.io/crates/league-toolkit)
-[![Docs](https://img.shields.io/docsrs/league-toolkit?style=flat-square)](https://docs.rs/league-toolkit)
-[![License](https://img.shields.io/crates/l/league-toolkit.svg?style=flat-square)](https://github.com/LeagueToolkit/league-toolkit/blob/main/LICENSE)
+# 🛠️ League Toolkit
 
-Rust workspace for parsing, editing, and writing League of Legends file formats.
+**Rust library for parsing, editing, and writing League of Legends file formats**
 
-This repository hosts a set of crates that can be used individually or together via the umbrella crate `league-toolkit`.
+[![CI](https://img.shields.io/github/actions/workflow/status/LeagueToolkit/league-toolkit/ci.yml?style=for-the-badge&logo=github)](https://github.com/LeagueToolkit/league-toolkit/actions/workflows/ci.yml)
+[![Crates.io](https://img.shields.io/crates/v/league-toolkit.svg?style=for-the-badge&logo=rust)](https://crates.io/crates/league-toolkit)
+[![Docs](https://img.shields.io/docsrs/league-toolkit?style=for-the-badge&logo=docs.rs)](https://docs.rs/league-toolkit)
+[![License](https://img.shields.io/crates/l/league-toolkit.svg?style=for-the-badge)](https://github.com/LeagueToolkit/league-toolkit/blob/main/LICENSE)
 
-## Crates in this workspace
+[Documentation](https://docs.rs/league-toolkit) • [Crates.io](https://crates.io/crates/league-toolkit) • [Changelog](CHANGELOG.md)
 
-- `league-toolkit` — Library for serializing and editing various League of Legends formats (feature-gated facade over the crates below)
-- `ltk_anim` — Animation formats support for League Toolkit
-- `ltk_file` — Core IO and file abstractions for League Toolkit
-- `ltk_mesh` — Mesh parsing and structures for League Toolkit
-- `ltk_meta` — Metadata formats and utilities for League Toolkit
-- `ltk_primitives` — Primitive types and helpers for League Toolkit
-- `ltk_texture` — Texture decoding/encoding utilities for League Toolkit
-- `ltk_wad` — WAD archive reading/writing for League Toolkit
-- `ltk_hash` — Hashes implementation used by League Toolkit
-- `ltk_io_ext` — I/O extensions used by League Toolkit
+</div>
+
+---
+
+## ✨ Features
+
+- 📦 **WAD Archives** — Read and write `.wad.client` asset containers
+- 🎨 **Textures** — Decode/encode `.tex` and `.dds` formats
+- 🧍 **Meshes** — Parse skinned (`.skn`) and static (`.scb`/`.sco`) meshes
+- 🦴 **Animation** — Load skeletons (`.skl`) and animations (`.anm`)
+- 📋 **Property Bins** — Read/write `.bin` configuration files
+- 🗺️ **Map Geometry** — Parse `.mapgeo` environment assets
+- 🔧 **Modular** — Use individual crates or the umbrella crate
+
+---
+
+## 📦 Installation
+
+Add the umbrella crate to your project:
+
+```toml
+[dependencies]
+league-toolkit = { version = "0.2", features = ["wad", "mesh", "texture"] }
+```
+
+Or use individual crates for a smaller dependency footprint:
+
+```toml
+[dependencies]
+ltk_wad = "0.2"
+ltk_texture = "0.4"
+ltk_mesh = "0.3"
+```
+
+---
+
+## 🚀 Quick Start
+
+### Reading a WAD Archive
+
+```rust
+use std::fs::File;
+use ltk_wad::Wad;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let file = File::open("assets.wad.client")?;
+    let mut wad = Wad::mount(file)?;
+    
+    println!("Archive contains {} files", wad.chunks().len());
+    
+    // Decode a specific chunk
+    let (mut decoder, chunks) = wad.decode();
+    for chunk in chunks.values().take(5) {
+        let data = decoder.load_chunk_decompressed(chunk)?;
+        println!("Chunk {:016x}: {} bytes", chunk.path_hash(), data.len());
+    }
+    
+    Ok(())
+}
+```
+
+### Decoding a Texture
+
+```rust
+use ltk_texture::Tex;
+use std::io::Cursor;
+
+let tex = Tex::from_reader(&mut cursor)?;
+let surface = tex.decode_mipmap(0)?;
+let image = surface.into_rgba_image()?;
+image.save("output.png")?;
+```
+
+### Parsing a Skinned Mesh
+
+```rust
+use ltk_mesh::SkinnedMesh;
+use std::fs::File;
+
+let mesh = SkinnedMesh::from_reader(&mut File::open("champion.skn")?)?;
+println!("Vertices: {}", mesh.vertex_buffer().vertex_count());
+println!("Submeshes: {}", mesh.ranges().len());
+```
+
+### Working with Property Bins
+
+```rust
+use ltk_meta::{BinTree, BinTreeObject, value::*};
+
+// Read
+let tree = BinTree::from_reader(&mut file)?;
+for (hash, object) in &tree.objects {
+    println!("Object 0x{:08x}", hash);
+}
+
+// Create
+let tree = BinTree::builder()
+    .dependency("shared/data.bin")
+    .object(
+        BinTreeObject::builder(0x12345678, 0xABCDEF00)
+            .property(0x1111, I32Value(42))
+            .build()
+    )
+    .build();
+```
+
+---
+
+## 📚 Crates
+
+| Crate | Description | Formats |
+|-------|-------------|---------|
+| [`league-toolkit`](https://crates.io/crates/league-toolkit) | Umbrella crate (feature-gated re-exports) | — |
+| [`ltk_wad`](https://crates.io/crates/ltk_wad) | WAD archive reading/writing | `.wad.client` |
+| [`ltk_texture`](https://crates.io/crates/ltk_texture) | Texture decoding/encoding | `.tex`, `.dds` |
+| [`ltk_mesh`](https://crates.io/crates/ltk_mesh) | Skinned & static mesh parsing | `.skn`, `.scb`, `.sco` |
+| [`ltk_anim`](https://crates.io/crates/ltk_anim) | Skeleton & animation formats | `.skl`, `.anm` |
+| [`ltk_meta`](https://crates.io/crates/ltk_meta) | Property bin files | `.bin` |
+| [`ltk_ritobin`](https://crates.io/crates/ltk_ritobin) | Human-readable bin format | ritobin text |
+| [`ltk_mapgeo`](https://crates.io/crates/ltk_mapgeo) | Map environment geometry | `.mapgeo` |
+| [`ltk_file`](https://crates.io/crates/ltk_file) | File type detection | — |
+| [`ltk_hash`](https://crates.io/crates/ltk_hash) | Hash functions (FNV-1a, ELF) | — |
+| [`ltk_shader`](https://crates.io/crates/ltk_shader) | Shader path utilities | — |
+| [`ltk_primitives`](https://crates.io/crates/ltk_primitives) | Geometric primitives | — |
+| [`ltk_io_ext`](https://crates.io/crates/ltk_io_ext) | I/O extensions (internal) | — |
 
 Each crate lives under `crates/<name>`.
 
-## Getting started
+---
 
-Add the umbrella crate to your project (recommended):
+## ⚙️ Feature Flags
 
-```toml
-# Cargo.toml
-[dependencies]
-league-toolkit = { version = "0.1", features = ["wad", "mesh", "texture"] }
-```
+The `league-toolkit` umbrella crate uses feature flags to control which subsystems are included:
 
-Until a release is published, you can use the Git version:
+| Feature | Enables | Default |
+|---------|---------|---------|
+| `anim` | `ltk_anim` | ✅ |
+| `file` | `ltk_file` | ✅ |
+| `mesh` | `ltk_mesh` | ✅ |
+| `meta` | `ltk_meta` | ✅ |
+| `primitives` | `ltk_primitives` | ✅ |
+| `texture` | `ltk_texture` | ✅ |
+| `wad` | `ltk_wad` | ✅ |
+| `hash` | `ltk_hash` | ✅ |
+| `serde` | Serde support (where available) | ❌ |
 
-```toml
-[dependencies]
-league-toolkit = { git = "https://github.com/LeagueToolkit/league-toolkit", features = ["wad", "mesh", "texture"] }
-```
-
-Or depend on individual crates directly, for example:
-
-```toml
-[dependencies]
-ltk_wad = "0.1"
-ltk_texture = "0.1"
-```
-
-## Features (on `league-toolkit`)
-
-The `league-toolkit` crate exposes feature flags to opt into specific subsystems:
-
-- `anim` — enable `ltk_anim`
-- `file` — enable `ltk_file`
-- `mesh` — enable `ltk_mesh`
-- `meta` — enable `ltk_meta`
-- `primitives` — enable `ltk_primitives`
-- `texture` — enable `ltk_texture`
-- `wad` — enable `ltk_wad`
-- `hash` — enable `ltk_hash`
-- `serde` — enable serde support where available
-
-The default feature set enables most subsystems. Disable default features and opt-in selectively if you want a smaller dependency surface:
+For a minimal build, disable defaults and opt-in selectively:
 
 ```toml
 [dependencies]
-league-toolkit = { version = "0.1", default-features = false, features = ["wad", "mesh"] }
+league-toolkit = { version = "0.2", default-features = false, features = ["wad"] }
 ```
 
-## Texture encoding (BC1/BC3) with `intel-tex`
+### Texture Encoding with `intel-tex`
 
-BC1/BC3 encoding in `ltk_texture` is backed by the optional `intel_tex_2` dependency behind the **`intel-tex`** feature on **`ltk_texture`**.
-
-If you use the umbrella crate re-export (`league_toolkit::texture`), you still enable the `texture` feature on `league-toolkit`, but you enable `intel-tex` on `ltk_texture` directly:
+BC1/BC3 texture encoding requires the optional `intel-tex` feature on `ltk_texture`:
 
 ```toml
 [dependencies]
-league-toolkit = { version = "0.5.0", features = ["texture"] }
-ltk_texture = { version = "*", features = ["intel-tex"] }
+league-toolkit = { version = "0.2", features = ["texture"] }
+ltk_texture = { version = "0.4", features = ["intel-tex"] }
 ```
 
-## Development
+---
 
-- Prerequisites: Rust stable toolchain
-- Build: `cargo build`
-- Test: `cargo test`
+## 📖 Documentation
 
-Workspace membership is defined in the top-level `Cargo.toml`.
+- **[API Documentation](https://docs.rs/league-toolkit)** — Full rustdoc reference
+- **[LTK Guide](docs/LTK_GUIDE.md)** — Comprehensive usage guide with examples
 
-## Releasing
+---
 
-This repository uses Release-plz to automate versioning and publishing to crates.io.
+## 🛠️ Development
 
-- On pushes to `main`, Release-plz opens a release PR.
-- Merging the release PR triggers publishing of the configured crates.
+**Prerequisites:** Rust stable toolchain
 
-Make sure the repository has the appropriate credentials configured (crates.io token or Trusted Publishing) before merging release PRs.
+```bash
+# Build all crates
+cargo build
 
-## License
+# Run tests
+cargo test
 
-Licensed under either of
+# Build documentation
+cargo doc --open
+```
 
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
-- MIT license ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
+### Project Structure
+
+```
+league-toolkit/
+├── crates/
+│   ├── league-toolkit/    # Umbrella crate
+│   ├── ltk_wad/           # WAD archives
+│   ├── ltk_texture/       # Textures
+│   ├── ltk_mesh/          # Meshes
+│   ├── ltk_anim/          # Animation
+│   ├── ltk_meta/          # Property bins
+│   ├── ltk_ritobin/       # Ritobin text format
+│   ├── ltk_mapgeo/        # Map geometry
+│   ├── ltk_file/          # File detection
+│   ├── ltk_hash/          # Hashing
+│   ├── ltk_shader/        # Shader utilities
+│   ├── ltk_primitives/    # Primitives
+│   └── ltk_io_ext/        # I/O extensions
+└── docs/
+    └── LTK_GUIDE.md       # Usage guide
+```
+
+---
+
+## 📋 Releasing
+
+This repository uses [Release-plz](https://release-plz.ieni.dev/) for automated versioning and publishing:
+
+1. Pushes to `main` trigger Release-plz to open a release PR
+2. Merging the release PR publishes updated crates to crates.io
+
+---
+
+## 📄 License
+
+Licensed under either of:
+
+- **Apache License, Version 2.0** ([LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
+- **MIT License** ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
 
 at your option.
 
 ### Contribution
 
-Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
-dual licensed as above, without any additional terms or conditions.
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
+
+---
+
+<div align="center">
+
+Made with ❤️ by the [LeagueToolkit](https://github.com/LeagueToolkit) community
+
+</div>
