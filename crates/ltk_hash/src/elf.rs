@@ -1,8 +1,8 @@
-pub fn elf<S: AsRef<str>>(input: S) -> usize {
+pub fn elf<B: AsRef<[u8]>>(input: B) -> usize {
     let input = input.as_ref();
     let mut hash = 0;
     let mut high;
-    for b in input.as_bytes() {
+    for b in input {
         hash = (hash << 4) + (*b as usize);
         high = hash & 0xF0000000;
         if high != 0 {
