@@ -35,6 +35,32 @@
       extensions = ["rust-src"];
     }));
 
+    nightly = eachSystem (pkgs:
+      pkgs.rust-bin.selectLatestNightlyWith (t:
+        t.default.override {
+          extensions = ["rust-docs-json"];
+        }));
+
+    cargo-expand' = eachSystem (pkgs: let
+      nightly' = nightly.${pkgs.system};
+    in
+      pkgs.writeShellScriptBin "cargo-expand" ''
+        export RUSTC="${nightly'}/bin/rustc";
+        export CARGO="${nightly'}/bin/cargo";
+        exec "${pkgs.cargo-expand}/bin/cargo-expand" "$@"
+      '');
+
+    cargo-public-api' = eachSystem (pkgs: let
+      nightly' = nightly.${pkgs.system};
+      fakeRustup = pkgs.writeShellScriptBin "rustup" ''shift 3; ${pkgs.lib.getExe' nightly' "cargo"} "$@"'';
+    in
+      pkgs.writeShellScriptBin "cargo-public-api" ''
+        export RUSTC="${nightly'}/bin/rustc";
+        export CARGO="${nightly'}/bin/cargo";
+        export PATH="${fakeRustup}/bin:${nightly'}/bin:$PATH";
+        exec "${pkgs.cargo-public-api}/bin/cargo-public-api" "$@"
+      '');
+
     treefmtEval = eachSystem (pkgs: treefmt-nix.lib.evalModule pkgs ./treefmt.nix);
   in {
     # You can use crane to build the Rust application with Nix
@@ -49,8 +75,8 @@
 
     devShells = eachSystem (pkgs: {
       # Based on a discussion at https://github.com/oxalica/rust-overlay/issues/129
-      default = pkgs.mkShell (with pkgs; {
-        nativeBuildInputs = [
+      default = pkgs.mkShell {
+        nativeBuildInputs = with pkgs; [
           clang
           gdb
           # Use mold when we are runnning in Linux
@@ -58,17 +84,18 @@
         ];
         buildInputs = [
           rustToolchain.${pkgs.system}
-          rust-analyzer-unwrapped
-          cargo
-          cargo-insta
-          cargo-hack
-          cargo-expand
-          bacon
-          # pkg-config
-          # openssl
+          pkgs.rust-analyzer-unwrapped
+          pkgs.cargo
+          pkgs.cargo-insta
+          pkgs.cargo-hack
+          cargo-expand'.${pkgs.system}
+          cargo-public-api'.${pkgs.system}
+          pkgs.bacon
+          # pkgs.pkg-config
+          # pkgs.openssl
         ];
-        RUST_SRC_PATH = rustPlatform.rustLibSrc;
-      });
+        RUST_SRC_PATH = pkgs.rustPlatform.rustLibSrc;
+      };
     });
 
     formatter = eachSystem (pkgs: treefmtEval.${pkgs.system}.config.build.wrapper);
