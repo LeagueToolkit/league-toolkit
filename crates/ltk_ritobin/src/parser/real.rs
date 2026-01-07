@@ -40,11 +40,27 @@ impl Default for CalcDatabaseImpl {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Visit {
+    Stop,
+    /// Skip the current tree
+    Skip,
+    Continue,
+}
 #[allow(unused_variables)]
 pub trait Visitor {
-    fn enter_tree(&mut self, kind: TreeKind) {}
-    fn exit_tree(&mut self, kind: TreeKind) {}
-    fn visit_token(&mut self, token: &Token, context: TreeKind) {}
+    #[must_use]
+    fn enter_tree(&mut self, kind: TreeKind) -> Visit {
+        Visit::Continue
+    }
+    #[must_use]
+    fn exit_tree(&mut self, kind: TreeKind) -> Visit {
+        Visit::Continue
+    }
+    #[must_use]
+    fn visit_token(&mut self, token: &Token, context: TreeKind) -> Visit {
+        Visit::Continue
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -69,21 +85,30 @@ impl Tree {
         self.walk_inner(visitor);
     }
 
-    fn walk_inner<V: Visitor>(&self, visitor: &mut V) {
-        visitor.enter_tree(self.kind);
+    fn walk_inner<V: Visitor>(&self, visitor: &mut V) -> Visit {
+        let enter = visitor.enter_tree(self.kind);
+        if matches!(enter, Visit::Stop | Visit::Skip) {
+            return enter;
+        }
 
         for child in &self.children {
             match child {
-                Child::Token(token) => {
-                    visitor.visit_token(token, self.kind);
-                }
-                Child::Tree(child_tree) => {
-                    child_tree.walk_inner(visitor);
-                }
+                Child::Token(token) => match visitor.visit_token(token, self.kind) {
+                    Visit::Continue => {}
+                    Visit::Skip => break,
+                    Visit::Stop => return Visit::Stop,
+                },
+                Child::Tree(child_tree) => match child_tree.walk_inner(visitor) {
+                    Visit::Continue => {}
+                    Visit::Skip => {
+                        break;
+                    }
+                    Visit::Stop => return Visit::Stop,
+                },
             }
         }
 
-        visitor.exit_tree(self.kind);
+        visitor.exit_tree(self.kind)
     }
 }
 
