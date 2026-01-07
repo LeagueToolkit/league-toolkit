@@ -289,7 +289,7 @@ pub fn stmt_entry(p: &mut Parser) {
         TokenKind::Quote => {
             let m = p.open();
             p.advance();
-            p.expect(TokenKind::Name);
+            p.expect(TokenKind::String);
             p.expect(TokenKind::Quote);
             p.close(m, TreeKind::ExprLiteral);
         }
