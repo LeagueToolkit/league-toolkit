@@ -9,19 +9,22 @@ use thiserror::Error;
 /// A span in the source text (offset and length).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Span {
-    pub offset: usize,
-    pub len: usize,
+    pub start: u32,
+    pub end: u32,
 }
 
 impl Span {
-    pub fn new(offset: usize, len: usize) -> Self {
-        Self { offset, len }
+    pub fn new(start: u32, end: u32) -> Self {
+        Self { start, end }
     }
 }
 
 impl From<Span> for SourceSpan {
     fn from(span: Span) -> Self {
-        SourceSpan::new(span.offset.into(), span.len)
+        SourceSpan::new(
+            (span.start as usize).into(),
+            ((span.end - span.start) as usize).into(),
+        )
     }
 }
 
