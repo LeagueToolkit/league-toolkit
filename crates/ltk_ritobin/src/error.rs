@@ -14,8 +14,16 @@ pub struct Span {
 }
 
 impl Span {
+    #[must_use]
+    #[inline]
     pub fn new(start: u32, end: u32) -> Self {
         Self { start, end }
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn contains(&self, offset: u32) -> bool {
+        self.start <= offset && offset <= self.end
     }
 }
 
@@ -23,7 +31,7 @@ impl From<Span> for SourceSpan {
     fn from(span: Span) -> Self {
         SourceSpan::new(
             (span.start as usize).into(),
-            ((span.end - span.start) as usize).into(),
+            (span.end - span.start) as usize,
         )
     }
 }
