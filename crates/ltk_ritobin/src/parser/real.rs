@@ -112,7 +112,7 @@ impl Tree {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum Child {
     Token(Token),
     Tree(Tree),
@@ -367,7 +367,9 @@ version: u32 = 5
 
 "#;
         let cst = parse(text);
-        eprintln!("{cst:?}");
+        let mut str = String::new();
+        cst.print(&mut str, 0, text);
+        eprintln!("{str}");
     }
 }
 
@@ -379,7 +381,7 @@ macro_rules! format_to {
     };
 }
 impl Tree {
-    fn print(&self, buf: &mut String, level: usize) {
+    fn print(&self, buf: &mut String, level: usize, source: &str) {
         let parent_indent = "│ ".repeat(level.saturating_sub(1));
         let indent = match level > 0 {
             true => "├ ",
@@ -393,20 +395,16 @@ impl Tree {
             };
             match child {
                 Child::Token(token) => {
-                    format_to!(buf, "{parent_indent}│ {bar} {:?}\n", token.span)
+                    format_to!(
+                        buf,
+                        "{parent_indent}│ {bar} {:?}\n",
+                        &source[token.span.start as _..token.span.end as _]
+                    )
                 }
-                Child::Tree(tree) => tree.print(buf, level + 1),
+                Child::Tree(tree) => tree.print(buf, level + 1, source),
             }
         }
         assert!(buf.ends_with('\n'));
-    }
-}
-
-impl fmt::Debug for Tree {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut buf = String::new();
-        self.print(&mut buf, 0);
-        write!(f, "{}", buf)
     }
 }
 
