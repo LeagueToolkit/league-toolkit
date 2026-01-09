@@ -50,15 +50,15 @@ pub enum Visit {
 #[allow(unused_variables)]
 pub trait Visitor {
     #[must_use]
-    fn enter_tree(&mut self, kind: TreeKind) -> Visit {
+    fn enter_tree(&mut self, tree: &Tree) -> Visit {
         Visit::Continue
     }
     #[must_use]
-    fn exit_tree(&mut self, kind: TreeKind) -> Visit {
+    fn exit_tree(&mut self, tree: &Tree) -> Visit {
         Visit::Continue
     }
     #[must_use]
-    fn visit_token(&mut self, token: &Token, context: TreeKind) -> Visit {
+    fn visit_token(&mut self, token: &Token, context: &Tree) -> Visit {
         Visit::Continue
     }
 }
@@ -86,14 +86,14 @@ impl Tree {
     }
 
     fn walk_inner<V: Visitor>(&self, visitor: &mut V) -> Visit {
-        let enter = visitor.enter_tree(self.kind);
+        let enter = visitor.enter_tree(self);
         if matches!(enter, Visit::Stop | Visit::Skip) {
             return enter;
         }
 
         for child in &self.children {
             match child {
-                Child::Token(token) => match visitor.visit_token(token, self.kind) {
+                Child::Token(token) => match visitor.visit_token(token, self) {
                     Visit::Continue => {}
                     Visit::Skip => break,
                     Visit::Stop => return Visit::Stop,
@@ -108,7 +108,7 @@ impl Tree {
             }
         }
 
-        visitor.exit_tree(self.kind)
+        visitor.exit_tree(self)
     }
 }
 
