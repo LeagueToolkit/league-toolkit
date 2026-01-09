@@ -119,6 +119,15 @@ pub enum Child {
     Tree(Tree),
 }
 
+impl Child {
+    pub fn span(&self) -> crate::Span {
+        match self {
+            Child::Token(token) => token.span,
+            Child::Tree(tree) => tree.span,
+        }
+    }
+}
+
 pub enum Event {
     Open { kind: TreeKind },
     Close,
