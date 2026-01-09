@@ -76,8 +76,9 @@ pub enum TreeKind {
 
 #[derive(Clone)]
 pub struct Tree {
-    kind: TreeKind,
-    children: Vec<Child>,
+    pub span: crate::Span,
+    pub kind: TreeKind,
+    pub children: Vec<Child>,
 }
 
 impl Tree {
@@ -154,19 +155,41 @@ impl Parser {
 
         assert!(matches!(events.pop(), Some(Event::Close)));
         let mut stack = Vec::new();
+        let mut last_offset = 0;
+        let mut just_opened = false;
         for event in events {
             match event {
-                Event::Open { kind } => stack.push(Tree {
-                    kind,
-                    children: Vec::new(),
-                }),
+                Event::Open { kind } => {
+                    just_opened = true;
+                    stack.push(Tree {
+                        span: crate::Span::new(last_offset, 0),
+                        kind,
+                        children: Vec::new(),
+                    })
+                }
                 Event::Close => {
-                    let tree = stack.pop().unwrap();
-                    stack.last_mut().unwrap().children.push(Child::Tree(tree));
+                    let mut tree = stack.pop().unwrap();
+                    let last = stack.last_mut().unwrap();
+                    if tree.span.end == 0 {
+                        // empty trees
+                        tree.span.end = tree.span.start;
+                    }
+                    last.span.end = tree.span.end.max(last.span.end); // update our parent tree's span
+                    last.children.push(Child::Tree(tree));
                 }
                 Event::Advance => {
                     let token = tokens.next().unwrap();
-                    stack.last_mut().unwrap().children.push(Child::Token(token));
+                    let last = stack.last_mut().unwrap();
+
+                    if just_opened {
+                        // first token of the tree
+                        last.span.start = token.span.start;
+                    }
+                    just_opened = false;
+
+                    last.span.end = token.span.end;
+                    last_offset = last.span.end;
+                    last.children.push(Child::Token(token));
                 }
             }
         }
@@ -390,7 +413,18 @@ impl Tree {
             true => "├ ",
             false => "",
         };
-        format_to!(buf, "{parent_indent}{indent}{:?}\n", self.kind);
+        let safe_span = match self.span.end >= self.span.start {
+            true => &source[self.span.start as _..self.span.end as _],
+            false => "!!!!!!",
+        };
+        format_to!(
+            buf,
+            "{parent_indent}{indent}{:?} - ({}..{}): {:?}\n",
+            self.kind,
+            self.span.start,
+            self.span.end,
+            safe_span
+        );
         for (i, child) in self.children.iter().enumerate() {
             let bar = match i + 1 == self.children.len() {
                 true => '└',
