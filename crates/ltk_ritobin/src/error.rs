@@ -27,6 +27,14 @@ impl Span {
     }
 }
 
+impl std::ops::Index<crate::Span> for str {
+    type Output = str;
+
+    fn index(&self, index: crate::Span) -> &Self::Output {
+        &self[index.start as _..index.end as _]
+    }
+}
+
 impl From<Span> for SourceSpan {
     fn from(span: Span) -> Self {
         SourceSpan::new(
