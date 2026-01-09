@@ -74,7 +74,7 @@ pub enum TreeKind {
   ExprLiteral, ExprName,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Tree {
     pub span: crate::Span,
     pub kind: TreeKind,
@@ -113,7 +113,7 @@ impl Tree {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Child {
     Token(Token),
     Tree(Tree),
