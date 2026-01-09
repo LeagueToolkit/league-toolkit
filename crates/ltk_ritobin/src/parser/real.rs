@@ -286,11 +286,14 @@ pub fn stmt_entry(p: &mut Parser) {
     expr_type(p);
     p.expect(TokenKind::Eq);
     match p.nth(0) {
-        TokenKind::Quote => {
+        TokenKind::String => {
             let m = p.open();
             p.advance();
-            p.expect(TokenKind::String);
-            p.expect(TokenKind::Quote);
+            p.close(m, TreeKind::ExprLiteral);
+        }
+        TokenKind::UnterminatedString => {
+            let m = p.open();
+            p.advance_with_error("unterminated string");
             p.close(m, TreeKind::ExprLiteral);
         }
         TokenKind::Int | TokenKind::Minus => {

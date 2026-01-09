@@ -11,7 +11,7 @@ pub enum TokenKind {
   Minus, Star, Slash,
   Quote,
 
-  String,
+  String, UnterminatedString,
 
 
   True, False,
@@ -24,13 +24,12 @@ pub struct Token {
     pub kind: TokenKind,
     pub span: Span,
 }
-pub fn lex<'a>(mut text: &'a str) -> Vec<Token> {
+pub fn lex(mut text: &str) -> Vec<Token> {
     use TokenKind::*;
     let punctuation = (
-        "( ) { } [ ] = , : - * / \" \'",
+        "( ) { } [ ] = , : - * /",
         [
             LParen, RParen, LCurly, RCurly, LBrack, RBrack, Eq, Comma, Colon, Minus, Star, Slash,
-            Quote,
         ],
     );
 
@@ -56,10 +55,38 @@ pub fn lex<'a>(mut text: &'a str) -> Vec<Token> {
                 text = rest;
                 break 'kind Int;
             }
+
+            if let Some(rest) = text.strip_prefix(['\'', '"']) {
+                text = rest;
+                let mut skip = false;
+                loop {
+                    let Some(c) = text.chars().next() else {
+                        break 'kind UnterminatedString;
+                    };
+
+                    text = &text[c.len_utf8()..];
+                    match c {
+                        '\\' => {
+                            skip = true;
+                        }
+                        '\'' | '"' => match skip {
+                            true => {
+                                skip = false;
+                            }
+                            false => {
+                                break 'kind String;
+                            }
+                        },
+                        '\n' | '\r' => break 'kind UnterminatedString,
+                        _ => {}
+                    }
+                }
+            }
             if let Some(rest) = trim(text, name_char) {
                 text = rest;
                 break 'kind Name;
             }
+
             let error_index = text
                 .find(|it: char| it.is_ascii_whitespace())
                 .unwrap_or(text.len());
@@ -85,39 +112,39 @@ pub fn lex<'a>(mut text: &'a str) -> Vec<Token> {
             }
         }
         result.push(Token { kind, span });
-        if kind == Quote {
-            eprintln!("[lex] pushed quote!");
-            let span = match find_string_closer(text) {
-                Some(close_idx) => {
-                    let start = (source.len() - text.len()) as u32;
-                    Span {
-                        start,
-                        end: start + close_idx as u32,
-                    }
-                }
-                // &text[..close_idx],
-                None => {
-                    let start = (source.len() - text.len()) as u32;
-                    Span {
-                        start,
-                        end: start + text.len() as u32,
-                    }
-                }
-            };
-            eprintln!("[lex] token text: {token_text:?}");
-            result.push(Token { kind: String, span });
-            text = &text[token_text.len()..];
-            result.push(Token {
-                kind: Quote,
-                span: Span {
-                    start: span.end,
-                    end: span.end + 1,
-                },
-            });
-            eprint!("[lex] text: {text:?}");
-            text = &source[span.end as usize + 1..];
-            eprintln!(" -> {text:?}");
-        }
+        // if kind == Quote {
+        //     eprintln!("[lex] pushed quote!");
+        //     let span = match find_string_closer(text) {
+        //         Some(close_idx) => {
+        //             let start = (source.len() - text.len()) as u32;
+        //             Span {
+        //                 start,
+        //                 end: start + close_idx as u32,
+        //             }
+        //         }
+        //         // &text[..close_idx],
+        //         None => {
+        //             let start = (source.len() - text.len()) as u32;
+        //             Span {
+        //                 start,
+        //                 end: start + text.len() as u32,
+        //             }
+        //         }
+        //     };
+        //     eprintln!("[lex] token text: {token_text:?}");
+        //     result.push(Token { kind: String, span });
+        //     text = &source[span.end as _..];
+        //     result.push(Token {
+        //         kind: Quote,
+        //         span: Span {
+        //             start: span.end,
+        //             end: span.end + 1,
+        //         },
+        //     });
+        //     eprint!("[lex] text: {text:?}");
+        //     text = &source[(span.end as usize + 1).min(source.len().saturating_sub(1))..];
+        //     eprintln!(" -> {text:?}");
+        // }
     }
     return result;
 
