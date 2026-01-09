@@ -129,8 +129,14 @@ impl Child {
 }
 
 pub enum Event {
-    Open { kind: TreeKind },
+    Open {
+        kind: TreeKind,
+    },
     Close,
+    Error {
+        kind: ErrorKind,
+        span: Option<crate::Span>,
+    },
     Advance,
 }
 
@@ -139,6 +145,25 @@ pub struct MarkOpened {
 }
 pub struct MarkClosed {
     index: usize,
+}
+
+#[derive(Debug)]
+pub enum ErrorKind {
+    Expected {
+        token: TokenKind,
+        for_tree: Option<TreeKind>,
+    },
+    UnterminatedString,
+    Unexpected {
+        token: TokenKind,
+    },
+    Custom(&'static str),
+}
+
+#[derive(Debug)]
+pub struct ParseError {
+    pub span: crate::Span,
+    pub kind: ErrorKind,
 }
 
 pub struct Parser {
@@ -158,9 +183,11 @@ impl Parser {
         }
     }
 
-    pub fn build_tree(self) -> Tree {
+    pub fn build_tree(self) -> (Tree, Vec<ParseError>) {
         let mut tokens = self.tokens.into_iter();
         let mut events = self.events;
+
+        let mut errors = Vec::new();
 
         assert!(matches!(events.pop(), Some(Event::Close)));
         let mut stack = Vec::new();
@@ -200,13 +227,22 @@ impl Parser {
                     last_offset = last.span.end;
                     last.children.push(Child::Token(token));
                 }
+                Event::Error { kind, span } => {
+                    let cur_tree = stack.last_mut().unwrap();
+                    errors.push(ParseError {
+                        span: span
+                            .or(cur_tree.children.last().map(|c| c.span()))
+                            .unwrap_or(cur_tree.span),
+                        kind,
+                    });
+                }
             }
         }
 
         let tree = stack.pop().unwrap();
         assert!(stack.is_empty());
         assert!(tokens.next().is_none());
-        tree
+        (tree, errors)
     }
 
     fn open(&mut self) -> MarkOpened {
@@ -243,11 +279,14 @@ impl Parser {
         self.pos += 1;
     }
 
-    fn advance_with_error(&mut self, error: &str) {
+    fn report(&mut self, kind: ErrorKind) {
+        self.events.push(Event::Error { kind, span: None });
+    }
+
+    fn advance_with_error(&mut self, kind: ErrorKind, span: Option<crate::Span>) {
         let m = self.open();
-        // TODO: Error reporting.
-        eprintln!("{error}");
         self.advance();
+        self.events.push(Event::Error { kind, span });
         self.close(m, TreeKind::ErrorTree);
     }
 
@@ -291,7 +330,7 @@ impl Parser {
     }
 }
 
-pub fn parse(text: &str) -> Tree {
+pub fn parse(text: &str) -> (Tree, Vec<ParseError>) {
     let tokens = lex(text);
     eprintln!("tokens: {tokens:#?}");
     let mut p = Parser::new(tokens);
@@ -305,7 +344,13 @@ pub fn file(p: &mut Parser) {
         if p.at(TokenKind::Name) {
             stmt_entry(p)
         } else {
-            p.advance_with_error("expected a name");
+            p.advance_with_error(
+                ErrorKind::Expected {
+                    token: TokenKind::Name,
+                    for_tree: Some(TreeKind::File),
+                },
+                None,
+            );
         }
     }
     p.close(m, TreeKind::File);
@@ -325,7 +370,7 @@ pub fn stmt_entry(p: &mut Parser) {
         }
         TokenKind::UnterminatedString => {
             let m = p.open();
-            p.advance_with_error("unterminated string");
+            p.advance_with_error(ErrorKind::UnterminatedString, None);
             p.close(m, TreeKind::ExprLiteral);
         }
         TokenKind::Int | TokenKind::Minus => {
@@ -336,8 +381,9 @@ pub fn stmt_entry(p: &mut Parser) {
         TokenKind::LCurly => {
             block(p);
         }
-        TokenKind::Eof | TokenKind::Name => {}
-        _ => p.advance_with_error("unexpected"),
+        // TokenKind::Eof | TokenKind::Name => {}
+        token @ TokenKind::Eof => p.report(ErrorKind::Unexpected { token }),
+        token => p.advance_with_error(ErrorKind::Unexpected { token }, None),
     }
 
     p.close(m, TreeKind::StmtEntry);
@@ -401,10 +447,13 @@ linked: list[string] = {
 version: u32 = 5
 
 "#;
-        let cst = parse(text);
+        let (cst, errors) = parse(text);
         let mut str = String::new();
         cst.print(&mut str, 0, text);
-        eprintln!("{str}");
+        eprintln!("{str}\n====== errors: ======\n");
+        for err in errors {
+            eprintln!("{:?}: {:#?}", &text[err.span], err.kind);
+        }
     }
 }
 
@@ -423,7 +472,7 @@ impl Tree {
             false => "",
         };
         let safe_span = match self.span.end >= self.span.start {
-            true => &source[self.span.start as _..self.span.end as _],
+            true => &source[self.span],
             false => "!!!!!!",
         };
         format_to!(
