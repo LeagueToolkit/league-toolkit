@@ -79,6 +79,7 @@ pub struct Tree {
     pub span: crate::Span,
     pub kind: TreeKind,
     pub children: Vec<Child>,
+    pub errors: Vec<ParseError>,
 }
 
 impl Tree {
@@ -147,10 +148,11 @@ pub struct MarkClosed {
     index: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum ErrorKind {
     Expected {
-        token: TokenKind,
+        expected: TokenKind,
+        got: TokenKind,
         for_tree: Option<TreeKind>,
     },
     UnterminatedString,
@@ -160,7 +162,7 @@ pub enum ErrorKind {
     Custom(&'static str),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct ParseError {
     pub span: crate::Span,
     pub kind: ErrorKind,
@@ -183,11 +185,9 @@ impl Parser {
         }
     }
 
-    pub fn build_tree(self) -> (Tree, Vec<ParseError>) {
-        let mut tokens = self.tokens.into_iter();
+    pub fn build_tree(self) -> Tree {
+        let mut tokens = self.tokens.into_iter().peekable();
         let mut events = self.events;
-
-        let mut errors = Vec::new();
 
         assert!(matches!(events.pop(), Some(Event::Close)));
         let mut stack = Vec::new();
@@ -201,6 +201,7 @@ impl Parser {
                         span: crate::Span::new(last_offset, 0),
                         kind,
                         children: Vec::new(),
+                        errors: Vec::new(),
                     })
                 }
                 Event::Close => {
@@ -229,7 +230,22 @@ impl Parser {
                 }
                 Event::Error { kind, span } => {
                     let cur_tree = stack.last_mut().unwrap();
-                    errors.push(ParseError {
+                    let (kind, span) = match kind {
+                        ErrorKind::Expected {
+                            expected,
+                            got,
+                            for_tree: None,
+                        } => (
+                            ErrorKind::Expected {
+                                expected,
+                                got,
+                                for_tree: Some(cur_tree.kind),
+                            },
+                            tokens.peek().map(|t| t.span),
+                        ),
+                        kind => (kind, span),
+                    };
+                    cur_tree.errors.push(ParseError {
                         span: span
                             .or(cur_tree.children.last().map(|c| c.span()))
                             .unwrap_or(cur_tree.span),
@@ -242,7 +258,7 @@ impl Parser {
         let tree = stack.pop().unwrap();
         assert!(stack.is_empty());
         assert!(tokens.next().is_none());
-        (tree, errors)
+        tree
     }
 
     fn open(&mut self) -> MarkOpened {
@@ -321,16 +337,20 @@ impl Parser {
         }
     }
 
-    fn expect(&mut self, kind: TokenKind) {
+    fn expect(&mut self, kind: TokenKind) -> bool {
         if self.eat(kind) {
-            return;
+            return true;
         }
-        // TODO: Error reporting.
-        eprintln!("expected {kind:?}");
+        self.report(ErrorKind::Expected {
+            expected: kind,
+            got: self.nth(0),
+            for_tree: None,
+        });
+        false
     }
 }
 
-pub fn parse(text: &str) -> (Tree, Vec<ParseError>) {
+pub fn parse(text: &str) -> Tree {
     let tokens = lex(text);
     eprintln!("tokens: {tokens:#?}");
     let mut p = Parser::new(tokens);
@@ -341,17 +361,7 @@ pub fn parse(text: &str) -> (Tree, Vec<ParseError>) {
 pub fn file(p: &mut Parser) {
     let m = p.open();
     while !p.eof() {
-        if p.at(TokenKind::Name) {
-            stmt_entry(p)
-        } else {
-            p.advance_with_error(
-                ErrorKind::Expected {
-                    token: TokenKind::Name,
-                    for_tree: Some(TreeKind::File),
-                },
-                None,
-            );
-        }
+        stmt_entry(p)
     }
     p.close(m, TreeKind::File);
 }
@@ -381,7 +391,6 @@ pub fn stmt_entry(p: &mut Parser) {
         TokenKind::LCurly => {
             block(p);
         }
-        // TokenKind::Eof | TokenKind::Name => {}
         token @ TokenKind::Eof => p.report(ErrorKind::Unexpected { token }),
         token => p.advance_with_error(ErrorKind::Unexpected { token }, None),
     }
@@ -447,13 +456,42 @@ linked: list[string] = {
 version: u32 = 5
 
 "#;
-        let (cst, errors) = parse(text);
+        let cst = parse(text);
+        let errors = FlatErrors::walk(&cst);
+
         let mut str = String::new();
         cst.print(&mut str, 0, text);
         eprintln!("{str}\n====== errors: ======\n");
         for err in errors {
             eprintln!("{:?}: {:#?}", &text[err.span], err.kind);
         }
+    }
+}
+
+#[derive(Default)]
+pub struct FlatErrors {
+    errors: Vec<ParseError>,
+}
+
+impl FlatErrors {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    pub fn into_errors(self) -> Vec<ParseError> {
+        self.errors
+    }
+
+    pub fn walk(tree: &Tree) -> Vec<ParseError> {
+        let mut errors = Self::new();
+        tree.walk(&mut errors);
+        errors.into_errors()
+    }
+}
+
+impl Visitor for FlatErrors {
+    fn exit_tree(&mut self, tree: &Tree) -> Visit {
+        self.errors.extend_from_slice(&tree.errors);
+        Visit::Continue
     }
 }
 
