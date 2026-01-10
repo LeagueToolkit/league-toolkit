@@ -5,6 +5,9 @@ use TokenKind::*;
 pub fn file(p: &mut Parser) {
     let m = p.open();
     while !p.eof() {
+        if p.at(Comment) {
+            p.scope(TreeKind::Comment, |p| p.advance());
+        }
         stmt_or_list_item(p)
     }
     p.close(m, TreeKind::File);
@@ -14,7 +17,7 @@ pub fn stmt_or_list_item(p: &mut Parser) {
     let m = p.open();
 
     // obvious list item literals
-    if p.eat_any(&[TokenKind::HexLit]) {
+    if p.eat_any(&[TokenKind::HexLit, TokenKind::Number]) {
         p.advance(); // list item
         while p.eat(Newline) {}
         p.close(m, TreeKind::ListItem);
@@ -81,7 +84,7 @@ pub fn entry_value(p: &mut Parser) -> bool {
             TokenKind::UnterminatedString => {
                 p.advance_with_error(ErrorKind::UnterminatedString, None);
             }
-            TokenKind::Int | TokenKind::Minus => {
+            Number | Minus | HexLit | True | False => {
                 let m = p.open();
                 p.advance();
                 p.close(m, TreeKind::Literal);
