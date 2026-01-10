@@ -14,46 +14,59 @@ pub fn file(p: &mut Parser) {
 }
 
 pub fn stmt_or_list_item(p: &mut Parser) {
-    let m = p.open();
-
-    // obvious list item literals
-    if p.eat_any(&[TokenKind::HexLit, TokenKind::Number]) {
-        p.advance(); // list item
-        while p.eat(Newline) {}
-        p.close(m, TreeKind::ListItem);
-        return;
+    match (p.nth(0), p.nth(1), p.nth(2)) {
+        (Name | String | HexLit, Colon | Eq, _) => {
+            stmt(p);
+        }
+        (Name | HexLit, LCurly, _) => {
+            let m = p.open();
+            p.advance();
+            block(p);
+            p.close(m, TreeKind::Class);
+        }
+        (LCurly, _, _) => {
+            let m = p.open();
+            block(p);
+            p.close(m, TreeKind::ListItem);
+            p.eat(Comma);
+        }
+        (Name | HexLit | String | Number | True | False, _, _) => {
+            let m = p.open();
+            p.advance();
+            p.close(m, TreeKind::ListItem);
+            p.eat(Comma);
+        }
+        _ => stmt(p),
     }
 
+    while p.eat(Newline) {}
+}
+
+pub fn stmt(p: &mut Parser) {
+    let m = p.open();
+
     p.scope(TreeKind::EntryKey, |p| {
-        p.expect_any(&[TokenKind::Name, TokenKind::String])
+        p.expect_any(&[Name, String, HexLit])
     });
-    match p.nth(0) {
-        TokenKind::Colon => {
-            p.advance();
-            type_expr(p);
-            p.expect(TokenKind::Eq);
-        }
-        TokenKind::Eq => {
-            p.advance();
-        }
-        _ => {
-            p.advance(); // list item
-            while p.eat(Newline) {}
-            p.close(m, TreeKind::ListItem);
-            return;
-        }
+    if p.eat_any(&[Colon, Eq, Newline]) == Some(Colon) {
+        type_expr(p);
+        p.expect(TokenKind::Eq);
     }
 
     if !entry_value(p) {
         p.close(m, TreeKind::Entry);
         return;
     }
+
     p.scope(TreeKind::EntryTerminator, |p| {
         let mut one = false;
         if p.eof() {
             return;
         }
-        while p.eat_any(&[TokenKind::SemiColon, TokenKind::Newline]) {
+        while p
+            .eat_any(&[TokenKind::SemiColon, TokenKind::Newline])
+            .is_some()
+        {
             one = true;
         }
 
@@ -69,7 +82,10 @@ pub fn stmt_or_list_item(p: &mut Parser) {
                 }
                 p.report(ErrorKind::UnexpectedTree);
             });
-            while p.eat_any(&[TokenKind::SemiColon, TokenKind::Newline]) {}
+            while p
+                .eat_any(&[TokenKind::SemiColon, TokenKind::Newline])
+                .is_some()
+            {}
         }
     });
     p.close(m, TreeKind::Entry);
@@ -77,34 +93,36 @@ pub fn stmt_or_list_item(p: &mut Parser) {
 
 pub fn entry_value(p: &mut Parser) -> bool {
     p.scope(TreeKind::EntryValue, |p| {
-        match p.nth(0) {
-            TokenKind::String => {
+        match (p.nth(0), p.nth(1)) {
+            (String, _) => {
                 p.advance();
             }
-            TokenKind::UnterminatedString => {
+            (UnterminatedString, _) => {
                 p.advance_with_error(ErrorKind::UnterminatedString, None);
             }
-            Number | Minus | HexLit | True | False => {
+            (Name, _) | (HexLit, LCurly) => {
+                p.scope(TreeKind::Class, |p| {
+                    p.advance();
+                    if p.at(LCurly) {
+                        block(p);
+                    }
+                });
+            }
+            (Number | HexLit | True | False, _) => {
                 let m = p.open();
                 p.advance();
                 p.close(m, TreeKind::Literal);
             }
-            TokenKind::Name => {
-                p.scope(TreeKind::Class, |p| {
-                    p.advance();
-                    block(p);
-                });
-            }
-            TokenKind::LCurly => {
+            (LCurly, _) => {
                 block(p);
             }
-            TokenKind::Newline => {
+            (Newline, _) => {
                 p.advance_with_error(ErrorKind::Unexpected { token: Newline }, None);
                 while p.eat(Newline) {}
                 return false;
             }
-            token @ TokenKind::Eof => p.report(ErrorKind::Unexpected { token }),
-            token => p.advance_with_error(ErrorKind::Unexpected { token }, None),
+            (token @ TokenKind::Eof, _) => p.report(ErrorKind::Unexpected { token }),
+            (token, _) => p.advance_with_error(ErrorKind::Unexpected { token }, None),
         }
         true
     })
