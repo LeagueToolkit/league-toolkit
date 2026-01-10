@@ -5,7 +5,7 @@ use crate::Span;
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[rustfmt::skip]
 pub enum TokenKind {
-  Unknown, Eof,
+  Unknown, Eof, Newline,
 
   LParen, RParen, LCurly, RCurly,
   LBrack, RBrack,
@@ -26,6 +26,7 @@ impl Display for TokenKind {
         f.write_str(match self {
             TokenKind::Unknown => "unknown text",
             TokenKind::Eof => "end of file",
+            TokenKind::Newline => "new line",
             TokenKind::LParen => "'('",
             TokenKind::RParen => "')'",
             TokenKind::LCurly => "'{'",
@@ -69,9 +70,26 @@ pub fn lex(mut text: &str) -> Vec<Token> {
 
     let source = text;
 
-    let mut result = Vec::new();
+    let mut result: Vec<Token> = Vec::new();
     while !text.is_empty() {
         if let Some(rest) = trim(text, |it| it.is_ascii_whitespace()) {
+            let eaten = &source[source.len() - text.len()..source.len() - rest.len()];
+            if let Some(last_token) = result.last() {
+                if matches!(
+                    last_token.kind,
+                    TokenKind::Name | TokenKind::Int | TokenKind::RCurly | TokenKind::String
+                ) && eaten.find(['\n', '\r']).is_some()
+                {
+                    let start = source.len() - text.len();
+                    let end = source.len() - rest.len();
+                    let span = Span::new(start as _, end as _);
+                    result.push(Token {
+                        span,
+                        kind: TokenKind::Newline,
+                    });
+                }
+            }
+
             text = rest;
             continue;
         }
@@ -144,39 +162,6 @@ pub fn lex(mut text: &str) -> Vec<Token> {
             }
         }
         result.push(Token { kind, span });
-        // if kind == Quote {
-        //     eprintln!("[lex] pushed quote!");
-        //     let span = match find_string_closer(text) {
-        //         Some(close_idx) => {
-        //             let start = (source.len() - text.len()) as u32;
-        //             Span {
-        //                 start,
-        //                 end: start + close_idx as u32,
-        //             }
-        //         }
-        //         // &text[..close_idx],
-        //         None => {
-        //             let start = (source.len() - text.len()) as u32;
-        //             Span {
-        //                 start,
-        //                 end: start + text.len() as u32,
-        //             }
-        //         }
-        //     };
-        //     eprintln!("[lex] token text: {token_text:?}");
-        //     result.push(Token { kind: String, span });
-        //     text = &source[span.end as _..];
-        //     result.push(Token {
-        //         kind: Quote,
-        //         span: Span {
-        //             start: span.end,
-        //             end: span.end + 1,
-        //         },
-        //     });
-        //     eprint!("[lex] text: {text:?}");
-        //     text = &source[(span.end as usize + 1).min(source.len().saturating_sub(1))..];
-        //     eprintln!(" -> {text:?}");
-        // }
     }
     return result;
 
@@ -191,21 +176,5 @@ pub fn lex(mut text: &str) -> Vec<Token> {
         } else {
             Some(&text[index..])
         }
-    }
-
-    fn find_string_closer(text: &str) -> Option<usize> {
-        let mut skip = false;
-        for (i, char) in text.char_indices() {
-            if skip {
-                skip = false;
-                continue;
-            }
-            match char {
-                '\\' => skip = true,
-                '\'' | '"' => return Some(i),
-                _ => {}
-            }
-        }
-        None
     }
 }
