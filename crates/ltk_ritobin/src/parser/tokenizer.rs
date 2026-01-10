@@ -9,7 +9,7 @@ pub enum TokenKind {
 
   LParen, RParen, LCurly, RCurly,
   LBrack, RBrack,
-  Eq, Comma, Colon,
+  Eq, Comma, Colon, SemiColon,
   Minus, Star, Slash,
   Quote,
 
@@ -35,6 +35,7 @@ impl Display for TokenKind {
             TokenKind::Eq => "'='",
             TokenKind::Comma => "','",
             TokenKind::Colon => "':'",
+            TokenKind::SemiColon => "';'",
             TokenKind::Minus => "'-'",
             TokenKind::Star => "'*'",
             TokenKind::Slash => "'/'",
@@ -57,9 +58,10 @@ pub struct Token {
 pub fn lex(mut text: &str) -> Vec<Token> {
     use TokenKind::*;
     let punctuation = (
-        "( ) { } [ ] = , : - * /",
+        "( ) { } [ ] = , : ; - * /",
         [
-            LParen, RParen, LCurly, RCurly, LBrack, RBrack, Eq, Comma, Colon, Minus, Star, Slash,
+            LParen, RParen, LCurly, RCurly, LBrack, RBrack, Eq, Comma, Colon, SemiColon, Minus,
+            Star, Slash,
         ],
     );
 
