@@ -18,7 +18,7 @@ pub enum TokenKind {
 
   True, False,
 
-  Name, Int,
+  Name, Int, HexLit,
 }
 
 impl TokenKind {
@@ -54,6 +54,7 @@ impl Display for TokenKind {
             TokenKind::False => "'false'",
             TokenKind::Name => "keyword",
             TokenKind::Int => "number",
+            TokenKind::HexLit => "hexadecimal literal",
         })
     }
 }
@@ -108,6 +109,15 @@ pub fn lex(mut text: &str) -> Vec<Token> {
                     break 'kind punctuation.1[i];
                 }
             }
+
+            if let Some(rest) = text.strip_prefix("0x") {
+                text = rest;
+                if let Some(rest) = trim(text, |it| matches!(it, 'a'..'f' | 'A'..'F' | '0'..='9')) {
+                    text = rest;
+                }
+                break 'kind HexLit;
+            }
+
             if let Some(rest) = trim(text, |it| it.is_ascii_digit()) {
                 text = rest;
                 break 'kind Int;
