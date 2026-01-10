@@ -15,10 +15,11 @@ pub enum TokenKind {
 
   String, UnterminatedString,
 
+Comment,
 
   True, False,
 
-  Name, Int, HexLit,
+  Name, Number, HexLit,
 }
 
 impl TokenKind {
@@ -53,8 +54,9 @@ impl Display for TokenKind {
             TokenKind::True => "'true'",
             TokenKind::False => "'false'",
             TokenKind::Name => "keyword",
-            TokenKind::Int => "number",
+            TokenKind::Number => "number",
             TokenKind::HexLit => "hexadecimal literal",
+            TokenKind::Comment => "comment",
         })
     }
 }
@@ -86,7 +88,10 @@ pub fn lex(mut text: &str) -> Vec<Token> {
                 if matches!(
                     last_token.kind,
                     TokenKind::Name
-                        | TokenKind::Int
+                        | TokenKind::HexLit
+                        | TokenKind::True
+                        | TokenKind::False
+                        | TokenKind::Number
                         | TokenKind::RCurly
                         | TokenKind::String
                         | TokenKind::Eq
@@ -114,6 +119,14 @@ pub fn lex(mut text: &str) -> Vec<Token> {
                 }
             }
 
+            if let Some(rest) = text.strip_prefix('#') {
+                text = rest;
+                if let Some(rest) = trim(text, |t| !matches!(t, '\n' | '\r')) {
+                    text = rest;
+                }
+                break 'kind Comment;
+            }
+
             if let Some(rest) = text.strip_prefix("0x") {
                 text = rest;
                 if let Some(rest) = trim(text, |it| matches!(it, 'a'..'f' | 'A'..'F' | '0'..='9')) {
@@ -122,9 +135,9 @@ pub fn lex(mut text: &str) -> Vec<Token> {
                 break 'kind HexLit;
             }
 
-            if let Some(rest) = trim(text, |it| it.is_ascii_digit()) {
+            if let Some(rest) = scan_number(text) {
                 text = rest;
-                break 'kind Int;
+                break 'kind Number;
             }
 
             if let Some(rest) = text.strip_prefix(['\'', '"']) {
@@ -203,5 +216,41 @@ pub fn lex(mut text: &str) -> Vec<Token> {
         } else {
             Some(&text[index..])
         }
+    }
+
+    fn scan_number(mut s: &str) -> Option<&str> {
+        if let Some(rest) = s.strip_prefix('-') {
+            s = rest;
+        }
+
+        let rest = trim(s, |c| matches!(c, '0'..='9' | '_'))?;
+        let int_part = &s[..s.len() - rest.len()];
+
+        if int_part.is_empty()
+            || int_part.starts_with('_')
+            || int_part.ends_with('_')
+            || int_part.contains("__")
+        {
+            return None;
+        }
+
+        s = rest;
+
+        if let Some(after_dot) = s.strip_prefix('.') {
+            let rest = trim(after_dot, |c| matches!(c, '0'..='9' | '_'))?;
+            // let frac_part = &after_dot[..after_dot.len() - rest.len()];
+            //
+            // if frac_part.is_empty()
+            //     || frac_part.starts_with('_')
+            //     || frac_part.ends_with('_')
+            //     || frac_part.contains("__")
+            // {
+            //     return None;
+            // }
+
+            s = rest;
+        }
+
+        Some(s)
     }
 }
