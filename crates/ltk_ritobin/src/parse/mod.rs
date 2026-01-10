@@ -17,8 +17,7 @@ pub use span::Span;
 
 pub fn parse(text: &str) -> cst::Cst {
     let tokens = tokenizer::lex(text);
-    eprintln!("tokens: {tokens:#?}");
-    let mut p = parser::Parser::new(tokens);
+    let mut p = parser::Parser::new(text, tokens);
     impls::file(&mut p);
     p.build_tree()
 }
@@ -41,6 +40,7 @@ linked: list[string, cock] = {
 
         let mut str = String::new();
         cst.print(&mut str, 0, text);
+        eprintln!("text len: {}", text.len());
         eprintln!("{str}\n====== errors: ======\n");
         for err in errors {
             eprintln!("{:?}: {:#?}", &text[err.span], err.kind);
