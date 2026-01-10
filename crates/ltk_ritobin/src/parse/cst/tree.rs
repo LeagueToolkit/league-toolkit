@@ -52,6 +52,18 @@ pub enum Child {
 }
 
 impl Child {
+    pub fn token(&self) -> Option<&Token> {
+        match self {
+            Child::Token(token) => Some(token),
+            Child::Tree(_) => None,
+        }
+    }
+    pub fn tree(&self) -> Option<&Cst> {
+        match self {
+            Child::Token(_) => None,
+            Child::Tree(cst) => Some(cst),
+        }
+    }
     pub fn span(&self) -> Span {
         match self {
             Child::Token(token) => token.span,
