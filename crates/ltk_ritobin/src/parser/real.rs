@@ -477,13 +477,15 @@ pub fn stmt_entry(p: &mut Parser) {
 pub fn type_expr(p: &mut Parser) {
     p.expect(TokenKind::Name);
     if p.eat(TokenKind::LBrack) {
-        while !p.at(TokenKind::RBrack) && !p.eof() {
-            if p.at(TokenKind::Name) {
-                expr_type_arg(p);
-            } else {
-                break;
+        p.scope(TreeKind::TypeArgList, |p| {
+            while !p.at(TokenKind::RBrack) && !p.eof() {
+                if p.at(TokenKind::Name) {
+                    expr_type_arg(p);
+                } else {
+                    break;
+                }
             }
-        }
+        });
         p.expect(TokenKind::RBrack);
     }
 }
@@ -494,7 +496,7 @@ pub fn expr_type_arg(p: &mut Parser) -> MarkClosed {
     let m = p.open();
 
     p.expect(Name);
-    if !p.at(RParen) {
+    if !p.at(RBrack) {
         p.expect(Comma);
     }
 
