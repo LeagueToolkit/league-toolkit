@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::Span;
+use crate::parse::Span;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[rustfmt::skip]

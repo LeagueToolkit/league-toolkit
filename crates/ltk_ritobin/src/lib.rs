@@ -46,12 +46,11 @@
 
 pub mod error;
 pub mod hashes;
-pub mod parser;
+pub mod parse;
 pub mod types;
 pub mod writer;
 
 pub use error::*;
 pub use hashes::*;
-pub use parser::{parse, parse_to_bin_tree, RitobinFile};
 pub use types::*;
 pub use writer::*;
