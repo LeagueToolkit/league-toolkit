@@ -31,7 +31,16 @@ impl std::ops::Index<crate::Span> for str {
     type Output = str;
 
     fn index(&self, index: crate::Span) -> &Self::Output {
-        &self[index.start as _..index.end as _]
+        &self[&index]
+    }
+}
+impl std::ops::Index<&crate::Span> for str {
+    type Output = str;
+
+    fn index(&self, index: &crate::Span) -> &Self::Output {
+        let start = index.start as usize;
+        let end = index.end as usize;
+        &self[start..end]
     }
 }
 
