@@ -1,6 +1,6 @@
 use std::{
     cell::Cell,
-    fmt,
+    fmt::{self, Display},
     sync::{Arc, Mutex},
 };
 
@@ -72,6 +72,21 @@ pub enum TreeKind {
   Block,
   StmtEntry,
   ExprLiteral, ExprName,
+}
+impl Display for TreeKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            TreeKind::ErrorTree => "error tree",
+            TreeKind::File => "file",
+            TreeKind::TypeExpr => "bin entry type",
+            TreeKind::TypeArgList => "type argument list",
+            TreeKind::TypeArg => "type argument",
+            TreeKind::Block => "block",
+            TreeKind::StmtEntry => "bin entry",
+            TreeKind::ExprLiteral => "literal",
+            TreeKind::ExprName => "name?", // TODO: don't think I need this any more
+        })
+    }
 }
 
 #[derive(Clone, Debug)]
