@@ -286,6 +286,22 @@ impl Parser {
         mark
     }
 
+    fn scope<F, R>(&mut self, kind: TreeKind, mut f: F) -> MarkClosed
+    where
+        F: FnMut(&mut Self) -> R,
+    {
+        let m = MarkOpened {
+            index: self.events.len(),
+        };
+        self.events.push(Event::Open {
+            kind: TreeKind::ErrorTree,
+        });
+        let _ = f(self);
+        self.events[m.index] = Event::Open { kind };
+        self.events.push(Event::Close);
+        MarkClosed { index: m.index }
+    }
+
     fn open_before(&mut self, m: MarkClosed) -> MarkOpened {
         let mark = MarkOpened { index: m.index };
         self.events.insert(
@@ -362,6 +378,13 @@ impl Parser {
             for_tree: None,
         });
         false
+    }
+
+    fn expect_fallable(&mut self, kind: TokenKind) -> Result<(), ()> {
+        match self.expect(kind) {
+            true => Ok(()),
+            false => Err(()),
+        }
     }
 }
 
