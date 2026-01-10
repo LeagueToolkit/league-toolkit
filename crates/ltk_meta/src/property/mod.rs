@@ -103,8 +103,16 @@ impl BinPropertyKind {
 
     /// Whether this property kind is a container type (container, unordered container, optional, map).
     pub fn is_container(&self) -> bool {
+        self.subtype_count() > 0
+    }
+
+    pub fn subtype_count(&self) -> u8 {
         use BinPropertyKind::*;
-        matches!(self, Container | UnorderedContainer | Optional | Map)
+        match self {
+            Container | UnorderedContainer | Optional => 1,
+            Map => 2,
+            _ => 0,
+        }
     }
 
     pub fn read<R: io::Read + std::io::Seek + ?Sized>(
