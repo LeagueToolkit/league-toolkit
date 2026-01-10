@@ -85,7 +85,11 @@ pub fn lex(mut text: &str) -> Vec<Token> {
             if let Some(last_token) = result.last() {
                 if matches!(
                     last_token.kind,
-                    TokenKind::Name | TokenKind::Int | TokenKind::RCurly | TokenKind::String
+                    TokenKind::Name
+                        | TokenKind::Int
+                        | TokenKind::RCurly
+                        | TokenKind::String
+                        | TokenKind::Eq
                 ) && eaten.find(['\n', '\r']).is_some()
                 {
                     let start = source.len() - text.len();
