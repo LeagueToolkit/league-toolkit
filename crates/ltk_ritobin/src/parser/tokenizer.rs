@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::Span;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -17,6 +19,34 @@ pub enum TokenKind {
   True, False,
 
   Name, Int,
+}
+
+impl Display for TokenKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            TokenKind::Unknown => "unknown text",
+            TokenKind::Eof => "end of file",
+            TokenKind::LParen => "'('",
+            TokenKind::RParen => "')'",
+            TokenKind::LCurly => "'{'",
+            TokenKind::RCurly => "'}'",
+            TokenKind::LBrack => "'['",
+            TokenKind::RBrack => "']'",
+            TokenKind::Eq => "'='",
+            TokenKind::Comma => "','",
+            TokenKind::Colon => "':'",
+            TokenKind::Minus => "'-'",
+            TokenKind::Star => "'*'",
+            TokenKind::Slash => "'/'",
+            TokenKind::Quote => "'\"'",
+            TokenKind::String => "string literal",
+            TokenKind::UnterminatedString => "unterminated string literal",
+            TokenKind::True => "'true'",
+            TokenKind::False => "'false'",
+            TokenKind::Name => "keyword",
+            TokenKind::Int => "number",
+        })
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
