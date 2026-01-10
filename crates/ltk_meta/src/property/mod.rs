@@ -76,6 +76,8 @@ impl BinPropertyKind {
     }
 
     /// Whether this property kind is a primitive type. (i8, u8, .. u32, u64, f32, Vector2, Vector3, Vector4, Matrix44, Color, String, Hash, WadChunkLink),
+    #[inline(always)]
+    #[must_use]
     pub fn is_primitive(&self) -> bool {
         use BinPropertyKind::*;
         matches!(
@@ -102,10 +104,14 @@ impl BinPropertyKind {
     }
 
     /// Whether this property kind is a container type (container, unordered container, optional, map).
+    #[inline(always)]
+    #[must_use]
     pub fn is_container(&self) -> bool {
         self.subtype_count() > 0
     }
 
+    #[inline(always)]
+    #[must_use]
     pub fn subtype_count(&self) -> u8 {
         use BinPropertyKind::*;
         match self {
@@ -115,6 +121,7 @@ impl BinPropertyKind {
         }
     }
 
+    #[inline(always)]
     pub fn read<R: io::Read + std::io::Seek + ?Sized>(
         self,
         reader: &mut R,
