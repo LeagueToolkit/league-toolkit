@@ -21,16 +21,18 @@ pub struct MarkClosed {
     index: usize,
 }
 
-pub struct Parser {
+pub struct Parser<'a> {
+    pub text: &'a str,
     pub tokens: Vec<Token>,
     pos: usize,
     fuel: Cell<u32>,
     pub events: Vec<Event>,
 }
 
-impl Parser {
-    pub fn new(tokens: Vec<Token>) -> Parser {
+impl<'a> Parser<'a> {
+    pub fn new(text: &'a str, tokens: Vec<Token>) -> Parser {
         Parser {
+            text,
             tokens,
             pos: 0,
             fuel: Cell::new(256),
@@ -192,6 +194,11 @@ impl Parser {
 
     pub(crate) fn nth(&self, lookahead: usize) -> TokenKind {
         if self.fuel.get() == 0 {
+            eprintln!("last 5 tokens behind self.pos:");
+            for tok in &self.tokens[self.pos.saturating_sub(5)..self.pos] {
+                eprintln!(" - {:?}: {:?}", tok.kind, &self.text[tok.span]);
+            }
+
             panic!("parser is stuck")
         }
         self.fuel.set(self.fuel.get() - 1);
@@ -204,16 +211,16 @@ impl Parser {
         self.nth(0) == kind
     }
 
-    pub(crate) fn at_any(&self, kinds: &[TokenKind]) -> bool {
-        kinds.contains(&self.nth(0))
+    pub(crate) fn at_any(&self, kinds: &[TokenKind]) -> Option<TokenKind> {
+        kinds.contains(&self.nth(0)).then_some(self.nth(0))
     }
 
-    pub(crate) fn eat_any(&mut self, kinds: &[TokenKind]) -> bool {
-        if self.at_any(kinds) {
+    pub(crate) fn eat_any(&mut self, kinds: &[TokenKind]) -> Option<TokenKind> {
+        if let Some(kind) = self.at_any(kinds) {
             self.advance();
-            true
+            Some(kind)
         } else {
-            false
+            None
         }
     }
 
@@ -226,15 +233,15 @@ impl Parser {
         }
     }
 
-    pub(crate) fn expect_any(&mut self, kinds: &'static [TokenKind]) -> bool {
-        if self.eat_any(kinds) {
-            return true;
+    pub(crate) fn expect_any(&mut self, kinds: &'static [TokenKind]) -> Option<TokenKind> {
+        if let Some(kind) = self.eat_any(kinds) {
+            return Some(kind);
         }
         self.report(ErrorKind::ExpectedAny {
             expected: kinds,
             got: self.nth(0),
         });
-        false
+        None
     }
 
     pub(crate) fn expect(&mut self, kind: TokenKind) -> bool {
