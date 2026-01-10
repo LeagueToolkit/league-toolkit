@@ -85,27 +85,30 @@ impl Parser {
                 }
                 Event::Error { kind, span } => {
                     let cur_tree = stack.last_mut().unwrap();
-                    let span = match kind {
-                        // these errors are talking about what they wanted next
-                        ErrorKind::Expected { .. } | ErrorKind::Unexpected { .. } => {
-                            let mut span = tokens.peek().map(|t| t.span).unwrap_or(last_span);
-                            // so we point at the character just after our token
-                            span.end += 1;
-                            span.start = span.end - 1;
-                            span
-                        }
-                        // whole tree is the problem
-                        ErrorKind::UnexpectedTree => cur_tree.span,
-                        _ => span
-                            .or(cur_tree.children.last().map(|c| c.span()))
-                            // we can't use Tree.span.end because that's only known on Close
-                            .unwrap_or(Span::new(
-                                cur_tree.span.start,
-                                last_token
-                                    .as_ref()
-                                    .map(|t| t.span.end)
-                                    .unwrap_or(cur_tree.span.start),
-                            )),
+                    let span = match cur_tree.kind {
+                        TreeKind::ErrorTree => cur_tree.span,
+                        _ => match kind {
+                            // these errors are talking about what they wanted next
+                            ErrorKind::Expected { .. } | ErrorKind::Unexpected { .. } => {
+                                let mut span = tokens.peek().map(|t| t.span).unwrap_or(last_span);
+                                // so we point at the character just after our token
+                                span.end += 1;
+                                span.start = span.end - 1;
+                                span
+                            }
+                            // whole tree is the problem
+                            ErrorKind::UnexpectedTree => cur_tree.span,
+                            _ => span
+                                .or(cur_tree.children.last().map(|c| c.span()))
+                                // we can't use Tree.span.end because that's only known on Close
+                                .unwrap_or(Span::new(
+                                    cur_tree.span.start,
+                                    last_token
+                                        .as_ref()
+                                        .map(|t| t.span.end)
+                                        .unwrap_or(cur_tree.span.start),
+                                )),
+                        },
                     };
                     cur_tree.errors.push(Error {
                         span,
@@ -132,7 +135,7 @@ impl Parser {
         mark
     }
 
-    pub(crate) fn scope<F, R>(&mut self, kind: TreeKind, mut f: F) -> MarkClosed
+    pub(crate) fn scope<F, R>(&mut self, kind: TreeKind, mut f: F) -> (R, MarkClosed)
     where
         F: FnMut(&mut Self) -> R,
     {
@@ -142,10 +145,10 @@ impl Parser {
         self.events.push(Event::Open {
             kind: TreeKind::ErrorTree,
         });
-        let _ = f(self);
+        let ret = f(self);
         self.events[m.index] = Event::Open { kind };
         self.events.push(Event::Close);
-        MarkClosed { index: m.index }
+        (ret, MarkClosed { index: m.index })
     }
 
     pub(crate) fn open_before(&mut self, m: MarkClosed) -> MarkOpened {
