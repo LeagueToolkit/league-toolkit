@@ -3,7 +3,7 @@ use crate::Span;
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[rustfmt::skip]
 pub enum TokenKind {
-  ErrorToken, Eof,
+  Unknown, Eof,
 
   LParen, RParen, LCurly, RCurly,
   LBrack, RBrack,
@@ -91,7 +91,7 @@ pub fn lex(mut text: &str) -> Vec<Token> {
                 .find(|it: char| it.is_ascii_whitespace())
                 .unwrap_or(text.len());
             text = &text[error_index..];
-            ErrorToken
+            Unknown
         };
         assert!(text.len() < text_orig.len());
         let token_text = &text_orig[..text_orig.len() - text.len()];
