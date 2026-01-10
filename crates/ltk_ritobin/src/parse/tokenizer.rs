@@ -10,7 +10,7 @@ pub enum TokenKind {
   LParen, RParen, LCurly, RCurly,
   LBrack, RBrack,
   Eq, Comma, Colon, SemiColon,
-  Minus, Star, Slash,
+  Star, Slash,
   Quote,
 
   String, UnterminatedString,
@@ -45,7 +45,6 @@ impl Display for TokenKind {
             TokenKind::Comma => "','",
             TokenKind::Colon => "':'",
             TokenKind::SemiColon => "';'",
-            TokenKind::Minus => "'-'",
             TokenKind::Star => "'*'",
             TokenKind::Slash => "'/'",
             TokenKind::Quote => "'\"'",
@@ -69,10 +68,10 @@ pub struct Token {
 pub fn lex(mut text: &str) -> Vec<Token> {
     use TokenKind::*;
     let punctuation = (
-        "( ) { } [ ] = , : ; - * /",
+        "( ) { } [ ] = , : ; * /",
         [
-            LParen, RParen, LCurly, RCurly, LBrack, RBrack, Eq, Comma, Colon, SemiColon, Minus,
-            Star, Slash,
+            LParen, RParen, LCurly, RCurly, LBrack, RBrack, Eq, Comma, Colon, SemiColon, Star,
+            Slash,
         ],
     );
 
@@ -129,7 +128,7 @@ pub fn lex(mut text: &str) -> Vec<Token> {
 
             if let Some(rest) = text.strip_prefix("0x") {
                 text = rest;
-                if let Some(rest) = trim(text, |it| matches!(it, 'a'..'f' | 'A'..'F' | '0'..='9')) {
+                if let Some(rest) = trim(text, |it: char| it.is_ascii_hexdigit()) {
                     text = rest;
                 }
                 break 'kind HexLit;
