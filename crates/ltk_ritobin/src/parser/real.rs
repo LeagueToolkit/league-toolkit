@@ -71,7 +71,7 @@ pub enum TreeKind {
   TypeExpr, TypeArgList, TypeArg,
   Block,
 
-  Entry, EntryKey, EntryValue,
+  Entry, EntryKey, EntryValue, EntryTerminator,
   Literal,
 }
 impl Display for TreeKind {
@@ -87,6 +87,7 @@ impl Display for TreeKind {
             TreeKind::EntryKey => "key",
             TreeKind::EntryValue => "value",
             TreeKind::Literal => "literal",
+            TreeKind::EntryTerminator => "bin entry terminator (new line or ';')",
         })
     }
 }
@@ -167,9 +168,16 @@ pub struct MarkClosed {
 
 #[derive(Debug, Clone, Copy)]
 pub enum ErrorKind {
-    Expected { expected: TokenKind, got: TokenKind },
+    Expected {
+        expected: TokenKind,
+        got: TokenKind,
+    },
     UnterminatedString,
-    Unexpected { token: TokenKind },
+    Unexpected {
+        token: TokenKind,
+    },
+    /// When the entire tree we're in is unexpected
+    UnexpectedTree,
     Custom(&'static str),
 }
 
@@ -253,7 +261,9 @@ impl Parser {
                             span.start = span.end - 1;
                             span
                         }
-                        kind => span
+                        // whole tree is the problem
+                        ErrorKind::UnexpectedTree => cur_tree.span,
+                        _ => span
                             .or(cur_tree.children.last().map(|c| c.span()))
                             // we can't use Tree.span.end because that's only known on Close
                             .unwrap_or(crate::Span::new(
@@ -324,7 +334,6 @@ impl Parser {
 
     fn advance(&mut self) {
         assert!(!self.eof());
-        self.fuel.set(256);
         self.events.push(Event::Advance);
         self.pos += 1;
     }
@@ -360,6 +369,15 @@ impl Parser {
 
     fn at_any(&self, kinds: &[TokenKind]) -> bool {
         kinds.contains(&self.nth(0))
+    }
+
+    fn eat_any(&mut self, kinds: &[TokenKind]) -> bool {
+        if self.at_any(kinds) {
+            self.advance();
+            true
+        } else {
+            false
+        }
     }
 
     fn eat(&mut self, kind: TokenKind) -> bool {
@@ -429,6 +447,30 @@ pub fn stmt_entry(p: &mut Parser) {
             token @ TokenKind::Eof => p.report(ErrorKind::Unexpected { token }),
             token => p.advance_with_error(ErrorKind::Unexpected { token }, None),
         });
+        p.scope(TreeKind::EntryTerminator, |p| {
+            let mut one = false;
+            if p.eof() {
+                return;
+            }
+            while p.eat_any(&[TokenKind::SemiColon, TokenKind::Newline]) {
+                one = true;
+            }
+
+            if !one {
+                // if something was between us and our statement terminator,
+                // we eat it all and then try again
+                p.scope(TreeKind::ErrorTree, |p| {
+                    while !matches!(
+                        p.nth(0),
+                        TokenKind::SemiColon | TokenKind::Newline | TokenKind::Eof
+                    ) {
+                        p.advance();
+                    }
+                    p.report(ErrorKind::UnexpectedTree);
+                });
+                while p.eat_any(&[TokenKind::SemiColon, TokenKind::Newline]) {}
+            }
+        });
     });
 }
 
@@ -479,12 +521,7 @@ mod test {
     #[test]
     fn smoke_test() {
         let text = r#"
-type = 4 
-version: list[u32, = 3
-linked: list[string] = {
-    "DATA/Characters/Test/Animations/Skin0.bin\"
-    "DATA/Characters/Test/Test.bin"
-
+type = 4 a 
 version: u32 = 5
 
 "#;
