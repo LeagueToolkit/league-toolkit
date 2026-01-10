@@ -70,8 +70,9 @@ pub enum TreeKind {
   File, 
   TypeExpr, TypeArgList, TypeArg,
   Block,
-  StmtEntry,
-  ExprLiteral, ExprName,
+
+  Entry, EntryKey, EntryValue,
+  Literal,
 }
 impl Display for TreeKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -82,9 +83,10 @@ impl Display for TreeKind {
             TreeKind::TypeArgList => "type argument list",
             TreeKind::TypeArg => "type argument",
             TreeKind::Block => "block",
-            TreeKind::StmtEntry => "bin entry",
-            TreeKind::ExprLiteral => "literal",
-            TreeKind::ExprName => "name?", // TODO: don't think I need this any more
+            TreeKind::Entry => "bin entry",
+            TreeKind::EntryKey => "key",
+            TreeKind::EntryValue => "value",
+            TreeKind::Literal => "literal",
         })
     }
 }
@@ -165,21 +167,16 @@ pub struct MarkClosed {
 
 #[derive(Debug, Clone, Copy)]
 pub enum ErrorKind {
-    Expected {
-        expected: TokenKind,
-        got: TokenKind,
-        for_tree: Option<TreeKind>,
-    },
+    Expected { expected: TokenKind, got: TokenKind },
     UnterminatedString,
-    Unexpected {
-        token: TokenKind,
-    },
+    Unexpected { token: TokenKind },
     Custom(&'static str),
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct ParseError {
     pub span: crate::Span,
+    pub tree: TreeKind,
     pub kind: ErrorKind,
 }
 
@@ -201,19 +198,21 @@ impl Parser {
     }
 
     pub fn build_tree(self) -> Tree {
+        let last_token = self.tokens.last().copied();
+
         let mut tokens = self.tokens.into_iter().peekable();
         let mut events = self.events;
 
         assert!(matches!(events.pop(), Some(Event::Close)));
         let mut stack = Vec::new();
-        let mut last_offset = 0;
+        let mut last_span = crate::Span::default();
         let mut just_opened = false;
         for event in events {
             match event {
                 Event::Open { kind } => {
                     just_opened = true;
                     stack.push(Tree {
-                        span: crate::Span::new(last_offset, 0),
+                        span: crate::Span::new(last_span.end, 0),
                         kind,
                         children: Vec::new(),
                         errors: Vec::new(),
@@ -240,30 +239,34 @@ impl Parser {
                     just_opened = false;
 
                     last.span.end = token.span.end;
-                    last_offset = last.span.end;
+                    last_span = token.span;
                     last.children.push(Child::Token(token));
                 }
                 Event::Error { kind, span } => {
                     let cur_tree = stack.last_mut().unwrap();
-                    let (kind, span) = match kind {
-                        ErrorKind::Expected {
-                            expected,
-                            got,
-                            for_tree: None,
-                        } => (
-                            ErrorKind::Expected {
-                                expected,
-                                got,
-                                for_tree: Some(cur_tree.kind),
-                            },
-                            tokens.peek().map(|t| t.span),
-                        ),
-                        kind => (kind, span),
+                    let span = match kind {
+                        // these errors are talking about what they wanted next
+                        ErrorKind::Expected { .. } | ErrorKind::Unexpected { .. } => {
+                            let mut span = tokens.peek().map(|t| t.span).unwrap_or(last_span);
+                            // so we point at the character just after our token
+                            span.end += 1;
+                            span.start = span.end - 1;
+                            span
+                        }
+                        kind => span
+                            .or(cur_tree.children.last().map(|c| c.span()))
+                            // we can't use Tree.span.end because that's only known on Close
+                            .unwrap_or(crate::Span::new(
+                                cur_tree.span.start,
+                                last_token
+                                    .as_ref()
+                                    .map(|t| t.span.end)
+                                    .unwrap_or(cur_tree.span.start),
+                            )),
                     };
                     cur_tree.errors.push(ParseError {
-                        span: span
-                            .or(cur_tree.children.last().map(|c| c.span()))
-                            .unwrap_or(cur_tree.span),
+                        span,
+                        tree: cur_tree.kind,
                         kind,
                     });
                 }
@@ -375,7 +378,6 @@ impl Parser {
         self.report(ErrorKind::Expected {
             expected: kind,
             got: self.nth(0),
-            for_tree: None,
         });
         false
     }
@@ -404,38 +406,33 @@ pub fn file(p: &mut Parser) {
     p.close(m, TreeKind::File);
 }
 pub fn stmt_entry(p: &mut Parser) {
-    p.scope(TreeKind::StmtEntry, |p| {
-        p.expect(TokenKind::Name);
+    p.scope(TreeKind::Entry, |p| {
+        p.scope(TreeKind::EntryKey, |p| p.expect(TokenKind::Name));
         p.expect(TokenKind::Colon);
-        expr_type(p);
+        p.scope(TreeKind::TypeExpr, type_expr);
         p.expect(TokenKind::Eq);
-        match p.nth(0) {
+        p.scope(TreeKind::EntryValue, |p| match p.nth(0) {
             TokenKind::String => {
-                let m = p.open();
                 p.advance();
-                p.close(m, TreeKind::ExprLiteral);
             }
             TokenKind::UnterminatedString => {
-                let m = p.open();
                 p.advance_with_error(ErrorKind::UnterminatedString, None);
-                p.close(m, TreeKind::ExprLiteral);
             }
             TokenKind::Int | TokenKind::Minus => {
                 let m = p.open();
                 p.advance();
-                p.close(m, TreeKind::ExprLiteral);
+                p.close(m, TreeKind::Literal);
             }
             TokenKind::LCurly => {
                 block(p);
             }
             token @ TokenKind::Eof => p.report(ErrorKind::Unexpected { token }),
             token => p.advance_with_error(ErrorKind::Unexpected { token }, None),
-        }
+        });
     });
 }
 
-pub fn expr_type(p: &mut Parser) -> MarkClosed {
-    let m = p.open();
+pub fn type_expr(p: &mut Parser) {
     p.expect(TokenKind::Name);
     if p.eat(TokenKind::LBrack) {
         while !p.at(TokenKind::RBrack) && !p.eof() {
@@ -447,7 +444,6 @@ pub fn expr_type(p: &mut Parser) -> MarkClosed {
         }
         p.expect(TokenKind::RBrack);
     }
-    p.close(m, TreeKind::TypeExpr)
 }
 
 pub fn expr_type_arg(p: &mut Parser) -> MarkClosed {
