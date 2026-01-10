@@ -404,36 +404,34 @@ pub fn file(p: &mut Parser) {
     p.close(m, TreeKind::File);
 }
 pub fn stmt_entry(p: &mut Parser) {
-    let m = p.open();
-
-    p.expect(TokenKind::Name);
-    p.expect(TokenKind::Colon);
-    expr_type(p);
-    p.expect(TokenKind::Eq);
-    match p.nth(0) {
-        TokenKind::String => {
-            let m = p.open();
-            p.advance();
-            p.close(m, TreeKind::ExprLiteral);
+    p.scope(TreeKind::StmtEntry, |p| {
+        p.expect(TokenKind::Name);
+        p.expect(TokenKind::Colon);
+        expr_type(p);
+        p.expect(TokenKind::Eq);
+        match p.nth(0) {
+            TokenKind::String => {
+                let m = p.open();
+                p.advance();
+                p.close(m, TreeKind::ExprLiteral);
+            }
+            TokenKind::UnterminatedString => {
+                let m = p.open();
+                p.advance_with_error(ErrorKind::UnterminatedString, None);
+                p.close(m, TreeKind::ExprLiteral);
+            }
+            TokenKind::Int | TokenKind::Minus => {
+                let m = p.open();
+                p.advance();
+                p.close(m, TreeKind::ExprLiteral);
+            }
+            TokenKind::LCurly => {
+                block(p);
+            }
+            token @ TokenKind::Eof => p.report(ErrorKind::Unexpected { token }),
+            token => p.advance_with_error(ErrorKind::Unexpected { token }, None),
         }
-        TokenKind::UnterminatedString => {
-            let m = p.open();
-            p.advance_with_error(ErrorKind::UnterminatedString, None);
-            p.close(m, TreeKind::ExprLiteral);
-        }
-        TokenKind::Int | TokenKind::Minus => {
-            let m = p.open();
-            p.advance();
-            p.close(m, TreeKind::ExprLiteral);
-        }
-        TokenKind::LCurly => {
-            block(p);
-        }
-        token @ TokenKind::Eof => p.report(ErrorKind::Unexpected { token }),
-        token => p.advance_with_error(ErrorKind::Unexpected { token }, None),
-    }
-
-    p.close(m, TreeKind::StmtEntry);
+    });
 }
 
 pub fn expr_type(p: &mut Parser) -> MarkClosed {
