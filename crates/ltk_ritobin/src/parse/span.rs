@@ -32,6 +32,6 @@ impl std::ops::Index<&Span> for str {
     fn index(&self, index: &Span) -> &Self::Output {
         let start = index.start as usize;
         let end = index.end as usize;
-        &self[start..end]
+        &self[start..end.min(self.len())]
     }
 }
