@@ -128,6 +128,10 @@ pub fn lex(mut text: &str) -> Vec<Token> {
             }
 
             if let Some(rest) = text.strip_prefix(['\'', '"']) {
+                let eaten = &source[source.len() - text.len()..source.len() - rest.len()]
+                    .chars()
+                    .next()
+                    .unwrap();
                 text = rest;
                 let mut skip = false;
                 loop {
@@ -140,7 +144,7 @@ pub fn lex(mut text: &str) -> Vec<Token> {
                         '\\' => {
                             skip = true;
                         }
-                        '\'' | '"' => match skip {
+                        c if c == *eaten => match skip {
                             true => {
                                 skip = false;
                             }
@@ -149,7 +153,9 @@ pub fn lex(mut text: &str) -> Vec<Token> {
                             }
                         },
                         '\n' | '\r' => break 'kind UnterminatedString,
-                        _ => {}
+                        _ => {
+                            skip = false;
+                        }
                     }
                 }
             }
