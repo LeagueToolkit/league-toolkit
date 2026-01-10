@@ -69,7 +69,7 @@ pub enum TreeKind {
   ErrorTree,
   File, 
   TypeExpr, TypeArgList, TypeArg,
-  Block,
+  Block, BlockKey, Class, ListItem,
 
   Entry, EntryKey, EntryValue, EntryTerminator,
   Literal,
@@ -88,6 +88,9 @@ impl Display for TreeKind {
             TreeKind::EntryValue => "value",
             TreeKind::Literal => "literal",
             TreeKind::EntryTerminator => "bin entry terminator (new line or ';')",
+            TreeKind::BlockKey => "key",
+            TreeKind::Class => "bin class",
+            TreeKind::ListItem => "list item",
         })
     }
 }
@@ -170,6 +173,10 @@ pub struct MarkClosed {
 pub enum ErrorKind {
     Expected {
         expected: TokenKind,
+        got: TokenKind,
+    },
+    ExpectedAny {
+        expected: &'static [TokenKind],
         got: TokenKind,
     },
     UnterminatedString,
@@ -389,6 +396,17 @@ impl Parser {
         }
     }
 
+    fn expect_any(&mut self, kinds: &'static [TokenKind]) -> bool {
+        if self.eat_any(kinds) {
+            return true;
+        }
+        self.report(ErrorKind::ExpectedAny {
+            expected: kinds,
+            got: self.nth(0),
+        });
+        false
+    }
+
     fn expect(&mut self, kind: TokenKind) -> bool {
         if self.eat(kind) {
             return true;
@@ -425,9 +443,12 @@ pub fn file(p: &mut Parser) {
 }
 pub fn stmt_entry(p: &mut Parser) {
     p.scope(TreeKind::Entry, |p| {
-        p.scope(TreeKind::EntryKey, |p| p.expect(TokenKind::Name));
-        p.expect(TokenKind::Colon);
-        p.scope(TreeKind::TypeExpr, type_expr);
+        p.scope(TreeKind::EntryKey, |p| {
+            p.expect_any(&[TokenKind::Name, TokenKind::String])
+        });
+        if p.eat(TokenKind::Colon) {
+            p.scope(TreeKind::TypeExpr, type_expr);
+        }
         p.expect(TokenKind::Eq);
         p.scope(TreeKind::EntryValue, |p| match p.nth(0) {
             TokenKind::String => {
@@ -440,6 +461,12 @@ pub fn stmt_entry(p: &mut Parser) {
                 let m = p.open();
                 p.advance();
                 p.close(m, TreeKind::Literal);
+            }
+            TokenKind::Name => {
+                p.scope(TreeKind::Class, |p| {
+                    p.advance();
+                    block(p);
+                });
             }
             TokenKind::LCurly => {
                 block(p);
@@ -507,14 +534,25 @@ pub fn block(p: &mut Parser) {
     use TokenKind::*;
     assert!(p.at(LCurly));
     let m = p.open();
-
     p.expect(LCurly);
     while !p.at(RCurly) && !p.eof() {
-        stmt_entry(p)
+        match (p.nth(0), p.nth(1)) {
+            (Name, Eq) | (String, Eq) | (Name, Colon) | (String, Colon) => stmt_entry(p),
+            _ => list_item(p),
+        }
     }
     p.expect(RCurly);
 
     p.close(m, TreeKind::Block);
+}
+
+pub fn list_item(p: &mut Parser) {
+    use TokenKind::*;
+    let m = p.open();
+
+    p.advance(); // list item
+    while p.eat(Newline) {}
+    p.close(m, TreeKind::ListItem);
 }
 
 #[cfg(test)]

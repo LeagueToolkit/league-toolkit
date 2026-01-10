@@ -21,6 +21,13 @@ pub enum TokenKind {
   Name, Int,
 }
 
+impl TokenKind {
+    /// Whether we are a string/unterminated string
+    pub fn is_string(&self) -> bool {
+        matches!(self, Self::String | Self::UnterminatedString)
+    }
+}
+
 impl Display for TokenKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
