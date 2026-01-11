@@ -24,15 +24,15 @@ pub fn parse(text: &str) -> cst::Cst {
 
 #[cfg(test)]
 mod test {
+    use crate::typecheck::visitor::TypeChecker;
+
     use super::*;
     #[test]
     fn smoke_test() {
         let text = r#"
-linked: list[string, cock] = {
-    "DATA/Characters/Yasuo/Yasuo.bin"
-    "data/Yasuo_skin0_concat.bin"
-    "data/Yasuo_skin0_StaticMat_proxy.bin"
-}
+EmitterName: string = "EyeTrail1"
+map: map[string, string] = 2
+2
 
 "#;
         let cst = parse(text);
@@ -44,6 +44,14 @@ linked: list[string, cock] = {
         eprintln!("{str}\n====== errors: ======\n");
         for err in errors {
             eprintln!("{:?}: {:#?}", &text[err.span], err.kind);
+        }
+
+        let mut checker = TypeChecker::new(text);
+        cst.walk(&mut checker);
+
+        eprintln!("{str}\n====== type errors: ======\n");
+        for err in checker.into_diagnostics() {
+            eprintln!("{:?}: {:#?}", &text[err.span], err.diagnostic);
         }
     }
 }
