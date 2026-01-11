@@ -1,3 +1,5 @@
+use std::num::ParseIntError;
+
 use indexmap::IndexMap;
 use ltk_meta::{
     value::{
@@ -101,6 +103,8 @@ pub enum Diagnostic {
     UnknownType(Span),
     MissingType(Span),
 
+    ResolveLiteral,
+
     RootNonEntry,
 
     SubtypeCountMismatch {
@@ -118,7 +122,7 @@ pub enum Diagnostic {
 impl Diagnostic {
     pub fn span(&self) -> Option<&Span> {
         match self {
-            MissingTree(_) | EmptyTree(_) | MissingToken(_) | RootNonEntry => None,
+            MissingTree(_) | EmptyTree(_) | MissingToken(_) | RootNonEntry | ResolveLiteral => None,
             UnknownType(span)
             | SubtypeCountMismatch { span, .. }
             | UnexpectedSubtypes { span, .. }
@@ -349,6 +353,46 @@ pub fn resolve_rito_type(ctx: &mut Ctx<'_>, tree: &Cst) -> Result<RitoType, Diag
     Ok(RitoType { base, subtypes })
 }
 
+pub fn resolve_literal(
+    ctx: &mut Ctx,
+    tree: &Cst,
+    kind_hint: Option<BinPropertyKind>,
+) -> Result<Option<PropertyValueEnum>, Diagnostic> {
+    use ltk_meta::value::*;
+    use BinPropertyKind as K;
+    use PropertyValueEnum as P;
+
+    if tree.children.len() != 1 {
+        return Ok(None);
+    }
+    Ok(Some(
+        match tree.children.first().unwrap(/* checked above */) {
+            cst::Child::Token(Token {
+                kind: TokenKind::String,
+                span,
+            }) => P::String(StringValue(ctx.text[span].into())),
+            cst::Child::Token(Token {
+                kind: TokenKind::Number,
+                span,
+            }) => {
+                let txt = &ctx.text[span];
+                let Some(kind_hint) = kind_hint else {
+                    return Ok(None);
+                };
+
+                dbg!(kind_hint);
+                match kind_hint {
+                    K::U8 => P::U8(U8Value(
+                        txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                    )),
+                    _ => return Ok(None),
+                }
+            }
+            _ => return Ok(None),
+        },
+    ))
+}
+
 pub fn resolve_entry(
     ctx: &mut Ctx,
     tree: &Cst,
@@ -370,18 +414,19 @@ pub fn resolve_entry(
         .or(parent_value_kind);
 
     let value = c.expect_tree(Kind::EntryValue)?;
-    let inferred_value = match value.children.first() {
-        Some(cst::Child::Token(Token {
-            kind: TokenKind::String,
-            span,
-            ..
-        })) => Some(PropertyValueEnum::String(ltk_meta::value::StringValue(
-            ctx.text[span].into(),
-        ))),
-        _ => None,
-    };
+    let literal = resolve_literal(ctx, tree, kind.map(|k| k.base))?;
+    // let inferred_value = match value.children.first() {
+    //     Some(cst::Child::Token(Token {
+    //         kind: TokenKind::String,
+    //         span,
+    //         ..
+    //     })) => Some(PropertyValueEnum::String(ltk_meta::value::StringValue(
+    //         ctx.text[span].into(),
+    //     ))),
+    //     _ => None,
+    // };
 
-    let value = match (kind, inferred_value) {
+    let value = match (kind, literal) {
         (None, Some(value)) => value,
         (None, None) => return Err(MissingType(key.span).into()),
         (Some(kind), Some(ivalue)) if ivalue.kind() == kind.base => ivalue,
