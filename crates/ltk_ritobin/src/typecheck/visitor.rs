@@ -1,5 +1,8 @@
 use indexmap::IndexMap;
-use ltk_meta::{value::NoneValue, BinPropertyKind, PropertyValueEnum};
+use ltk_meta::{
+    value::{NoneValue, StringValue},
+    BinPropertyKind, PropertyValueEnum,
+};
 
 use crate::{
     parse::{
@@ -11,8 +14,8 @@ use crate::{
 
 pub struct TypeChecker<'a> {
     ctx: Ctx<'a>,
-    root: IndexMap<String, PropertyValueEnum>,
-    current: Option<(String, PropertyValueEnum)>,
+    pub root: IndexMap<String, PropertyValueEnum>,
+    current: Option<(PropertyValueEnum, PropertyValueEnum)>,
     depth: u32,
 }
 
@@ -28,8 +31,8 @@ impl<'a> TypeChecker<'a> {
             depth: 0,
         }
     }
-    pub fn into_diagnostics(self) -> Vec<DiagnosticWithSpan> {
-        self.ctx.diagnostics
+    pub fn into_parts(self) -> (IndexMap<String, PropertyValueEnum>, Vec<DiagnosticWithSpan>) {
+        (self.root, self.ctx.diagnostics)
     }
 }
 #[derive(Debug, Clone, Copy)]
@@ -115,11 +118,15 @@ use Diagnostic::*;
 #[derive(Debug, Clone, Copy)]
 pub struct RitoType {
     pub base: BinPropertyKind,
+    pub subtypes: [Option<BinPropertyKind>; 2],
 }
 
 impl RitoType {
     pub fn simple(kind: BinPropertyKind) -> Self {
-        Self { base: kind }
+        Self {
+            base: kind,
+            subtypes: [None, None],
+        }
     }
 }
 pub enum Statement {
@@ -211,7 +218,10 @@ pub fn resolve_rito_type(ctx: &mut Ctx<'_>, tree: &Cst) -> Result<RitoType, Diag
         }
     }
 
-    Ok(RitoType { base })
+    Ok(RitoType {
+        base,
+        subtypes: [None, None],
+    })
 }
 
 pub fn resolve_entry(
@@ -241,6 +251,7 @@ pub fn resolve_entry(
     };
 
     let value = match (kind, inferred_value) {
+        (None, Some(value)) => value,
         (None, None) => return Err(MissingType(key.span).into()),
         (Some(kind), Some(ivalue)) if ivalue.kind() == kind.base => ivalue,
         (Some(kind), _) => kind.base.default_value(),
@@ -254,14 +265,43 @@ pub fn resolve_list(ctx: &mut Ctx, tree: &Cst) -> Result<(), Diagnostic> {
 }
 
 impl TypeChecker<'_> {
-    fn inject_child(&mut self, name: Option<String>, child: PropertyValueEnum) {
+    fn inject_child(&mut self, key: Option<PropertyValueEnum>, child: PropertyValueEnum) {
         let Some(current) = self.current.as_mut() else {
-            let Some(name) = name else {
+            let Some(key) = key else {
                 return;
             };
-            self.current.replace((name, child));
+            self.current.replace((key, child));
             return;
         };
+
+        if current.1.kind().subtype_count() == 0 {
+            eprintln!("cant inject into non container");
+            return;
+        }
+        match &mut current.1 {
+            PropertyValueEnum::Container(container_value) => todo!(),
+            PropertyValueEnum::UnorderedContainer(unordered_container_value) => todo!(),
+            PropertyValueEnum::Struct(struct_value) => todo!(),
+            PropertyValueEnum::Embedded(embedded_value) => todo!(),
+            PropertyValueEnum::ObjectLink(object_link_value) => todo!(),
+            PropertyValueEnum::Map(map_value) => {
+                if map_value.value_kind != child.kind() {
+                    eprintln!(
+                        "map value kind mismatch {:?} / {:?}",
+                        map_value.value_kind,
+                        child.kind()
+                    );
+                    return;
+                }
+                let Some(key) = key else {
+                    return;
+                };
+                map_value
+                    .entries
+                    .insert(ltk_meta::value::PropertyValueUnsafeEq(key), child);
+            }
+            _ => unreachable!("non container"),
+        }
     }
 }
 
@@ -278,8 +318,10 @@ impl Visitor for TypeChecker<'_> {
                     Ok(entry) => {
                         eprintln!("entry: {entry:?}");
                         self.inject_child(
-                            Some(self.ctx.text[entry.0].into()),
-                            entry.1.base.make_empty(),
+                            Some(PropertyValueEnum::String(StringValue(
+                                self.ctx.text[entry.0].to_string(),
+                            ))),
+                            entry.1,
                         );
                     }
                     Err(e) => self.ctx.diagnostics.push(e),
@@ -318,13 +360,16 @@ impl Visitor for TypeChecker<'_> {
             return Visit::Continue;
         }
 
-        match self.current.take() {
-            Some((2, name, value)) => {
-                // TODO: warn when shadowed
-                let _existing = self.root.insert(name, value);
-            }
-            _ => {
-                // eprintln!("exit tree with no current?");
+        if self.depth == 1 {
+            match self.current.take() {
+                Some((PropertyValueEnum::String(StringValue(name)), value)) => {
+                    // TODO: warn when shadowed
+
+                    let _existing = self.root.insert(name, value);
+                }
+                _ => {
+                    // eprintln!("exit tree with no current?");
+                }
             }
         }
 
