@@ -31,8 +31,9 @@ mod test {
     fn smoke_test() {
         let text = r#"
 EmitterName: string = "EyeTrail1"
-map: map[string, string] = 2
-2
+map: map[string, string] = {
+    a: string = "hi"
+}
 
 "#;
         let cst = parse(text);
@@ -49,9 +50,13 @@ map: map[string, string] = 2
         let mut checker = TypeChecker::new(text);
         cst.walk(&mut checker);
 
+        let (roots, errors) = checker.into_parts();
+
         eprintln!("{str}\n====== type errors: ======\n");
-        for err in checker.into_diagnostics() {
+        for err in errors {
             eprintln!("{:?}: {:#?}", &text[err.span], err.diagnostic);
         }
+
+        eprintln!("{roots:#?}");
     }
 }
