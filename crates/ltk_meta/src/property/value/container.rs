@@ -11,7 +11,7 @@ use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 use ltk_io_ext::{measure, window_at};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub struct ContainerValue {
     pub item_kind: BinPropertyKind,
     pub items: Vec<PropertyValueEnum>,

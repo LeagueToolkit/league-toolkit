@@ -44,7 +44,7 @@ impl PropertyValue for PropertyValueUnsafeEq {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Default)]
 pub struct MapValue {
     pub key_kind: BinPropertyKind,
     pub value_kind: BinPropertyKind,
