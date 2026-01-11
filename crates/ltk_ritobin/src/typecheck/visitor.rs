@@ -12,7 +12,7 @@ use crate::{
 pub struct TypeChecker<'a> {
     ctx: Ctx<'a>,
     root: IndexMap<String, PropertyValueEnum>,
-    current: Option<(u32, String, PropertyValueEnum)>,
+    current: Option<(String, PropertyValueEnum)>,
     depth: u32,
 }
 
@@ -38,6 +38,7 @@ pub enum Diagnostic {
     EmptyTree(cst::Kind),
     MissingToken(TokenKind),
     UnknownType(Span),
+    MissingType(Span),
 
     RootNonEntry,
 
@@ -59,7 +60,8 @@ impl Diagnostic {
             MissingTree(_) | EmptyTree(_) | MissingToken(_) | RootNonEntry => None,
             UnknownType(span)
             | SubtypeCountMismatch { span, .. }
-            | UnexpectedSubtypes { span, .. } => Some(span),
+            | UnexpectedSubtypes { span, .. }
+            | MissingType(span) => Some(span),
         }
     }
 
@@ -115,6 +117,11 @@ pub struct RitoType {
     pub base: BinPropertyKind,
 }
 
+impl RitoType {
+    pub fn simple(kind: BinPropertyKind) -> Self {
+        Self { base: kind }
+    }
+}
 pub enum Statement {
     KeyValue {
         key: Span,
@@ -210,7 +217,7 @@ pub fn resolve_rito_type(ctx: &mut Ctx<'_>, tree: &Cst) -> Result<RitoType, Diag
 pub fn resolve_entry(
     ctx: &mut Ctx,
     tree: &Cst,
-) -> Result<(Span, Option<RitoType>, Span), MaybeSpanDiag> {
+) -> Result<(Span, PropertyValueEnum), MaybeSpanDiag> {
     let mut c = tree.children.iter();
 
     let key = c.expect_tree(Kind::EntryKey)?;
@@ -222,51 +229,84 @@ pub fn resolve_entry(
         .transpose()?;
 
     let value = c.expect_tree(Kind::EntryValue)?;
+    let inferred_value = match value.children.first() {
+        Some(cst::Child::Token(Token {
+            kind: TokenKind::String,
+            span,
+            ..
+        })) => Some(PropertyValueEnum::String(ltk_meta::value::StringValue(
+            ctx.text[span].into(),
+        ))),
+        _ => None,
+    };
 
-    Ok((key.span, kind, value.span))
+    let value = match (kind, inferred_value) {
+        (None, None) => return Err(MissingType(key.span).into()),
+        (Some(kind), Some(ivalue)) if ivalue.kind() == kind.base => ivalue,
+        (Some(kind), _) => kind.base.default_value(),
+    };
+
+    Ok((key.span, value))
 }
 
 pub fn resolve_list(ctx: &mut Ctx, tree: &Cst) -> Result<(), Diagnostic> {
     Ok(())
 }
 
+impl TypeChecker<'_> {
+    fn inject_child(&mut self, name: Option<String>, child: PropertyValueEnum) {
+        let Some(current) = self.current.as_mut() else {
+            let Some(name) = name else {
+                return;
+            };
+            self.current.replace((name, child));
+            return;
+        };
+    }
+}
+
 impl Visitor for TypeChecker<'_> {
     fn enter_tree(&mut self, tree: &Cst) -> Visit {
         self.depth += 1;
         eprintln!("depth -> {} | {}", self.depth, tree.kind);
-        if tree.kind == cst::Kind::ErrorTree {
-            return Visit::Skip;
-        }
 
-        match self.current.as_mut() {
-            Some((depth, name, value)) => {}
-            None => {
-                match tree.kind {
-                    Kind::Entry => {}
-                    Kind::File => return Visit::Continue,
-                    kind => {
-                        if self.depth == 2 {
-                            self.ctx
-                                .diagnostics
-                                .push(RootNonEntry.default_span(tree.span));
-                        }
-                        return Visit::Skip;
-                    }
-                }
+        match tree.kind {
+            Kind::ErrorTree => return Visit::Skip,
 
+            Kind::Entry => {
                 match resolve_entry(&mut self.ctx, tree).map_err(|e| e.fallback(tree.span)) {
                     Ok(entry) => {
                         eprintln!("entry: {entry:?}");
-                        self.current.replace((
-                            self.depth,
-                            self.ctx.text[entry.0].into(),
-                            PropertyValueEnum::None(NoneValue),
-                        ));
+                        self.inject_child(
+                            Some(self.ctx.text[entry.0].into()),
+                            entry.1.base.make_empty(),
+                        );
                     }
                     Err(e) => self.ctx.diagnostics.push(e),
                 }
             }
+
+            _ => {}
         }
+
+        // match self.current.as_mut() {
+        //     Some((depth, name, value)) => {}
+        //     None => {
+        //         match tree.kind {
+        //             Kind::Entry => {}
+        //             Kind::File => return Visit::Continue,
+        //             kind => {
+        //                 if self.depth == 2 {
+        //                     self.ctx
+        //                         .diagnostics
+        //                         .push(RootNonEntry.default_span(tree.span));
+        //                 }
+        //                 return Visit::Skip;
+        //             }
+        //         }
+        //
+        //     }
+        // }
 
         Visit::Continue
     }
