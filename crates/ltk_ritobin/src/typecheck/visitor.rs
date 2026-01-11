@@ -1,6 +1,8 @@
 use indexmap::IndexMap;
 use ltk_meta::{
-    value::{NoneValue, StringValue},
+    value::{
+        ContainerValue, MapValue, NoneValue, OptionalValue, StringValue, UnorderedContainerValue,
+    },
     BinPropertyKind, PropertyValueEnum,
 };
 
@@ -115,6 +117,33 @@ impl From<Diagnostic> for MaybeSpanDiag {
 
 use Diagnostic::*;
 
+pub trait PropertyValueExt {
+    fn rito_type(&self) -> RitoType;
+}
+impl PropertyValueExt for PropertyValueEnum {
+    fn rito_type(&self) -> RitoType {
+        let base = self.kind();
+        let subtypes = match self {
+            PropertyValueEnum::Map(MapValue {
+                key_kind,
+                value_kind,
+                ..
+            }) => [Some(*key_kind), Some(*value_kind)],
+            PropertyValueEnum::UnorderedContainer(UnorderedContainerValue(ContainerValue {
+                item_kind,
+                ..
+            })) => [Some(*item_kind), None],
+            PropertyValueEnum::Container(ContainerValue { item_kind, .. }) => {
+                [Some(*item_kind), None]
+            }
+            PropertyValueEnum::Optional(OptionalValue { kind, .. }) => [Some(*kind), None],
+
+            _ => [None, None],
+        };
+        RitoType { base, subtypes }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct RitoType {
     pub base: BinPropertyKind,
@@ -126,6 +155,36 @@ impl RitoType {
         Self {
             base: kind,
             subtypes: [None, None],
+        }
+    }
+
+    fn subtype(&self, idx: usize) -> BinPropertyKind {
+        self.subtypes[idx].unwrap_or_default()
+    }
+
+    pub fn make_default(&self) -> PropertyValueEnum {
+        match self.base {
+            BinPropertyKind::Map => PropertyValueEnum::Map(MapValue {
+                key_kind: self.subtype(0),
+                value_kind: self.subtype(1),
+                ..Default::default()
+            }),
+            BinPropertyKind::UnorderedContainer => {
+                PropertyValueEnum::UnorderedContainer(UnorderedContainerValue(ContainerValue {
+                    item_kind: self.subtype(0),
+                    ..Default::default()
+                }))
+            }
+            BinPropertyKind::Container => PropertyValueEnum::Container(ContainerValue {
+                item_kind: self.subtype(0),
+                ..Default::default()
+            }),
+            BinPropertyKind::Optional => PropertyValueEnum::Optional(OptionalValue {
+                kind: self.subtype(0),
+                value: None,
+            }),
+
+            _ => self.base.default_value(),
         }
     }
 }
@@ -170,63 +229,70 @@ pub fn resolve_rito_type(ctx: &mut Ctx<'_>, tree: &Cst) -> Result<RitoType, Diag
     let base =
         BinPropertyKind::from_ritobin_name(&ctx.text[base.span]).ok_or(UnknownType(base.span))?;
 
-    if let Some(subtypes) = c
+    let subtypes = match c
         .clone()
         .find_map(|c| c.tree().filter(|t| t.kind == Kind::TypeArgList))
     {
-        let subtypes_span = subtypes.span;
+        Some(subtypes) => {
+            let subtypes_span = subtypes.span;
 
-        let expected = base.subtype_count();
+            let expected = base.subtype_count();
 
-        if expected == 0 {
-            return Err(UnexpectedSubtypes {
-                span: subtypes_span,
-                base_type: base_span,
-            });
+            if expected == 0 {
+                return Err(UnexpectedSubtypes {
+                    span: subtypes_span,
+                    base_type: base_span,
+                });
+            }
+
+            let subtypes = subtypes
+                .children
+                .iter()
+                .filter_map(|c| c.tree().filter(|t| t.kind == Kind::TypeArg))
+                .map(|t| {
+                    let resolved = BinPropertyKind::from_ritobin_name(&ctx.text[t.span]);
+                    if resolved.is_none() {
+                        ctx.diagnostics.push(UnknownType(t.span).unwrap());
+                    }
+                    (resolved, t.span)
+                })
+                .collect::<Vec<_>>();
+
+            if subtypes.len() > expected.into() {
+                return Err(SubtypeCountMismatch {
+                    span: subtypes[expected as _..]
+                        .iter()
+                        .map(|s| s.1)
+                        .reduce(|acc, s| Span::new(acc.start, s.end))
+                        .unwrap_or(subtypes_span),
+                    got: subtypes.len() as u8,
+                    expected,
+                });
+            }
+            if subtypes.len() < expected.into() {
+                return Err(SubtypeCountMismatch {
+                    span: subtypes.last().map(|s| s.1).unwrap_or(subtypes_span),
+                    got: subtypes.len() as u8,
+                    expected,
+                });
+            }
+
+            let mut subtypes = subtypes.iter();
+            [
+                subtypes.next().and_then(|s| s.0),
+                subtypes.next().and_then(|s| s.0),
+            ]
         }
+        None => [None, None],
+    };
 
-        let subtypes = subtypes
-            .children
-            .iter()
-            .filter_map(|c| c.tree().filter(|t| t.kind == Kind::TypeArg))
-            .map(|t| {
-                let resolved = BinPropertyKind::from_ritobin_name(&ctx.text[t.span]);
-                if resolved.is_none() {
-                    ctx.diagnostics.push(UnknownType(t.span).unwrap());
-                }
-                (resolved, t.span)
-            })
-            .collect::<Vec<_>>();
-
-        if subtypes.len() > expected.into() {
-            return Err(SubtypeCountMismatch {
-                span: subtypes[expected as _..]
-                    .iter()
-                    .map(|s| s.1)
-                    .reduce(|acc, s| Span::new(acc.start, s.end))
-                    .unwrap_or(subtypes_span),
-                got: subtypes.len() as u8,
-                expected,
-            });
-        }
-        if subtypes.len() < expected.into() {
-            return Err(SubtypeCountMismatch {
-                span: subtypes.last().map(|s| s.1).unwrap_or(subtypes_span),
-                got: subtypes.len() as u8,
-                expected,
-            });
-        }
-    }
-
-    Ok(RitoType {
-        base,
-        subtypes: [None, None],
-    })
+    Ok(RitoType { base, subtypes })
 }
 
 pub fn resolve_entry(
     ctx: &mut Ctx,
     tree: &Cst,
+    parent_value_kind: Option<RitoType>,
 ) -> Result<(Span, PropertyValueEnum), MaybeSpanDiag> {
     let mut c = tree.children.iter();
 
@@ -236,7 +302,8 @@ pub fn resolve_entry(
         .clone()
         .find_map(|c| c.tree().filter(|t| t.kind == Kind::TypeExpr))
         .map(|t| resolve_rito_type(ctx, t))
-        .transpose()?;
+        .transpose()?
+        .or(parent_value_kind);
 
     let value = c.expect_tree(Kind::EntryValue)?;
     let inferred_value = match value.children.first() {
@@ -254,7 +321,7 @@ pub fn resolve_entry(
         (None, Some(value)) => value,
         (None, None) => return Err(MissingType(key.span).into()),
         (Some(kind), Some(ivalue)) if ivalue.kind() == kind.base => ivalue,
-        (Some(kind), _) => kind.base.default_value(),
+        (Some(kind), _) => kind.make_default(),
     };
 
     Ok((key.span, value))
@@ -279,8 +346,18 @@ impl TypeChecker<'_> {
             return;
         }
         match &mut current.1 {
-            PropertyValueEnum::Container(container_value) => todo!(),
-            PropertyValueEnum::UnorderedContainer(unordered_container_value) => todo!(),
+            PropertyValueEnum::Container(value)
+            | PropertyValueEnum::UnorderedContainer(UnorderedContainerValue(value)) => {
+                if value.item_kind != child.kind() {
+                    eprintln!(
+                        "container kind mismatch {:?} / {:?}",
+                        value.item_kind,
+                        child.kind()
+                    );
+                    return;
+                }
+                value.items.push(child);
+            }
             PropertyValueEnum::Struct(struct_value) => todo!(),
             PropertyValueEnum::Embedded(embedded_value) => todo!(),
             PropertyValueEnum::ObjectLink(object_link_value) => todo!(),
@@ -314,7 +391,13 @@ impl Visitor for TypeChecker<'_> {
             Kind::ErrorTree => return Visit::Skip,
 
             Kind::Entry => {
-                match resolve_entry(&mut self.ctx, tree).map_err(|e| e.fallback(tree.span)) {
+                match resolve_entry(
+                    &mut self.ctx,
+                    tree,
+                    self.current.as_ref().map(|(_k, v)| v.rito_type()),
+                )
+                .map_err(|e| e.fallback(tree.span))
+                {
                     Ok(entry) => {
                         eprintln!("entry: {entry:?}");
                         self.inject_child(
