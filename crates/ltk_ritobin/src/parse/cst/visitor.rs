@@ -32,9 +32,15 @@ impl Cst {
     }
 
     fn walk_inner<V: Visitor>(&self, visitor: &mut V) -> Visit {
-        let enter = visitor.enter_tree(self);
-        if matches!(enter, Visit::Stop | Visit::Skip) {
-            return enter;
+        if let Some(ret) = match visitor.enter_tree(self) {
+            Visit::Stop => Some(Visit::Stop),
+            Visit::Skip => Some(Visit::Continue),
+            _ => None,
+        } {
+            if visitor.exit_tree(self) == Visit::Stop {
+                return Visit::Stop;
+            }
+            return ret;
         }
 
         for child in &self.children {
