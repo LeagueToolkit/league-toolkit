@@ -7,7 +7,7 @@ use crate::{
 use ltk_io_ext::{ReaderExt as _, WriterExt as _};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Default)]
 pub struct OptionalValue {
     pub kind: BinPropertyKind,
     pub value: Option<Box<PropertyValueEnum>>,

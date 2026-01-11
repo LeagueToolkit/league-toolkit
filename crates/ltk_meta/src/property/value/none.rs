@@ -1,7 +1,7 @@
 use crate::traits::{PropertyValue, ReadProperty, WriteProperty};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub struct NoneValue;
 
 impl PropertyValue for NoneValue {

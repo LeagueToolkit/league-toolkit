@@ -4,7 +4,7 @@ use ltk_io_ext::{ReaderExt, WriterExt};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(transparent)]
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct StringValue(pub String);
 
 impl PropertyValue for StringValue {

@@ -1,3 +1,5 @@
+use crate::value::NoneValue;
+
 use super::traits::{ReaderExt as _, WriterExt as _};
 use super::Error;
 use byteorder::{ReadBytesExt as _, WriteBytesExt as _, LE};
@@ -9,11 +11,22 @@ pub use value::PropertyValueEnum;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, IntoPrimitive, TryFromPrimitive,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    IntoPrimitive,
+    TryFromPrimitive,
+    Default,
 )]
 #[repr(u8)]
 pub enum BinPropertyKind {
     // PRIMITIVE TYPES
+    #[default]
     None = 0,
     Bool = 1,
     I8 = 2,
@@ -128,6 +141,38 @@ impl BinPropertyKind {
         legacy: bool,
     ) -> Result<PropertyValueEnum, super::Error> {
         PropertyValueEnum::from_reader(reader, self, legacy)
+    }
+
+    pub fn default_value(self) -> PropertyValueEnum {
+        match self {
+            Self::None => PropertyValueEnum::None(Default::default()),
+            Self::Bool => PropertyValueEnum::Bool(Default::default()),
+            Self::I8 => PropertyValueEnum::I8(Default::default()),
+            Self::U8 => PropertyValueEnum::U8(Default::default()),
+            Self::I16 => PropertyValueEnum::I16(Default::default()),
+            Self::U16 => PropertyValueEnum::U16(Default::default()),
+            Self::I32 => PropertyValueEnum::I32(Default::default()),
+            Self::U32 => PropertyValueEnum::U32(Default::default()),
+            Self::I64 => PropertyValueEnum::I64(Default::default()),
+            Self::U64 => PropertyValueEnum::U64(Default::default()),
+            Self::F32 => PropertyValueEnum::F32(Default::default()),
+            Self::Vector2 => PropertyValueEnum::Vector2(Default::default()),
+            Self::Vector3 => PropertyValueEnum::Vector3(Default::default()),
+            Self::Vector4 => PropertyValueEnum::Vector4(Default::default()),
+            Self::Matrix44 => PropertyValueEnum::Matrix44(Default::default()),
+            Self::Color => PropertyValueEnum::Color(Default::default()),
+            Self::String => PropertyValueEnum::String(Default::default()),
+            Self::Hash => PropertyValueEnum::Hash(Default::default()),
+            Self::WadChunkLink => PropertyValueEnum::WadChunkLink(Default::default()),
+            Self::Container => PropertyValueEnum::Container(Default::default()),
+            Self::UnorderedContainer => PropertyValueEnum::UnorderedContainer(Default::default()),
+            Self::Struct => PropertyValueEnum::Struct(Default::default()),
+            Self::Embedded => PropertyValueEnum::Embedded(Default::default()),
+            Self::ObjectLink => PropertyValueEnum::ObjectLink(Default::default()),
+            Self::Optional => PropertyValueEnum::Optional(Default::default()),
+            Self::Map => PropertyValueEnum::Map(Default::default()),
+            Self::BitBool => PropertyValueEnum::BitBool(Default::default()),
+        }
     }
 }
 

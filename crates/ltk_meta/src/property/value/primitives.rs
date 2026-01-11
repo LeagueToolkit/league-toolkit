@@ -4,7 +4,7 @@ use ltk_io_ext::{ReaderExt, WriterExt};
 macro_rules! impl_prim {
     ($name:tt, $rust:tt, [$($derive:tt),*], $method:ident $(::<$endian:ident>)?, $($write_value:tt)*) => {
         #[repr(transparent)]
-        #[derive(Clone, Debug, PartialEq, $($derive),*)]
+        #[derive(Clone, Debug, PartialEq, Default, $($derive),*)]
         #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
         pub struct $name(pub $rust);
 

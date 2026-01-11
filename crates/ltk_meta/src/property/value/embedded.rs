@@ -3,7 +3,7 @@ use crate::traits::{PropertyValue, ReadProperty, WriteProperty};
 use super::StructValue;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Default)]
 pub struct EmbeddedValue(pub StructValue);
 
 impl PropertyValue for EmbeddedValue {
