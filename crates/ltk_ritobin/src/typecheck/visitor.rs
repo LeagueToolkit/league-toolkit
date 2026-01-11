@@ -1,5 +1,5 @@
 use indexmap::IndexMap;
-use ltk_meta::{BinPropertyKind, PropertyValueEnum};
+use ltk_meta::{value::NoneValue, BinPropertyKind, PropertyValueEnum};
 
 use crate::{
     parse::{
@@ -12,7 +12,8 @@ use crate::{
 pub struct TypeChecker<'a> {
     ctx: Ctx<'a>,
     root: IndexMap<String, PropertyValueEnum>,
-    current: Option<(String, PropertyValueEnum)>,
+    current: Option<(u32, String, PropertyValueEnum)>,
+    depth: u32,
 }
 
 impl<'a> TypeChecker<'a> {
@@ -24,6 +25,7 @@ impl<'a> TypeChecker<'a> {
             },
             root: IndexMap::new(),
             current: None,
+            depth: 0,
         }
     }
     pub fn into_diagnostics(self) -> Vec<DiagnosticWithSpan> {
@@ -36,6 +38,8 @@ pub enum Diagnostic {
     EmptyTree(cst::Kind),
     MissingToken(TokenKind),
     UnknownType(Span),
+
+    RootNonEntry,
 
     SubtypeCountMismatch {
         span: Span,
@@ -52,7 +56,7 @@ pub enum Diagnostic {
 impl Diagnostic {
     pub fn span(&self) -> Option<&Span> {
         match self {
-            MissingTree(_) | EmptyTree(_) | MissingToken(_) => None,
+            MissingTree(_) | EmptyTree(_) | MissingToken(_) | RootNonEntry => None,
             UnknownType(span)
             | SubtypeCountMismatch { span, .. }
             | UnexpectedSubtypes { span, .. } => Some(span),
@@ -228,22 +232,36 @@ pub fn resolve_list(ctx: &mut Ctx, tree: &Cst) -> Result<(), Diagnostic> {
 
 impl Visitor for TypeChecker<'_> {
     fn enter_tree(&mut self, tree: &Cst) -> Visit {
+        self.depth += 1;
+        eprintln!("depth -> {} | {}", self.depth, tree.kind);
         if tree.kind == cst::Kind::ErrorTree {
             return Visit::Skip;
         }
 
         match self.current.as_mut() {
-            Some((name, value)) => {}
+            Some((depth, name, value)) => {}
             None => {
                 match tree.kind {
                     Kind::Entry => {}
                     Kind::File => return Visit::Continue,
-                    _ => return Visit::Skip,
+                    kind => {
+                        if self.depth == 2 {
+                            self.ctx
+                                .diagnostics
+                                .push(RootNonEntry.default_span(tree.span));
+                        }
+                        return Visit::Skip;
+                    }
                 }
 
                 match resolve_entry(&mut self.ctx, tree).map_err(|e| e.fallback(tree.span)) {
                     Ok(entry) => {
                         eprintln!("entry: {entry:?}");
+                        self.current.replace((
+                            self.depth,
+                            self.ctx.text[entry.0].into(),
+                            PropertyValueEnum::None(NoneValue),
+                        ));
                     }
                     Err(e) => self.ctx.diagnostics.push(e),
                 }
@@ -254,17 +272,19 @@ impl Visitor for TypeChecker<'_> {
     }
 
     fn exit_tree(&mut self, tree: &cst::Cst) -> Visit {
+        self.depth -= 1;
+        eprintln!("depth <- {} | {}", self.depth, tree.kind);
         if tree.kind == cst::Kind::ErrorTree {
             return Visit::Continue;
         }
 
         match self.current.take() {
-            Some((name, value)) => {
+            Some((2, name, value)) => {
                 // TODO: warn when shadowed
                 let _existing = self.root.insert(name, value);
             }
-            None => {
-                eprintln!("exit tree with no current?");
+            _ => {
+                // eprintln!("exit tree with no current?");
             }
         }
 
