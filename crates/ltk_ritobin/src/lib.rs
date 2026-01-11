@@ -47,6 +47,7 @@
 pub mod error;
 pub mod hashes;
 pub mod parse;
+pub mod typecheck;
 pub mod types;
 pub mod writer;
 
