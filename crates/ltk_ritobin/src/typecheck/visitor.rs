@@ -14,10 +14,66 @@ use crate::{
     typecheck::RitobinName,
 };
 
+#[derive(Debug, Clone)]
+pub struct IrEntry {
+    pub key: PropertyValueEnum,
+    pub value: PropertyValueEnum,
+}
+
+#[derive(Debug, Clone)]
+pub struct IrListItem(pub PropertyValueEnum);
+
+#[derive(Debug, Clone)]
+pub enum IrItem {
+    Entry(IrEntry),
+    ListItem(IrListItem),
+}
+
+impl IrItem {
+    pub fn is_entry(&self) -> bool {
+        matches!(self, Self::Entry { .. })
+    }
+
+    pub fn as_entry(&self) -> Option<&IrEntry> {
+        match self {
+            IrItem::Entry(i) => Some(i),
+            _ => None,
+        }
+    }
+    pub fn is_list_item(&self) -> bool {
+        matches!(self, Self::ListItem { .. })
+    }
+    pub fn as_list_item(&self) -> Option<&IrListItem> {
+        match self {
+            IrItem::ListItem(i) => Some(i),
+            _ => None,
+        }
+    }
+    pub fn value(&self) -> &PropertyValueEnum {
+        match self {
+            IrItem::Entry(i) => &i.value,
+            IrItem::ListItem(i) => &i.0,
+        }
+    }
+    pub fn value_mut(&mut self) -> &mut PropertyValueEnum {
+        match self {
+            IrItem::Entry(i) => &mut i.value,
+            IrItem::ListItem(i) => &mut i.0,
+        }
+    }
+    pub fn into_value(self) -> PropertyValueEnum {
+        match self {
+            IrItem::Entry(i) => i.value,
+            IrItem::ListItem(i) => i.0,
+        }
+    }
+}
+
 pub struct TypeChecker<'a> {
     ctx: Ctx<'a>,
     pub root: IndexMap<String, PropertyValueEnum>,
-    current: Option<(PropertyValueEnum, PropertyValueEnum)>,
+    // current: Option<(PropertyValueEnum, PropertyValueEnum)>,
+    stack: Vec<(u32, IrItem)>,
     depth: u32,
 }
 
@@ -29,7 +85,7 @@ impl<'a> TypeChecker<'a> {
                 diagnostics: Vec::new(),
             },
             root: IndexMap::new(),
-            current: None,
+            stack: Vec::new(),
             depth: 0,
         }
     }
@@ -160,6 +216,10 @@ impl RitoType {
 
     fn subtype(&self, idx: usize) -> BinPropertyKind {
         self.subtypes[idx].unwrap_or_default()
+    }
+
+    fn value_subtype(&self) -> Option<BinPropertyKind> {
+        self.subtypes[1].or(self.subtypes[0])
     }
 
     pub fn make_default(&self) -> PropertyValueEnum {
@@ -293,10 +353,14 @@ pub fn resolve_entry(
     ctx: &mut Ctx,
     tree: &Cst,
     parent_value_kind: Option<RitoType>,
-) -> Result<(Span, PropertyValueEnum), MaybeSpanDiag> {
+) -> Result<IrEntry, MaybeSpanDiag> {
     let mut c = tree.children.iter();
 
     let key = c.expect_tree(Kind::EntryKey)?;
+
+    let parent_value_kind = parent_value_kind
+        .and_then(|p| p.value_subtype())
+        .map(RitoType::simple);
 
     let kind = c
         .clone()
@@ -324,7 +388,10 @@ pub fn resolve_entry(
         (Some(kind), _) => kind.make_default(),
     };
 
-    Ok((key.span, value))
+    Ok(IrEntry {
+        key: PropertyValueEnum::String(StringValue(ctx.text[key.span].into())),
+        value,
+    })
 }
 
 pub fn resolve_list(ctx: &mut Ctx, tree: &Cst) -> Result<(), Diagnostic> {
@@ -332,80 +399,73 @@ pub fn resolve_list(ctx: &mut Ctx, tree: &Cst) -> Result<(), Diagnostic> {
 }
 
 impl TypeChecker<'_> {
-    fn inject_child(&mut self, key: Option<PropertyValueEnum>, child: PropertyValueEnum) {
-        let Some(current) = self.current.as_mut() else {
-            let Some(key) = key else {
-                return;
-            };
-            self.current.replace((key, child));
-            return;
-        };
-
-        if current.1.kind().subtype_count() == 0 {
+    fn merge_ir(&mut self, mut parent: IrItem, child: IrItem) -> IrItem {
+        if parent.value().kind().subtype_count() == 0 {
             eprintln!("cant inject into non container");
-            return;
+            return parent;
         }
-        match &mut current.1 {
-            PropertyValueEnum::Container(value)
-            | PropertyValueEnum::UnorderedContainer(UnorderedContainerValue(value)) => {
-                if value.item_kind != child.kind() {
+        match parent.value_mut() {
+            PropertyValueEnum::Container(list)
+            | PropertyValueEnum::UnorderedContainer(UnorderedContainerValue(list)) => {
+                let IrItem::ListItem(IrListItem(value)) = child else {
+                    eprintln!("list item must be list item");
+                    return parent;
+                };
+                if list.item_kind != value.kind() {
                     eprintln!(
                         "container kind mismatch {:?} / {:?}",
-                        value.item_kind,
-                        child.kind()
+                        list.item_kind,
+                        value.kind()
                     );
-                    return;
+                    return parent;
                 }
-                value.items.push(child);
+                list.items.push(value);
             }
             PropertyValueEnum::Struct(struct_value) => todo!(),
             PropertyValueEnum::Embedded(embedded_value) => todo!(),
             PropertyValueEnum::ObjectLink(object_link_value) => todo!(),
             PropertyValueEnum::Map(map_value) => {
-                if map_value.value_kind != child.kind() {
+                let IrItem::Entry(IrEntry { key, value }) = child else {
+                    eprintln!("map item must be entry");
+                    return parent;
+                };
+                if map_value.value_kind != value.kind() {
                     eprintln!(
                         "map value kind mismatch {:?} / {:?}",
                         map_value.value_kind,
-                        child.kind()
+                        value.kind()
                     );
-                    return;
+                    return parent;
                 }
-                let Some(key) = key else {
-                    return;
-                };
                 map_value
                     .entries
-                    .insert(ltk_meta::value::PropertyValueUnsafeEq(key), child);
+                    .insert(ltk_meta::value::PropertyValueUnsafeEq(key), value);
             }
             _ => unreachable!("non container"),
         }
+        parent
     }
 }
 
 impl Visitor for TypeChecker<'_> {
     fn enter_tree(&mut self, tree: &Cst) -> Visit {
         self.depth += 1;
-        eprintln!("depth -> {} | {}", self.depth, tree.kind);
+        let indent = "  ".repeat(self.depth.saturating_sub(1) as _);
+        eprintln!("{indent}> d:{} | {:?}", self.depth, tree.kind);
+        eprintln!("{indent}> stack: {:?}", &self.stack);
+
+        let parent = self.stack.last();
 
         match tree.kind {
             Kind::ErrorTree => return Visit::Skip,
 
             Kind::Entry => {
-                match resolve_entry(
-                    &mut self.ctx,
-                    tree,
-                    self.current.as_ref().map(|(_k, v)| v.rito_type()),
-                )
-                .map_err(|e| e.fallback(tree.span))
+                match resolve_entry(&mut self.ctx, tree, parent.map(|p| p.1.value().rito_type()))
+                    .map_err(|e| e.fallback(tree.span))
                 {
                     Ok(entry) => {
                         eprintln!("entry: {entry:?}");
-                        self.inject_child(
-                            Some(PropertyValueEnum::String(StringValue(
-                                self.ctx.text[entry.0].to_string(),
-                            ))),
-                            entry.1,
-                        );
+                        self.stack.push((self.depth, IrItem::Entry(entry)));
                     }
                     Err(e) => self.ctx.diagnostics.push(e),
                 }
@@ -438,21 +498,51 @@ impl Visitor for TypeChecker<'_> {
 
     fn exit_tree(&mut self, tree: &cst::Cst) -> Visit {
         self.depth -= 1;
-        eprintln!("depth <- {} | {}", self.depth, tree.kind);
+        let indent = "  ".repeat(self.depth.saturating_sub(1) as _);
+        eprintln!("{indent}< d:{} | {:?}", self.depth, tree.kind);
+        eprintln!("{indent}< stack: {:?}", &self.stack);
         if tree.kind == cst::Kind::ErrorTree {
             return Visit::Continue;
         }
 
-        if self.depth == 1 {
-            match self.current.take() {
-                Some((PropertyValueEnum::String(StringValue(name)), value)) => {
-                    // TODO: warn when shadowed
-
-                    let _existing = self.root.insert(name, value);
+        match self.stack.pop() {
+            Some(ir) => {
+                if ir.0 != self.depth + 1 {
+                    self.stack.push(ir);
+                    return Visit::Continue;
                 }
-                _ => {
-                    // eprintln!("exit tree with no current?");
+                match self.stack.pop() {
+                    Some(parent) => {
+                        let parent = self.merge_ir(parent.1, ir.1);
+                        self.stack.push((self.depth, parent));
+                    }
+                    None => {
+                        let (
+                            _,
+                            IrItem::Entry(IrEntry {
+                                key: PropertyValueEnum::String(StringValue(key)),
+                                value,
+                            }),
+                        ) = ir.clone()
+                        else {
+                            match self.depth {
+                                1 => self
+                                    .ctx
+                                    .diagnostics
+                                    .push(RootNonEntry.default_span(tree.span)),
+                                _ => {
+                                    self.stack.push(ir);
+                                }
+                            }
+                            return Visit::Continue;
+                        };
+                        let _existing = self.root.insert(key, value);
+                    }
                 }
+                // TODO: warn when shadowed
+            }
+            _ => {
+                // eprintln!("exit tree with no current?");
             }
         }
 
