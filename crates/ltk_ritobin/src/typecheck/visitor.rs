@@ -174,6 +174,7 @@ impl Diagnostic {
             | SubtypeCountMismatch { span, .. }
             | UnexpectedSubtypes { span, .. }
             | MissingType(span)
+            | TypeMismatch { span, .. }
             | ShadowedEntry { shadower: span, .. } => Some(span),
         }
     }
@@ -485,7 +486,17 @@ pub fn resolve_entry(
     let value = match (kind, literal) {
         (None, Some(value)) => value,
         (None, None) => return Err(MissingType(key.span).into()),
-        (Some(kind), Some(ivalue)) if ivalue.kind() == kind.base => ivalue,
+        (Some(kind), Some(ivalue)) => match ivalue.kind() == kind.base {
+            true => ivalue,
+            false => {
+                return Err(TypeMismatch {
+                    span: value_span,
+                    expected: kind,
+                    got: ivalue.rito_type(),
+                }
+                .into())
+            }
+        },
         (Some(kind), _) => kind.make_default(),
     };
 
