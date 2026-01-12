@@ -26,6 +26,15 @@ pub trait Visitor {
     }
 }
 
+pub trait VisitorExt: Sized + Visitor {
+    fn walk(mut self, tree: &Cst) -> Self {
+        tree.walk(&mut self);
+        self
+    }
+}
+
+impl<T: Sized + Visitor> VisitorExt for T {}
+
 impl Cst {
     pub fn walk<V: Visitor>(&self, visitor: &mut V) {
         self.walk_inner(visitor);
