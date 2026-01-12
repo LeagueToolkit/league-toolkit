@@ -476,6 +476,8 @@ pub fn resolve_value(
     use BinPropertyKind as K;
     use PropertyValueEnum as P;
 
+    dbg!(tree, kind_hint);
+
     let Some(child) = tree.children.first() else {
         return Ok(None);
     };
@@ -789,6 +791,36 @@ impl Visitor for TypeChecker<'_> {
 
         match tree.kind {
             Kind::ErrorTree => return Visit::Skip,
+
+            Kind::ListItem => {
+                dbg!(parent);
+                match resolve_value(
+                    &mut self.ctx,
+                    tree,
+                    parent.and_then(|p| {
+                        let t = p.1.value().rito_type();
+                        if let Some(subtype) = t.value_subtype() {
+                            return Some(subtype);
+                        }
+                        use BinPropertyKind as K;
+                        dbg!(t.base);
+                        match t.base {
+                            K::Vector2 | K::Vector3 | K::Vector4 => Some(BinPropertyKind::F32),
+                            K::Color => Some(BinPropertyKind::U8),
+                            _ => None,
+                        }
+                    }),
+                ) {
+                    Ok(Some(item)) => {
+                        eprintln!("{indent}  push {item:?}");
+                        self.stack.push((depth, IrItem::ListItem(IrListItem(item))));
+                    }
+                    Ok(None) => {
+                        eprintln!("{indent}  ERROR empty item");
+                    }
+                    Err(e) => self.ctx.diagnostics.push(e.default_span(tree.span)),
+                }
+            }
 
             Kind::Entry => {
                 match resolve_entry(&mut self.ctx, tree, parent.map(|p| p.1.value().rito_type()))
