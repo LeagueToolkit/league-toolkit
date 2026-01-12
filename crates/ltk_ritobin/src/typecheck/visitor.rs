@@ -759,7 +759,9 @@ impl TypeChecker<'_> {
                     .entries
                     .insert(ltk_meta::value::PropertyValueUnsafeEq(key.inner), value);
             }
-            other => unreachable!("cant inject into {:?}", other.kind()),
+            other => {
+                eprintln!("cant inject into {:?}", other.kind())
+            }
         }
         parent
     }
