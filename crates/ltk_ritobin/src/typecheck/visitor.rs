@@ -288,7 +288,7 @@ impl PropertyValueExt for PropertyValueEnum {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RitoType {
     pub base: BinPropertyKind,
     pub subtypes: [Option<BinPropertyKind>; 2],
@@ -533,13 +533,39 @@ pub fn resolve_entry(
 
     let kind = c
         .clone()
-        .find_map(|c| c.tree().filter(|t| t.kind == Kind::TypeExpr))
-        .map(|t| resolve_rito_type(ctx, t))
-        .transpose()?
-        .or(parent_value_kind);
+        .find_map(|c| c.tree().filter(|t| t.kind == Kind::TypeExpr));
+    let kind_span = kind.map(|k| k.span);
+    let kind = kind.map(|t| resolve_rito_type(ctx, t)).transpose()?;
 
     let value = c.expect_tree(Kind::EntryValue)?;
     let value_span = value.span;
+
+    // entries: map[string, u8] = {
+    //     "bad": string = "string"
+    //              ^
+    // }
+    if let Some(parent) = parent_value_kind.as_ref() {
+        if let Some((kind, kind_span)) = kind.as_ref().zip(kind_span) {
+            if parent != kind {
+                ctx.diagnostics.push(
+                    TypeMismatch {
+                        span: kind_span,
+                        expected: *parent,
+                        got: (*kind).into(),
+                    }
+                    .unwrap(),
+                );
+                return Ok(IrEntry {
+                    key: PropertyValueEnum::String(StringValue(ctx.text[key.span].into()))
+                        .with_span(key.span),
+                    value: parent.make_default().with_span(value.span),
+                });
+            }
+        }
+    }
+
+    let kind = kind.or(parent_value_kind);
+
     let literal = value
         .children
         .iter()
