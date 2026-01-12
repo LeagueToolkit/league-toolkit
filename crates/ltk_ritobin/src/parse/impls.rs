@@ -32,7 +32,7 @@ pub fn stmt_or_list_item(p: &mut Parser) {
         }
         (Name | HexLit | String | Number | True | False, _, _) => {
             let m = p.open();
-            p.advance();
+            p.scope(TreeKind::Literal, |p| p.advance());
             p.close(m, TreeKind::ListItem);
             p.eat(Comma);
         }
@@ -94,12 +94,6 @@ pub fn stmt(p: &mut Parser) {
 pub fn entry_value(p: &mut Parser) -> bool {
     p.scope(TreeKind::EntryValue, |p| {
         match (p.nth(0), p.nth(1)) {
-            (String, _) => {
-                p.advance();
-            }
-            (UnterminatedString, _) => {
-                p.advance_with_error(ErrorKind::UnterminatedString, None);
-            }
             (Name, _) | (HexLit, LCurly) => {
                 p.scope(TreeKind::Class, |p| {
                     p.advance();
@@ -108,10 +102,11 @@ pub fn entry_value(p: &mut Parser) -> bool {
                     }
                 });
             }
-            (Number | HexLit | True | False, _) => {
-                let m = p.open();
-                p.advance();
-                p.close(m, TreeKind::Literal);
+            (UnterminatedString, _) => {
+                p.advance_with_error(ErrorKind::UnterminatedString, None);
+            }
+            (String | Number | HexLit | True | False, _) => {
+                p.scope(TreeKind::Literal, |p| p.advance());
             }
             (LCurly, _) => {
                 block(p);
