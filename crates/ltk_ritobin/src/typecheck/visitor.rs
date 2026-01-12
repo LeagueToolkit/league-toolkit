@@ -478,9 +478,29 @@ pub fn resolve_literal(
                     return Ok(None);
                 };
 
-                dbg!(kind_hint);
                 match kind_hint {
                     K::U8 => P::U8(U8Value(
+                        txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                    )),
+                    K::U16 => P::U16(U16Value(
+                        txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                    )),
+                    K::U32 => P::U32(U32Value(
+                        txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                    )),
+                    K::U64 => P::U64(U64Value(
+                        txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                    )),
+                    K::I8 => P::I8(I8Value(
+                        txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                    )),
+                    K::I16 => P::I16(I16Value(
+                        txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                    )),
+                    K::I32 => P::I32(I32Value(
+                        txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                    )),
+                    K::I64 => P::I64(I64Value(
                         txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
                     )),
                     _ => {
