@@ -21,6 +21,11 @@ pub static LEAGUE_FILE_MAGIC_BYTES: &[LeagueFilePattern] = &[
     // These are also effectively fixed headers
     LeagueFilePattern::from_fn(|data| &data[1..5] == b"LuaQ", 5, LeagueFileKind::LuaObj),
     LeagueFilePattern::from_fn(|data| &data[1..4] == b"PNG", 4, LeagueFileKind::Png),
+    LeagueFilePattern::from_fn(
+        |data| &data[0..4] == b"r3d2" && u32::from_le_bytes(data[4..8].try_into().unwrap()) == 1,
+        8,
+        LeagueFileKind::WwisePackage,
+    ),
     // Slightly less confident fixed headers
     LeagueFilePattern::from_fn(
         |data| u32::from_le_bytes(data[4..8].try_into().unwrap()) == 0x22FD4FC3,
@@ -49,11 +54,6 @@ pub static LEAGUE_FILE_MAGIC_BYTES: &[LeagueFilePattern] = &[
         |data| u32::from_le_bytes(data[..4].try_into().unwrap()) == 3,
         4,
         LeagueFileKind::LightGrid,
-    ),
-    LeagueFilePattern::from_fn(
-        |data| u32::from_le_bytes(data[4..8].try_into().unwrap()) == 1,
-        8,
-        LeagueFileKind::WwisePackage,
     ),
 ];
 
