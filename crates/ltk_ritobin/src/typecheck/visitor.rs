@@ -1,4 +1,5 @@
 use std::{
+    fmt::{Debug, Display},
     num::ParseIntError,
     ops::{Deref, DerefMut},
 };
@@ -138,6 +139,34 @@ impl<'a> TypeChecker<'a> {
         (self.root, self.ctx.diagnostics)
     }
 }
+
+#[derive(Debug, Clone, Copy)]
+pub enum RitoTypeOrNumeric {
+    RitoType(RitoType),
+    Numeric,
+}
+
+impl RitoTypeOrNumeric {
+    pub fn numeric() -> Self {
+        Self::Numeric
+    }
+}
+
+impl From<RitoType> for RitoTypeOrNumeric {
+    fn from(value: RitoType) -> Self {
+        RitoTypeOrNumeric::RitoType(value)
+    }
+}
+
+impl Display for RitoTypeOrNumeric {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RitoTypeOrNumeric::RitoType(rito_type) => Display::fmt(rito_type, f),
+            RitoTypeOrNumeric::Numeric => f.write_str("numeric type"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum Diagnostic {
     MissingTree(cst::Kind),
@@ -145,6 +174,12 @@ pub enum Diagnostic {
     MissingToken(TokenKind),
     UnknownType(Span),
     MissingType(Span),
+
+    TypeMismatch {
+        span: Span,
+        expected: RitoType,
+        got: RitoTypeOrNumeric,
+    },
 
     ResolveLiteral,
 
@@ -257,6 +292,20 @@ impl PropertyValueExt for PropertyValueEnum {
 pub struct RitoType {
     pub base: BinPropertyKind,
     pub subtypes: [Option<BinPropertyKind>; 2],
+}
+
+impl Display for RitoType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let base = self.base.to_ritobin_name();
+        match self.subtypes {
+            [None, None] => f.write_str(base),
+            [Some(a), None] => write!(f, "{base}[{}]", a.to_ritobin_name()),
+            [Some(a), Some(b)] => {
+                write!(f, "{base}[{},{}]", a.to_ritobin_name(), b.to_ritobin_name())
+            }
+            _ => write!(f, "{base}[!!]"),
+        }
+    }
 }
 
 impl RitoType {
@@ -406,7 +455,7 @@ pub fn resolve_literal(
     ctx: &mut Ctx,
     tree: &Cst,
     kind_hint: Option<BinPropertyKind>,
-) -> Result<Option<PropertyValueEnum>, Diagnostic> {
+) -> Result<Option<Spanned<PropertyValueEnum>>, Diagnostic> {
     use ltk_meta::value::*;
     use BinPropertyKind as K;
     use PropertyValueEnum as P;
@@ -419,7 +468,7 @@ pub fn resolve_literal(
             cst::Child::Token(Token {
                 kind: TokenKind::String,
                 span,
-            }) => P::String(StringValue(ctx.text[span].into())),
+            }) => P::String(StringValue(ctx.text[span].into())).with_span(*span),
             cst::Child::Token(Token {
                 kind: TokenKind::Number,
                 span,
@@ -434,8 +483,15 @@ pub fn resolve_literal(
                     K::U8 => P::U8(U8Value(
                         txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
                     )),
-                    _ => return Ok(None),
+                    _ => {
+                        return Err(TypeMismatch {
+                            span: *span,
+                            expected: RitoType::simple(kind_hint),
+                            got: RitoTypeOrNumeric::numeric(),
+                        })
+                    }
                 }
+                .with_span(*span)
             }
             _ => return Ok(None),
         },
@@ -490,19 +546,19 @@ pub fn resolve_entry(
             true => ivalue,
             false => {
                 return Err(TypeMismatch {
-                    span: value_span,
+                    span: ivalue.span,
                     expected: kind,
-                    got: ivalue.rito_type(),
+                    got: ivalue.rito_type().into(),
                 }
                 .into())
             }
         },
-        (Some(kind), _) => kind.make_default(),
+        (Some(kind), _) => kind.make_default().with_span(value_span),
     };
 
     Ok(IrEntry {
         key: PropertyValueEnum::String(StringValue(ctx.text[key.span].into())).with_span(key.span),
-        value: value.with_span(value_span),
+        value,
     })
 }
 
