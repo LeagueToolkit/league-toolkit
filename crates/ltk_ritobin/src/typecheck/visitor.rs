@@ -463,7 +463,14 @@ pub fn resolve_entry(
 
     let value = c.expect_tree(Kind::EntryValue)?;
     let value_span = value.span;
-    let literal = resolve_literal(ctx, tree, kind.map(|k| k.base))?;
+    let literal = value
+        .children
+        .iter()
+        .expect_tree(Kind::Literal)
+        .ok()
+        .map(|tree| resolve_literal(ctx, tree, kind.map(|k| k.base)))
+        .transpose()?
+        .flatten();
     // let inferred_value = match value.children.first() {
     //     Some(cst::Child::Token(Token {
     //         kind: TokenKind::String,
