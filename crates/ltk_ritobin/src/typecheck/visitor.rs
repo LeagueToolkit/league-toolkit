@@ -8,8 +8,8 @@ use indexmap::IndexMap;
 use ltk_hash::fnv1a;
 use ltk_meta::{
     value::{
-        ContainerValue, EmbeddedValue, HashValue, MapValue, NoneValue, OptionalValue, StringValue,
-        UnorderedContainerValue,
+        ContainerValue, EmbeddedValue, F32Value, HashValue, MapValue, NoneValue, OptionalValue,
+        StringValue, UnorderedContainerValue, Vector2Value, Vector3Value,
     },
     BinPropertyKind, PropertyValueEnum,
 };
@@ -123,6 +123,7 @@ pub struct TypeChecker<'a> {
     pub root: IndexMap<String, Spanned<PropertyValueEnum>>,
     // current: Option<(PropertyValueEnum, PropertyValueEnum)>,
     stack: Vec<(u32, IrItem)>,
+    list_queue: Vec<IrListItem>,
     depth: u32,
 }
 
@@ -135,6 +136,7 @@ impl<'a> TypeChecker<'a> {
             },
             root: IndexMap::new(),
             stack: Vec::new(),
+            list_queue: Vec::new(),
             depth: 0,
         }
     }
@@ -178,6 +180,14 @@ impl Display for RitoTypeOrVirtual {
 }
 
 #[derive(Debug, Clone, Copy)]
+pub enum ColorOrVec {
+    Color,
+    Vec2,
+    Vec3,
+    Vec4,
+}
+
+#[derive(Debug, Clone, Copy)]
 pub enum Diagnostic {
     MissingTree(cst::Kind),
     EmptyTree(cst::Kind),
@@ -194,6 +204,17 @@ pub enum Diagnostic {
 
     ResolveLiteral,
     AmbiguousNumeric(Span),
+
+    NotEnoughItems {
+        span: Span,
+        got: u8,
+        expected: ColorOrVec,
+    },
+    TooManyItems {
+        span: Span,
+        extra: u8,
+        expected: ColorOrVec,
+    },
 
     RootNonEntry,
     ShadowedEntry {
@@ -226,7 +247,9 @@ impl Diagnostic {
             | TypeMismatch { span, .. }
             | ShadowedEntry { shadower: span, .. }
             | InvalidHash(span)
-            | AmbiguousNumeric(span) => Some(span),
+            | AmbiguousNumeric(span)
+            | NotEnoughItems { span, .. }
+            | TooManyItems { span, .. } => Some(span),
         }
     }
 
@@ -476,7 +499,7 @@ pub fn resolve_value(
     use BinPropertyKind as K;
     use PropertyValueEnum as P;
 
-    dbg!(tree, kind_hint);
+    // dbg!(tree, kind_hint);
 
     let Some(child) = tree.children.first() else {
         return Ok(None);
@@ -769,6 +792,96 @@ impl TypeChecker<'_> {
     }
 }
 
+fn populate_vec_or_color(
+    target: &mut IrItem,
+    items: &mut Vec<IrListItem>,
+) -> Result<(), MaybeSpanDiag> {
+    let resolve_f32 = |n: Spanned<PropertyValueEnum>| -> Result<f32, MaybeSpanDiag> {
+        match n.inner {
+            PropertyValueEnum::F32(F32Value(n)) => Ok(n),
+            _ => Err(TypeMismatch {
+                span: n.span,
+                expected: RitoType::simple(BinPropertyKind::F32),
+                expected_span: None, // TODO: would be nice
+                got: RitoTypeOrVirtual::RitoType(RitoType::simple(n.inner.kind())),
+            }
+            .into()),
+        }
+    };
+    let resolve_u8 = |n: Spanned<PropertyValueEnum>| -> Result<u8, MaybeSpanDiag> {
+        match n.inner {
+            PropertyValueEnum::U8(U8Value(n)) => Ok(n),
+            _ => Err(TypeMismatch {
+                span: n.span,
+                expected: RitoType::simple(BinPropertyKind::U8),
+                expected_span: None, // TODO: would be nice
+                got: RitoTypeOrVirtual::RitoType(RitoType::simple(n.inner.kind())),
+            }
+            .into()),
+        }
+    };
+
+    let mut items = items.drain(..);
+    let mut get_next = |span: &mut Span| -> Result<_, Diagnostic> {
+        let item = items
+            .next()
+            .ok_or(NotEnoughItems {
+                span: *span,
+                got: 0,
+                expected: ColorOrVec::Vec2,
+            })?
+            .0;
+        *span = item.span;
+        Ok(item)
+    };
+
+    use ltk_meta::value::*;
+    use PropertyValueEnum as V;
+    let mut span = Span::new(0, 0); // FIXME: get a span in here stat
+    let expected;
+    match &mut **target.value_mut() {
+        V::Vector2(Vector2Value(vec)) => {
+            vec.x = resolve_f32(get_next(&mut span)?)?;
+            vec.y = resolve_f32(get_next(&mut span)?)?;
+            expected = ColorOrVec::Vec2;
+        }
+        V::Vector3(Vector3Value(vec)) => {
+            vec.x = resolve_f32(get_next(&mut span)?)?;
+            vec.y = resolve_f32(get_next(&mut span)?)?;
+            vec.z = resolve_f32(get_next(&mut span)?)?;
+            expected = ColorOrVec::Vec3;
+        }
+        V::Vector4(Vector4Value(vec)) => {
+            vec.x = resolve_f32(get_next(&mut span)?)?;
+            vec.y = resolve_f32(get_next(&mut span)?)?;
+            vec.z = resolve_f32(get_next(&mut span)?)?;
+            vec.w = resolve_f32(get_next(&mut span)?)?;
+            expected = ColorOrVec::Vec4;
+        }
+        V::Color(ColorValue(color)) => {
+            color.r = resolve_u8(get_next(&mut span)?)?;
+            color.g = resolve_u8(get_next(&mut span)?)?;
+            color.b = resolve_u8(get_next(&mut span)?)?;
+            color.a = resolve_u8(get_next(&mut span)?)?;
+            expected = ColorOrVec::Color;
+        }
+        _ => {
+            unreachable!("non-empty list queue with non color/vec type receiver?");
+        }
+    }
+
+    if let Some(extra) = items.next() {
+        let count = 1 + items.count();
+        return Err(TooManyItems {
+            span: extra.0.span,
+            extra: count as _,
+            expected,
+        }
+        .into());
+    }
+    Ok(())
+}
+
 impl Visitor for TypeChecker<'_> {
     fn enter_tree(&mut self, tree: &Cst) -> Visit {
         self.depth += 1;
@@ -793,27 +906,32 @@ impl Visitor for TypeChecker<'_> {
             Kind::ErrorTree => return Visit::Skip,
 
             Kind::ListItem => {
-                dbg!(parent);
-                match resolve_value(
-                    &mut self.ctx,
-                    tree,
-                    parent.and_then(|p| {
-                        let t = p.1.value().rito_type();
-                        if let Some(subtype) = t.value_subtype() {
-                            return Some(subtype);
-                        }
-                        use BinPropertyKind as K;
-                        dbg!(t.base);
-                        match t.base {
-                            K::Vector2 | K::Vector3 | K::Vector4 => Some(BinPropertyKind::F32),
-                            K::Color => Some(BinPropertyKind::U8),
-                            _ => None,
-                        }
-                    }),
-                ) {
+                let Some((_, parent)) = parent else {
+                    self.ctx
+                        .diagnostics
+                        .push(RootNonEntry.default_span(tree.span));
+                    return Visit::Skip;
+                };
+
+                let parent_type = parent.value().rito_type();
+
+                use BinPropertyKind as K;
+                let color_vec_type = match parent_type.base {
+                    K::Vector2 | K::Vector3 | K::Vector4 => Some(BinPropertyKind::F32),
+                    K::Color => Some(BinPropertyKind::U8),
+                    _ => None,
+                };
+
+                let value_hint = color_vec_type.or(parent_type.value_subtype());
+
+                match resolve_value(&mut self.ctx, tree, value_hint) {
                     Ok(Some(item)) => {
-                        eprintln!("{indent}  push {item:?}");
-                        self.stack.push((depth, IrItem::ListItem(IrListItem(item))));
+                        eprintln!("{indent}  list q {item:?}");
+                        if color_vec_type.is_some() {
+                            self.list_queue.push(IrListItem(item));
+                        } else {
+                            self.stack.push((depth, IrItem::ListItem(IrListItem(item))));
+                        }
                     }
                     Ok(None) => {
                         eprintln!("{indent}  ERROR empty item");
@@ -879,7 +997,7 @@ impl Visitor for TypeChecker<'_> {
         }
 
         match self.stack.pop() {
-            Some(ir) => {
+            Some(mut ir) => {
                 if std::env::var("RB_STACK").is_ok() {
                     eprintln!("{indent}< popped {}", ir.0);
                 }
@@ -887,6 +1005,16 @@ impl Visitor for TypeChecker<'_> {
                     self.stack.push(ir);
                     return Visit::Continue;
                 }
+
+                if !self.list_queue.is_empty() {
+                    // let (d, mut ir) = &mut ir;
+                    if let Err(e) = populate_vec_or_color(&mut ir.1, &mut self.list_queue) {
+                        self.ctx.diagnostics.push(e.fallback(ir.1.value().span));
+                    }
+                    // self.stack.push((d, ir));
+                    // return Visit::Continue;
+                }
+
                 match self.stack.pop() {
                     Some((d, parent)) => {
                         let parent = self.merge_ir(parent, ir.1);
