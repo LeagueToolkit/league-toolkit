@@ -17,6 +17,12 @@ impl Span {
     pub fn contains(&self, offset: u32) -> bool {
         self.start <= offset && offset <= self.end
     }
+
+    #[must_use]
+    #[inline]
+    pub fn intersects(&self, other: &Span) -> bool {
+        self.start < other.end && other.start < self.end
+    }
 }
 
 impl std::ops::Index<Span> for str {
