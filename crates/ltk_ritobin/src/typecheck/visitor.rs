@@ -773,14 +773,16 @@ impl Visitor for TypeChecker<'_> {
         let depth = self.depth;
 
         let indent = "  ".repeat(depth.saturating_sub(1) as _);
-        eprintln!("{indent}> d:{} | {:?}", depth, tree.kind);
-        eprint!("{indent}  stack: ");
-        if self.stack.is_empty() {
-            eprint!("empty")
-        }
-        eprintln!();
-        for s in &self.stack {
-            eprintln!("{indent}    - {}: {:?}", s.0, s.1);
+        if std::env::var("RB_STACK").is_ok() {
+            eprintln!("{indent}> d:{} | {:?}", depth, tree.kind);
+            eprint!("{indent}  stack: ");
+            if self.stack.is_empty() {
+                eprint!("empty")
+            }
+            eprintln!();
+            for s in &self.stack {
+                eprintln!("{indent}    - {}: {:?}", s.0, s.1);
+            }
         }
 
         let parent = self.stack.last();
@@ -829,14 +831,16 @@ impl Visitor for TypeChecker<'_> {
         let depth = self.depth;
         self.depth -= 1;
         let indent = "  ".repeat(depth.saturating_sub(1) as _);
-        eprintln!("{indent}< d:{} | {:?}", depth, tree.kind);
-        eprint!("{indent}  stack: ");
-        if self.stack.is_empty() {
-            eprint!("empty")
-        }
-        eprintln!();
-        for s in &self.stack {
-            eprintln!("{indent}    - {}: {:?}", s.0, s.1);
+        if std::env::var("RB_STACK").is_ok() {
+            eprintln!("{indent}< d:{} | {:?}", depth, tree.kind);
+            eprint!("{indent}  stack: ");
+            if self.stack.is_empty() {
+                eprint!("empty")
+            }
+            eprintln!();
+            for s in &self.stack {
+                eprintln!("{indent}    - {}: {:?}", s.0, s.1);
+            }
         }
         if tree.kind == cst::Kind::ErrorTree {
             return Visit::Continue;
@@ -844,7 +848,9 @@ impl Visitor for TypeChecker<'_> {
 
         match self.stack.pop() {
             Some(ir) => {
-                eprintln!("{indent}< popped {}", ir.0);
+                if std::env::var("RB_STACK").is_ok() {
+                    eprintln!("{indent}< popped {}", ir.0);
+                }
                 if ir.0 != depth {
                     self.stack.push(ir);
                     return Visit::Continue;
