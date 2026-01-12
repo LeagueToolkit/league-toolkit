@@ -193,6 +193,7 @@ pub enum Diagnostic {
     },
 
     ResolveLiteral,
+    AmbiguousNumeric(Span),
 
     RootNonEntry,
     ShadowedEntry {
@@ -224,7 +225,8 @@ impl Diagnostic {
             | MissingType(span)
             | TypeMismatch { span, .. }
             | ShadowedEntry { shadower: span, .. }
-            | InvalidHash(span) => Some(span),
+            | InvalidHash(span)
+            | AmbiguousNumeric(span) => Some(span),
         }
     }
 
@@ -553,7 +555,7 @@ pub fn resolve_value(
                 }) => {
                     let txt = &ctx.text[span];
                     let Some(kind_hint) = kind_hint else {
-                        return Ok(None);
+                        return Err(AmbiguousNumeric(*span));
                     };
 
                     match kind_hint {
