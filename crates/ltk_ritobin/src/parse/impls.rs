@@ -1,4 +1,9 @@
-use crate::parse::{cst::Kind as TreeKind, error::ErrorKind, parser::Parser, tokenizer::TokenKind};
+use crate::parse::{
+    cst::Kind as TreeKind,
+    error::ErrorKind,
+    parser::{MarkClosed, Parser},
+    tokenizer::TokenKind,
+};
 
 use TokenKind::*;
 
@@ -8,41 +13,46 @@ pub fn file(p: &mut Parser) {
         if p.at(Comment) {
             p.scope(TreeKind::Comment, |p| p.advance());
         }
-        stmt_or_list_item(p)
+        stmt_or_list_item(p);
     }
     p.close(m, TreeKind::File);
 }
 
-pub fn stmt_or_list_item(p: &mut Parser) {
+pub fn stmt_or_list_item(p: &mut Parser) -> (MarkClosed, TreeKind) {
+    let res;
     match (p.nth(0), p.nth(1), p.nth(2)) {
-        (Name | String | HexLit, Colon | Eq, _) => {
-            stmt(p);
-        }
         (Name | HexLit, LCurly, _) => {
             let m = p.open();
             p.advance();
             block(p);
-            p.close(m, TreeKind::Class);
+            res = (p.close(m, TreeKind::Class), TreeKind::Class);
+        }
+        (Name | String | HexLit, Colon | Eq, _) => {
+            res = (stmt(p), TreeKind::Entry);
         }
         (LCurly, _, _) => {
             let m = p.open();
             block(p);
-            p.close(m, TreeKind::ListItem);
+            res = (p.close(m, TreeKind::ListItem), TreeKind::ListItem);
             p.eat(Comma);
         }
         (Name | HexLit | String | Number | True | False, _, _) => {
             let m = p.open();
             p.scope(TreeKind::Literal, |p| p.advance());
-            p.close(m, TreeKind::ListItem);
+            res = (p.close(m, TreeKind::ListItem), TreeKind::ListItem);
             p.eat(Comma);
         }
-        _ => stmt(p),
+        _ => {
+            res = (stmt(p), TreeKind::Entry);
+        }
     }
 
     while p.eat(Newline) {}
+
+    res
 }
 
-pub fn stmt(p: &mut Parser) {
+pub fn stmt(p: &mut Parser) -> MarkClosed {
     let m = p.open();
 
     p.scope(TreeKind::EntryKey, |p| {
@@ -54,8 +64,7 @@ pub fn stmt(p: &mut Parser) {
     }
 
     if !entry_value(p) {
-        p.close(m, TreeKind::Entry);
-        return;
+        return p.close(m, TreeKind::Entry);
     }
 
     p.scope(TreeKind::EntryTerminator, |p| {
@@ -88,18 +97,20 @@ pub fn stmt(p: &mut Parser) {
             {}
         }
     });
-    p.close(m, TreeKind::Entry);
+    p.close(m, TreeKind::Entry)
 }
 
 pub fn entry_value(p: &mut Parser) -> bool {
     p.scope(TreeKind::EntryValue, |p| {
         match (p.nth(0), p.nth(1)) {
             (Name, _) | (HexLit, LCurly) => {
-                p.scope(TreeKind::Class, |p| {
-                    p.advance();
-                    if p.at(LCurly) {
-                        block(p);
-                    }
+                p.scope(TreeKind::ListItem, |p| {
+                    p.scope(TreeKind::Class, |p| {
+                        p.advance();
+                        if p.at(LCurly) {
+                            block(p);
+                        }
+                    });
                 });
             }
             (UnterminatedString, _) => {
@@ -159,7 +170,11 @@ pub fn block(p: &mut Parser) {
     let m = p.open();
     p.expect(LCurly);
     while !p.at(RCurly) && !p.eof() {
-        stmt_or_list_item(p);
+        let (mark, kind) = stmt_or_list_item(p);
+        if kind == TreeKind::Class {
+            let m = p.open_before(mark);
+            p.close(m, TreeKind::ListItem);
+        }
     }
     p.expect(RCurly);
 
