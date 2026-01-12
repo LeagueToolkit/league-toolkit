@@ -1,4 +1,7 @@
-use std::num::ParseIntError;
+use std::{
+    num::ParseIntError,
+    ops::{Deref, DerefMut},
+};
 
 use indexmap::IndexMap;
 use ltk_meta::{
@@ -16,14 +19,49 @@ use crate::{
     typecheck::RitobinName,
 };
 
-#[derive(Debug, Clone)]
-pub struct IrEntry {
-    pub key: PropertyValueEnum,
-    pub value: PropertyValueEnum,
+pub trait SpannedExt {
+    fn with_span(self, span: Span) -> Spanned<Self>
+    where
+        Self: Sized,
+    {
+        Spanned::new(self, span)
+    }
+}
+impl<T: Sized> SpannedExt for T {}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Spanned<T> {
+    pub span: Span,
+    pub inner: T,
+}
+
+impl<T> Spanned<T> {
+    pub fn new(item: T, span: Span) -> Self {
+        Self { inner: item, span }
+    }
+}
+
+impl<T> Deref for Spanned<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+impl<T> DerefMut for Spanned<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
 }
 
 #[derive(Debug, Clone)]
-pub struct IrListItem(pub PropertyValueEnum);
+pub struct IrEntry {
+    pub key: Spanned<PropertyValueEnum>,
+    pub value: Spanned<PropertyValueEnum>,
+}
+
+#[derive(Debug, Clone)]
+pub struct IrListItem(pub Spanned<PropertyValueEnum>);
 
 #[derive(Debug, Clone)]
 pub enum IrItem {
@@ -51,19 +89,19 @@ impl IrItem {
             _ => None,
         }
     }
-    pub fn value(&self) -> &PropertyValueEnum {
+    pub fn value(&self) -> &Spanned<PropertyValueEnum> {
         match self {
             IrItem::Entry(i) => &i.value,
             IrItem::ListItem(i) => &i.0,
         }
     }
-    pub fn value_mut(&mut self) -> &mut PropertyValueEnum {
+    pub fn value_mut(&mut self) -> &mut Spanned<PropertyValueEnum> {
         match self {
             IrItem::Entry(i) => &mut i.value,
             IrItem::ListItem(i) => &mut i.0,
         }
     }
-    pub fn into_value(self) -> PropertyValueEnum {
+    pub fn into_value(self) -> Spanned<PropertyValueEnum> {
         match self {
             IrItem::Entry(i) => i.value,
             IrItem::ListItem(i) => i.0,
@@ -73,7 +111,7 @@ impl IrItem {
 
 pub struct TypeChecker<'a> {
     ctx: Ctx<'a>,
-    pub root: IndexMap<String, PropertyValueEnum>,
+    pub root: IndexMap<String, Spanned<PropertyValueEnum>>,
     // current: Option<(PropertyValueEnum, PropertyValueEnum)>,
     stack: Vec<(u32, IrItem)>,
     depth: u32,
@@ -91,7 +129,12 @@ impl<'a> TypeChecker<'a> {
             depth: 0,
         }
     }
-    pub fn into_parts(self) -> (IndexMap<String, PropertyValueEnum>, Vec<DiagnosticWithSpan>) {
+    pub fn into_parts(
+        self,
+    ) -> (
+        IndexMap<String, Spanned<PropertyValueEnum>>,
+        Vec<DiagnosticWithSpan>,
+    ) {
         (self.root, self.ctx.diagnostics)
     }
 }
@@ -106,6 +149,10 @@ pub enum Diagnostic {
     ResolveLiteral,
 
     RootNonEntry,
+    ShadowedEntry {
+        shadowee: Span,
+        shadower: Span,
+    },
 
     SubtypeCountMismatch {
         span: Span,
@@ -126,7 +173,8 @@ impl Diagnostic {
             UnknownType(span)
             | SubtypeCountMismatch { span, .. }
             | UnexpectedSubtypes { span, .. }
-            | MissingType(span) => Some(span),
+            | MissingType(span)
+            | ShadowedEntry { shadower: span, .. } => Some(span),
         }
     }
 
@@ -414,6 +462,7 @@ pub fn resolve_entry(
         .or(parent_value_kind);
 
     let value = c.expect_tree(Kind::EntryValue)?;
+    let value_span = value.span;
     let literal = resolve_literal(ctx, tree, kind.map(|k| k.base))?;
     // let inferred_value = match value.children.first() {
     //     Some(cst::Child::Token(Token {
@@ -434,8 +483,8 @@ pub fn resolve_entry(
     };
 
     Ok(IrEntry {
-        key: PropertyValueEnum::String(StringValue(ctx.text[key.span].into())),
-        value,
+        key: PropertyValueEnum::String(StringValue(ctx.text[key.span].into())).with_span(key.span),
+        value: value.with_span(value_span),
     })
 }
 
@@ -446,45 +495,46 @@ pub fn resolve_list(ctx: &mut Ctx, tree: &Cst) -> Result<(), Diagnostic> {
 impl TypeChecker<'_> {
     fn merge_ir(&mut self, mut parent: IrItem, child: IrItem) -> IrItem {
         if parent.value().kind().subtype_count() == 0 {
-            eprintln!("cant inject into non container");
+            // eprintln!("cant inject into non container");
             return parent;
         }
-        match parent.value_mut() {
+        match &mut parent.value_mut().inner {
             PropertyValueEnum::Container(list)
             | PropertyValueEnum::UnorderedContainer(UnorderedContainerValue(list)) => {
                 let IrItem::ListItem(IrListItem(value)) = child else {
-                    eprintln!("list item must be list item");
+                    // eprintln!("list item must be list item");
                     return parent;
                 };
                 if list.item_kind != value.kind() {
-                    eprintln!(
-                        "container kind mismatch {:?} / {:?}",
-                        list.item_kind,
-                        value.kind()
-                    );
+                    // eprintln!(
+                    //     "container kind mismatch {:?} / {:?}",
+                    //     list.item_kind,
+                    //     value.kind()
+                    // );
                     return parent;
                 }
-                list.items.push(value);
+                list.items.push(value.inner); // FIXME: span info inside all containers??
             }
             PropertyValueEnum::Struct(struct_value) => todo!(),
             PropertyValueEnum::Embedded(embedded_value) => todo!(),
             PropertyValueEnum::ObjectLink(object_link_value) => todo!(),
             PropertyValueEnum::Map(map_value) => {
                 let IrItem::Entry(IrEntry { key, value }) = child else {
-                    eprintln!("map item must be entry");
+                    // eprintln!("map item must be entry");
                     return parent;
                 };
                 if map_value.value_kind != value.kind() {
-                    eprintln!(
-                        "map value kind mismatch {:?} / {:?}",
-                        map_value.value_kind,
-                        value.kind()
-                    );
+                    // eprintln!(
+                    //     "map value kind mismatch {:?} / {:?}",
+                    //     map_value.value_kind,
+                    //     value.kind()
+                    // );
                     return parent;
                 }
-                map_value
-                    .entries
-                    .insert(ltk_meta::value::PropertyValueUnsafeEq(key), value);
+                map_value.entries.insert(
+                    ltk_meta::value::PropertyValueUnsafeEq(key.inner),
+                    value.inner,
+                );
             }
             _ => unreachable!("non container"),
         }
@@ -496,8 +546,8 @@ impl Visitor for TypeChecker<'_> {
     fn enter_tree(&mut self, tree: &Cst) -> Visit {
         self.depth += 1;
         let indent = "  ".repeat(self.depth.saturating_sub(1) as _);
-        eprintln!("{indent}> d:{} | {:?}", self.depth, tree.kind);
-        eprintln!("{indent}> stack: {:?}", &self.stack);
+        // eprintln!("{indent}> d:{} | {:?}", self.depth, tree.kind);
+        // eprintln!("{indent}> stack: {:?}", &self.stack);
 
         let parent = self.stack.last();
 
@@ -509,7 +559,7 @@ impl Visitor for TypeChecker<'_> {
                     .map_err(|e| e.fallback(tree.span))
                 {
                     Ok(entry) => {
-                        eprintln!("entry: {entry:?}");
+                        // eprintln!("entry: {entry:?}");
                         self.stack.push((self.depth, IrItem::Entry(entry)));
                     }
                     Err(e) => self.ctx.diagnostics.push(e),
@@ -544,8 +594,8 @@ impl Visitor for TypeChecker<'_> {
     fn exit_tree(&mut self, tree: &cst::Cst) -> Visit {
         self.depth -= 1;
         let indent = "  ".repeat(self.depth.saturating_sub(1) as _);
-        eprintln!("{indent}< d:{} | {:?}", self.depth, tree.kind);
-        eprintln!("{indent}< stack: {:?}", &self.stack);
+        // eprintln!("{indent}< d:{} | {:?}", self.depth, tree.kind);
+        // eprintln!("{indent}< stack: {:?}", &self.stack);
         if tree.kind == cst::Kind::ErrorTree {
             return Visit::Continue;
         }
@@ -565,7 +615,11 @@ impl Visitor for TypeChecker<'_> {
                         let (
                             _,
                             IrItem::Entry(IrEntry {
-                                key: PropertyValueEnum::String(StringValue(key)),
+                                key:
+                                    Spanned {
+                                        span: key_span,
+                                        inner: PropertyValueEnum::String(StringValue(key)),
+                                    },
                                 value,
                             }),
                         ) = ir.clone()
@@ -581,7 +635,15 @@ impl Visitor for TypeChecker<'_> {
                             }
                             return Visit::Continue;
                         };
-                        let _existing = self.root.insert(key, value);
+                        if let Some(existing) = self.root.insert(key, value) {
+                            self.ctx.diagnostics.push(
+                                ShadowedEntry {
+                                    shadowee: existing.span,
+                                    shadower: key_span,
+                                }
+                                .unwrap(),
+                            );
+                        }
                     }
                 }
                 // TODO: warn when shadowed
