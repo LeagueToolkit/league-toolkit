@@ -599,15 +599,22 @@ impl TypeChecker<'_> {
                     eprintln!("list item must be list item");
                     return parent;
                 };
-                if list.item_kind != value.kind() {
-                    eprintln!(
-                        "container kind mismatch {:?} / {:?}",
-                        list.item_kind,
-                        value.kind()
-                    );
-                    return parent;
-                }
-                list.items.push(value.inner); // FIXME: span info inside all containers??
+                let value = match list.item_kind == value.kind() {
+                    true => value.inner, // FIXME: span info inside all containers??
+                    false => {
+                        self.ctx.diagnostics.push(
+                            TypeMismatch {
+                                span: value.span,
+                                expected: RitoType::simple(list.item_kind),
+                                got: RitoType::simple(value.kind()).into(),
+                            }
+                            .unwrap(),
+                        );
+                        list.item_kind.default_value()
+                    }
+                };
+
+                list.items.push(value);
             }
             PropertyValueEnum::Struct(struct_value) => todo!(),
             PropertyValueEnum::Embedded(embedded_value) => todo!(),
@@ -617,18 +624,23 @@ impl TypeChecker<'_> {
                     eprintln!("map item must be entry");
                     return parent;
                 };
-                if map_value.value_kind != value.kind() {
-                    eprintln!(
-                        "map value kind mismatch {:?} / {:?}",
-                        map_value.value_kind,
-                        value.kind()
-                    );
-                    return parent;
-                }
-                map_value.entries.insert(
-                    ltk_meta::value::PropertyValueUnsafeEq(key.inner),
-                    value.inner,
-                );
+                let value = match map_value.value_kind == value.kind() {
+                    true => value.inner, // FIXME: span info inside all containers??
+                    false => {
+                        self.ctx.diagnostics.push(
+                            TypeMismatch {
+                                span: value.span,
+                                expected: RitoType::simple(map_value.value_kind),
+                                got: RitoType::simple(value.kind()).into(),
+                            }
+                            .unwrap(),
+                        );
+                        map_value.value_kind.default_value()
+                    }
+                };
+                map_value
+                    .entries
+                    .insert(ltk_meta::value::PropertyValueUnsafeEq(key.inner), value);
             }
             _ => unreachable!("non container"),
         }
