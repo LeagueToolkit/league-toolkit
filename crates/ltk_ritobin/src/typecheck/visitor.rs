@@ -495,22 +495,22 @@ pub fn resolve_list(ctx: &mut Ctx, tree: &Cst) -> Result<(), Diagnostic> {
 impl TypeChecker<'_> {
     fn merge_ir(&mut self, mut parent: IrItem, child: IrItem) -> IrItem {
         if parent.value().kind().subtype_count() == 0 {
-            // eprintln!("cant inject into non container");
+            eprintln!("cant inject into non container");
             return parent;
         }
         match &mut parent.value_mut().inner {
             PropertyValueEnum::Container(list)
             | PropertyValueEnum::UnorderedContainer(UnorderedContainerValue(list)) => {
                 let IrItem::ListItem(IrListItem(value)) = child else {
-                    // eprintln!("list item must be list item");
+                    eprintln!("list item must be list item");
                     return parent;
                 };
                 if list.item_kind != value.kind() {
-                    // eprintln!(
-                    //     "container kind mismatch {:?} / {:?}",
-                    //     list.item_kind,
-                    //     value.kind()
-                    // );
+                    eprintln!(
+                        "container kind mismatch {:?} / {:?}",
+                        list.item_kind,
+                        value.kind()
+                    );
                     return parent;
                 }
                 list.items.push(value.inner); // FIXME: span info inside all containers??
@@ -520,15 +520,15 @@ impl TypeChecker<'_> {
             PropertyValueEnum::ObjectLink(object_link_value) => todo!(),
             PropertyValueEnum::Map(map_value) => {
                 let IrItem::Entry(IrEntry { key, value }) = child else {
-                    // eprintln!("map item must be entry");
+                    eprintln!("map item must be entry");
                     return parent;
                 };
                 if map_value.value_kind != value.kind() {
-                    // eprintln!(
-                    //     "map value kind mismatch {:?} / {:?}",
-                    //     map_value.value_kind,
-                    //     value.kind()
-                    // );
+                    eprintln!(
+                        "map value kind mismatch {:?} / {:?}",
+                        map_value.value_kind,
+                        value.kind()
+                    );
                     return parent;
                 }
                 map_value.entries.insert(
@@ -545,9 +545,18 @@ impl TypeChecker<'_> {
 impl Visitor for TypeChecker<'_> {
     fn enter_tree(&mut self, tree: &Cst) -> Visit {
         self.depth += 1;
-        let indent = "  ".repeat(self.depth.saturating_sub(1) as _);
-        // eprintln!("{indent}> d:{} | {:?}", self.depth, tree.kind);
-        // eprintln!("{indent}> stack: {:?}", &self.stack);
+        let depth = self.depth;
+
+        let indent = "  ".repeat(depth.saturating_sub(1) as _);
+        eprintln!("{indent}> d:{} | {:?}", depth, tree.kind);
+        eprint!("{indent}  stack: ");
+        if self.stack.is_empty() {
+            eprint!("empty")
+        }
+        eprintln!();
+        for s in &self.stack {
+            eprintln!("{indent}    - {}: {:?}", s.0, s.1);
+        }
 
         let parent = self.stack.last();
 
@@ -559,8 +568,8 @@ impl Visitor for TypeChecker<'_> {
                     .map_err(|e| e.fallback(tree.span))
                 {
                     Ok(entry) => {
-                        // eprintln!("entry: {entry:?}");
-                        self.stack.push((self.depth, IrItem::Entry(entry)));
+                        eprintln!("{indent}  push {entry:?}");
+                        self.stack.push((depth, IrItem::Entry(entry)));
                     }
                     Err(e) => self.ctx.diagnostics.push(e),
                 }
@@ -576,7 +585,7 @@ impl Visitor for TypeChecker<'_> {
         //             Kind::Entry => {}
         //             Kind::File => return Visit::Continue,
         //             kind => {
-        //                 if self.depth == 2 {
+        //                 if depth == 2 {
         //                     self.ctx
         //                         .diagnostics
         //                         .push(RootNonEntry.default_span(tree.span));
@@ -592,26 +601,36 @@ impl Visitor for TypeChecker<'_> {
     }
 
     fn exit_tree(&mut self, tree: &cst::Cst) -> Visit {
+        let depth = self.depth;
         self.depth -= 1;
-        let indent = "  ".repeat(self.depth.saturating_sub(1) as _);
-        // eprintln!("{indent}< d:{} | {:?}", self.depth, tree.kind);
-        // eprintln!("{indent}< stack: {:?}", &self.stack);
+        let indent = "  ".repeat(depth.saturating_sub(1) as _);
+        eprintln!("{indent}< d:{} | {:?}", depth, tree.kind);
+        eprint!("{indent}  stack: ");
+        if self.stack.is_empty() {
+            eprint!("empty")
+        }
+        eprintln!();
+        for s in &self.stack {
+            eprintln!("{indent}    - {}: {:?}", s.0, s.1);
+        }
         if tree.kind == cst::Kind::ErrorTree {
             return Visit::Continue;
         }
 
         match self.stack.pop() {
             Some(ir) => {
-                if ir.0 != self.depth + 1 {
+                eprintln!("{indent}< popped {}", ir.0);
+                if ir.0 != depth {
                     self.stack.push(ir);
                     return Visit::Continue;
                 }
                 match self.stack.pop() {
-                    Some(parent) => {
-                        let parent = self.merge_ir(parent.1, ir.1);
-                        self.stack.push((self.depth, parent));
+                    Some((d, parent)) => {
+                        let parent = self.merge_ir(parent, ir.1);
+                        self.stack.push((d, parent));
                     }
                     None => {
+                        assert_eq!(depth, 2);
                         let (
                             _,
                             IrItem::Entry(IrEntry {
@@ -624,15 +643,9 @@ impl Visitor for TypeChecker<'_> {
                             }),
                         ) = ir.clone()
                         else {
-                            match self.depth {
-                                1 => self
-                                    .ctx
-                                    .diagnostics
-                                    .push(RootNonEntry.default_span(tree.span)),
-                                _ => {
-                                    self.stack.push(ir);
-                                }
-                            }
+                            self.ctx
+                                .diagnostics
+                                .push(RootNonEntry.default_span(tree.span));
                             return Visit::Continue;
                         };
                         if let Some(existing) = self.root.insert(key, value) {
