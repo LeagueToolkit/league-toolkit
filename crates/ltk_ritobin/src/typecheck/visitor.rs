@@ -581,6 +581,9 @@ pub fn resolve_value(
                         K::I64 => P::I64(I64Value(
                             txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
                         )),
+                        K::F32 => P::F32(F32Value(
+                            txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                        )),
                         _ => {
                             return Err(TypeMismatch {
                                 span: *span,
