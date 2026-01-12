@@ -5,9 +5,11 @@ use std::{
 };
 
 use indexmap::IndexMap;
+use ltk_hash::fnv1a;
 use ltk_meta::{
     value::{
-        ContainerValue, MapValue, NoneValue, OptionalValue, StringValue, UnorderedContainerValue,
+        ContainerValue, EmbeddedValue, HashValue, MapValue, NoneValue, OptionalValue, StringValue,
+        UnorderedContainerValue,
     },
     BinPropertyKind, PropertyValueEnum,
 };
@@ -618,10 +620,6 @@ pub fn resolve_list(ctx: &mut Ctx, tree: &Cst) -> Result<(), Diagnostic> {
 
 impl TypeChecker<'_> {
     fn merge_ir(&mut self, mut parent: IrItem, child: IrItem) -> IrItem {
-        if parent.value().kind().subtype_count() == 0 {
-            eprintln!("cant inject into non container");
-            return parent;
-        }
         match &mut parent.value_mut().inner {
             PropertyValueEnum::Container(list)
             | PropertyValueEnum::UnorderedContainer(UnorderedContainerValue(list)) => {
@@ -647,8 +645,30 @@ impl TypeChecker<'_> {
 
                 list.items.push(value);
             }
-            PropertyValueEnum::Struct(struct_value) => todo!(),
-            PropertyValueEnum::Embedded(embedded_value) => todo!(),
+            PropertyValueEnum::Struct(struct_val)
+            | PropertyValueEnum::Embedded(EmbeddedValue(struct_val)) => {
+                let IrItem::Entry(IrEntry { key, value }) = child else {
+                    eprintln!("struct item must be entry");
+                    return parent;
+                };
+
+                let key = match key.inner {
+                    PropertyValueEnum::String(StringValue(str)) => fnv1a::hash_lower(&str),
+                    PropertyValueEnum::Hash(HashValue(hash)) => hash,
+                    other => {
+                        eprintln!("{other:?} not valid hash");
+                        return parent;
+                    }
+                };
+
+                struct_val.properties.insert(
+                    key,
+                    ltk_meta::BinProperty {
+                        name_hash: key,
+                        value: value.inner,
+                    },
+                );
+            }
             PropertyValueEnum::ObjectLink(object_link_value) => todo!(),
             PropertyValueEnum::Map(map_value) => {
                 let IrItem::Entry(IrEntry { key, value }) = child else {
@@ -674,7 +694,7 @@ impl TypeChecker<'_> {
                     .entries
                     .insert(ltk_meta::value::PropertyValueUnsafeEq(key.inner), value);
             }
-            _ => unreachable!("non container"),
+            other => unreachable!("cant inject into {:?}", other.kind()),
         }
         parent
     }
