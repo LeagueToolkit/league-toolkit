@@ -178,6 +178,7 @@ pub enum Diagnostic {
     TypeMismatch {
         span: Span,
         expected: RitoType,
+        expected_span: Option<Span>,
         got: RitoTypeOrNumeric,
     },
 
@@ -507,8 +508,9 @@ pub fn resolve_literal(
                         return Err(TypeMismatch {
                             span: *span,
                             expected: RitoType::simple(kind_hint),
+                            expected_span: None, // TODO: would be nice here
                             got: RitoTypeOrNumeric::numeric(),
-                        })
+                        });
                     }
                 }
                 .with_span(*span)
@@ -551,6 +553,7 @@ pub fn resolve_entry(
                     TypeMismatch {
                         span: kind_span,
                         expected: *parent,
+                        expected_span: None, // TODO: would be nice here
                         got: (*kind).into(),
                     }
                     .unwrap(),
@@ -594,6 +597,7 @@ pub fn resolve_entry(
                 return Err(TypeMismatch {
                     span: ivalue.span,
                     expected: kind,
+                    expected_span: kind_span,
                     got: ivalue.rito_type().into(),
                 }
                 .into())
@@ -632,6 +636,7 @@ impl TypeChecker<'_> {
                             TypeMismatch {
                                 span: value.span,
                                 expected: RitoType::simple(list.item_kind),
+                                expected_span: None, // TODO: would be nice here
                                 got: RitoType::simple(value.kind()).into(),
                             }
                             .unwrap(),
@@ -657,6 +662,7 @@ impl TypeChecker<'_> {
                             TypeMismatch {
                                 span: value.span,
                                 expected: RitoType::simple(map_value.value_kind),
+                                expected_span: None, // TODO: would be nice here
                                 got: RitoType::simple(value.kind()).into(),
                             }
                             .unwrap(),
