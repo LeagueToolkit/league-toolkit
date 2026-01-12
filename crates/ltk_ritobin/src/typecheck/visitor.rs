@@ -58,6 +58,12 @@ impl<T> DerefMut for Spanned<T> {
 }
 
 #[derive(Debug, Clone)]
+pub enum ClassKind {
+    Str(String),
+    Hash(u32),
+}
+
+#[derive(Debug, Clone)]
 pub struct IrEntry {
     pub key: Spanned<PropertyValueEnum>,
     pub value: Spanned<PropertyValueEnum>,
@@ -454,7 +460,7 @@ pub fn resolve_rito_type(ctx: &mut Ctx<'_>, tree: &Cst) -> Result<RitoType, Diag
     Ok(RitoType { base, subtypes })
 }
 
-pub fn resolve_literal(
+pub fn resolve_value(
     ctx: &mut Ctx,
     tree: &Cst,
     kind_hint: Option<BinPropertyKind>,
@@ -463,63 +469,104 @@ pub fn resolve_literal(
     use BinPropertyKind as K;
     use PropertyValueEnum as P;
 
-    if tree.children.len() != 1 {
+    let Some(child) = tree.children.first() else {
         return Ok(None);
-    }
-    Ok(Some(
-        match tree.children.first().unwrap(/* checked above */) {
-            cst::Child::Token(Token {
-                kind: TokenKind::String,
-                span,
-            }) => P::String(StringValue(ctx.text[span].into())).with_span(*span),
-            cst::Child::Token(Token {
-                kind: TokenKind::Number,
-                span,
-            }) => {
-                let txt = &ctx.text[span];
-                let Some(kind_hint) = kind_hint else {
-                    return Ok(None);
-                };
+    };
+    Ok(Some(match child {
+        cst::Child::Tree(Cst {
+            kind: Kind::Class,
+            children,
+            ..
+        }) => {
+            let Some(kind_hint) = kind_hint else {
+                return Ok(None);
+            };
+            let class_span = children
+                .iter()
+                .expect_token(TokenKind::Name)
+                .map_err(|_| ResolveLiteral)?
+                .span;
 
-                match kind_hint {
-                    K::U8 => P::U8(U8Value(
-                        txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
-                    )),
-                    K::U16 => P::U16(U16Value(
-                        txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
-                    )),
-                    K::U32 => P::U32(U32Value(
-                        txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
-                    )),
-                    K::U64 => P::U64(U64Value(
-                        txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
-                    )),
-                    K::I8 => P::I8(I8Value(
-                        txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
-                    )),
-                    K::I16 => P::I16(I16Value(
-                        txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
-                    )),
-                    K::I32 => P::I32(I32Value(
-                        txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
-                    )),
-                    K::I64 => P::I64(I64Value(
-                        txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
-                    )),
-                    _ => {
-                        return Err(TypeMismatch {
-                            span: *span,
-                            expected: RitoType::simple(kind_hint),
-                            expected_span: None, // TODO: would be nice here
-                            got: RitoTypeOrNumeric::numeric(),
-                        });
-                    }
+            let class_hash = fnv1a::hash_lower(&ctx.text[class_span]);
+            match kind_hint {
+                K::Struct => P::Struct(StructValue {
+                    class_hash,
+                    properties: Default::default(),
+                }),
+                K::Embedded => P::Embedded(EmbeddedValue(StructValue {
+                    class_hash,
+                    properties: Default::default(),
+                })),
+                other => {
+                    eprintln!("can't create class value from kind {other:?}");
+                    return Ok(None);
                 }
-                .with_span(*span)
             }
-            _ => return Ok(None),
-        },
-    ))
+            .with_span(class_span)
+        }
+        cst::Child::Tree(Cst {
+            kind: Kind::Literal,
+            children,
+            ..
+        }) => {
+            let Some(child) = children.first() else {
+                return Ok(None);
+            };
+            match child {
+                cst::Child::Token(Token {
+                    kind: TokenKind::String,
+                    span,
+                }) => P::String(StringValue(ctx.text[span].into())).with_span(*span),
+                cst::Child::Token(Token {
+                    kind: TokenKind::Number,
+                    span,
+                }) => {
+                    let txt = &ctx.text[span];
+                    let Some(kind_hint) = kind_hint else {
+                        return Ok(None);
+                    };
+
+                    match kind_hint {
+                        K::U8 => P::U8(U8Value(
+                            txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                        )),
+                        K::U16 => P::U16(U16Value(
+                            txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                        )),
+                        K::U32 => P::U32(U32Value(
+                            txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                        )),
+                        K::U64 => P::U64(U64Value(
+                            txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                        )),
+                        K::I8 => P::I8(I8Value(
+                            txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                        )),
+                        K::I16 => P::I16(I16Value(
+                            txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                        )),
+                        K::I32 => P::I32(I32Value(
+                            txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                        )),
+                        K::I64 => P::I64(I64Value(
+                            txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                        )),
+                        _ => {
+                            return Err(TypeMismatch {
+                                span: *span,
+                                expected: RitoType::simple(kind_hint),
+                                expected_span: None, // TODO: would be nice here
+                                got: RitoTypeOrNumeric::numeric(),
+                            });
+                        }
+                    }
+                    .with_span(*span)
+                }
+                _ => return Ok(None),
+            }
+        }
+        _ => return Ok(None),
+    }))
 }
 
 pub fn resolve_entry(
@@ -571,26 +618,9 @@ pub fn resolve_entry(
 
     let kind = kind.or(parent_value_kind);
 
-    let literal = value
-        .children
-        .iter()
-        .expect_tree(Kind::Literal)
-        .ok()
-        .map(|tree| resolve_literal(ctx, tree, kind.map(|k| k.base)))
-        .transpose()?
-        .flatten();
-    // let inferred_value = match value.children.first() {
-    //     Some(cst::Child::Token(Token {
-    //         kind: TokenKind::String,
-    //         span,
-    //         ..
-    //     })) => Some(PropertyValueEnum::String(ltk_meta::value::StringValue(
-    //         ctx.text[span].into(),
-    //     ))),
-    //     _ => None,
-    // };
+    let resolved_val = resolve_value(ctx, value, kind.map(|k| k.base))?;
 
-    let value = match (kind, literal) {
+    let value = match (kind, resolved_val) {
         (None, Some(value)) => value,
         (None, None) => return Err(MissingType(key.span).into()),
         (Some(kind), Some(ivalue)) => match ivalue.kind() == kind.base {
