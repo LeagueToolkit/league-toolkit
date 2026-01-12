@@ -149,28 +149,30 @@ impl<'a> TypeChecker<'a> {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum RitoTypeOrNumeric {
+pub enum RitoTypeOrVirtual {
     RitoType(RitoType),
     Numeric,
+    StructOrEmbedded,
 }
 
-impl RitoTypeOrNumeric {
+impl RitoTypeOrVirtual {
     pub fn numeric() -> Self {
         Self::Numeric
     }
 }
 
-impl From<RitoType> for RitoTypeOrNumeric {
+impl From<RitoType> for RitoTypeOrVirtual {
     fn from(value: RitoType) -> Self {
-        RitoTypeOrNumeric::RitoType(value)
+        RitoTypeOrVirtual::RitoType(value)
     }
 }
 
-impl Display for RitoTypeOrNumeric {
+impl Display for RitoTypeOrVirtual {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RitoTypeOrNumeric::RitoType(rito_type) => Display::fmt(rito_type, f),
-            RitoTypeOrNumeric::Numeric => f.write_str("numeric type"),
+            Self::RitoType(rito_type) => Display::fmt(rito_type, f),
+            Self::Numeric => f.write_str("numeric type"),
+            Self::StructOrEmbedded => f.write_str("struct/embedded"),
         }
     }
 }
@@ -187,7 +189,7 @@ pub enum Diagnostic {
         span: Span,
         expected: RitoType,
         expected_span: Option<Span>,
-        got: RitoTypeOrNumeric,
+        got: RitoTypeOrVirtual,
     },
 
     ResolveLiteral,
@@ -197,6 +199,8 @@ pub enum Diagnostic {
         shadowee: Span,
         shadower: Span,
     },
+
+    InvalidHash(Span),
 
     SubtypeCountMismatch {
         span: Span,
@@ -219,7 +223,8 @@ impl Diagnostic {
             | UnexpectedSubtypes { span, .. }
             | MissingType(span)
             | TypeMismatch { span, .. }
-            | ShadowedEntry { shadower: span, .. } => Some(span),
+            | ShadowedEntry { shadower: span, .. }
+            | InvalidHash(span) => Some(span),
         }
     }
 
@@ -476,18 +481,38 @@ pub fn resolve_value(
         cst::Child::Tree(Cst {
             kind: Kind::Class,
             children,
+            span,
             ..
         }) => {
             let Some(kind_hint) = kind_hint else {
-                return Ok(None);
+                return Ok(None); // TODO: err
             };
-            let class_span = children
-                .iter()
-                .expect_token(TokenKind::Name)
-                .map_err(|_| ResolveLiteral)?
-                .span;
+            let Some(class) = children.first().and_then(|t| t.token()) else {
+                return Err(InvalidHash(*span));
+            };
 
-            let class_hash = fnv1a::hash_lower(&ctx.text[class_span]);
+            let class_hash = match class {
+                Token {
+                    kind: TokenKind::Name,
+                    span,
+                } => fnv1a::hash_lower(&ctx.text[span]),
+                Token {
+                    kind: TokenKind::HexLit,
+                    span,
+                } => {
+                    // TODO: better err here?
+                    u32::from_str_radix(
+                        ctx.text[span]
+                            .strip_prefix("0x")
+                            .ok_or(InvalidHash(class.span))?,
+                        16,
+                    )
+                    .map_err(|_| InvalidHash(class.span))?
+                }
+                _ => {
+                    return Err(InvalidHash(class.span));
+                }
+            };
             match kind_hint {
                 K::Struct => P::Struct(StructValue {
                     class_hash,
@@ -499,10 +524,15 @@ pub fn resolve_value(
                 })),
                 other => {
                     eprintln!("can't create class value from kind {other:?}");
-                    return Ok(None);
+                    return Err(TypeMismatch {
+                        span: class.span,
+                        expected: RitoType::simple(other),
+                        expected_span: None,
+                        got: RitoTypeOrVirtual::StructOrEmbedded,
+                    });
                 }
             }
-            .with_span(class_span)
+            .with_span(class.span)
         }
         cst::Child::Tree(Cst {
             kind: Kind::Literal,
@@ -556,7 +586,7 @@ pub fn resolve_value(
                                 span: *span,
                                 expected: RitoType::simple(kind_hint),
                                 expected_span: None, // TODO: would be nice here
-                                got: RitoTypeOrNumeric::numeric(),
+                                got: RitoTypeOrVirtual::numeric(),
                             });
                         }
                     }
