@@ -1,6 +1,5 @@
 use std::{
     fmt::{Debug, Display},
-    num::ParseIntError,
     ops::{Deref, DerefMut},
 };
 
@@ -8,7 +7,7 @@ use indexmap::IndexMap;
 use ltk_hash::fnv1a;
 use ltk_meta::{
     value::{
-        ContainerValue, EmbeddedValue, HashValue, MapValue, NoneValue, OptionalValue, StringValue,
+        ContainerValue, EmbeddedValue, HashValue, MapValue, OptionalValue, StringValue,
         UnorderedContainerValue, Vector2Value, Vector3Value,
     },
     BinPropertyKind, PropertyValueEnum,
