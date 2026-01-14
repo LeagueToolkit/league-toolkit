@@ -30,10 +30,7 @@ mod test {
     #[test]
     fn smoke_test() {
         let text = r#"
-EmitterName: string = "EyeTrail1"
-map: map[string, string] = {
-    a: string = "hi"
-}
+a: list[vec4] = { { 1.5, 2.5, 6.9, -1000.21 } }
 
 "#;
         let cst = parse(text);
