@@ -8,8 +8,8 @@ use indexmap::IndexMap;
 use ltk_hash::fnv1a;
 use ltk_meta::{
     value::{
-        ContainerValue, EmbeddedValue, F32Value, HashValue, MapValue, NoneValue, OptionalValue,
-        StringValue, UnorderedContainerValue, Vector2Value, Vector3Value,
+        ContainerValue, EmbeddedValue, HashValue, MapValue, NoneValue, OptionalValue, StringValue,
+        UnorderedContainerValue, Vector2Value, Vector3Value,
     },
     BinPropertyKind, PropertyValueEnum,
 };
@@ -904,6 +904,33 @@ impl Visitor for TypeChecker<'_> {
 
         match tree.kind {
             Kind::ErrorTree => return Visit::Skip,
+
+            Kind::Block => {
+                let Some((_, parent)) = parent else {
+                    self.ctx
+                        .diagnostics
+                        .push(RootNonEntry.default_span(tree.span));
+                    return Visit::Skip;
+                };
+
+                let parent_type = parent.value().rito_type();
+
+                use BinPropertyKind as K;
+                match parent_type.base {
+                    K::Container | K::UnorderedContainer => {
+                        let value_type = parent_type
+                            .value_subtype()
+                            .expect("container must have value_subtype");
+                        self.stack.push((
+                            depth,
+                            IrItem::ListItem(IrListItem(
+                                value_type.default_value().with_span(tree.span),
+                            )),
+                        ));
+                    }
+                    _ => {}
+                }
+            }
 
             Kind::ListItem => {
                 let Some((_, parent)) = parent else {
