@@ -1,7 +1,7 @@
 use crate::parse::{
     cst::Kind as TreeKind,
     error::ErrorKind,
-    parser::{MarkClosed, Parser},
+    parser::{MarkClosed, MarkOpened, Parser},
     tokenizer::TokenKind,
 };
 
@@ -24,16 +24,16 @@ pub fn stmt_or_list_item(p: &mut Parser) -> (MarkClosed, TreeKind) {
         (Name | HexLit, LCurly, _) => {
             let m = p.open();
             p.advance();
-            block(p);
+            let block = block(p);
+            p.close(block, TreeKind::Block);
             res = (p.close(m, TreeKind::Class), TreeKind::Class);
         }
         (Name | String | HexLit, Colon | Eq, _) => {
             res = (stmt(p), TreeKind::Entry);
         }
         (LCurly, _, _) => {
-            let m = p.open();
-            block(p);
-            res = (p.close(m, TreeKind::ListItem), TreeKind::ListItem);
+            let m = block(p);
+            res = (p.close(m, TreeKind::ListBlock), TreeKind::ListBlock);
             p.eat(Comma);
         }
         (Name | HexLit | String | Number | True | False, _, _) => {
@@ -108,7 +108,8 @@ pub fn entry_value(p: &mut Parser) -> bool {
                     p.scope(TreeKind::Class, |p| {
                         p.advance();
                         if p.at(LCurly) {
-                            block(p);
+                            let block = block(p);
+                            p.close(block, TreeKind::Block);
                         }
                     });
                 });
@@ -120,7 +121,8 @@ pub fn entry_value(p: &mut Parser) -> bool {
                 p.scope(TreeKind::Literal, |p| p.advance());
             }
             (LCurly, _) => {
-                block(p);
+                let block = block(p);
+                p.close(block, TreeKind::Block);
             }
             (Newline, _) => {
                 p.advance_with_error(ErrorKind::Unexpected { token: Newline }, None);
@@ -165,7 +167,8 @@ pub fn expr_type_arg(p: &mut Parser) {
     }
 }
 
-pub fn block(p: &mut Parser) {
+#[must_use]
+pub fn block(p: &mut Parser) -> MarkOpened {
     assert!(p.at(LCurly));
     let m = p.open();
     p.expect(LCurly);
@@ -177,6 +180,5 @@ pub fn block(p: &mut Parser) {
         }
     }
     p.expect(RCurly);
-
-    p.close(m, TreeKind::Block);
+    m
 }
