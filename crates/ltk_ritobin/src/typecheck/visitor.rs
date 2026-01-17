@@ -712,27 +712,31 @@ impl TypeChecker<'_> {
         match &mut parent.value_mut().inner {
             PropertyValueEnum::Container(list)
             | PropertyValueEnum::UnorderedContainer(UnorderedContainerValue(list)) => {
-                let IrItem::ListItem(IrListItem(value)) = child else {
-                    eprintln!("list item must be list item");
-                    return parent;
-                };
-                let value = match list.item_kind == value.kind() {
-                    true => value.inner, // FIXME: span info inside all containers??
-                    false => {
-                        self.ctx.diagnostics.push(
-                            TypeMismatch {
-                                span: value.span,
-                                expected: RitoType::simple(list.item_kind),
-                                expected_span: None, // TODO: would be nice here
-                                got: RitoType::simple(value.kind()).into(),
+                match child {
+                    IrItem::ListItem(IrListItem(value)) => {
+                        let value = match list.item_kind == value.kind() {
+                            true => value.inner, // FIXME: span info inside all containers??
+                            false => {
+                                self.ctx.diagnostics.push(
+                                    TypeMismatch {
+                                        span: value.span,
+                                        expected: RitoType::simple(list.item_kind),
+                                        expected_span: None, // TODO: would be nice here
+                                        got: RitoType::simple(value.kind()).into(),
+                                    }
+                                    .unwrap(),
+                                );
+                                list.item_kind.default_value()
                             }
-                            .unwrap(),
-                        );
-                        list.item_kind.default_value()
-                    }
-                };
+                        };
 
-                list.items.push(value);
+                        list.items.push(value);
+                    }
+                    IrItem::Entry(IrEntry { key, value }) => {
+                        eprintln!("list item must be list item");
+                        return parent;
+                    }
+                }
             }
             PropertyValueEnum::Struct(struct_val)
             | PropertyValueEnum::Embedded(EmbeddedValue(struct_val)) => {
@@ -904,7 +908,7 @@ impl Visitor for TypeChecker<'_> {
         match tree.kind {
             Kind::ErrorTree => return Visit::Skip,
 
-            Kind::Block => {
+            Kind::ListBlock => {
                 let Some((_, parent)) = parent else {
                     self.ctx
                         .diagnostics
@@ -930,7 +934,6 @@ impl Visitor for TypeChecker<'_> {
                     _ => {}
                 }
             }
-
             Kind::ListItem => {
                 let Some((_, parent)) = parent else {
                     self.ctx
@@ -948,11 +951,13 @@ impl Visitor for TypeChecker<'_> {
                     _ => None,
                 };
 
+                // dbg!(color_vec_type, parent_type);
+
                 let value_hint = color_vec_type.or(parent_type.value_subtype());
 
                 match resolve_value(&mut self.ctx, tree, value_hint) {
                     Ok(Some(item)) => {
-                        eprintln!("{indent}  list q {item:?}");
+                        eprintln!("{indent}  list item {item:?}");
                         if color_vec_type.is_some() {
                             self.list_queue.push(IrListItem(item));
                         } else {
