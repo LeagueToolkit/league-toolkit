@@ -266,7 +266,7 @@ mod tests {
         let wad = Wad::mount(cursor).expect("Failed to mount WAD");
         assert_eq!(wad.chunks().len(), 3);
 
-        let chunk = wad.chunks.get(&xxh64::xxh64(b"test1", 0)).unwrap();
+        let chunk = wad.chunks().get(xxh64::xxh64(b"test1", 0)).unwrap();
         assert_eq!(chunk.path_hash, xxh64::xxh64(b"test1", 0));
         assert_eq!(chunk.compressed_size, 17);
         assert_eq!(chunk.uncompressed_size, 100);
