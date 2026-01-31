@@ -12,6 +12,8 @@ pub enum Format {
     Bc3 = 12,
     /// Uncompressed BGRA8
     Bgra8 = 20,
+    /// Uncompressed BGRA16 (16-bit per channel)
+    Bgra16 = 21,
 }
 
 impl Format {
@@ -26,7 +28,7 @@ impl Format {
     /// Get the block size of the format
     pub fn block_size(&self) -> (usize, usize) {
         match self {
-            Format::Bgra8 => (1, 1),
+            Format::Bgra8 | Format::Bgra16 => (1, 1),
             _ => (4, 4),
         }
     }
@@ -39,6 +41,7 @@ impl Format {
             Format::Bc1 => 8,
             Format::Bc3 => 16,
             Format::Bgra8 => 4,
+            Format::Bgra16 => 8, // 4 channels × 2 bytes each
         }
     }
 }
