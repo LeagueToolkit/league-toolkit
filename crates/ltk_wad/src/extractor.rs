@@ -6,8 +6,8 @@
 //!
 //! ```no_run
 //! use std::fs::File;
-//! use std::collections::HashMap;
 //! use std::borrow::Cow;
+//! use std::collections::HashMap;
 //! use ltk_wad::{Wad, PathResolver, WadExtractor, ExtractProgress};
 //!
 //! // Implement your own path resolver (e.g., from a hashtable file)
@@ -35,8 +35,7 @@
 //!             println!("Progress: {:.1}% - {}", progress.percent() * 100.0, progress.current_path());
 //!         });
 //!
-//!     let (mut decoder, chunks) = wad.decode();
-//!     let extracted = extractor.extract_all(&mut decoder, chunks, "/output/path")?;
+//!     let extracted = extractor.extract_all(&mut wad, "/output/path")?;
 //!     println!("Extracted {} chunks", extracted);
 //!
 //!     Ok(())
@@ -53,7 +52,7 @@ use std::{
 use camino::{Utf8Path, Utf8PathBuf};
 use ltk_file::LeagueFileKind;
 
-use crate::{WadChunk, WadDecoder, WadError};
+use crate::{Wad, WadChunk, WadError};
 
 /// A trait for resolving path hashes to human-readable paths.
 ///
@@ -238,20 +237,20 @@ impl<'a, R: PathResolver, F: PathFilter> WadExtractor<'a, R, F> {
         self
     }
 
-    /// Extract all chunks from the decoder to the specified directory.
+    /// Extract all chunks from a WAD to the specified directory.
     ///
     /// Returns the number of chunks actually extracted (not skipped).
     pub fn extract_all<TSource: Read + Seek>(
         &self,
-        decoder: &mut WadDecoder<'_, TSource>,
-        chunks: &HashMap<u64, WadChunk>,
+        wad: &mut Wad<TSource>,
         output_dir: impl AsRef<Utf8Path>,
     ) -> Result<usize, WadError> {
         let output_dir = output_dir.as_ref();
+        let chunks: Vec<WadChunk> = wad.chunks().iter().copied().collect();
         let total = chunks.len();
         let mut extracted_count = 0;
 
-        for (index, chunk) in chunks.values().enumerate() {
+        for (index, chunk) in chunks.iter().enumerate() {
             let chunk_path_str = self.resolver.resolve(chunk.path_hash());
             let chunk_path = Utf8Path::new(chunk_path_str.as_ref());
 
@@ -272,8 +271,11 @@ impl<'a, R: PathResolver, F: PathFilter> WadExtractor<'a, R, F> {
                 }
             }
 
+            // Load and decompress
+            let chunk_data = wad.load_chunk_decompressed(chunk)?;
+
             // Extract the chunk
-            match self.extract_chunk(decoder, chunk, chunk_path, output_dir)? {
+            match self.extract_chunk_data(chunk, &chunk_data, chunk_path, output_dir)? {
                 ExtractResult::Extracted => extracted_count += 1,
                 ExtractResult::SkippedByType | ExtractResult::SkippedByPattern => {}
             }
@@ -282,21 +284,19 @@ impl<'a, R: PathResolver, F: PathFilter> WadExtractor<'a, R, F> {
         Ok(extracted_count)
     }
 
-    /// Extract a single chunk to the specified directory.
+    /// Extract a single chunk from already-decompressed data to the specified directory.
     ///
-    /// Returns the extraction result indicating whether the chunk was extracted or skipped.
-    pub fn extract_chunk<TSource: Read + Seek>(
+    /// This is useful for parallel workflows where decompression is done separately
+    /// (e.g. via [`decompress_raw`](crate::decompress_raw)).
+    pub fn extract_chunk_data(
         &self,
-        decoder: &mut WadDecoder<'_, TSource>,
         chunk: &WadChunk,
+        chunk_data: &[u8],
         chunk_path: &Utf8Path,
         output_dir: &Utf8Path,
     ) -> Result<ExtractResult, WadError> {
-        // Decompress the chunk data
-        let chunk_data = decoder.load_chunk_decompressed(chunk)?;
-
         // Identify the file type
-        let chunk_kind = LeagueFileKind::identify_from_bytes(&chunk_data);
+        let chunk_kind = LeagueFileKind::identify_from_bytes(chunk_data);
 
         // Check type filter
         if let Some(ref type_filter) = self.type_filter {
@@ -306,7 +306,7 @@ impl<'a, R: PathResolver, F: PathFilter> WadExtractor<'a, R, F> {
         }
 
         // Determine the final output path
-        let final_path = self.resolve_final_path(chunk_path, output_dir, &chunk_data, chunk_kind);
+        let final_path = self.resolve_final_path(chunk_path, output_dir, chunk_data, chunk_kind);
         let full_path = output_dir.join(&final_path);
 
         // Create parent directories
@@ -315,11 +315,11 @@ impl<'a, R: PathResolver, F: PathFilter> WadExtractor<'a, R, F> {
         }
 
         // Write the file
-        match fs::write(&full_path, &chunk_data) {
+        match fs::write(&full_path, chunk_data) {
             Ok(()) => Ok(ExtractResult::Extracted),
             Err(error) if error.kind() == io::ErrorKind::InvalidFilename => {
                 // Fallback for long filenames
-                self.write_with_hashed_name(chunk, &chunk_data, chunk_kind, output_dir)?;
+                self.write_with_hashed_name(chunk, chunk_data, chunk_kind, output_dir)?;
                 Ok(ExtractResult::Extracted)
             }
             Err(error) => Err(WadError::IoError(error)),
@@ -444,6 +444,7 @@ pub use regex_filter::RegexFilter;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::WadChunks;
     use std::io::{Read, Seek, SeekFrom, Write};
 
     // =============================================================================
@@ -484,6 +485,14 @@ mod tests {
             let compressed_size = compressed.len();
             self.write_at(offset, &compressed);
             (offset, compressed_size)
+        }
+
+        /// Create a mock Wad from this source with the given chunks.
+        fn into_wad(self, chunks: WadChunks) -> Wad<Self> {
+            Wad {
+                chunks,
+                source: self,
+            }
         }
     }
 
@@ -792,6 +801,7 @@ mod tests {
         let offset = source.write_at(1000, test_data);
 
         let chunk = create_uncompressed_chunk(0x1234567890abcdef, offset, test_data);
+        let chunks = WadChunks::from_iter([chunk]);
 
         // Create resolver and extractor
         let mut resolver = HashMapPathResolver::default();
@@ -799,14 +809,14 @@ mod tests {
 
         let extractor = WadExtractor::new(&resolver);
 
-        // Extract the chunk
-        let mut decoder = WadDecoder {
-            source: &mut source,
-        };
+        let mut wad = source.into_wad(chunks);
+        let chunk = *wad.chunks().iter().next().unwrap();
+        let chunk_data = wad.load_chunk_decompressed(&chunk).unwrap();
+
         let result = extractor
-            .extract_chunk(
-                &mut decoder,
+            .extract_chunk_data(
                 &chunk,
+                &chunk_data,
                 Utf8Path::new("test/hello.txt"),
                 output_path,
             )
@@ -833,6 +843,7 @@ mod tests {
         let (offset, compressed_size) = source.write_gzip_at(1000, test_data);
 
         let chunk = create_gzip_chunk(0xabcdef1234567890, offset, compressed_size, test_data.len());
+        let chunks = WadChunks::from_iter([chunk]);
 
         // Create resolver and extractor
         let mut resolver = HashMapPathResolver::default();
@@ -840,14 +851,14 @@ mod tests {
 
         let extractor = WadExtractor::new(&resolver);
 
-        // Extract the chunk
-        let mut decoder = WadDecoder {
-            source: &mut source,
-        };
+        let mut wad = source.into_wad(chunks);
+        let chunk = *wad.chunks().iter().next().unwrap();
+        let chunk_data = wad.load_chunk_decompressed(&chunk).unwrap();
+
         let result = extractor
-            .extract_chunk(
-                &mut decoder,
+            .extract_chunk_data(
                 &chunk,
+                &chunk_data,
                 Utf8Path::new("compressed/data.txt"),
                 output_path,
             )
@@ -883,10 +894,7 @@ mod tests {
         let chunk2 = create_uncompressed_chunk(0x2222, offset2, data2);
         let chunk3 = create_uncompressed_chunk(0x3333, offset3, data3);
 
-        let mut chunks = HashMap::new();
-        chunks.insert(0x1111, chunk1);
-        chunks.insert(0x2222, chunk2);
-        chunks.insert(0x3333, chunk3);
+        let chunks = WadChunks::from_iter([chunk1, chunk2, chunk3]);
 
         // Create resolver
         let mut resolver = HashMapPathResolver::default();
@@ -896,13 +904,8 @@ mod tests {
 
         let extractor = WadExtractor::new(&resolver);
 
-        // Extract all chunks
-        let mut decoder = WadDecoder {
-            source: &mut source,
-        };
-        let extracted = extractor
-            .extract_all(&mut decoder, &chunks, output_path)
-            .unwrap();
+        let mut wad = source.into_wad(chunks);
+        let extracted = extractor.extract_all(&mut wad, output_path).unwrap();
 
         assert_eq!(extracted, 3);
 
@@ -929,9 +932,7 @@ mod tests {
         let chunk1 = create_uncompressed_chunk(0x1111, offset1, data1);
         let chunk2 = create_uncompressed_chunk(0x2222, offset2, data2);
 
-        let mut chunks = HashMap::new();
-        chunks.insert(0x1111, chunk1);
-        chunks.insert(0x2222, chunk2);
+        let chunks = WadChunks::from_iter([chunk1, chunk2]);
 
         // Create resolver
         let mut resolver = HashMapPathResolver::default();
@@ -942,13 +943,8 @@ mod tests {
         let filter = PrefixFilter::new("assets/");
         let extractor = WadExtractor::new(&resolver).with_filter(filter);
 
-        // Extract all chunks
-        let mut decoder = WadDecoder {
-            source: &mut source,
-        };
-        let extracted = extractor
-            .extract_all(&mut decoder, &chunks, output_path)
-            .unwrap();
+        let mut wad = source.into_wad(chunks);
+        let extracted = extractor.extract_all(&mut wad, output_path).unwrap();
 
         // Only assets/ file should be extracted
         assert_eq!(extracted, 1);
@@ -978,9 +974,7 @@ mod tests {
         let chunk1 = create_uncompressed_chunk(0x1111, offset1, &png_data);
         let chunk2 = create_uncompressed_chunk(0x2222, offset2, other_data);
 
-        let mut chunks = HashMap::new();
-        chunks.insert(0x1111, chunk1);
-        chunks.insert(0x2222, chunk2);
+        let chunks = WadChunks::from_iter([chunk1, chunk2]);
 
         // Create resolver
         let mut resolver = HashMapPathResolver::default();
@@ -990,13 +984,8 @@ mod tests {
         // Create extractor with type filter (only PNG)
         let extractor = WadExtractor::new(&resolver).with_type_filter(vec![LeagueFileKind::Png]);
 
-        // Extract all chunks
-        let mut decoder = WadDecoder {
-            source: &mut source,
-        };
-        let extracted = extractor
-            .extract_all(&mut decoder, &chunks, output_path)
-            .unwrap();
+        let mut wad = source.into_wad(chunks);
+        let extracted = extractor.extract_all(&mut wad, output_path).unwrap();
 
         // Only PNG file should be extracted
         assert_eq!(extracted, 1);
@@ -1018,8 +1007,7 @@ mod tests {
         let offset = source.write_at(1000, data);
 
         let chunk = create_uncompressed_chunk(0x1234, offset, data);
-        let mut chunks = HashMap::new();
-        chunks.insert(0x1234, chunk);
+        let chunks = WadChunks::from_iter([chunk]);
 
         let mut resolver = HashMapPathResolver::default();
         resolver.insert(0x1234, "test.txt".to_string());
@@ -1034,13 +1022,8 @@ mod tests {
             assert_eq!(progress.current_path(), "test.txt");
         });
 
-        // Extract
-        let mut decoder = WadDecoder {
-            source: &mut source,
-        };
-        extractor
-            .extract_all(&mut decoder, &chunks, output_path)
-            .unwrap();
+        let mut wad = source.into_wad(chunks);
+        extractor.extract_all(&mut wad, output_path).unwrap();
 
         // Progress callback should have been called once
         assert_eq!(progress_count.load(Ordering::SeqCst), 1);
@@ -1060,19 +1043,20 @@ mod tests {
         let offset = source.write_at(1000, &png_data);
 
         let chunk = create_uncompressed_chunk(0x1234567890abcdef, offset, &png_data);
+        let chunks = WadChunks::from_iter([chunk]);
 
         // Use HexPathResolver - no known path, just hex
         let resolver = HexPathResolver;
         let extractor = WadExtractor::new(&resolver);
 
-        // Extract the chunk
-        let mut decoder = WadDecoder {
-            source: &mut source,
-        };
+        let mut wad = source.into_wad(chunks);
+        let chunk = *wad.chunks().iter().next().unwrap();
+        let chunk_data = wad.load_chunk_decompressed(&chunk).unwrap();
+
         let result = extractor
-            .extract_chunk(
-                &mut decoder,
+            .extract_chunk_data(
                 &chunk,
+                &chunk_data,
                 Utf8Path::new("1234567890abcdef"),
                 output_path,
             )
@@ -1097,21 +1081,21 @@ mod tests {
         let offset = source.write_at(1000, &png_data);
 
         let chunk = create_uncompressed_chunk(0x1234, offset, &png_data);
+        let chunks = WadChunks::from_iter([chunk]);
 
         let mut resolver = HashMapPathResolver::default();
-        // Path without extension
         resolver.insert(0x1234, "assets/noextension".to_string());
 
         let extractor = WadExtractor::new(&resolver);
 
-        // Extract the chunk
-        let mut decoder = WadDecoder {
-            source: &mut source,
-        };
+        let mut wad = source.into_wad(chunks);
+        let chunk = *wad.chunks().iter().next().unwrap();
+        let chunk_data = wad.load_chunk_decompressed(&chunk).unwrap();
+
         let result = extractor
-            .extract_chunk(
-                &mut decoder,
+            .extract_chunk_data(
                 &chunk,
+                &chunk_data,
                 Utf8Path::new("assets/noextension"),
                 output_path,
             )
@@ -1134,20 +1118,21 @@ mod tests {
         let offset = source.write_at(1000, unknown_data);
 
         let chunk = create_uncompressed_chunk(0x1234, offset, unknown_data);
+        let chunks = WadChunks::from_iter([chunk]);
 
         let mut resolver = HashMapPathResolver::default();
         resolver.insert(0x1234, "assets/noextension".to_string());
 
         let extractor = WadExtractor::new(&resolver);
 
-        // Extract the chunk
-        let mut decoder = WadDecoder {
-            source: &mut source,
-        };
+        let mut wad = source.into_wad(chunks);
+        let chunk = *wad.chunks().iter().next().unwrap();
+        let chunk_data = wad.load_chunk_decompressed(&chunk).unwrap();
+
         let result = extractor
-            .extract_chunk(
-                &mut decoder,
+            .extract_chunk_data(
                 &chunk,
+                &chunk_data,
                 Utf8Path::new("assets/noextension"),
                 output_path,
             )
@@ -1169,19 +1154,21 @@ mod tests {
         let offset = source.write_at(1000, data);
 
         let chunk = create_uncompressed_chunk(0x1234, offset, data);
+        let chunks = WadChunks::from_iter([chunk]);
 
         let mut resolver = HashMapPathResolver::default();
         resolver.insert(0x1234, "a/b/c/d/e/deep.txt".to_string());
 
         let extractor = WadExtractor::new(&resolver);
 
-        let mut decoder = WadDecoder {
-            source: &mut source,
-        };
+        let mut wad = source.into_wad(chunks);
+        let chunk = *wad.chunks().iter().next().unwrap();
+        let chunk_data = wad.load_chunk_decompressed(&chunk).unwrap();
+
         let result = extractor
-            .extract_chunk(
-                &mut decoder,
+            .extract_chunk_data(
                 &chunk,
+                &chunk_data,
                 Utf8Path::new("a/b/c/d/e/deep.txt"),
                 output_path,
             )
@@ -1196,18 +1183,14 @@ mod tests {
         let temp_dir = tempfile::TempDir::new().unwrap();
         let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
 
-        let mut source = MockWadSource::new();
-        let chunks: HashMap<u64, WadChunk> = HashMap::new();
+        let source = MockWadSource::new();
+        let chunks = WadChunks::from_iter([]);
 
         let resolver = HexPathResolver;
         let extractor = WadExtractor::new(&resolver);
 
-        let mut decoder = WadDecoder {
-            source: &mut source,
-        };
-        let extracted = extractor
-            .extract_all(&mut decoder, &chunks, output_path)
-            .unwrap();
+        let mut wad = source.into_wad(chunks);
+        let extracted = extractor.extract_all(&mut wad, output_path).unwrap();
 
         assert_eq!(extracted, 0);
     }

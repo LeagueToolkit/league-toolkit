@@ -30,17 +30,17 @@ impl ShaderLoader {
         defines: &[ShaderMacroDefinition],
         wad: &mut Wad<R>,
     ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-        let (mut wad_decoder, wad_chunks) = wad.decode();
         let full_shader_object_path =
             create_shader_object_path(shader_object_path, shader_type, platform);
 
         let path_hash = xxh64(full_shader_object_path.as_bytes(), 0);
 
-        let chunk = wad_chunks
-            .get(&path_hash)
+        let chunk = *wad
+            .chunks()
+            .get(path_hash)
             .ok_or_else(|| format!("Shader object not found: {}", full_shader_object_path))?;
 
-        let shader_object_data = wad_decoder.load_chunk_decompressed(chunk)?;
+        let shader_object_data = wad.load_chunk_decompressed(&chunk)?;
         let mut shader_object_reader = Cursor::new(shader_object_data);
         let shader_toc = ShaderToc::read(&mut shader_object_reader)?;
 
@@ -70,11 +70,12 @@ impl ShaderLoader {
             create_shader_bundle_path(&full_shader_object_path, shader_bundle_id);
 
         let bundle_path_hash = xxh64(shader_bundle_path.as_bytes(), 0);
-        let bundle_chunk = wad_chunks
-            .get(&bundle_path_hash)
+        let bundle_chunk = *wad
+            .chunks()
+            .get(bundle_path_hash)
             .ok_or_else(|| format!("Shader bundle not found: {}", shader_bundle_path))?;
 
-        let shader_bundle_data = wad_decoder.load_chunk_decompressed(bundle_chunk)?;
+        let shader_bundle_data = wad.load_chunk_decompressed(&bundle_chunk)?;
         let mut shader_bundle_reader = Cursor::new(shader_bundle_data);
 
         for _ in 0..shader_index_in_bundle {
