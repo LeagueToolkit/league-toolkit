@@ -1,5 +1,3 @@
-use crate::value::NoneValue;
-
 use super::traits::{ReaderExt as _, WriterExt as _};
 use super::Error;
 use byteorder::{ReadBytesExt as _, WriteBytesExt as _, LE};
