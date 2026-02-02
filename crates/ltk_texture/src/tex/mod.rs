@@ -133,12 +133,15 @@ impl Tex {
         // size of mip
         let (w, h) = mip_dims(level);
 
-        let data = match matches!(self.format, Format::Bgra8) {
-            true => TexSurfaceData::Bgra8Slice(
+        let data = match self.format {
+            Format::Bgra8 => TexSurfaceData::Bgra8Slice(
                 // TODO: test me (this is likely wrong)
                 &self.data[off..off + (w * h * self.format.bytes_per_block())],
             ),
-            false => {
+            Format::Bgra16 => TexSurfaceData::Bgra16Slice(
+                &self.data[off..off + (w * h * self.format.bytes_per_block())],
+            ),
+            _ => {
                 let mut data = vec![0; w * h];
                 let i = &self.data[off..off + mip_bytes((w, h))];
                 let o = &mut data;
@@ -152,7 +155,7 @@ impl Tex {
                         texture2ddecoder::decode_etc2_rgba8(i, w, h, o).map_err(DecodeErr::Etc2Eac)
                     }
                     // Safety: the outer match ensures we can't reach this arm
-                    Format::Bgra8 => unsafe { unreachable_unchecked() },
+                    Format::Bgra8 | Format::Bgra16 => unsafe { unreachable_unchecked() },
                 }?;
                 TexSurfaceData::Bgra8Owned(data)
             }
