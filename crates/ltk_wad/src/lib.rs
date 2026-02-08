@@ -101,10 +101,7 @@ pub use error::*;
 pub use extractor::*;
 pub use file_ext::*;
 
-use std::{
-    collections::HashMap,
-    io::{BufReader, Read, Seek, SeekFrom},
-};
+use std::io::{BufReader, Read, Seek, SeekFrom};
 
 use byteorder::{ReadBytesExt as _, LE};
 
@@ -155,24 +152,18 @@ impl<TSource: Read + Seek> Wad<TSource> {
         }
 
         let chunk_count = reader.read_i32::<LE>()? as usize;
-        let mut raw_chunks = HashMap::<u64, WadChunk>::with_capacity(chunk_count);
+        let mut raw_chunks = Vec::<WadChunk>::with_capacity(chunk_count);
         for _ in 0..chunk_count {
             let chunk = match (major, minor) {
-                (3, 1) => WadChunk::read_v3_1(&mut reader),
-                (3, 4) => WadChunk::read_v3_4(&mut reader),
+                (3, 0..=3) => WadChunk::read_v3_1(&mut reader),
+                (3, _) => WadChunk::read_v3_4(&mut reader),
                 _ => Err(WadError::InvalidVersion { major, minor }),
             }?;
 
-            raw_chunks
-                .insert(chunk.path_hash(), chunk)
-                .map_or(Ok(()), |chunk| {
-                    Err(WadError::DuplicateChunk {
-                        path_hash: chunk.path_hash(),
-                    })
-                })?;
+            raw_chunks.push(chunk);
         }
 
-        let chunks = WadChunks::from_iter(raw_chunks.into_values());
+        let chunks = WadChunks::from_iter(raw_chunks);
 
         Ok(Wad { chunks, source })
     }
