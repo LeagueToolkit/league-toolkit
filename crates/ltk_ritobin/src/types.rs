@@ -1,85 +1,85 @@
 //! Type name mappings for ritobin format.
 
-use ltk_meta::property::Kind;
+use ltk_meta::PropertyKind;
 use std::str::FromStr;
 
-/// Maps a ritobin type name string to a BinPropertyKind.
-pub fn type_name_to_kind(name: &str) -> Option<Kind> {
+/// Maps a ritobin type name string to a [`ltk_meta::PropertyKind`].
+pub fn type_name_to_kind(name: &str) -> Option<PropertyKind> {
     match name {
-        "none" => Some(Kind::None),
-        "bool" => Some(Kind::Bool),
-        "i8" => Some(Kind::I8),
-        "u8" => Some(Kind::U8),
-        "i16" => Some(Kind::I16),
-        "u16" => Some(Kind::U16),
-        "i32" => Some(Kind::I32),
-        "u32" => Some(Kind::U32),
-        "i64" => Some(Kind::I64),
-        "u64" => Some(Kind::U64),
-        "f32" => Some(Kind::F32),
-        "vec2" => Some(Kind::Vector2),
-        "vec3" => Some(Kind::Vector3),
-        "vec4" => Some(Kind::Vector4),
-        "mtx44" => Some(Kind::Matrix44),
-        "rgba" => Some(Kind::Color),
-        "string" => Some(Kind::String),
-        "hash" => Some(Kind::Hash),
-        "file" => Some(Kind::WadChunkLink),
-        "list" => Some(Kind::Container),
-        "list2" => Some(Kind::UnorderedContainer),
-        "pointer" => Some(Kind::Struct),
-        "embed" => Some(Kind::Embedded),
-        "link" => Some(Kind::ObjectLink),
-        "option" => Some(Kind::Optional),
-        "map" => Some(Kind::Map),
-        "flag" => Some(Kind::BitBool),
+        "none" => Some(PropertyKind::None),
+        "bool" => Some(PropertyKind::Bool),
+        "i8" => Some(PropertyKind::I8),
+        "u8" => Some(PropertyKind::U8),
+        "i16" => Some(PropertyKind::I16),
+        "u16" => Some(PropertyKind::U16),
+        "i32" => Some(PropertyKind::I32),
+        "u32" => Some(PropertyKind::U32),
+        "i64" => Some(PropertyKind::I64),
+        "u64" => Some(PropertyKind::U64),
+        "f32" => Some(PropertyKind::F32),
+        "vec2" => Some(PropertyKind::Vector2),
+        "vec3" => Some(PropertyKind::Vector3),
+        "vec4" => Some(PropertyKind::Vector4),
+        "mtx44" => Some(PropertyKind::Matrix44),
+        "rgba" => Some(PropertyKind::Color),
+        "string" => Some(PropertyKind::String),
+        "hash" => Some(PropertyKind::Hash),
+        "file" => Some(PropertyKind::WadChunkLink),
+        "list" => Some(PropertyKind::Container),
+        "list2" => Some(PropertyKind::UnorderedContainer),
+        "pointer" => Some(PropertyKind::Struct),
+        "embed" => Some(PropertyKind::Embedded),
+        "link" => Some(PropertyKind::ObjectLink),
+        "option" => Some(PropertyKind::Optional),
+        "map" => Some(PropertyKind::Map),
+        "flag" => Some(PropertyKind::BitBool),
         _ => None,
     }
 }
 
-/// Maps a BinPropertyKind to its ritobin type name string.
-pub fn kind_to_type_name(kind: Kind) -> &'static str {
+/// Maps a [`ltk_meta::PropertyKind`] to its ritobin type name string.
+pub fn kind_to_type_name(kind: PropertyKind) -> &'static str {
     match kind {
-        Kind::None => "none",
-        Kind::Bool => "bool",
-        Kind::I8 => "i8",
-        Kind::U8 => "u8",
-        Kind::I16 => "i16",
-        Kind::U16 => "u16",
-        Kind::I32 => "i32",
-        Kind::U32 => "u32",
-        Kind::I64 => "i64",
-        Kind::U64 => "u64",
-        Kind::F32 => "f32",
-        Kind::Vector2 => "vec2",
-        Kind::Vector3 => "vec3",
-        Kind::Vector4 => "vec4",
-        Kind::Matrix44 => "mtx44",
-        Kind::Color => "rgba",
-        Kind::String => "string",
-        Kind::Hash => "hash",
-        Kind::WadChunkLink => "file",
-        Kind::Container => "list",
-        Kind::UnorderedContainer => "list2",
-        Kind::Struct => "pointer",
-        Kind::Embedded => "embed",
-        Kind::ObjectLink => "link",
-        Kind::Optional => "option",
-        Kind::Map => "map",
-        Kind::BitBool => "flag",
+        PropertyKind::None => "none",
+        PropertyKind::Bool => "bool",
+        PropertyKind::I8 => "i8",
+        PropertyKind::U8 => "u8",
+        PropertyKind::I16 => "i16",
+        PropertyKind::U16 => "u16",
+        PropertyKind::I32 => "i32",
+        PropertyKind::U32 => "u32",
+        PropertyKind::I64 => "i64",
+        PropertyKind::U64 => "u64",
+        PropertyKind::F32 => "f32",
+        PropertyKind::Vector2 => "vec2",
+        PropertyKind::Vector3 => "vec3",
+        PropertyKind::Vector4 => "vec4",
+        PropertyKind::Matrix44 => "mtx44",
+        PropertyKind::Color => "rgba",
+        PropertyKind::String => "string",
+        PropertyKind::Hash => "hash",
+        PropertyKind::WadChunkLink => "file",
+        PropertyKind::Container => "list",
+        PropertyKind::UnorderedContainer => "list2",
+        PropertyKind::Struct => "pointer",
+        PropertyKind::Embedded => "embed",
+        PropertyKind::ObjectLink => "link",
+        PropertyKind::Optional => "option",
+        PropertyKind::Map => "map",
+        PropertyKind::BitBool => "flag",
     }
 }
 
 /// Ritobin type representation for parsing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RitobinType {
-    pub kind: Kind,
-    pub inner_kind: Option<Kind>,
-    pub value_kind: Option<Kind>,
+    pub kind: PropertyKind,
+    pub inner_kind: Option<PropertyKind>,
+    pub value_kind: Option<PropertyKind>,
 }
 
 impl RitobinType {
-    pub fn simple(kind: Kind) -> Self {
+    pub fn simple(kind: PropertyKind) -> Self {
         Self {
             kind,
             inner_kind: None,
@@ -87,7 +87,7 @@ impl RitobinType {
         }
     }
 
-    pub fn container(kind: Kind, inner: Kind) -> Self {
+    pub fn container(kind: PropertyKind, inner: PropertyKind) -> Self {
         Self {
             kind,
             inner_kind: Some(inner),
@@ -95,9 +95,9 @@ impl RitobinType {
         }
     }
 
-    pub fn map(key: Kind, value: Kind) -> Self {
+    pub fn map(key: PropertyKind, value: PropertyKind) -> Self {
         Self {
-            kind: Kind::Map,
+            kind: PropertyKind::Map,
             inner_kind: Some(key),
             value_kind: Some(value),
         }
