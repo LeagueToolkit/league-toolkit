@@ -1,85 +1,16 @@
-//! # BinTree
-//!
-//! This module provides types for reading and writing League of Legends
-//! property bin files (`.bin`).
-//!
-//! Property bins are hierarchical data structures used throughout League's
-//! game data. They contain objects with typed properties that can reference
-//! other objects and external files.
-//!
-//! ## Quick Start
-//!
-//! ### Reading a bin file
-//!
-//! ```no_run
-//! use std::fs::File;
-//! use ltk_meta::BinTree;
-//!
-//! let mut file = File::open("data.bin")?;
-//! let tree = BinTree::from_reader(&mut file)?;
-//!
-//! for (path_hash, object) in &tree.objects {
-//!     println!("Object {:08x} has {} properties", path_hash, object.properties.len());
-//! }
-//! # Ok::<(), Box<dyn std::error::Error>>(())
-//! ```
-//!
-//! ### Creating a bin file programmatically
-//!
-//! ```
-//! use ltk_meta::{BinTree, BinTreeObject};
-//! use ltk_meta::value;
-//!
-//! // Using the builder pattern
-//! let tree = BinTree::builder()
-//!     .dependency("common.bin")
-//!     .object(
-//!         BinTreeObject::builder(0x12345678, 0xABCDEF00)
-//!             .property(0x1111, value::I32(42))
-//!             .property(0x2222, value::String("hello".into()))
-//!             .build()
-//!     )
-//!     .build();
-//!
-//! // Or using the simple constructor
-//! let tree = BinTree::new(
-//!     [BinTreeObject::new(0x1234, 0x5678)],
-//!     ["dependency.bin"],
-//! );
-//! ```
-//!
-//! ### Modifying a bin file
-//!
-//! ```no_run
-//! use std::fs::File;
-//! use std::io::Cursor;
-//! use ltk_meta::{Bin, BinObject};
-//!
-//! let mut file = File::open("data.bin")?;
-//! let mut tree = Bin::from_reader(&mut file)?;
-//!
-//! // Add a new object
-//! tree.add_object(BinObject::new(0x11112222, 0x33334444));
-//!
-//! // Remove an object
-//! tree.remove_object(0x55556666);
-//!
-//! // Write back
-//! let mut output = Cursor::new(Vec::new());
-//! tree.to_writer(&mut output)?;
-//! # Ok::<(), Box<dyn std::error::Error>>(())
-//! ```
-
-use indexmap::IndexMap;
+mod builder;
+pub use builder::Builder;
 
 mod object;
-pub use object::*;
+pub use object::{BinObject, Builder as ObjectBuilder};
 
 mod read;
 mod write;
 
 #[cfg(test)]
 mod tests;
+
+use indexmap::IndexMap;
 
 /// The top level tree of a bin file.
 ///
@@ -113,7 +44,7 @@ pub struct Bin {
     pub version: u32,
 
     /// The objects in this bin tree, keyed by their path hash.
-    pub objects: IndexMap<u32, Object>,
+    pub objects: IndexMap<u32, BinObject>,
 
     /// List of other property bins this file depends on.
     ///
@@ -153,7 +84,7 @@ impl Bin {
     /// );
     /// ```
     pub fn new(
-        objects: impl IntoIterator<Item = Object>,
+        objects: impl IntoIterator<Item = BinObject>,
         dependencies: impl IntoIterator<Item = impl Into<String>>,
     ) -> Self {
         Self {
@@ -161,7 +92,7 @@ impl Bin {
             is_override: false,
             objects: objects
                 .into_iter()
-                .map(|o: Object| (o.path_hash, o))
+                .map(|o: BinObject| (o.path_hash, o))
                 .collect(),
             dependencies: dependencies.into_iter().map(Into::into).collect(),
             data_overrides: Vec::new(),
@@ -173,15 +104,15 @@ impl Bin {
     /// # Examples
     ///
     /// ```
-    /// use ltk_meta::{BinTree, BinTreeObject};
+    /// use ltk_meta::{BinTree, BinObject};
     ///
-    /// let tree = BinTree::builder()
+    /// let tree = Bin::builder()
     ///     .dependency("common.bin")
-    ///     .object(BinTreeObject::new(0x1234, 0x5678))
+    ///     .object(BinObject::new(0x1234, 0x5678))
     ///     .build();
     /// ```
-    pub fn builder() -> BinTreeBuilder {
-        BinTreeBuilder::new()
+    pub fn builder() -> builder::Builder {
+        builder::Builder::new()
     }
 
     /// Returns the number of objects in the tree.
@@ -198,13 +129,13 @@ impl Bin {
 
     /// Returns a reference to the object with the given path hash, if it exists.
     #[inline]
-    pub fn get_object(&self, path_hash: u32) -> Option<&Object> {
+    pub fn get_object(&self, path_hash: u32) -> Option<&BinObject> {
         self.objects.get(&path_hash)
     }
 
     /// Returns a mutable reference to the object with the given path hash, if it exists.
     #[inline]
-    pub fn get_object_mut(&mut self, path_hash: u32) -> Option<&mut Object> {
+    pub fn get_object_mut(&mut self, path_hash: u32) -> Option<&mut BinObject> {
         self.objects.get_mut(&path_hash)
     }
 
@@ -218,12 +149,12 @@ impl Bin {
     ///
     /// If an object with the same path hash already exists, it is replaced
     /// and the old object is returned.
-    pub fn add_object(&mut self, object: Object) -> Option<Object> {
+    pub fn add_object(&mut self, object: BinObject) -> Option<BinObject> {
         self.objects.insert(object.path_hash, object)
     }
 
     /// Removes and returns the object with the given path hash, if it exists.
-    pub fn remove_object(&mut self, path_hash: u32) -> Option<Object> {
+    pub fn remove_object(&mut self, path_hash: u32) -> Option<BinObject> {
         self.objects.shift_remove(&path_hash)
     }
 
@@ -234,20 +165,20 @@ impl Bin {
 
     /// Returns an iterator over the objects in the tree.
     #[inline]
-    pub fn iter(&self) -> impl Iterator<Item = (&u32, &Object)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&u32, &BinObject)> {
         self.objects.iter()
     }
 
     /// Returns a mutable iterator over the objects in the tree.
     #[inline]
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&u32, &mut Object)> {
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&u32, &mut BinObject)> {
         self.objects.iter_mut()
     }
 }
 
 impl<'a> IntoIterator for &'a Bin {
-    type Item = (&'a u32, &'a Object);
-    type IntoIter = indexmap::map::Iter<'a, u32, Object>;
+    type Item = (&'a u32, &'a BinObject);
+    type IntoIter = indexmap::map::Iter<'a, u32, BinObject>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.objects.iter()
@@ -255,8 +186,8 @@ impl<'a> IntoIterator for &'a Bin {
 }
 
 impl<'a> IntoIterator for &'a mut Bin {
-    type Item = (&'a u32, &'a mut Object);
-    type IntoIter = indexmap::map::IterMut<'a, u32, Object>;
+    type Item = (&'a u32, &'a mut BinObject);
+    type IntoIter = indexmap::map::IterMut<'a, u32, BinObject>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.objects.iter_mut()
@@ -264,83 +195,10 @@ impl<'a> IntoIterator for &'a mut Bin {
 }
 
 impl IntoIterator for Bin {
-    type Item = (u32, Object);
-    type IntoIter = indexmap::map::IntoIter<u32, Object>;
+    type Item = (u32, BinObject);
+    type IntoIter = indexmap::map::IntoIter<u32, BinObject>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.objects.into_iter()
-    }
-}
-
-/// A builder for constructing [`BinTree`] instances.
-///
-/// # Examples
-///
-/// ```
-/// use ltk_meta::{BinTree, BinTreeObject, BinTreeBuilder};
-///
-/// let tree = BinTreeBuilder::new()
-///     .is_override(false)
-///     .dependency("base.bin")
-///     .dependencies(["extra1.bin", "extra2.bin"])
-///     .object(BinTreeObject::new(0x1234, 0x5678))
-///     .build();
-/// ```
-#[derive(Debug, Default, Clone)]
-pub struct BinTreeBuilder {
-    is_override: bool,
-    objects: Vec<Object>,
-    dependencies: Vec<String>,
-}
-
-impl BinTreeBuilder {
-    /// Creates a new `BinTreeBuilder` with default values.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Sets whether this is an override bin file.
-    ///
-    /// Default is `false`.
-    pub fn is_override(mut self, is_override: bool) -> Self {
-        self.is_override = is_override;
-        self
-    }
-
-    /// Adds a single dependency.
-    pub fn dependency(mut self, dep: impl Into<String>) -> Self {
-        self.dependencies.push(dep.into());
-        self
-    }
-
-    /// Adds multiple dependencies.
-    pub fn dependencies(mut self, deps: impl IntoIterator<Item = impl Into<String>>) -> Self {
-        self.dependencies.extend(deps.into_iter().map(Into::into));
-        self
-    }
-
-    /// Adds a single object.
-    pub fn object(mut self, obj: Object) -> Self {
-        self.objects.push(obj);
-        self
-    }
-
-    /// Adds multiple objects.
-    pub fn objects(mut self, objs: impl IntoIterator<Item = Object>) -> Self {
-        self.objects.extend(objs);
-        self
-    }
-
-    /// Builds the [`BinTree`].
-    ///
-    /// The resulting tree will have version 3, which is always used when writing.
-    pub fn build(self) -> Bin {
-        Bin {
-            version: 3,
-            is_override: self.is_override,
-            objects: self.objects.into_iter().map(|o| (o.path_hash, o)).collect(),
-            dependencies: self.dependencies,
-            data_overrides: Vec::new(),
-        }
     }
 }

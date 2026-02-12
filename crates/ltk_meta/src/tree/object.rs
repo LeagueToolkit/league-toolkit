@@ -1,5 +1,8 @@
 //! BinTree object types and builders.
 
+mod builder;
+pub use builder::Builder;
+
 use std::io;
 
 use indexmap::IndexMap;
@@ -33,7 +36,7 @@ use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 /// ```
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
-pub struct Object {
+pub struct BinObject {
     /// The unique path hash identifying this object.
     pub path_hash: u32,
 
@@ -44,7 +47,7 @@ pub struct Object {
     pub properties: IndexMap<u32, BinProperty>,
 }
 
-impl Object {
+impl BinObject {
     /// Creates a new `BinTreeObject` with the given path and class hashes.
     ///
     /// The object starts with no properties.
@@ -77,8 +80,8 @@ impl Object {
     ///     .property(0xAAAA, value::I32(42))
     ///     .build();
     /// ```
-    pub fn builder(path_hash: u32, class_hash: u32) -> BinTreeObjectBuilder {
-        BinTreeObjectBuilder::new(path_hash, class_hash)
+    pub fn builder(path_hash: u32, class_hash: u32) -> builder::Builder {
+        builder::Builder::new(path_hash, class_hash)
     }
 
     /// Reads a BinTreeObject from a reader.
@@ -228,7 +231,7 @@ impl Object {
     }
 }
 
-impl<'a> IntoIterator for &'a Object {
+impl<'a> IntoIterator for &'a BinObject {
     type Item = (&'a u32, &'a BinProperty);
     type IntoIter = indexmap::map::Iter<'a, u32, BinProperty>;
 
@@ -237,7 +240,7 @@ impl<'a> IntoIterator for &'a Object {
     }
 }
 
-impl<'a> IntoIterator for &'a mut Object {
+impl<'a> IntoIterator for &'a mut BinObject {
     type Item = (&'a u32, &'a mut BinProperty);
     type IntoIter = indexmap::map::IterMut<'a, u32, BinProperty>;
 
@@ -246,95 +249,11 @@ impl<'a> IntoIterator for &'a mut Object {
     }
 }
 
-impl IntoIterator for Object {
+impl IntoIterator for BinObject {
     type Item = (u32, BinProperty);
     type IntoIter = indexmap::map::IntoIter<u32, BinProperty>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.properties.into_iter()
-    }
-}
-
-/// A builder for constructing [`BinTreeObject`] instances.
-///
-/// # Examples
-///
-/// ```
-/// use ltk_meta::BinTreeObjectBuilder;
-/// use ltk_meta::value;
-///
-/// let obj = BinTreeObjectBuilder::new(0x12345678, 0xABCDEF00)
-///     .property(0x1111, value::I32(42))
-///     .property(0x2222, value::String("hello".into()))
-///     .property(0x3333, value::Bool(true))
-///     .build();
-///
-/// assert_eq!(obj.properties.len(), 3);
-/// ```
-#[derive(Debug, Clone)]
-pub struct BinTreeObjectBuilder {
-    path_hash: u32,
-    class_hash: u32,
-    properties: IndexMap<u32, BinProperty>,
-}
-
-impl BinTreeObjectBuilder {
-    /// Creates a new `BinTreeObjectBuilder` with the given path and class hashes.
-    pub fn new(path_hash: u32, class_hash: u32) -> Self {
-        Self {
-            path_hash,
-            class_hash,
-            properties: IndexMap::new(),
-        }
-    }
-
-    /// Sets the path hash.
-    pub fn path_hash(mut self, path_hash: u32) -> Self {
-        self.path_hash = path_hash;
-        self
-    }
-
-    /// Sets the class hash.
-    pub fn class_hash(mut self, class_hash: u32) -> Self {
-        self.class_hash = class_hash;
-        self
-    }
-
-    /// Adds a property from a [`BinProperty`].
-    pub fn bin_property(mut self, prop: BinProperty) -> Self {
-        self.properties.insert(prop.name_hash, prop);
-        self
-    }
-
-    /// Adds a property with the given name hash and value.
-    ///
-    /// This is a convenience method that accepts any type that can be converted
-    /// into a [`PropertyValueEnum`].
-    pub fn property(mut self, name_hash: u32, value: impl Into<PropertyValueEnum>) -> Self {
-        self.properties.insert(
-            name_hash,
-            BinProperty {
-                name_hash,
-                value: value.into(),
-            },
-        );
-        self
-    }
-
-    /// Adds multiple properties from [`BinProperty`] instances.
-    pub fn bin_properties(mut self, props: impl IntoIterator<Item = BinProperty>) -> Self {
-        for prop in props {
-            self.properties.insert(prop.name_hash, prop);
-        }
-        self
-    }
-
-    /// Builds the [`BinTreeObject`].
-    pub fn build(self) -> Object {
-        Object {
-            path_hash: self.path_hash,
-            class_hash: self.class_hash,
-            properties: self.properties,
-        }
     }
 }

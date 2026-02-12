@@ -1,9 +1,79 @@
-//! Bin file & properties
+/*!
+Types for reading and writing League of Legends
+property bin files (`.bin`).
+
+Property bins are hierarchical data structures used throughout League's
+game data. They contain objects with typed properties that can reference
+other objects and external files.
+
+## Quick Start
+
+### Reading a bin file
+
+```no_run
+use std::fs::File;
+use ltk_meta::BinTree;
+
+let mut file = File::open("data.bin")?;
+let tree = BinTree::from_reader(&mut file)?;
+
+for (path_hash, object) in &tree.objects {
+    println!("Object {:08x} has {} properties", path_hash, object.properties.len());
+}
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+### Creating a bin file programmatically
+
+```
+use ltk_meta::{BinTree, BinTreeObject};
+use ltk_meta::value;
+
+// Using the builder pattern
+let tree = BinTree::builder()
+    .dependency("common.bin")
+    .object(
+        BinTreeObject::builder(0x12345678, 0xABCDEF00)
+            .property(0x1111, value::I32(42))
+            .property(0x2222, value::String("hello".into()))
+            .build()
+    )
+    .build();
+
+// Or using the simple constructor
+let tree = BinTree::new(
+    [BinTreeObject::new(0x1234, 0x5678)],
+    ["dependency.bin"],
+);
+```
+
+### Modifying a bin file
+
+```no_run
+use std::fs::File;
+use std::io::Cursor;
+use ltk_meta::{Bin, BinObject};
+
+let mut file = File::open("data.bin")?;
+let mut tree = Bin::from_reader(&mut file)?;
+
+// Add a new object
+tree.add_object(BinObject::new(0x11112222, 0x33334444));
+
+// Remove an object
+tree.remove_object(0x55556666);
+
+// Write back
+let mut output = Cursor::new(Vec::new());
+tree.to_writer(&mut output)?;
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+*/
 pub mod property;
 pub use property::{value, BinProperty, Kind as PropertyKind, PropertyValueEnum};
 
-pub mod tree;
-pub use tree::{Bin, Object as BinObject};
+mod tree;
+pub use tree::*;
 
 mod error;
 pub use error::*;
