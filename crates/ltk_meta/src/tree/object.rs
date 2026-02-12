@@ -1,4 +1,4 @@
-//! BinTree object types and builders.
+//! Bin object types and builders.
 
 mod builder;
 pub use builder::Builder;
@@ -18,18 +18,18 @@ use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 ///
 /// # Construction
 ///
-/// Use [`BinTreeObject::new`] for simple cases or [`BinTreeObject::builder`] for
+/// Use [`BinObject::new`] for simple cases or [`BinObject::builder`] for
 /// adding properties inline:
 ///
 /// ```
-/// use ltk_meta::BinTreeObject;
+/// use ltk_meta::BinObject;
 /// use ltk_meta::value;
 ///
 /// // Simple construction
-/// let obj = BinTreeObject::new(0x1234, 0x5678);
+/// let obj = BinObject::new(0x1234, 0x5678);
 ///
 /// // Builder pattern with properties
-/// let obj = BinTreeObject::builder(0x1234, 0x5678)
+/// let obj = BinObject::builder(0x1234, 0x5678)
 ///     .property(0xAAAA, value::I32(42))
 ///     .property(0xBBBB, value::String("hello".into()))
 ///     .build();
@@ -48,16 +48,16 @@ pub struct BinObject {
 }
 
 impl BinObject {
-    /// Creates a new `BinTreeObject` with the given path and class hashes.
+    /// Creates a new `BinObject` with the given path and class hashes.
     ///
     /// The object starts with no properties.
     ///
     /// # Examples
     ///
     /// ```
-    /// use ltk_meta::BinTreeObject;
+    /// use ltk_meta::BinObject;
     ///
-    /// let obj = BinTreeObject::new(0x12345678, 0xABCDEF00);
+    /// let obj = BinObject::new(0x12345678, 0xABCDEF00);
     /// assert!(obj.properties.is_empty());
     /// ```
     pub fn new(path_hash: u32, class_hash: u32) -> Self {
@@ -68,27 +68,31 @@ impl BinObject {
         }
     }
 
-    /// Creates a new builder for constructing a `BinTreeObject`.
+    /// Creates a new builder for constructing a `BinObject`.
     ///
     /// # Examples
     ///
     /// ```
-    /// use ltk_meta::BinTreeObject;
+    /// use ltk_meta::BinObject;
     /// use ltk_meta::value;
     ///
-    /// let obj = BinTreeObject::builder(0x1234, 0x5678)
-    ///     .property(0xAAAA, value::I32(42))
+    /// let obj = BinObject::builder(0x12345678, 0xABCDEF00)
+    ///     .property(0x1111, value::I32(42))
+    ///     .property(0x2222, value::String("hello".into()))
+    ///     .property(0x3333, value::Bool(true))
     ///     .build();
+    ///
+    /// assert_eq!(obj.properties.len(), 3);
     /// ```
     pub fn builder(path_hash: u32, class_hash: u32) -> builder::Builder {
         builder::Builder::new(path_hash, class_hash)
     }
 
-    /// Reads a BinTreeObject from a reader.
+    /// Reads a BinObject from a reader.
     ///
     /// # Arguments
     ///
-    /// * `reader` - A reader that implements io::Read and io::Seek.
+    /// * `reader` - A reader that implements [`io::Read`] and [`io::Seek`].
     /// * `class_hash` - The hash of the class of the object.
     /// * `legacy` - Whether to read in legacy format.
     pub fn from_reader<R: io::Read + io::Seek + ?Sized>(
@@ -120,7 +124,7 @@ impl BinObject {
         Ok(value)
     }
 
-    /// Writes a BinTreeObject to a writer.
+    /// Writes this object to a writer.
     ///
     /// # Arguments
     ///

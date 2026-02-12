@@ -12,24 +12,23 @@ mod tests;
 
 use indexmap::IndexMap;
 
-/// The top level tree of a bin file.
+/// The complete contents of a League of Legends property bin file.
 ///
-/// A `BinTree` represents the complete contents of a League of Legends
-/// property bin file. It contains a collection of objects, each identified
-/// by a path hash, along with optional dependencies on other bin files.
+/// It contains a collection of objects, each identified
+/// by a path hash, along with a list of any dependencies on other bin files.
 ///
 /// # Construction
 ///
-/// Use [`BinTree::new`] for simple cases or [`BinTree::builder`] for more control:
+/// Use [`Bin::new`] for simple cases or [`Bin::builder`] for more control:
 ///
 /// ```
-/// use ltk_meta::{BinTree, BinTreeObject};
+/// use ltk_meta::{Bin, BinObject};
 ///
 /// // Simple construction
-/// let tree = BinTree::new([], std::iter::empty::<&str>());
+/// let tree = Bin::new([], std::iter::empty::<&str>());
 ///
 /// // Builder pattern
-/// let tree = BinTree::builder()
+/// let tree = Bin::builder()
 ///     .dependency("base.bin")
 ///     .build();
 /// ```
@@ -69,17 +68,17 @@ impl Default for Bin {
 }
 
 impl Bin {
-    /// Creates a new `BinTree` with the given objects and dependencies.
+    /// Creates a new `Bin` with the given objects and dependencies.
     ///
     /// The version is set to 3 and `is_override` is set to false.
     ///
     /// # Examples
     ///
     /// ```
-    /// use ltk_meta::{BinTree, BinTreeObject};
+    /// use ltk_meta::{Bin, BinObject};
     ///
-    /// let tree = BinTree::new(
-    ///     [BinTreeObject::new(0x1234, 0x5678)],
+    /// let tree = Bin::new(
+    ///     [BinObject::new(0x1234, 0x5678)],
     ///     ["dependency.bin"],
     /// );
     /// ```
@@ -99,12 +98,12 @@ impl Bin {
         }
     }
 
-    /// Creates a new builder for constructing a `BinTree`.
+    /// Creates a new builder for constructing a `Bin`.
     ///
     /// # Examples
     ///
     /// ```
-    /// use ltk_meta::{BinTree, BinObject};
+    /// use ltk_meta::{Bin, BinObject};
     ///
     /// let tree = Bin::builder()
     ///     .dependency("common.bin")

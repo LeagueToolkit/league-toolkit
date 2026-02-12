@@ -1,25 +1,10 @@
 use indexmap::IndexMap;
 
-use crate::{BinProperty, PropertyValueEnum};
+use crate::{BinObject, BinProperty, PropertyValueEnum};
 
-use super::BinObject;
-
-/// A builder for constructing [`Object`] instances.
+/// A builder for constructing [`BinObject`] instances.
 ///
-/// # Examples
-///
-/// ```
-/// use ltk_meta::tree::Object;
-/// use ltk_meta::value;
-///
-/// let obj = Object::builder(0x12345678, 0xABCDEF00)
-///     .property(0x1111, value::I32(42))
-///     .property(0x2222, value::String("hello".into()))
-///     .property(0x3333, value::Bool(true))
-///     .build();
-///
-/// assert_eq!(obj.properties.len(), 3);
-/// ```
+/// See: [`BinObject::builder`]
 #[derive(Debug, Clone)]
 pub struct Builder {
     path_hash: u32,
@@ -28,6 +13,7 @@ pub struct Builder {
 }
 
 impl Builder {
+    /// See: [`BinObject::builder`]
     pub fn new(path_hash: u32, class_hash: u32) -> Self {
         Self {
             path_hash,
@@ -75,7 +61,7 @@ impl Builder {
         self
     }
 
-    /// Builds the final [`Object`].
+    /// Builds the final [`BinObject`].
     pub fn build(self) -> BinObject {
         BinObject {
             path_hash: self.path_hash,

@@ -12,10 +12,10 @@ other objects and external files.
 
 ```no_run
 use std::fs::File;
-use ltk_meta::BinTree;
+use ltk_meta::Bin;
 
 let mut file = File::open("data.bin")?;
-let tree = BinTree::from_reader(&mut file)?;
+let tree = Bin::from_reader(&mut file)?;
 
 for (path_hash, object) in &tree.objects {
     println!("Object {:08x} has {} properties", path_hash, object.properties.len());
@@ -26,14 +26,14 @@ for (path_hash, object) in &tree.objects {
 ### Creating a bin file programmatically
 
 ```
-use ltk_meta::{BinTree, BinTreeObject};
+use ltk_meta::{Bin, BinObject};
 use ltk_meta::value;
 
 // Using the builder pattern
-let tree = BinTree::builder()
+let tree = Bin::builder()
     .dependency("common.bin")
     .object(
-        BinTreeObject::builder(0x12345678, 0xABCDEF00)
+        BinObject::builder(0x12345678, 0xABCDEF00)
             .property(0x1111, value::I32(42))
             .property(0x2222, value::String("hello".into()))
             .build()
@@ -41,8 +41,8 @@ let tree = BinTree::builder()
     .build();
 
 // Or using the simple constructor
-let tree = BinTree::new(
-    [BinTreeObject::new(0x1234, 0x5678)],
+let tree = Bin::new(
+    [BinObject::new(0x1234, 0x5678)],
     ["dependency.bin"],
 );
 ```
