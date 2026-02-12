@@ -1,5 +1,7 @@
-use crate::property::Kind;
-use crate::traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty};
+use crate::{
+    property::Kind,
+    traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty},
+};
 use ltk_io_ext::{ReaderExt, WriterExt};
 
 macro_rules! impl_prim {

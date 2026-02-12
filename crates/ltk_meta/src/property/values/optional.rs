@@ -1,8 +1,7 @@
-use super::PropertyValueEnum;
 use crate::{
     property::Kind,
     traits::{PropertyExt, PropertyValueExt, ReadProperty, ReaderExt, WriteProperty, WriterExt},
-    Error,
+    Error, PropertyValueEnum,
 };
 use ltk_io_ext::{ReaderExt as _, WriterExt as _};
 

@@ -2,29 +2,29 @@ macro_rules! variants {
     ($macro:ident $(, $args:tt)*) => {
         $macro! {
             $( $args )*
-            None(crate::property::value::None),
-            Bool(crate::property::value::Bool),
-            I8(crate::property::value::I8),
-            U8(crate::property::value::U8),
-            I16(crate::property::value::I16),
-            U16(crate::property::value::U16),
-            I32(crate::property::value::I32),
-            U32(crate::property::value::U32),
-            I64(crate::property::value::I64),
-            U64(crate::property::value::U64),
-            F32(crate::property::value::F32),
-            Vector2(crate::property::value::Vector2),
-            Vector3(crate::property::value::Vector3),
-            Vector4(crate::property::value::Vector4),
-            Matrix44(crate::property::value::Matrix44),
-            Color(crate::property::value::Color),
-            String(crate::property::value::String),
-            Hash(crate::property::value::Hash),
-            WadChunkLink(crate::property::value::WadChunkLink),
-            Struct(crate::property::value::Struct),
-            Embedded(crate::property::value::Embedded),
-            ObjectLink(crate::property::value::ObjectLink),
-            BitBool(crate::property::value::BitBool),
+            None(crate::property::values::None),
+            Bool(crate::property::values::Bool),
+            I8(crate::property::values::I8),
+            U8(crate::property::values::U8),
+            I16(crate::property::values::I16),
+            U16(crate::property::values::U16),
+            I32(crate::property::values::I32),
+            U32(crate::property::values::U32),
+            I64(crate::property::values::I64),
+            U64(crate::property::values::U64),
+            F32(crate::property::values::F32),
+            Vector2(crate::property::values::Vector2),
+            Vector3(crate::property::values::Vector3),
+            Vector4(crate::property::values::Vector4),
+            Matrix44(crate::property::values::Matrix44),
+            Color(crate::property::values::Color),
+            String(crate::property::values::String),
+            Hash(crate::property::values::Hash),
+            WadChunkLink(crate::property::values::WadChunkLink),
+            Struct(crate::property::values::Struct),
+            Embedded(crate::property::values::Embedded),
+            ObjectLink(crate::property::values::ObjectLink),
+            BitBool(crate::property::values::BitBool),
         }
     };
 }
@@ -40,7 +40,7 @@ macro_rules! match_property_arms {
      $( $variant:ident($ty:ty), )*) => {
         match $value {
             $(
-                crate::property::value::Container::$variant($inner) => $body,
+                crate::property::values::Container::$variant($inner) => $body,
             )*
         }
     };

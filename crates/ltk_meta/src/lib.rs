@@ -27,15 +27,15 @@ for (path_hash, object) in &tree.objects {
 
 ```
 use ltk_meta::{Bin, BinObject};
-use ltk_meta::value;
+use ltk_meta::property::values;
 
 // Using the builder pattern
 let tree = Bin::builder()
     .dependency("common.bin")
     .object(
         BinObject::builder(0x12345678, 0xABCDEF00)
-            .property(0x1111, value::I32(42))
-            .property(0x2222, value::String("hello".into()))
+            .property(0x1111, values::I32(42))
+            .property(0x2222, values::String("hello".into()))
             .build()
     )
     .build();
@@ -70,7 +70,7 @@ tree.to_writer(&mut output)?;
 ```
 */
 pub mod property;
-pub use property::{value, BinProperty, Kind as PropertyKind, PropertyValueEnum};
+pub use property::{BinProperty, Kind as PropertyKind, PropertyValueEnum};
 
 mod tree;
 pub use tree::*;

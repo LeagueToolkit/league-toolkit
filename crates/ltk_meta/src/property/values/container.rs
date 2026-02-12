@@ -6,7 +6,7 @@ use crate::{
     Error,
 };
 
-use super::PropertyValueEnum;
+use crate::PropertyValueEnum;
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 use ltk_io_ext::{measure, window_at};
 

@@ -7,7 +7,7 @@ use glam::{Mat4, Vec2, Vec3, Vec4};
 use indexmap::IndexMap;
 use ltk_hash::fnv1a::hash_lower;
 use ltk_meta::{
-    value::{self, PropertyValueEnum},
+    property::{values, PropertyValueEnum},
     Bin, BinObject, BinProperty, PropertyKind,
 };
 use ltk_primitives::Color;
@@ -506,7 +506,7 @@ fn parse_map_entries(
     input: Span,
     key_kind: PropertyKind,
     value_kind: PropertyKind,
-) -> ParseResult<IndexMap<value::PropertyValueUnsafeEq, PropertyValueEnum>> {
+) -> ParseResult<IndexMap<values::PropertyValueUnsafeEq, PropertyValueEnum>> {
     let (input, _) = preceded(ws, char('{'))(input)?;
     let (input, _) = ws(input)?;
 
@@ -526,7 +526,7 @@ fn parse_map_entries(
         let (r, _) = preceded(ws, char('='))(r)?;
         let (r, value) = parse_value_for_kind(r, value_kind)?;
 
-        entries.insert(value::PropertyValueUnsafeEq(key), value);
+        entries.insert(values::PropertyValueUnsafeEq(key), value);
 
         let (r, _) = ws(r)?;
         let (r, _) = opt(char(','))(r)?;
@@ -535,7 +535,7 @@ fn parse_map_entries(
 }
 
 /// Parse optional value.
-fn parse_optional_value(input: Span, inner_kind: PropertyKind) -> ParseResult<value::Optional> {
+fn parse_optional_value(input: Span, inner_kind: PropertyKind) -> ParseResult<values::Optional> {
     let (input, _) = preceded(ws, char('{'))(input)?;
     let (input, _) = ws(input)?;
 
@@ -543,7 +543,7 @@ fn parse_optional_value(input: Span, inner_kind: PropertyKind) -> ParseResult<va
     if let Ok((input, _)) = char::<Span, SpannedError>('}')(input) {
         return Ok((
             input,
-            value::Optional {
+            values::Optional {
                 kind: inner_kind,
                 value: None,
             },
@@ -557,7 +557,7 @@ fn parse_optional_value(input: Span, inner_kind: PropertyKind) -> ParseResult<va
 
     Ok((
         input,
-        value::Optional {
+        values::Optional {
             kind: inner_kind,
             value: Some(Box::new(value)),
         },
@@ -612,14 +612,14 @@ fn parse_field(input: Span) -> ParseResult<BinProperty> {
 }
 
 /// Parse a pointer value (null or name { fields }).
-fn parse_pointer_value(input: Span) -> ParseResult<value::Struct> {
+fn parse_pointer_value(input: Span) -> ParseResult<values::Struct> {
     let (input, _) = ws(input)?;
 
     // Check for null
     if let Ok((input, _)) = tag::<&str, Span, SpannedError>("null")(input) {
         return Ok((
             input,
-            value::Struct {
+            values::Struct {
                 class_hash: 0,
                 properties: IndexMap::new(),
             },
@@ -640,7 +640,7 @@ fn parse_pointer_value(input: Span) -> ParseResult<value::Struct> {
     if let Ok((input, _)) = tag::<&str, Span, SpannedError>("{}")(input) {
         return Ok((
             input,
-            value::Struct {
+            values::Struct {
                 class_hash,
                 properties: IndexMap::new(),
             },
@@ -652,7 +652,7 @@ fn parse_pointer_value(input: Span) -> ParseResult<value::Struct> {
 
     Ok((
         input,
-        value::Struct {
+        values::Struct {
             class_hash,
             properties,
         },
@@ -660,9 +660,9 @@ fn parse_pointer_value(input: Span) -> ParseResult<value::Struct> {
 }
 
 /// Parse an embed value (name { fields }).
-fn parse_embed_value(input: Span) -> ParseResult<value::Embedded> {
+fn parse_embed_value(input: Span) -> ParseResult<values::Embedded> {
     let (input, struct_val) = parse_pointer_value(input)?;
-    Ok((input, value::Embedded(struct_val)))
+    Ok((input, values::Embedded(struct_val)))
 }
 
 /// Parse a value given a BinPropertyKind.
@@ -670,90 +670,90 @@ fn parse_value_for_kind(input: Span, kind: PropertyKind) -> ParseResult<Property
     match kind {
         PropertyKind::None => {
             let (input, _) = preceded(ws, tag("null"))(input)?;
-            Ok((input, PropertyValueEnum::None(value::None)))
+            Ok((input, PropertyValueEnum::None(values::None)))
         }
         PropertyKind::Bool => {
             let (input, v) = parse_bool(input)?;
-            Ok((input, PropertyValueEnum::Bool(value::Bool(v))))
+            Ok((input, PropertyValueEnum::Bool(values::Bool(v))))
         }
         PropertyKind::I8 => {
             let (input, v) = parse_int::<i8>(input)?;
-            Ok((input, PropertyValueEnum::I8(value::I8(v))))
+            Ok((input, PropertyValueEnum::I8(values::I8(v))))
         }
         PropertyKind::U8 => {
             let (input, v) = parse_int::<u8>(input)?;
-            Ok((input, PropertyValueEnum::U8(value::U8(v))))
+            Ok((input, PropertyValueEnum::U8(values::U8(v))))
         }
         PropertyKind::I16 => {
             let (input, v) = parse_int::<i16>(input)?;
-            Ok((input, PropertyValueEnum::I16(value::I16(v))))
+            Ok((input, PropertyValueEnum::I16(values::I16(v))))
         }
         PropertyKind::U16 => {
             let (input, v) = parse_int::<u16>(input)?;
-            Ok((input, PropertyValueEnum::U16(value::U16(v))))
+            Ok((input, PropertyValueEnum::U16(values::U16(v))))
         }
         PropertyKind::I32 => {
             let (input, v) = parse_int::<i32>(input)?;
-            Ok((input, PropertyValueEnum::I32(value::I32(v))))
+            Ok((input, PropertyValueEnum::I32(values::I32(v))))
         }
         PropertyKind::U32 => {
             let (input, v) = hex_u32(input)?;
-            Ok((input, PropertyValueEnum::U32(value::U32(v))))
+            Ok((input, PropertyValueEnum::U32(values::U32(v))))
         }
         PropertyKind::I64 => {
             let (input, v) = parse_int::<i64>(input)?;
-            Ok((input, PropertyValueEnum::I64(value::I64(v))))
+            Ok((input, PropertyValueEnum::I64(values::I64(v))))
         }
         PropertyKind::U64 => {
             let (input, v) = hex_u64(input)?;
-            Ok((input, PropertyValueEnum::U64(value::U64(v))))
+            Ok((input, PropertyValueEnum::U64(values::U64(v))))
         }
         PropertyKind::F32 => {
             let (input, v) = parse_float(input)?;
-            Ok((input, PropertyValueEnum::F32(value::F32(v))))
+            Ok((input, PropertyValueEnum::F32(values::F32(v))))
         }
         PropertyKind::Vector2 => {
             let (input, v) = parse_vec2(input)?;
-            Ok((input, PropertyValueEnum::Vector2(value::Vector2(v))))
+            Ok((input, PropertyValueEnum::Vector2(values::Vector2(v))))
         }
         PropertyKind::Vector3 => {
             let (input, v) = parse_vec3(input)?;
-            Ok((input, PropertyValueEnum::Vector3(value::Vector3(v))))
+            Ok((input, PropertyValueEnum::Vector3(values::Vector3(v))))
         }
         PropertyKind::Vector4 => {
             let (input, v) = parse_vec4(input)?;
-            Ok((input, PropertyValueEnum::Vector4(value::Vector4(v))))
+            Ok((input, PropertyValueEnum::Vector4(values::Vector4(v))))
         }
         PropertyKind::Matrix44 => {
             let (input, v) = parse_mtx44(input)?;
-            Ok((input, PropertyValueEnum::Matrix44(value::Matrix44(v))))
+            Ok((input, PropertyValueEnum::Matrix44(values::Matrix44(v))))
         }
         PropertyKind::Color => {
             let (input, v) = parse_rgba(input)?;
-            Ok((input, PropertyValueEnum::Color(value::Color(v))))
+            Ok((input, PropertyValueEnum::Color(values::Color(v))))
         }
         PropertyKind::String => {
             let (input, v) = preceded(ws, quoted_string)(input)?;
-            Ok((input, PropertyValueEnum::String(value::String(v))))
+            Ok((input, PropertyValueEnum::String(values::String(v))))
         }
         PropertyKind::Hash => {
             let (input, v) = parse_hash_value(input)?;
-            Ok((input, PropertyValueEnum::Hash(value::Hash(v))))
+            Ok((input, PropertyValueEnum::Hash(values::Hash(v))))
         }
         PropertyKind::WadChunkLink => {
             let (input, v) = parse_file_hash(input)?;
             Ok((
                 input,
-                PropertyValueEnum::WadChunkLink(value::WadChunkLink(v)),
+                PropertyValueEnum::WadChunkLink(values::WadChunkLink(v)),
             ))
         }
         PropertyKind::ObjectLink => {
             let (input, v) = parse_link_value(input)?;
-            Ok((input, PropertyValueEnum::ObjectLink(value::ObjectLink(v))))
+            Ok((input, PropertyValueEnum::ObjectLink(values::ObjectLink(v))))
         }
         PropertyKind::BitBool => {
             let (input, v) = parse_bool(input)?;
-            Ok((input, PropertyValueEnum::BitBool(value::BitBool(v))))
+            Ok((input, PropertyValueEnum::BitBool(values::BitBool(v))))
         }
         PropertyKind::Struct => {
             let (input, v) = parse_pointer_value(input)?;
@@ -785,7 +785,9 @@ fn parse_value_for_type<'a>(
             let (input, items) = parse_list_items(input, inner_kind)?;
             Ok((
                 input,
-                PropertyValueEnum::Container(value::Container::try_from(items).unwrap_or_default()), // TODO: handle error here
+                PropertyValueEnum::Container(
+                    values::Container::try_from(items).unwrap_or_default(),
+                ), // TODO: handle error here
             ))
         }
         PropertyKind::UnorderedContainer => {
@@ -793,8 +795,8 @@ fn parse_value_for_type<'a>(
             let (input, items) = parse_list_items(input, inner_kind)?;
             Ok((
                 input,
-                PropertyValueEnum::UnorderedContainer(value::UnorderedContainer(
-                    value::Container::try_from(items).unwrap_or_default(), // TODO: handle error here
+                PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(
+                    values::Container::try_from(items).unwrap_or_default(), // TODO: handle error here
                 )),
             ))
         }
@@ -809,7 +811,7 @@ fn parse_value_for_type<'a>(
             let (input, entries) = parse_map_entries(input, key_kind, value_kind)?;
             Ok((
                 input,
-                PropertyValueEnum::Map(value::Map {
+                PropertyValueEnum::Map(values::Map {
                     key_kind,
                     value_kind,
                     entries,
@@ -878,7 +880,7 @@ impl RitobinFile {
     /// Get the "type" field value as a string.
     pub fn file_type(&self) -> Option<&str> {
         self.entries.get("type").and_then(|p| {
-            if let PropertyValueEnum::String(value::String(s)) = &p.value {
+            if let PropertyValueEnum::String(values::String(s)) = &p.value {
                 Some(s.as_str())
             } else {
                 None
@@ -889,7 +891,7 @@ impl RitobinFile {
     /// Get the "version" field as u32.
     pub fn version(&self) -> Option<u32> {
         self.entries.get("version").and_then(|p| {
-            if let PropertyValueEnum::U32(value::U32(v)) = &p.value {
+            if let PropertyValueEnum::U32(values::U32(v)) = &p.value {
                 Some(*v)
             } else {
                 None
@@ -902,7 +904,7 @@ impl RitobinFile {
         self.entries
             .get("linked")
             .and_then(|p| {
-                if let PropertyValueEnum::Container(value::Container::String(items)) = &p.value {
+                if let PropertyValueEnum::Container(values::Container::String(items)) = &p.value {
                     Some(items.iter().cloned().map(|i| i.0).collect())
                 } else {
                     None
@@ -916,17 +918,17 @@ impl RitobinFile {
         self.entries
             .get("entries")
             .and_then(|p| {
-                if let PropertyValueEnum::Map(value::Map { entries, .. }) = &p.value {
+                if let PropertyValueEnum::Map(values::Map { entries, .. }) = &p.value {
                     Some(
                         entries
                             .iter()
                             .filter_map(|(key, value)| {
                                 let path_hash = match &key.0 {
-                                    PropertyValueEnum::Hash(value::Hash(h)) => *h,
+                                    PropertyValueEnum::Hash(values::Hash(h)) => *h,
                                     _ => return None,
                                 };
 
-                                if let PropertyValueEnum::Embedded(value::Embedded(struct_val)) =
+                                if let PropertyValueEnum::Embedded(values::Embedded(struct_val)) =
                                     value
                                 {
                                     Some((
@@ -1021,7 +1023,7 @@ pos: vec3 = { 1.0, 2.5, -3.0 }
 "#;
         let file = parse(input).unwrap();
         let prop = file.entries.get("pos").unwrap();
-        if let PropertyValueEnum::Vector3(value::Vector3(v)) = &prop.value {
+        if let PropertyValueEnum::Vector3(values::Vector3(v)) = &prop.value {
             assert_eq!(v.x, 1.0);
             assert_eq!(v.y, 2.5);
             assert_eq!(v.z, -3.0);
@@ -1040,7 +1042,7 @@ data: embed = TestClass {
 "#;
         let file = parse(input).unwrap();
         let prop = file.entries.get("data").unwrap();
-        if let PropertyValueEnum::Embedded(value::Embedded(s)) = &prop.value {
+        if let PropertyValueEnum::Embedded(values::Embedded(s)) = &prop.value {
             assert_eq!(s.class_hash, hash_lower("TestClass"));
             assert_eq!(s.properties.len(), 2);
         } else {

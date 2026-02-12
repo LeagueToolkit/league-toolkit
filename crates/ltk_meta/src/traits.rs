@@ -1,6 +1,6 @@
 use std::io;
 
-use super::property::{value::*, Kind};
+use super::property::{values::*, Kind, PropertyValueEnum};
 use byteorder::{ReadBytesExt, WriteBytesExt};
 use enum_dispatch::enum_dispatch;
 

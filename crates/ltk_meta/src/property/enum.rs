@@ -1,33 +1,13 @@
-//! Value types for [`super::BinProperty`].
-mod container;
-mod embedded;
-mod map;
-mod none;
-mod optional;
-mod primitives;
-mod string;
-mod r#struct;
-mod unordered_container;
-
-pub use container::*;
-pub use embedded::*;
-pub use map::*;
-pub use none::*;
-pub use optional::*;
-pub use primitives::*;
-pub use r#struct::*;
-pub use string::*;
-pub use unordered_container::*;
-
-use std::io;
+use enum_dispatch::enum_dispatch;
 
 use crate::{
     property::Kind,
     traits::{ReadProperty as _, WriteProperty as _},
     Error,
 };
+use std::io;
 
-use enum_dispatch::enum_dispatch;
+use super::values::{self, *};
 
 macro_rules! variants {
     ($macro:ident $(, $args:tt)* ) => {
@@ -88,7 +68,7 @@ macro_rules! create_enum {
                 legacy: bool,
             ) -> Result<Self, Error> {
                 Ok(match kind {
-                    $(Kind::$variant => $variant::from_reader(reader, legacy)?.into()),*
+                    $(Kind::$variant => values::$variant::from_reader(reader, legacy)?.into()),*
                 })
             }
 

@@ -3,13 +3,11 @@ use std::{hash::Hash, io};
 use crate::{
     property::Kind,
     traits::{PropertyExt, PropertyValueExt, ReadProperty, ReaderExt, WriteProperty, WriterExt},
-    Error,
+    Error, PropertyValueEnum,
 };
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 use indexmap::IndexMap;
 use ltk_io_ext::{measure, window_at};
-
-use super::PropertyValueEnum;
 
 // FIXME (alan): do with hash here what we do with Eq
 impl Hash for PropertyValueEnum {

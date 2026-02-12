@@ -3,7 +3,10 @@
 use std::fmt::Write;
 
 use ltk_meta::{
-    value::{Embedded, Map, Optional, PropertyValueEnum, Struct, UnorderedContainer},
+    property::{
+        values::{Embedded, Map, Optional, Struct, UnorderedContainer},
+        PropertyValueEnum,
+    },
     Bin, BinObject, BinProperty,
 };
 
@@ -582,7 +585,7 @@ mod tests {
     #[test]
     fn test_write_with_hash_lookup() {
         use indexmap::IndexMap;
-        use ltk_meta::value::String;
+        use ltk_meta::property::values::String;
 
         // Create a simple tree with a hash value
         let mut properties = IndexMap::new();
