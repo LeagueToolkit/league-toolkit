@@ -46,6 +46,33 @@ macro_rules! match_property_arms {
     };
 }
 
+macro_rules! match_enum_inner {
+    (($value:expr, $on:ident, ||, $body:expr)
+     [$( $variant:ident, )*] ) => {
+        match $value {
+            $(
+                $on::$variant => $body,
+            )*
+        }
+    };
+    (($value:expr, $on:ident, |$inner:ident| $body:expr)
+     [$( $variant:ident, )*] ) => {
+        match $value {
+            $(
+                $on::$variant($inner) => $body,
+            )*
+        }
+    };
+}
+macro_rules! match_enum {
+    ($value:expr, $on:ident, ||, $body:expr) => {
+        variants!(match_enum_inner, ($value, $on, $body))
+    };
+    ($value:expr, $on:ident, |$inner:ident| $body:expr) => {
+        variants!(match_enum_inner, ($value, $on, |$inner| $body))
+    };
+}
+
 macro_rules! property_kinds {
     (($value:expr)
      $( $variant:ident($ty:ty), )* ) => {
