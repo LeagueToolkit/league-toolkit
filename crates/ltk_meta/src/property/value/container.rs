@@ -2,10 +2,7 @@ use std::io;
 
 use crate::{
     property::Kind,
-    traits::{
-        PropertyExt, PropertyValueDyn, PropertyValueExt, ReadProperty, ReaderExt, WriteProperty,
-        WriterExt,
-    },
+    traits::{PropertyExt, PropertyValueExt, ReadProperty, ReaderExt, WriteProperty, WriterExt},
     Error,
 };
 
