@@ -3,7 +3,7 @@
 use std::fmt::Write;
 
 use ltk_meta::{
-    value::{Container, Embedded, Map, Optional, PropertyValueEnum, Struct, UnorderedContainer},
+    value::{Embedded, Map, Optional, PropertyValueEnum, Struct, UnorderedContainer},
     Bin, BinObject, BinProperty,
 };
 
@@ -339,7 +339,7 @@ impl<'a, H: HashProvider> TextWriter<'a, H> {
         Ok(())
     }
 
-    /// Write a BinTree to the buffer.
+    /// Write a Bin to the buffer.
     pub fn write_tree(&mut self, tree: &Bin) -> Result<(), WriteError> {
         // Header
         self.write_raw("#PROP_text\n");
@@ -376,7 +376,7 @@ impl<'a, H: HashProvider> TextWriter<'a, H> {
         Ok(())
     }
 
-    /// Write a single BinTreeObject.
+    /// Write a single [`BinObject`].
     fn write_object(&mut self, obj: &BinObject) -> Result<(), WriteError> {
         self.pad();
         self.write_entry_hash(obj.path_hash)?;
@@ -411,14 +411,14 @@ impl Default for TextWriter<'_, HexHashProvider> {
 // Public API Functions
 // ============================================================================
 
-/// Write a BinTree to ritobin text format (hashes as hex).
+/// Write a [`Bin`] to ritobin text format (hashes as hex).
 pub fn write(tree: &Bin) -> Result<String, WriteError> {
     let mut writer = TextWriter::new();
     writer.write_tree(tree)?;
     Ok(writer.into_string())
 }
 
-/// Write a BinTree to ritobin text format with custom configuration.
+/// Write a [`Bin`] to ritobin text format with custom configuration.
 pub fn write_with_config(tree: &Bin, config: WriterConfig) -> Result<String, WriteError> {
     static HEX_PROVIDER: HexHashProvider = HexHashProvider;
     let mut writer = TextWriter::with_config_and_hashes(config, &HEX_PROVIDER);
@@ -426,14 +426,14 @@ pub fn write_with_config(tree: &Bin, config: WriterConfig) -> Result<String, Wri
     Ok(writer.into_string())
 }
 
-/// Write a BinTree to ritobin text format with hash name lookup.
+/// Write a [`Bin`] to ritobin text format with hash name lookup.
 pub fn write_with_hashes<H: HashProvider>(tree: &Bin, hashes: &H) -> Result<String, WriteError> {
     let mut writer = TextWriter::with_hashes(hashes);
     writer.write_tree(tree)?;
     Ok(writer.into_string())
 }
 
-/// Write a BinTree to ritobin text format with configuration and hash name lookup.
+/// Write a [`Bin`] to ritobin text format with configuration and hash name lookup.
 pub fn write_with_config_and_hashes<H: HashProvider>(
     tree: &Bin,
     config: WriterConfig,
@@ -450,18 +450,18 @@ pub fn write_with_config_and_hashes<H: HashProvider>(
 
 /// A builder for creating ritobin files programmatically and converting to text.
 ///
-/// This is a convenience wrapper around [`ltk_meta::BinTreeBuilder`]
+/// This is a convenience wrapper around [`ltk_meta::Builder`]
 /// that adds methods for direct text output.
 ///
 /// # Examples
 ///
 /// ```
 /// use ltk_ritobin::writer::RitobinBuilder;
-/// use ltk_meta::BinTreeObject;
+/// use ltk_meta::BinObject;
 ///
 /// let text = RitobinBuilder::new()
 ///     .dependency("base.bin")
-///     .object(BinTreeObject::new(0x1234, 0x5678))
+///     .object(BinObject::new(0x1234, 0x5678))
 ///     .to_text()
 ///     .unwrap();
 /// ```
@@ -473,7 +473,7 @@ pub struct RitobinBuilder {
 }
 
 impl RitobinBuilder {
-    /// Creates a new `RitobinBuilder` with default values.
+    /// Creates a new [`RitobinBuilder`] with default values.
     pub fn new() -> Self {
         Self::default()
     }
@@ -510,7 +510,7 @@ impl RitobinBuilder {
         self
     }
 
-    /// Builds the [`BinTree`].
+    /// Builds the [`Bin`].
     ///
     /// The resulting tree will have version 3, which is always used when writing.
     pub fn build(self) -> Bin {
