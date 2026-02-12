@@ -182,7 +182,7 @@ pub struct BinProperty {
     pub value: PropertyValueEnum,
 }
 
-use super::traits::PropertyValue as _;
+use super::traits::PropertyExt as _;
 impl BinProperty {
     /// Read a BinProperty from a reader. This will read the name_hash, prop kind and then value, in that order.
     pub fn from_reader<R: io::Read + std::io::Seek + ?Sized>(

@@ -1,27 +1,34 @@
-use crate::traits::{PropertyValue, ReadProperty, WriteProperty};
+use crate::{
+    traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty},
+    BinPropertyKind,
+};
 
-use super::ContainerValue;
+use super::Container;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, PartialEq, Debug, Default)]
-pub struct UnorderedContainerValue(pub ContainerValue);
+pub struct UnorderedContainer(pub Container);
 
-impl PropertyValue for UnorderedContainerValue {
+impl PropertyValueExt for UnorderedContainer {
+    const KIND: crate::BinPropertyKind = BinPropertyKind::UnorderedContainer;
+}
+
+impl PropertyExt for UnorderedContainer {
     fn size_no_header(&self) -> usize {
         self.0.size_no_header()
     }
 }
 
-impl ReadProperty for UnorderedContainerValue {
+impl ReadProperty for UnorderedContainer {
     fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         legacy: bool,
     ) -> Result<Self, crate::Error> {
-        Ok(Self(ContainerValue::from_reader(reader, legacy)?))
+        Ok(Self(Container::from_reader(reader, legacy)?))
     }
 }
 
-impl WriteProperty for UnorderedContainerValue {
+impl WriteProperty for UnorderedContainer {
     fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
         &self,
         writer: &mut R,

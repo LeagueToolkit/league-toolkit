@@ -1,4 +1,5 @@
-use crate::traits::{PropertyValue, ReadProperty, WriteProperty};
+use crate::traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty};
+use crate::BinPropertyKind;
 use ltk_io_ext::{ReaderExt, WriterExt};
 
 macro_rules! impl_prim {
@@ -8,10 +9,14 @@ macro_rules! impl_prim {
         #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
         pub struct $name(pub $rust);
 
-        impl PropertyValue for $name {
+        impl PropertyExt for $name {
             fn size_no_header(&self) -> usize {
                 core::mem::size_of::<$rust>()
             }
+        }
+
+        impl PropertyValueExt for $name {
+            const KIND: BinPropertyKind = BinPropertyKind::$name;
         }
 
         impl ReadProperty for $name {
@@ -36,40 +41,40 @@ macro_rules! impl_prim {
 
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 use glam::{Mat4, Vec2, Vec3, Vec4};
-use ltk_primitives::Color;
+use ltk_primitives::Color as ColorPrim;
 
 // A "primitive" in this case is just a PropertyValue that just encapsulates
 // a single struct/rust primitive.
 
-impl_prim!(BoolValue, bool, [Eq, Hash], bool, 0);
+impl_prim!(Bool, bool, [Eq, Hash], bool, 0);
 
 // https://github.com/LeagueToolkit/league-toolkit/pull/6#discussion_r1809366173
 // > Afaik this is leftover from before bitfield support was added to league.
 // > This type is also not a primitive, meaning it can't be used as a key for map.
 // - moonshadow
-impl_prim!(BitBoolValue, bool, [Eq, Hash], bool, 0);
+impl_prim!(BitBool, bool, [Eq, Hash], bool, 0);
 
-impl_prim!(I8Value, i8, [Eq, Hash], i8, 0);
-impl_prim!(U8Value, u8, [Eq, Hash], u8, 0);
+impl_prim!(I8, i8, [Eq, Hash], i8, 0);
+impl_prim!(U8, u8, [Eq, Hash], u8, 0);
 
-impl_prim!(I16Value, i16, [Eq, Hash], i16::<LE>, 0);
-impl_prim!(U16Value, u16, [Eq, Hash], u16::<LE>, 0);
+impl_prim!(I16, i16, [Eq, Hash], i16::<LE>, 0);
+impl_prim!(U16, u16, [Eq, Hash], u16::<LE>, 0);
 
-impl_prim!(I32Value, i32, [Eq, Hash], i32::<LE>, 0);
-impl_prim!(U32Value, u32, [Eq, Hash], u32::<LE>, 0);
+impl_prim!(I32, i32, [Eq, Hash], i32::<LE>, 0);
+impl_prim!(U32, u32, [Eq, Hash], u32::<LE>, 0);
 
-impl_prim!(I64Value, i64, [Eq, Hash], i64::<LE>, 0);
-impl_prim!(U64Value, u64, [Eq, Hash], u64::<LE>, 0);
+impl_prim!(I64, i64, [Eq, Hash], i64::<LE>, 0);
+impl_prim!(U64, u64, [Eq, Hash], u64::<LE>, 0);
 
-impl_prim!(F32Value, f32, [], f32::<LE>, 0);
+impl_prim!(F32, f32, [], f32::<LE>, 0);
 
-impl_prim!(Vector2Value, Vec2, [], vec2::<LE>, 0);
-impl_prim!(Vector3Value, Vec3, [], vec3::<LE>, 0);
-impl_prim!(Vector4Value, Vec4, [], vec4::<LE>, 0);
-impl_prim!(Matrix44Value, Mat4, [], mat4_row_major::<LE>, 0);
+impl_prim!(Vector2, Vec2, [], vec2::<LE>, 0);
+impl_prim!(Vector3, Vec3, [], vec3::<LE>, 0);
+impl_prim!(Vector4, Vec4, [], vec4::<LE>, 0);
+impl_prim!(Matrix44, Mat4, [], mat4_row_major::<LE>, 0);
 
-type ColorU8 = Color<u8>;
-impl_prim!(ColorValue, ColorU8, [], color_u8, 0.as_ref());
-impl_prim!(HashValue, u32, [Eq, Hash], u32::<LE>, 0);
-impl_prim!(WadChunkLinkValue, u64, [Eq, Hash], u64::<LE>, 0);
-impl_prim!(ObjectLinkValue, u32, [Eq, Hash], u32::<LE>, 0);
+type ColorU8 = ColorPrim<u8>;
+impl_prim!(Color, ColorU8, [], color_u8, 0.as_ref());
+impl_prim!(Hash, u32, [Eq, Hash], u32::<LE>, 0);
+impl_prim!(WadChunkLink, u64, [Eq, Hash], u64::<LE>, 0);
+impl_prim!(ObjectLink, u32, [Eq, Hash], u32::<LE>, 0);

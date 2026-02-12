@@ -1,8 +1,8 @@
 use std::io;
 
 use crate::{
-    traits::{PropertyValue as Value, ReadProperty, WriteProperty},
-    BinProperty, Error,
+    traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty},
+    BinProperty, BinPropertyKind, Error,
 };
 use byteorder::{ReadBytesExt as _, WriteBytesExt as _, LE};
 use indexmap::IndexMap;
@@ -10,12 +10,16 @@ use ltk_io_ext::{measure, window_at};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, PartialEq, Debug, Default)]
-pub struct StructValue {
+pub struct Struct {
     pub class_hash: u32,
     pub properties: IndexMap<u32, BinProperty>,
 }
 
-impl Value for StructValue {
+impl PropertyValueExt for Struct {
+    const KIND: BinPropertyKind = BinPropertyKind::Struct;
+}
+
+impl PropertyExt for Struct {
     fn size_no_header(&self) -> usize {
         match self.class_hash {
             0 => 4,
@@ -24,7 +28,7 @@ impl Value for StructValue {
     }
 }
 
-impl ReadProperty for StructValue {
+impl ReadProperty for Struct {
     fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         legacy: bool,
@@ -59,7 +63,7 @@ impl ReadProperty for StructValue {
         Ok(value)
     }
 }
-impl WriteProperty for StructValue {
+impl WriteProperty for Struct {
     fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
         &self,
         writer: &mut R,

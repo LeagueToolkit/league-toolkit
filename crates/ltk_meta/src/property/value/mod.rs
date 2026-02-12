@@ -22,7 +22,9 @@ pub use unordered_container::*;
 use std::io;
 
 use crate::{
-    property::BinPropertyKind, traits::ReadProperty as _, traits::WriteProperty as _, Error,
+    property::BinPropertyKind,
+    traits::{PropertyExt, PropertyValueExt, ReadProperty as _, WriteProperty as _},
+    Error,
 };
 
 use enum_dispatch::enum_dispatch;
@@ -31,7 +33,7 @@ macro_rules! enum_construct {
     ($item:expr, $method:expr, [$($variant:ident),*]) => {
         match $item {
             $(BinPropertyKind::$variant => paste::paste! {
-                Self::$variant([<$variant Value>]::$method)
+                Self::$variant($variant::$method)
             },)*
         }
     };
@@ -54,36 +56,36 @@ macro_rules! enum_kind {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(tag = "kind", content = "value"))]
 #[derive(Clone, Debug, PartialEq)]
-#[enum_dispatch(PropertyValue)]
+#[enum_dispatch(PropertyExt)]
 /// The value part of a [`super::BinProperty`]. Holds the type of the value, and the value itself.
 pub enum PropertyValueEnum {
-    None(pub NoneValue),
-    Bool(pub BoolValue),
-    I8(pub I8Value),
-    U8(pub U8Value),
-    I16(pub I16Value),
-    U16(pub U16Value),
-    I32(pub I32Value),
-    U32(pub U32Value),
-    I64(pub I64Value),
-    U64(pub U64Value),
-    F32(pub F32Value),
-    Vector2(pub Vector2Value),
-    Vector3(pub Vector3Value),
-    Vector4(pub Vector4Value),
-    Matrix44(pub Matrix44Value),
-    Color(pub ColorValue),
-    String(pub StringValue),
-    Hash(pub HashValue),
-    WadChunkLink(pub WadChunkLinkValue),
-    Container(pub ContainerValue),
-    UnorderedContainer(pub UnorderedContainerValue),
-    Struct(pub StructValue),
-    Embedded(pub EmbeddedValue),
-    ObjectLink(pub ObjectLinkValue),
-    Optional(pub OptionalValue),
-    Map(pub MapValue),
-    BitBool(pub BitBoolValue),
+    None(pub self::None),
+    Bool(pub self::Bool),
+    I8(pub self::I8),
+    U8(pub self::U8),
+    I16(pub self::I16),
+    U16(pub self::U16),
+    I32(pub self::I32),
+    U32(pub self::U32),
+    I64(pub self::I64),
+    U64(pub self::U64),
+    F32(pub self::F32),
+    Vector2(pub self::Vector2),
+    Vector3(pub self::Vector3),
+    Vector4(pub self::Vector4),
+    Matrix44(pub self::Matrix44),
+    Color(pub self::Color),
+    String(pub self::String),
+    Hash(pub self::Hash),
+    WadChunkLink(pub self::WadChunkLink),
+    Container(pub self::Container),
+    UnorderedContainer(pub self::UnorderedContainer),
+    Struct(pub self::Struct),
+    Embedded(pub self::Embedded),
+    ObjectLink(pub self::ObjectLink),
+    Optional(pub self::Optional),
+    Map(pub self::Map),
+    BitBool(pub self::BitBool),
 }
 
 impl PropertyValueEnum {

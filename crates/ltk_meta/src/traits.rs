@@ -8,7 +8,7 @@ const HEADER_SIZE: usize = 5;
 
 /// General methods for property values
 #[enum_dispatch]
-pub trait PropertyValue {
+pub trait PropertyExt {
     /// Get the size of the property value, including the kind header if specified
     fn size(&self, include_header: bool) -> usize {
         self.size_no_header()
@@ -18,6 +18,20 @@ pub trait PropertyValue {
             }
     }
     fn size_no_header(&self) -> usize;
+}
+
+pub trait PropertyValueExt {
+    const KIND: BinPropertyKind;
+}
+
+pub trait PropertyValueDyn: PropertyExt {
+    fn kind(&self) -> BinPropertyKind;
+}
+
+impl<T: PropertyValueExt + PropertyExt> PropertyValueDyn for T {
+    fn kind(&self) -> BinPropertyKind {
+        Self::KIND
+    }
 }
 
 /// Methods for reading properties

@@ -3,10 +3,7 @@
 use std::fmt::Write;
 
 use ltk_meta::{
-    value::{
-        ContainerValue, EmbeddedValue, MapValue, OptionalValue, PropertyValueEnum, StructValue,
-        UnorderedContainerValue,
-    },
+    value::{Container, Embedded, Map, Optional, PropertyValueEnum, Struct, UnorderedContainer},
     BinProperty, BinTree, BinTreeObject,
 };
 
@@ -104,21 +101,18 @@ impl<'a, H: HashProvider> TextWriter<'a, H> {
         self.write_raw(type_name);
 
         match value {
-            PropertyValueEnum::Container(ContainerValue { item_kind, .. })
-            | PropertyValueEnum::UnorderedContainer(UnorderedContainerValue(ContainerValue {
-                item_kind,
-                ..
-            })) => {
+            PropertyValueEnum::Container(container)
+            | PropertyValueEnum::UnorderedContainer(UnorderedContainer(container)) => {
                 self.write_raw("[");
-                self.write_raw(kind_to_type_name(*item_kind));
+                self.write_raw(kind_to_type_name(container.item_kind()));
                 self.write_raw("]");
             }
-            PropertyValueEnum::Optional(OptionalValue { kind, .. }) => {
+            PropertyValueEnum::Optional(Optional { kind, .. }) => {
                 self.write_raw("[");
                 self.write_raw(kind_to_type_name(*kind));
                 self.write_raw("]");
             }
-            PropertyValueEnum::Map(MapValue {
+            PropertyValueEnum::Map(Map {
                 key_kind,
                 value_kind,
                 ..
@@ -252,11 +246,9 @@ impl<'a, H: HashProvider> TextWriter<'a, H> {
             }
             PropertyValueEnum::BitBool(v) => self.write_raw(if v.0 { "true" } else { "false" }),
 
-            PropertyValueEnum::Container(ContainerValue { items, .. })
-            | PropertyValueEnum::UnorderedContainer(UnorderedContainerValue(ContainerValue {
-                items,
-                ..
-            })) => {
+            PropertyValueEnum::Container(container)
+            | PropertyValueEnum::UnorderedContainer(UnorderedContainer(container)) => {
+                let items = container.clone().into_items().collect::<Vec<_>>();
                 if items.is_empty() {
                     self.write_raw("{}");
                 } else {
@@ -264,7 +256,7 @@ impl<'a, H: HashProvider> TextWriter<'a, H> {
                     self.indent();
                     for item in items {
                         self.pad();
-                        self.write_value(item)?;
+                        self.write_value(&item)?;
                         self.write_raw("\n");
                     }
                     self.dedent();
@@ -272,7 +264,7 @@ impl<'a, H: HashProvider> TextWriter<'a, H> {
                     self.write_raw("}");
                 }
             }
-            PropertyValueEnum::Optional(OptionalValue { value, .. }) => {
+            PropertyValueEnum::Optional(Optional { value, .. }) => {
                 if let Some(inner) = value {
                     self.write_raw("{\n");
                     self.indent();
@@ -286,7 +278,7 @@ impl<'a, H: HashProvider> TextWriter<'a, H> {
                     self.write_raw("{}");
                 }
             }
-            PropertyValueEnum::Map(MapValue { entries, .. }) => {
+            PropertyValueEnum::Map(Map { entries, .. }) => {
                 if entries.is_empty() {
                     self.write_raw("{}");
                 } else {
@@ -307,14 +299,14 @@ impl<'a, H: HashProvider> TextWriter<'a, H> {
             PropertyValueEnum::Struct(v) => {
                 self.write_struct_value(v)?;
             }
-            PropertyValueEnum::Embedded(EmbeddedValue(v)) => {
+            PropertyValueEnum::Embedded(Embedded(v)) => {
                 self.write_struct_value(v)?;
             }
         }
         Ok(())
     }
 
-    fn write_struct_value(&mut self, v: &StructValue) -> Result<(), WriteError> {
+    fn write_struct_value(&mut self, v: &Struct) -> Result<(), WriteError> {
         if v.class_hash == 0 && v.properties.is_empty() {
             self.write_raw("null");
         } else {
@@ -593,7 +585,7 @@ mod tests {
     #[test]
     fn test_write_with_hash_lookup() {
         use indexmap::IndexMap;
-        use ltk_meta::value::StringValue;
+        use ltk_meta::value::String;
 
         // Create a simple tree with a hash value
         let mut properties = IndexMap::new();
@@ -602,7 +594,7 @@ mod tests {
             name_hash,
             BinProperty {
                 name_hash,
-                value: PropertyValueEnum::String(StringValue("hello".to_string())),
+                value: PropertyValueEnum::String(String("hello".to_string())),
             },
         );
 

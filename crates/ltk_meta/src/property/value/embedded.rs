@@ -1,31 +1,38 @@
-use crate::traits::{PropertyValue, ReadProperty, WriteProperty};
+use crate::{
+    traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty},
+    BinPropertyKind,
+};
 
-use super::StructValue;
+use super::Struct;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, PartialEq, Debug, Default)]
-pub struct EmbeddedValue(pub StructValue);
+pub struct Embedded(pub Struct);
 
-impl PropertyValue for EmbeddedValue {
+impl PropertyValueExt for Embedded {
+    const KIND: BinPropertyKind = BinPropertyKind::Embedded;
+}
+
+impl PropertyExt for Embedded {
     fn size_no_header(&self) -> usize {
         self.0.size_no_header()
     }
 }
 
-impl ReadProperty for EmbeddedValue {
+impl ReadProperty for Embedded {
     fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         legacy: bool,
     ) -> Result<Self, crate::Error> {
-        StructValue::from_reader(reader, legacy).map(Self)
+        Struct::from_reader(reader, legacy).map(Self)
     }
 }
-impl WriteProperty for EmbeddedValue {
+impl WriteProperty for Embedded {
     fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
         &self,
         writer: &mut R,
         legacy: bool,
     ) -> Result<(), std::io::Error> {
-        StructValue::to_writer(&self.0, writer, legacy)
+        Struct::to_writer(&self.0, writer, legacy)
     }
 }

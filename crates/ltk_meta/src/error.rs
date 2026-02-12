@@ -20,6 +20,14 @@ pub enum Error {
     #[error("Invalid map key type {0:?}, only primitive types can be used as keys.")]
     InvalidKeyType(BinPropertyKind),
 
+    #[error("Container is empty!")]
+    EmptyContainer,
+    #[error("Mismatched types - expected {expected:?}, got {got:?}")]
+    MismatchedContainerTypes {
+        expected: BinPropertyKind,
+        got: BinPropertyKind,
+    },
+
     #[error(transparent)]
     ReaderError(#[from] ltk_io_ext::ReaderError),
     #[error("IO Error - {0}")]

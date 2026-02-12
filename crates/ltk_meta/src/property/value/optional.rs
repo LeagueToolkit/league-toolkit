@@ -1,19 +1,23 @@
 use super::PropertyValueEnum;
 use crate::{
     property::BinPropertyKind,
-    traits::{PropertyValue, ReadProperty, ReaderExt, WriteProperty, WriterExt},
+    traits::{PropertyExt, PropertyValueExt, ReadProperty, ReaderExt, WriteProperty, WriterExt},
     Error,
 };
 use ltk_io_ext::{ReaderExt as _, WriterExt as _};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, PartialEq, Debug, Default)]
-pub struct OptionalValue {
+pub struct Optional {
     pub kind: BinPropertyKind,
     pub value: Option<Box<PropertyValueEnum>>,
 }
 
-impl PropertyValue for OptionalValue {
+impl PropertyValueExt for Optional {
+    const KIND: BinPropertyKind = BinPropertyKind::Optional;
+}
+
+impl PropertyExt for Optional {
     fn size_no_header(&self) -> usize {
         2 + match &self.value {
             Some(inner) => inner.size_no_header(),
@@ -22,7 +26,7 @@ impl PropertyValue for OptionalValue {
     }
 }
 
-impl ReadProperty for OptionalValue {
+impl ReadProperty for Optional {
     fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         legacy: bool,
@@ -43,7 +47,7 @@ impl ReadProperty for OptionalValue {
         })
     }
 }
-impl WriteProperty for OptionalValue {
+impl WriteProperty for Optional {
     fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
         &self,
         writer: &mut R,

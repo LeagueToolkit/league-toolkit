@@ -2,7 +2,7 @@ use std::{hash::Hash, io};
 
 use crate::{
     property::BinPropertyKind,
-    traits::{PropertyValue, ReadProperty, ReaderExt, WriteProperty, WriterExt},
+    traits::{PropertyExt, PropertyValueExt, ReadProperty, ReaderExt, WriteProperty, WriterExt},
     Error,
 };
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
@@ -37,7 +37,11 @@ impl Hash for PropertyValueEnum {
 pub struct PropertyValueUnsafeEq(pub PropertyValueEnum);
 impl Eq for PropertyValueUnsafeEq {}
 
-impl PropertyValue for PropertyValueUnsafeEq {
+impl PropertyValueExt for PropertyValueUnsafeEq {
+    const KIND: BinPropertyKind = BinPropertyKind::Map;
+}
+
+impl PropertyExt for PropertyValueUnsafeEq {
     fn size_no_header(&self) -> usize {
         self.0.size_no_header()
     }
@@ -45,13 +49,16 @@ impl PropertyValue for PropertyValueUnsafeEq {
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, PartialEq, Debug, Default)]
-pub struct MapValue {
+pub struct Map {
     pub key_kind: BinPropertyKind,
     pub value_kind: BinPropertyKind,
     pub entries: IndexMap<PropertyValueUnsafeEq, PropertyValueEnum>,
 }
 
-impl PropertyValue for MapValue {
+impl PropertyValueExt for Map {
+    const KIND: BinPropertyKind = BinPropertyKind::Map;
+}
+impl PropertyExt for Map {
     fn size_no_header(&self) -> usize {
         1 + 1
             + 4
@@ -63,7 +70,7 @@ impl PropertyValue for MapValue {
                 .sum::<usize>()
     }
 }
-impl ReadProperty for MapValue {
+impl ReadProperty for Map {
     fn from_reader<R: io::Read + io::Seek + ?Sized>(
         reader: &mut R,
         legacy: bool,
@@ -103,7 +110,7 @@ impl ReadProperty for MapValue {
         Ok(value)
     }
 }
-impl WriteProperty for MapValue {
+impl WriteProperty for Map {
     fn to_writer<R: io::Write + io::Seek + ?Sized>(
         &self,
         writer: &mut R,

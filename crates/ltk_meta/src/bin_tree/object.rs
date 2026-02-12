@@ -20,15 +20,15 @@ use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 ///
 /// ```
 /// use ltk_meta::BinTreeObject;
-/// use ltk_meta::value::*;
+/// use ltk_meta::value;
 ///
 /// // Simple construction
 /// let obj = BinTreeObject::new(0x1234, 0x5678);
 ///
 /// // Builder pattern with properties
 /// let obj = BinTreeObject::builder(0x1234, 0x5678)
-///     .property(0xAAAA, I32Value(42))
-///     .property(0xBBBB, StringValue("hello".into()))
+///     .property(0xAAAA, value::I32(42))
+///     .property(0xBBBB, value::String("hello".into()))
 ///     .build();
 /// ```
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -71,10 +71,10 @@ impl BinTreeObject {
     ///
     /// ```
     /// use ltk_meta::BinTreeObject;
-    /// use ltk_meta::value::*;
+    /// use ltk_meta::value;
     ///
     /// let obj = BinTreeObject::builder(0x1234, 0x5678)
-    ///     .property(0xAAAA, I32Value(42))
+    ///     .property(0xAAAA, value::I32(42))
     ///     .build();
     /// ```
     pub fn builder(path_hash: u32, class_hash: u32) -> BinTreeObjectBuilder {
@@ -261,12 +261,12 @@ impl IntoIterator for BinTreeObject {
 ///
 /// ```
 /// use ltk_meta::BinTreeObjectBuilder;
-/// use ltk_meta::value::*;
+/// use ltk_meta::value;
 ///
 /// let obj = BinTreeObjectBuilder::new(0x12345678, 0xABCDEF00)
-///     .property(0x1111, I32Value(42))
-///     .property(0x2222, StringValue("hello".into()))
-///     .property(0x3333, BoolValue(true))
+///     .property(0x1111, value::I32(42))
+///     .property(0x2222, value::String("hello".into()))
+///     .property(0x3333, value::Bool(true))
 ///     .build();
 ///
 /// assert_eq!(obj.properties.len(), 3);

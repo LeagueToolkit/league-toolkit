@@ -28,15 +28,15 @@
 //!
 //! ```
 //! use ltk_meta::{BinTree, BinTreeObject};
-//! use ltk_meta::value::*;
+//! use ltk_meta::value;
 //!
 //! // Using the builder pattern
 //! let tree = BinTree::builder()
 //!     .dependency("common.bin")
 //!     .object(
 //!         BinTreeObject::builder(0x12345678, 0xABCDEF00)
-//!             .property(0x1111, I32Value(42))
-//!             .property(0x2222, StringValue("hello".into()))
+//!             .property(0x1111, value::I32(42))
+//!             .property(0x2222, value::String("hello".into()))
 //!             .build()
 //!     )
 //!     .build();

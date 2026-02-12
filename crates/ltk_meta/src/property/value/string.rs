@@ -1,19 +1,26 @@
-use crate::traits::{PropertyValue, ReadProperty, WriteProperty};
+use crate::{
+    traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty},
+    BinPropertyKind,
+};
 use byteorder::LE;
 use ltk_io_ext::{ReaderExt, WriterExt};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(transparent)]
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
-pub struct StringValue(pub String);
+pub struct String(pub std::string::String);
 
-impl PropertyValue for StringValue {
+impl PropertyValueExt for String {
+    const KIND: BinPropertyKind = BinPropertyKind::String;
+}
+
+impl PropertyExt for String {
     fn size_no_header(&self) -> usize {
         self.0.len() + 2
     }
 }
 
-impl ReadProperty for StringValue {
+impl ReadProperty for String {
     fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         _legacy: bool,
@@ -22,7 +29,7 @@ impl ReadProperty for StringValue {
     }
 }
 
-impl WriteProperty for StringValue {
+impl WriteProperty for String {
     fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
         &self,
         writer: &mut R,
