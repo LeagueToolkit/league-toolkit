@@ -68,7 +68,6 @@ pub struct HashMapProvider {
 }
 
 impl HashMapProvider {
-    /// Create a new empty hash provider.
     pub fn new() -> Self {
         Self::default()
     }
@@ -146,31 +145,27 @@ impl HashMapProvider {
         self
     }
 
-    /// Insert an entry hash.
     pub fn insert_entry(&mut self, hash: u32, value: impl Into<String>) -> &mut Self {
         self.entries.insert(hash, value.into());
         self
     }
 
-    /// Insert a field hash.
     pub fn insert_field(&mut self, hash: u32, value: impl Into<String>) -> &mut Self {
         self.fields.insert(hash, value.into());
         self
     }
 
-    /// Insert a hash value.
     pub fn insert_hash(&mut self, hash: u32, value: impl Into<String>) -> &mut Self {
         self.hashes.insert(hash, value.into());
         self
     }
 
-    /// Insert a type hash.
     pub fn insert_type(&mut self, hash: u32, value: impl Into<String>) -> &mut Self {
         self.types.insert(hash, value.into());
         self
     }
 
-    /// Get the total number of loaded hashes across all categories.
+    /// The total number of loaded hashes across all categories.
     pub fn total_count(&self) -> usize {
         self.entries.len() + self.fields.len() + self.hashes.len() + self.types.len()
     }
@@ -194,7 +189,6 @@ impl HashProvider for HashMapProvider {
     }
 }
 
-/// Implement HashProvider for references to providers.
 impl<T: HashProvider + ?Sized> HashProvider for &T {
     fn lookup_entry(&self, hash: u32) -> Option<&str> {
         (*self).lookup_entry(hash)
@@ -213,7 +207,6 @@ impl<T: HashProvider + ?Sized> HashProvider for &T {
     }
 }
 
-/// Implement HashProvider for Box<dyn HashProvider>.
 impl HashProvider for Box<dyn HashProvider> {
     fn lookup_entry(&self, hash: u32) -> Option<&str> {
         self.as_ref().lookup_entry(hash)

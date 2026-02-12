@@ -461,7 +461,7 @@ pub fn write_with_config_and_hashes<H: HashProvider>(
 
 /// A builder for creating ritobin files programmatically and converting to text.
 ///
-/// This is a convenience wrapper around [`ltk_meta::bin_tree::BinTreeBuilder`]
+/// This is a convenience wrapper around [`ltk_meta::BinTreeBuilder`]
 /// that adds methods for direct text output.
 ///
 /// # Examples
