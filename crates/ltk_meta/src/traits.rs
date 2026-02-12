@@ -1,6 +1,6 @@
 use std::io;
 
-use super::property::{value::*, BinPropertyKind};
+use super::property::{value::*, Kind};
 use byteorder::{ReadBytesExt, WriteBytesExt};
 use enum_dispatch::enum_dispatch;
 
@@ -21,15 +21,15 @@ pub trait PropertyExt {
 }
 
 pub trait PropertyValueExt {
-    const KIND: BinPropertyKind;
+    const KIND: Kind;
 }
 
 pub trait PropertyValueDyn: PropertyExt {
-    fn kind(&self) -> BinPropertyKind;
+    fn kind(&self) -> Kind;
 }
 
 impl<T: PropertyValueExt + PropertyExt> PropertyValueDyn for T {
-    fn kind(&self) -> BinPropertyKind {
+    fn kind(&self) -> Kind {
         Self::KIND
     }
 }
@@ -45,8 +45,8 @@ pub trait ReadProperty: Sized {
 /// Extension trait for reading property kinds
 pub trait ReaderExt: io::Read {
     /// Reads a u8 as a property kind
-    fn read_property_kind(&mut self, legacy: bool) -> Result<BinPropertyKind, crate::Error> {
-        BinPropertyKind::unpack(self.read_u8()?, legacy)
+    fn read_property_kind(&mut self, legacy: bool) -> Result<Kind, crate::Error> {
+        Kind::unpack(self.read_u8()?, legacy)
     }
 }
 
@@ -63,7 +63,7 @@ pub trait WriteProperty: Sized {
 
 /// Extension trait for writing property kinds
 pub trait WriterExt: io::Write {
-    fn write_property_kind(&mut self, kind: BinPropertyKind) -> Result<(), io::Error> {
+    fn write_property_kind(&mut self, kind: Kind) -> Result<(), io::Error> {
         self.write_u8(kind.into())
     }
 }

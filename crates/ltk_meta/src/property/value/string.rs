@@ -1,6 +1,6 @@
 use crate::{
+    property::Kind,
     traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty},
-    BinPropertyKind,
 };
 use byteorder::LE;
 use ltk_io_ext::{ReaderExt, WriterExt};
@@ -11,7 +11,7 @@ use ltk_io_ext::{ReaderExt, WriterExt};
 pub struct String(pub std::string::String);
 
 impl PropertyValueExt for String {
-    const KIND: BinPropertyKind = BinPropertyKind::String;
+    const KIND: Kind = Kind::String;
 }
 
 impl PropertyExt for String {

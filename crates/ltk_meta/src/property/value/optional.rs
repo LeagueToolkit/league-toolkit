@@ -1,6 +1,6 @@
 use super::PropertyValueEnum;
 use crate::{
-    property::BinPropertyKind,
+    property::Kind,
     traits::{PropertyExt, PropertyValueExt, ReadProperty, ReaderExt, WriteProperty, WriterExt},
     Error,
 };
@@ -9,12 +9,12 @@ use ltk_io_ext::{ReaderExt as _, WriterExt as _};
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, PartialEq, Debug, Default)]
 pub struct Optional {
-    pub kind: BinPropertyKind,
+    pub kind: Kind,
     pub value: Option<Box<PropertyValueEnum>>,
 }
 
 impl PropertyValueExt for Optional {
-    const KIND: BinPropertyKind = BinPropertyKind::Optional;
+    const KIND: Kind = Kind::Optional;
 }
 
 impl PropertyExt for Optional {

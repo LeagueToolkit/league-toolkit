@@ -22,7 +22,7 @@ pub use value::PropertyValueEnum;
     Default,
 )]
 #[repr(u8)]
-pub enum BinPropertyKind {
+pub enum Kind {
     // PRIMITIVE TYPES
     #[default]
     None = 0,
@@ -56,7 +56,7 @@ pub enum BinPropertyKind {
     BitBool = 128 | 7,
 }
 
-impl BinPropertyKind {
+impl Kind {
     /// Converts a u8 into a BinPropertyKind, accounting for pre/post WadChunkLink.
     ///
     /// The WadChunkLink bin property type was newly added by Riot. For some reason they decided to put it in the middle of the enum,
@@ -66,8 +66,8 @@ impl BinPropertyKind {
     ///
     /// "Non-legacy" property types can just be used as is.
     ///
-    pub fn unpack(raw: u8, legacy: bool) -> Result<BinPropertyKind, Error> {
-        use BinPropertyKind as BPK;
+    pub fn unpack(raw: u8, legacy: bool) -> Result<Kind, Error> {
+        use Kind as BPK;
         if !legacy {
             return Ok(BPK::try_from_primitive(raw)?);
         }
@@ -83,14 +83,14 @@ impl BinPropertyKind {
             fudged += 1;
         }
 
-        Ok(BinPropertyKind::try_from_primitive(fudged)?)
+        Ok(Kind::try_from_primitive(fudged)?)
     }
 
     /// Whether this property kind is a primitive type. (i8, u8, .. u32, u64, f32, Vector2, Vector3, Vector4, Matrix44, Color, String, Hash, WadChunkLink),
     #[inline(always)]
     #[must_use]
     pub fn is_primitive(&self) -> bool {
-        use BinPropertyKind::*;
+        use Kind::*;
         matches!(
             self,
             None | Bool
@@ -124,7 +124,7 @@ impl BinPropertyKind {
     #[inline(always)]
     #[must_use]
     pub fn subtype_count(&self) -> u8 {
-        use BinPropertyKind::*;
+        use Kind::*;
         match self {
             Container | UnorderedContainer | Optional => 1,
             Map => 2,

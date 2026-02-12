@@ -7,7 +7,7 @@ use indexmap::IndexMap;
 use ltk_primitives::Color;
 
 use crate::property::value;
-use crate::property::{BinProperty, BinPropertyKind, PropertyValueEnum};
+use crate::property::{BinProperty, Kind, PropertyValueEnum};
 use crate::{BinTree, BinTreeObject};
 
 /// Helper to roundtrip a property value through write/read
@@ -356,7 +356,7 @@ fn test_optional_none_roundtrip() {
     let prop = make_prop(
         0x1234,
         PropertyValueEnum::Optional(value::Optional {
-            kind: BinPropertyKind::I32,
+            kind: Kind::I32,
             value: None,
         }),
     );
@@ -369,7 +369,7 @@ fn test_optional_some_primitive_roundtrip() {
     let prop = make_prop(
         0x1234,
         PropertyValueEnum::Optional(value::Optional {
-            kind: BinPropertyKind::I32,
+            kind: Kind::I32,
             value: Some(Box::new(PropertyValueEnum::I32(value::I32(42)))),
         }),
     );
@@ -382,7 +382,7 @@ fn test_optional_some_string_roundtrip() {
     let prop = make_prop(
         0x1234,
         PropertyValueEnum::Optional(value::Optional {
-            kind: BinPropertyKind::String,
+            kind: Kind::String,
             value: Some(Box::new(PropertyValueEnum::String(value::String(
                 "optional value".into(),
             )))),
@@ -406,7 +406,7 @@ fn test_optional_some_struct_roundtrip() {
     let prop = make_prop(
         0x1234,
         PropertyValueEnum::Optional(value::Optional {
-            kind: BinPropertyKind::Struct,
+            kind: Kind::Struct,
             value: Some(Box::new(PropertyValueEnum::Struct(value::Struct {
                 class_hash: 0xCCCC,
                 properties,
@@ -426,8 +426,8 @@ fn test_map_empty_roundtrip() {
     let prop = make_prop(
         0x1234,
         PropertyValueEnum::Map(value::Map {
-            key_kind: BinPropertyKind::U32,
-            value_kind: BinPropertyKind::String,
+            key_kind: Kind::U32,
+            value_kind: Kind::String,
             entries: IndexMap::new(),
         }),
     );
@@ -450,8 +450,8 @@ fn test_map_u32_to_string_roundtrip() {
     let prop = make_prop(
         0x1234,
         PropertyValueEnum::Map(value::Map {
-            key_kind: BinPropertyKind::U32,
-            value_kind: BinPropertyKind::String,
+            key_kind: Kind::U32,
+            value_kind: Kind::String,
             entries,
         }),
     );
@@ -482,8 +482,8 @@ fn test_map_hash_to_struct_roundtrip() {
     let prop = make_prop(
         0x1234,
         PropertyValueEnum::Map(value::Map {
-            key_kind: BinPropertyKind::Hash,
-            value_kind: BinPropertyKind::Struct,
+            key_kind: Kind::Hash,
+            value_kind: Kind::Struct,
             entries,
         }),
     );
@@ -752,7 +752,7 @@ fn test_bin_tree_complex_roundtrip() {
         BinProperty {
             name_hash: 0x5555,
             value: PropertyValueEnum::Optional(value::Optional {
-                kind: BinPropertyKind::F32,
+                kind: Kind::F32,
                 value: Some(Box::new(PropertyValueEnum::F32(value::F32(
                     std::f32::consts::PI,
                 )))),
@@ -783,33 +783,33 @@ fn test_property_kind_roundtrip() {
     use crate::traits::{ReaderExt, WriterExt};
 
     let kinds = [
-        BinPropertyKind::None,
-        BinPropertyKind::Bool,
-        BinPropertyKind::I8,
-        BinPropertyKind::U8,
-        BinPropertyKind::I16,
-        BinPropertyKind::U16,
-        BinPropertyKind::I32,
-        BinPropertyKind::U32,
-        BinPropertyKind::I64,
-        BinPropertyKind::U64,
-        BinPropertyKind::F32,
-        BinPropertyKind::Vector2,
-        BinPropertyKind::Vector3,
-        BinPropertyKind::Vector4,
-        BinPropertyKind::Matrix44,
-        BinPropertyKind::Color,
-        BinPropertyKind::String,
-        BinPropertyKind::Hash,
-        BinPropertyKind::WadChunkLink,
-        BinPropertyKind::Container,
-        BinPropertyKind::UnorderedContainer,
-        BinPropertyKind::Struct,
-        BinPropertyKind::Embedded,
-        BinPropertyKind::ObjectLink,
-        BinPropertyKind::Optional,
-        BinPropertyKind::Map,
-        BinPropertyKind::BitBool,
+        Kind::None,
+        Kind::Bool,
+        Kind::I8,
+        Kind::U8,
+        Kind::I16,
+        Kind::U16,
+        Kind::I32,
+        Kind::U32,
+        Kind::I64,
+        Kind::U64,
+        Kind::F32,
+        Kind::Vector2,
+        Kind::Vector3,
+        Kind::Vector4,
+        Kind::Matrix44,
+        Kind::Color,
+        Kind::String,
+        Kind::Hash,
+        Kind::WadChunkLink,
+        Kind::Container,
+        Kind::UnorderedContainer,
+        Kind::Struct,
+        Kind::Embedded,
+        Kind::ObjectLink,
+        Kind::Optional,
+        Kind::Map,
+        Kind::BitBool,
     ];
 
     for kind in kinds {
@@ -908,75 +908,48 @@ fn test_container_with_embedded_roundtrip() {
 #[test]
 fn test_all_primitive_kinds_in_container() {
     // Test that all primitive kinds can be stored in containers
-    let test_cases: Vec<(BinPropertyKind, PropertyValueEnum)> = vec![
+    let test_cases: Vec<(Kind, PropertyValueEnum)> = vec![
+        (Kind::Bool, PropertyValueEnum::Bool(value::Bool(true))),
+        (Kind::I8, PropertyValueEnum::I8(value::I8(-1))),
+        (Kind::U8, PropertyValueEnum::U8(value::U8(1))),
+        (Kind::I16, PropertyValueEnum::I16(value::I16(-100))),
+        (Kind::U16, PropertyValueEnum::U16(value::U16(100))),
+        (Kind::I32, PropertyValueEnum::I32(value::I32(-1000))),
+        (Kind::U32, PropertyValueEnum::U32(value::U32(1000))),
+        (Kind::I64, PropertyValueEnum::I64(value::I64(-10000))),
+        (Kind::U64, PropertyValueEnum::U64(value::U64(10000))),
+        (Kind::F32, PropertyValueEnum::F32(value::F32(1.5))),
         (
-            BinPropertyKind::Bool,
-            PropertyValueEnum::Bool(value::Bool(true)),
-        ),
-        (BinPropertyKind::I8, PropertyValueEnum::I8(value::I8(-1))),
-        (BinPropertyKind::U8, PropertyValueEnum::U8(value::U8(1))),
-        (
-            BinPropertyKind::I16,
-            PropertyValueEnum::I16(value::I16(-100)),
-        ),
-        (
-            BinPropertyKind::U16,
-            PropertyValueEnum::U16(value::U16(100)),
-        ),
-        (
-            BinPropertyKind::I32,
-            PropertyValueEnum::I32(value::I32(-1000)),
-        ),
-        (
-            BinPropertyKind::U32,
-            PropertyValueEnum::U32(value::U32(1000)),
-        ),
-        (
-            BinPropertyKind::I64,
-            PropertyValueEnum::I64(value::I64(-10000)),
-        ),
-        (
-            BinPropertyKind::U64,
-            PropertyValueEnum::U64(value::U64(10000)),
-        ),
-        (
-            BinPropertyKind::F32,
-            PropertyValueEnum::F32(value::F32(1.5)),
-        ),
-        (
-            BinPropertyKind::Vector2,
+            Kind::Vector2,
             PropertyValueEnum::Vector2(value::Vector2(Vec2::ONE)),
         ),
         (
-            BinPropertyKind::Vector3,
+            Kind::Vector3,
             PropertyValueEnum::Vector3(value::Vector3(Vec3::ONE)),
         ),
         (
-            BinPropertyKind::Vector4,
+            Kind::Vector4,
             PropertyValueEnum::Vector4(value::Vector4(Vec4::ONE)),
         ),
         (
-            BinPropertyKind::Matrix44,
+            Kind::Matrix44,
             PropertyValueEnum::Matrix44(value::Matrix44(Mat4::IDENTITY)),
         ),
         (
-            BinPropertyKind::Color,
+            Kind::Color,
             PropertyValueEnum::Color(value::Color(Color::new(255, 128, 64, 32))),
         ),
         (
-            BinPropertyKind::String,
+            Kind::String,
             PropertyValueEnum::String(value::String("test".into())),
         ),
+        (Kind::Hash, PropertyValueEnum::Hash(value::Hash(0xDEADBEEF))),
         (
-            BinPropertyKind::Hash,
-            PropertyValueEnum::Hash(value::Hash(0xDEADBEEF)),
-        ),
-        (
-            BinPropertyKind::WadChunkLink,
+            Kind::WadChunkLink,
             PropertyValueEnum::WadChunkLink(value::WadChunkLink(0xCAFEBABE)),
         ),
         (
-            BinPropertyKind::ObjectLink,
+            Kind::ObjectLink,
             PropertyValueEnum::ObjectLink(value::ObjectLink(0x12345678)),
         ),
     ];

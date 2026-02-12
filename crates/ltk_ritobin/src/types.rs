@@ -1,85 +1,85 @@
 //! Type name mappings for ritobin format.
 
-use ltk_meta::BinPropertyKind;
+use ltk_meta::property::Kind;
 use std::str::FromStr;
 
 /// Maps a ritobin type name string to a BinPropertyKind.
-pub fn type_name_to_kind(name: &str) -> Option<BinPropertyKind> {
+pub fn type_name_to_kind(name: &str) -> Option<Kind> {
     match name {
-        "none" => Some(BinPropertyKind::None),
-        "bool" => Some(BinPropertyKind::Bool),
-        "i8" => Some(BinPropertyKind::I8),
-        "u8" => Some(BinPropertyKind::U8),
-        "i16" => Some(BinPropertyKind::I16),
-        "u16" => Some(BinPropertyKind::U16),
-        "i32" => Some(BinPropertyKind::I32),
-        "u32" => Some(BinPropertyKind::U32),
-        "i64" => Some(BinPropertyKind::I64),
-        "u64" => Some(BinPropertyKind::U64),
-        "f32" => Some(BinPropertyKind::F32),
-        "vec2" => Some(BinPropertyKind::Vector2),
-        "vec3" => Some(BinPropertyKind::Vector3),
-        "vec4" => Some(BinPropertyKind::Vector4),
-        "mtx44" => Some(BinPropertyKind::Matrix44),
-        "rgba" => Some(BinPropertyKind::Color),
-        "string" => Some(BinPropertyKind::String),
-        "hash" => Some(BinPropertyKind::Hash),
-        "file" => Some(BinPropertyKind::WadChunkLink),
-        "list" => Some(BinPropertyKind::Container),
-        "list2" => Some(BinPropertyKind::UnorderedContainer),
-        "pointer" => Some(BinPropertyKind::Struct),
-        "embed" => Some(BinPropertyKind::Embedded),
-        "link" => Some(BinPropertyKind::ObjectLink),
-        "option" => Some(BinPropertyKind::Optional),
-        "map" => Some(BinPropertyKind::Map),
-        "flag" => Some(BinPropertyKind::BitBool),
+        "none" => Some(Kind::None),
+        "bool" => Some(Kind::Bool),
+        "i8" => Some(Kind::I8),
+        "u8" => Some(Kind::U8),
+        "i16" => Some(Kind::I16),
+        "u16" => Some(Kind::U16),
+        "i32" => Some(Kind::I32),
+        "u32" => Some(Kind::U32),
+        "i64" => Some(Kind::I64),
+        "u64" => Some(Kind::U64),
+        "f32" => Some(Kind::F32),
+        "vec2" => Some(Kind::Vector2),
+        "vec3" => Some(Kind::Vector3),
+        "vec4" => Some(Kind::Vector4),
+        "mtx44" => Some(Kind::Matrix44),
+        "rgba" => Some(Kind::Color),
+        "string" => Some(Kind::String),
+        "hash" => Some(Kind::Hash),
+        "file" => Some(Kind::WadChunkLink),
+        "list" => Some(Kind::Container),
+        "list2" => Some(Kind::UnorderedContainer),
+        "pointer" => Some(Kind::Struct),
+        "embed" => Some(Kind::Embedded),
+        "link" => Some(Kind::ObjectLink),
+        "option" => Some(Kind::Optional),
+        "map" => Some(Kind::Map),
+        "flag" => Some(Kind::BitBool),
         _ => None,
     }
 }
 
 /// Maps a BinPropertyKind to its ritobin type name string.
-pub fn kind_to_type_name(kind: BinPropertyKind) -> &'static str {
+pub fn kind_to_type_name(kind: Kind) -> &'static str {
     match kind {
-        BinPropertyKind::None => "none",
-        BinPropertyKind::Bool => "bool",
-        BinPropertyKind::I8 => "i8",
-        BinPropertyKind::U8 => "u8",
-        BinPropertyKind::I16 => "i16",
-        BinPropertyKind::U16 => "u16",
-        BinPropertyKind::I32 => "i32",
-        BinPropertyKind::U32 => "u32",
-        BinPropertyKind::I64 => "i64",
-        BinPropertyKind::U64 => "u64",
-        BinPropertyKind::F32 => "f32",
-        BinPropertyKind::Vector2 => "vec2",
-        BinPropertyKind::Vector3 => "vec3",
-        BinPropertyKind::Vector4 => "vec4",
-        BinPropertyKind::Matrix44 => "mtx44",
-        BinPropertyKind::Color => "rgba",
-        BinPropertyKind::String => "string",
-        BinPropertyKind::Hash => "hash",
-        BinPropertyKind::WadChunkLink => "file",
-        BinPropertyKind::Container => "list",
-        BinPropertyKind::UnorderedContainer => "list2",
-        BinPropertyKind::Struct => "pointer",
-        BinPropertyKind::Embedded => "embed",
-        BinPropertyKind::ObjectLink => "link",
-        BinPropertyKind::Optional => "option",
-        BinPropertyKind::Map => "map",
-        BinPropertyKind::BitBool => "flag",
+        Kind::None => "none",
+        Kind::Bool => "bool",
+        Kind::I8 => "i8",
+        Kind::U8 => "u8",
+        Kind::I16 => "i16",
+        Kind::U16 => "u16",
+        Kind::I32 => "i32",
+        Kind::U32 => "u32",
+        Kind::I64 => "i64",
+        Kind::U64 => "u64",
+        Kind::F32 => "f32",
+        Kind::Vector2 => "vec2",
+        Kind::Vector3 => "vec3",
+        Kind::Vector4 => "vec4",
+        Kind::Matrix44 => "mtx44",
+        Kind::Color => "rgba",
+        Kind::String => "string",
+        Kind::Hash => "hash",
+        Kind::WadChunkLink => "file",
+        Kind::Container => "list",
+        Kind::UnorderedContainer => "list2",
+        Kind::Struct => "pointer",
+        Kind::Embedded => "embed",
+        Kind::ObjectLink => "link",
+        Kind::Optional => "option",
+        Kind::Map => "map",
+        Kind::BitBool => "flag",
     }
 }
 
 /// Ritobin type representation for parsing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RitobinType {
-    pub kind: BinPropertyKind,
-    pub inner_kind: Option<BinPropertyKind>,
-    pub value_kind: Option<BinPropertyKind>,
+    pub kind: Kind,
+    pub inner_kind: Option<Kind>,
+    pub value_kind: Option<Kind>,
 }
 
 impl RitobinType {
-    pub fn simple(kind: BinPropertyKind) -> Self {
+    pub fn simple(kind: Kind) -> Self {
         Self {
             kind,
             inner_kind: None,
@@ -87,7 +87,7 @@ impl RitobinType {
         }
     }
 
-    pub fn container(kind: BinPropertyKind, inner: BinPropertyKind) -> Self {
+    pub fn container(kind: Kind, inner: Kind) -> Self {
         Self {
             kind,
             inner_kind: Some(inner),
@@ -95,9 +95,9 @@ impl RitobinType {
         }
     }
 
-    pub fn map(key: BinPropertyKind, value: BinPropertyKind) -> Self {
+    pub fn map(key: Kind, value: Kind) -> Self {
         Self {
-            kind: BinPropertyKind::Map,
+            kind: Kind::Map,
             inner_kind: Some(key),
             value_kind: Some(value),
         }

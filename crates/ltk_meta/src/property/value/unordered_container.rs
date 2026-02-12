@@ -1,6 +1,6 @@
 use crate::{
+    property::Kind,
     traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty},
-    BinPropertyKind,
 };
 
 use super::Container;
@@ -10,7 +10,7 @@ use super::Container;
 pub struct UnorderedContainer(pub Container);
 
 impl PropertyValueExt for UnorderedContainer {
-    const KIND: crate::BinPropertyKind = BinPropertyKind::UnorderedContainer;
+    const KIND: Kind = Kind::UnorderedContainer;
 }
 
 impl PropertyExt for UnorderedContainer {

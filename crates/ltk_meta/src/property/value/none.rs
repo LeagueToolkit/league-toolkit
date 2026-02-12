@@ -1,13 +1,13 @@
 use crate::{
+    property::Kind,
     traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty},
-    BinPropertyKind,
 };
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub struct None;
 impl PropertyValueExt for None {
-    const KIND: BinPropertyKind = BinPropertyKind::None;
+    const KIND: Kind = Kind::None;
 }
 impl PropertyExt for None {
     fn size_no_header(&self) -> usize {

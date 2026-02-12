@@ -1,5 +1,5 @@
+use crate::property::Kind;
 use crate::traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty};
-use crate::BinPropertyKind;
 use ltk_io_ext::{ReaderExt, WriterExt};
 
 macro_rules! impl_prim {
@@ -16,7 +16,7 @@ macro_rules! impl_prim {
         }
 
         impl PropertyValueExt for $name {
-            const KIND: BinPropertyKind = BinPropertyKind::$name;
+            const KIND: Kind = Kind::$name;
         }
 
         impl ReadProperty for $name {

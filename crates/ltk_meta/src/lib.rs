@@ -1,6 +1,6 @@
 //! Bin file & properties
-mod property;
-pub use property::*;
+pub mod property;
+pub use property::{value, BinProperty, Kind as PropertyKind, PropertyValueEnum};
 
 mod bin_tree;
 pub use bin_tree::*;

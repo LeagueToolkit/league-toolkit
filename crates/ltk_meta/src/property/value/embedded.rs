@@ -1,6 +1,6 @@
 use crate::{
+    property::Kind,
     traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty},
-    BinPropertyKind,
 };
 
 use super::Struct;
@@ -10,7 +10,7 @@ use super::Struct;
 pub struct Embedded(pub Struct);
 
 impl PropertyValueExt for Embedded {
-    const KIND: BinPropertyKind = BinPropertyKind::Embedded;
+    const KIND: Kind = Kind::Embedded;
 }
 
 impl PropertyExt for Embedded {

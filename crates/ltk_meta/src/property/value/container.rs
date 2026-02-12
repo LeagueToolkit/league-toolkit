@@ -1,7 +1,7 @@
 use std::io;
 
 use crate::{
-    property::BinPropertyKind,
+    property::Kind,
     traits::{
         PropertyExt, PropertyValueDyn, PropertyValueExt, ReadProperty, ReaderExt, WriteProperty,
         WriterExt,
@@ -114,13 +114,13 @@ impl Container {
 impl Container {
     #[inline(always)]
     #[must_use]
-    pub fn item_kind(&self) -> BinPropertyKind {
+    pub fn item_kind(&self) -> Kind {
         variants!(property_kinds, (self))
     }
 }
 
 impl PropertyValueExt for Container {
-    const KIND: BinPropertyKind = BinPropertyKind::Container;
+    const KIND: Kind = Kind::Container;
 }
 
 impl PropertyExt for Container {
@@ -165,7 +165,7 @@ impl ReadProperty for Container {
              $( $variant:ident($ty:ty), )*) => {
                 match $value {
                     $(
-                        BinPropertyKind::$variant => {
+                        Kind::$variant => {
                             read(reader, legacy).map(|items| Self::$variant(items))
                         },
                     )*

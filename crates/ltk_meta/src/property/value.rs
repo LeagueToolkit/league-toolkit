@@ -22,7 +22,7 @@ pub use unordered_container::*;
 use std::io;
 
 use crate::{
-    property::BinPropertyKind,
+    property::Kind,
     traits::{ReadProperty as _, WriteProperty as _},
     Error,
 };
@@ -75,20 +75,20 @@ macro_rules! create_enum {
 
         impl PropertyValueEnum {
             #[must_use]
-            pub fn kind(&self) -> BinPropertyKind {
+            pub fn kind(&self) -> Kind {
                 match self {
-                    $(Self::$variant(_) => BinPropertyKind::$variant,)*
+                    $(Self::$variant(_) => Kind::$variant,)*
                 }
             }
 
 
             pub fn from_reader<R: io::Read + std::io::Seek + ?Sized>(
                 reader: &mut R,
-                kind: BinPropertyKind,
+                kind: Kind,
                 legacy: bool,
             ) -> Result<Self, Error> {
                 Ok(match kind {
-                    $(BinPropertyKind::$variant => $variant::from_reader(reader, legacy)?.into()),*
+                    $(Kind::$variant => $variant::from_reader(reader, legacy)?.into()),*
                 })
             }
 

@@ -1,7 +1,7 @@
 use std::{hash::Hash, io};
 
 use crate::{
-    property::BinPropertyKind,
+    property::Kind,
     traits::{PropertyExt, PropertyValueExt, ReadProperty, ReaderExt, WriteProperty, WriterExt},
     Error,
 };
@@ -38,7 +38,7 @@ pub struct PropertyValueUnsafeEq(pub PropertyValueEnum);
 impl Eq for PropertyValueUnsafeEq {}
 
 impl PropertyValueExt for PropertyValueUnsafeEq {
-    const KIND: BinPropertyKind = BinPropertyKind::Map;
+    const KIND: Kind = Kind::Map;
 }
 
 impl PropertyExt for PropertyValueUnsafeEq {
@@ -50,13 +50,13 @@ impl PropertyExt for PropertyValueUnsafeEq {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, PartialEq, Debug, Default)]
 pub struct Map {
-    pub key_kind: BinPropertyKind,
-    pub value_kind: BinPropertyKind,
+    pub key_kind: Kind,
+    pub value_kind: Kind,
     pub entries: IndexMap<PropertyValueUnsafeEq, PropertyValueEnum>,
 }
 
 impl PropertyValueExt for Map {
-    const KIND: BinPropertyKind = BinPropertyKind::Map;
+    const KIND: Kind = Kind::Map;
 }
 impl PropertyExt for Map {
     fn size_no_header(&self) -> usize {

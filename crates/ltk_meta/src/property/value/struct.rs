@@ -1,8 +1,9 @@
 use std::io;
 
 use crate::{
+    property::Kind,
     traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty},
-    BinProperty, BinPropertyKind, Error,
+    BinProperty, Error,
 };
 use byteorder::{ReadBytesExt as _, WriteBytesExt as _, LE};
 use indexmap::IndexMap;
@@ -16,7 +17,7 @@ pub struct Struct {
 }
 
 impl PropertyValueExt for Struct {
-    const KIND: BinPropertyKind = BinPropertyKind::Struct;
+    const KIND: Kind = Kind::Struct;
 }
 
 impl PropertyExt for Struct {
