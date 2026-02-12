@@ -12,7 +12,7 @@ compile_error!("feature \"zstd\" and feature \"ruzstd\" cannot be enabled at the
 /// Decompresses raw chunk data that has already been read from a WAD source.
 ///
 /// This enables a two-phase parallel workflow:
-/// 1. Read raw compressed bytes sequentially via [`Wad::load_chunk_raw`]
+/// 1. Read raw compressed bytes sequentially via [`crate::Wad::load_chunk_raw`]
 /// 2. Decompress in parallel using this function (e.g. with rayon)
 ///
 /// For [`WadChunkCompression::None`], the input data is returned as-is.
