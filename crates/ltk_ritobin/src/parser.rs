@@ -318,7 +318,7 @@ fn parse_type_name(input: Span) -> ParseResult<BinPropertyKind> {
     }
 }
 
-/// Parse container type parameters: [type] or [key,value].
+/// Parse container type parameters: `\[type\]` or `\[key,value\]`.
 fn parse_container_type_params(
     input: Span,
 ) -> ParseResult<(BinPropertyKind, Option<BinPropertyKind>)> {
