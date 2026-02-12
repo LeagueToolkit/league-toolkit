@@ -2,12 +2,12 @@ use std::io;
 
 use crate::Error;
 
-use super::{BinTree, BinTreeObject};
+use super::{Bin, Object};
 use byteorder::{ReadBytesExt, LE};
 use indexmap::IndexMap;
 use ltk_io_ext::ReaderExt;
 
-impl BinTree {
+impl Bin {
     pub const PROP: u32 = u32::from_le_bytes(*b"PROP");
     pub const PTCH: u32 = u32::from_le_bytes(*b"PTCH");
 
@@ -107,12 +107,12 @@ impl BinTree {
     fn try_read_objects<R: io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         obj_classes: &[u32],
-        objects: &mut IndexMap<u32, BinTreeObject>,
+        objects: &mut IndexMap<u32, Object>,
         legacy: bool,
     ) -> Result<(), Error> {
         objects.clear();
         for &class_hash in obj_classes {
-            let tree_obj = BinTreeObject::from_reader(reader, class_hash, legacy)?;
+            let tree_obj = Object::from_reader(reader, class_hash, legacy)?;
             objects.insert(tree_obj.path_hash, tree_obj);
         }
         Ok(())

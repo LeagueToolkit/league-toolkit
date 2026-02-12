@@ -1,4 +1,4 @@
-//! Tests for BinTree reading and writing
+//! Tests for Bin reading and writing
 
 use std::io::Cursor;
 
@@ -8,7 +8,7 @@ use ltk_primitives::Color;
 
 use crate::property::value;
 use crate::property::{BinProperty, Kind, PropertyValueEnum};
-use crate::{BinTree, BinTreeObject};
+use crate::{Bin, BinObject as Object};
 
 /// Helper to roundtrip a property value through write/read
 fn roundtrip_property(prop: &BinProperty) -> BinProperty {
@@ -20,14 +20,14 @@ fn roundtrip_property(prop: &BinProperty) -> BinProperty {
     BinProperty::from_reader(&mut cursor, false).expect("read failed")
 }
 
-/// Helper to roundtrip a BinTree through write/read
-fn roundtrip_tree(tree: &BinTree) -> BinTree {
+/// Helper to roundtrip a Bin through write/read
+fn roundtrip_tree(tree: &Bin) -> Bin {
     let mut buffer = Vec::new();
     let mut cursor = Cursor::new(&mut buffer);
     tree.to_writer(&mut cursor).expect("write failed");
 
     cursor.set_position(0);
-    BinTree::from_reader(&mut cursor).expect("read failed")
+    Bin::from_reader(&mut cursor).expect("read failed")
 }
 
 /// Helper to create a BinProperty with a given name hash and value
@@ -605,12 +605,12 @@ fn test_embedded_roundtrip() {
 }
 
 // =============================================================================
-// BinTreeObject Tests
+// Object Tests
 // =============================================================================
 
 #[test]
 fn test_bin_tree_object_empty_roundtrip() {
-    let obj = BinTreeObject {
+    let obj = Object {
         path_hash: 0x1234,
         class_hash: 0x5678,
         properties: IndexMap::new(),
@@ -621,8 +621,7 @@ fn test_bin_tree_object_empty_roundtrip() {
     obj.to_writer(&mut cursor).expect("write failed");
 
     cursor.set_position(0);
-    let result =
-        BinTreeObject::from_reader(&mut cursor, obj.class_hash, false).expect("read failed");
+    let result = Object::from_reader(&mut cursor, obj.class_hash, false).expect("read failed");
     assert_eq!(obj, result);
 }
 
@@ -644,7 +643,7 @@ fn test_bin_tree_object_with_properties_roundtrip() {
         },
     );
 
-    let obj = BinTreeObject {
+    let obj = Object {
         path_hash: 0x1234,
         class_hash: 0x5678,
         properties,
@@ -655,25 +654,24 @@ fn test_bin_tree_object_with_properties_roundtrip() {
     obj.to_writer(&mut cursor).expect("write failed");
 
     cursor.set_position(0);
-    let result =
-        BinTreeObject::from_reader(&mut cursor, obj.class_hash, false).expect("read failed");
+    let result = Object::from_reader(&mut cursor, obj.class_hash, false).expect("read failed");
     assert_eq!(obj, result);
 }
 
 // =============================================================================
-// BinTree Tests
+// Bin Tests
 // =============================================================================
 
 #[test]
 fn test_bin_tree_empty_roundtrip() {
-    let tree = BinTree::new([], std::iter::empty::<String>());
+    let tree = Bin::new([], std::iter::empty::<String>());
     let result = roundtrip_tree(&tree);
     assert_eq!(tree, result);
 }
 
 #[test]
 fn test_bin_tree_with_dependencies_roundtrip() {
-    let tree = BinTree::new(
+    let tree = Bin::new(
         [],
         ["dependency1.bin".to_string(), "dependency2.bin".to_string()],
     );
@@ -692,13 +690,13 @@ fn test_bin_tree_with_objects_roundtrip() {
         },
     );
 
-    let obj = BinTreeObject {
+    let obj = Object {
         path_hash: 0x1234,
         class_hash: 0x5678,
         properties,
     };
 
-    let tree = BinTree::new([obj], std::iter::empty::<String>());
+    let tree = Bin::new([obj], std::iter::empty::<String>());
     let result = roundtrip_tree(&tree);
     assert_eq!(tree, result);
 }
@@ -733,7 +731,7 @@ fn test_bin_tree_complex_roundtrip() {
         },
     );
 
-    let obj1 = BinTreeObject {
+    let obj1 = Object {
         path_hash: 0xAAAA,
         class_hash: 0xBBBB,
         properties: obj1_props,
@@ -760,13 +758,13 @@ fn test_bin_tree_complex_roundtrip() {
         },
     );
 
-    let obj2 = BinTreeObject {
+    let obj2 = Object {
         path_hash: 0xCCCC,
         class_hash: 0xDDDD,
         properties: obj2_props,
     };
 
-    let tree = BinTree::new(
+    let tree = Bin::new(
         [obj1, obj2],
         ["dep1.bin".to_string(), "dep2.bin".to_string()],
     );

@@ -4,7 +4,7 @@ use std::fmt::Write;
 
 use ltk_meta::{
     value::{Container, Embedded, Map, Optional, PropertyValueEnum, Struct, UnorderedContainer},
-    BinProperty, BinTree, BinTreeObject,
+    Bin, BinObject, BinProperty,
 };
 
 use crate::{
@@ -340,7 +340,7 @@ impl<'a, H: HashProvider> TextWriter<'a, H> {
     }
 
     /// Write a BinTree to the buffer.
-    pub fn write_tree(&mut self, tree: &BinTree) -> Result<(), WriteError> {
+    pub fn write_tree(&mut self, tree: &Bin) -> Result<(), WriteError> {
         // Header
         self.write_raw("#PROP_text\n");
 
@@ -377,7 +377,7 @@ impl<'a, H: HashProvider> TextWriter<'a, H> {
     }
 
     /// Write a single BinTreeObject.
-    fn write_object(&mut self, obj: &BinTreeObject) -> Result<(), WriteError> {
+    fn write_object(&mut self, obj: &BinObject) -> Result<(), WriteError> {
         self.pad();
         self.write_entry_hash(obj.path_hash)?;
         self.write_raw(" = ");
@@ -412,14 +412,14 @@ impl Default for TextWriter<'_, HexHashProvider> {
 // ============================================================================
 
 /// Write a BinTree to ritobin text format (hashes as hex).
-pub fn write(tree: &BinTree) -> Result<String, WriteError> {
+pub fn write(tree: &Bin) -> Result<String, WriteError> {
     let mut writer = TextWriter::new();
     writer.write_tree(tree)?;
     Ok(writer.into_string())
 }
 
 /// Write a BinTree to ritobin text format with custom configuration.
-pub fn write_with_config(tree: &BinTree, config: WriterConfig) -> Result<String, WriteError> {
+pub fn write_with_config(tree: &Bin, config: WriterConfig) -> Result<String, WriteError> {
     static HEX_PROVIDER: HexHashProvider = HexHashProvider;
     let mut writer = TextWriter::with_config_and_hashes(config, &HEX_PROVIDER);
     writer.write_tree(tree)?;
@@ -427,10 +427,7 @@ pub fn write_with_config(tree: &BinTree, config: WriterConfig) -> Result<String,
 }
 
 /// Write a BinTree to ritobin text format with hash name lookup.
-pub fn write_with_hashes<H: HashProvider>(
-    tree: &BinTree,
-    hashes: &H,
-) -> Result<String, WriteError> {
+pub fn write_with_hashes<H: HashProvider>(tree: &Bin, hashes: &H) -> Result<String, WriteError> {
     let mut writer = TextWriter::with_hashes(hashes);
     writer.write_tree(tree)?;
     Ok(writer.into_string())
@@ -438,7 +435,7 @@ pub fn write_with_hashes<H: HashProvider>(
 
 /// Write a BinTree to ritobin text format with configuration and hash name lookup.
 pub fn write_with_config_and_hashes<H: HashProvider>(
-    tree: &BinTree,
+    tree: &Bin,
     config: WriterConfig,
     hashes: &H,
 ) -> Result<String, WriteError> {
@@ -472,7 +469,7 @@ pub fn write_with_config_and_hashes<H: HashProvider>(
 pub struct RitobinBuilder {
     is_override: bool,
     dependencies: Vec<String>,
-    objects: Vec<BinTreeObject>,
+    objects: Vec<BinObject>,
 }
 
 impl RitobinBuilder {
@@ -502,13 +499,13 @@ impl RitobinBuilder {
     }
 
     /// Adds a single object.
-    pub fn object(mut self, obj: BinTreeObject) -> Self {
+    pub fn object(mut self, obj: BinObject) -> Self {
         self.objects.push(obj);
         self
     }
 
     /// Adds multiple objects.
-    pub fn objects(mut self, objs: impl IntoIterator<Item = BinTreeObject>) -> Self {
+    pub fn objects(mut self, objs: impl IntoIterator<Item = BinObject>) -> Self {
         self.objects.extend(objs);
         self
     }
@@ -516,8 +513,8 @@ impl RitobinBuilder {
     /// Builds the [`BinTree`].
     ///
     /// The resulting tree will have version 3, which is always used when writing.
-    pub fn build(self) -> BinTree {
-        BinTree::builder()
+    pub fn build(self) -> Bin {
+        Bin::builder()
             .is_override(self.is_override)
             .dependencies(self.dependencies)
             .objects(self.objects)
@@ -552,7 +549,7 @@ mod tests {
 
     #[test]
     fn test_write_simple() {
-        let tree = BinTree::new([], std::iter::empty::<&str>());
+        let tree = Bin::new([], std::iter::empty::<&str>());
         let text = write(&tree).unwrap();
         assert!(text.contains("#PROP_text"));
         assert!(text.contains("type: string = \"PROP\""));
@@ -561,7 +558,7 @@ mod tests {
 
     #[test]
     fn test_write_with_dependencies() {
-        let tree = BinTree::new(
+        let tree = Bin::new(
             std::iter::empty(),
             vec![
                 "path/to/dep1.bin".to_string(),
@@ -601,13 +598,13 @@ mod tests {
         let path_hash = ltk_hash::fnv1a::hash_lower("Test/Path");
         let class_hash = ltk_hash::fnv1a::hash_lower("TestClass");
 
-        let obj = BinTreeObject {
+        let obj = BinObject {
             path_hash,
             class_hash,
             properties,
         };
 
-        let tree = BinTree::new(std::iter::once(obj), std::iter::empty::<&str>());
+        let tree = Bin::new(std::iter::once(obj), std::iter::empty::<&str>());
 
         // Without hash lookup - should have hex values
         let text_hex = write(&tree).unwrap();

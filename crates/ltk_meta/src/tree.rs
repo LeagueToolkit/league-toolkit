@@ -53,13 +53,13 @@
 //! ```no_run
 //! use std::fs::File;
 //! use std::io::Cursor;
-//! use ltk_meta::{BinTree, BinTreeObject};
+//! use ltk_meta::{Bin, BinObject};
 //!
 //! let mut file = File::open("data.bin")?;
-//! let mut tree = BinTree::from_reader(&mut file)?;
+//! let mut tree = Bin::from_reader(&mut file)?;
 //!
 //! // Add a new object
-//! tree.add_object(BinTreeObject::new(0x11112222, 0x33334444));
+//! tree.add_object(BinObject::new(0x11112222, 0x33334444));
 //!
 //! // Remove an object
 //! tree.remove_object(0x55556666);
@@ -104,7 +104,7 @@ mod tests;
 /// ```
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
-pub struct BinTree {
+pub struct Bin {
     /// Whether this is an override/patch bin file.
     pub is_override: bool,
 
@@ -113,7 +113,7 @@ pub struct BinTree {
     pub version: u32,
 
     /// The objects in this bin tree, keyed by their path hash.
-    pub objects: IndexMap<u32, BinTreeObject>,
+    pub objects: IndexMap<u32, Object>,
 
     /// List of other property bins this file depends on.
     ///
@@ -125,7 +125,7 @@ pub struct BinTree {
     data_overrides: Vec<()>,
 }
 
-impl Default for BinTree {
+impl Default for Bin {
     fn default() -> Self {
         Self {
             version: 3,
@@ -137,7 +137,7 @@ impl Default for BinTree {
     }
 }
 
-impl BinTree {
+impl Bin {
     /// Creates a new `BinTree` with the given objects and dependencies.
     ///
     /// The version is set to 3 and `is_override` is set to false.
@@ -153,7 +153,7 @@ impl BinTree {
     /// );
     /// ```
     pub fn new(
-        objects: impl IntoIterator<Item = BinTreeObject>,
+        objects: impl IntoIterator<Item = Object>,
         dependencies: impl IntoIterator<Item = impl Into<String>>,
     ) -> Self {
         Self {
@@ -161,7 +161,7 @@ impl BinTree {
             is_override: false,
             objects: objects
                 .into_iter()
-                .map(|o: BinTreeObject| (o.path_hash, o))
+                .map(|o: Object| (o.path_hash, o))
                 .collect(),
             dependencies: dependencies.into_iter().map(Into::into).collect(),
             data_overrides: Vec::new(),
@@ -198,13 +198,13 @@ impl BinTree {
 
     /// Returns a reference to the object with the given path hash, if it exists.
     #[inline]
-    pub fn get_object(&self, path_hash: u32) -> Option<&BinTreeObject> {
+    pub fn get_object(&self, path_hash: u32) -> Option<&Object> {
         self.objects.get(&path_hash)
     }
 
     /// Returns a mutable reference to the object with the given path hash, if it exists.
     #[inline]
-    pub fn get_object_mut(&mut self, path_hash: u32) -> Option<&mut BinTreeObject> {
+    pub fn get_object_mut(&mut self, path_hash: u32) -> Option<&mut Object> {
         self.objects.get_mut(&path_hash)
     }
 
@@ -218,12 +218,12 @@ impl BinTree {
     ///
     /// If an object with the same path hash already exists, it is replaced
     /// and the old object is returned.
-    pub fn add_object(&mut self, object: BinTreeObject) -> Option<BinTreeObject> {
+    pub fn add_object(&mut self, object: Object) -> Option<Object> {
         self.objects.insert(object.path_hash, object)
     }
 
     /// Removes and returns the object with the given path hash, if it exists.
-    pub fn remove_object(&mut self, path_hash: u32) -> Option<BinTreeObject> {
+    pub fn remove_object(&mut self, path_hash: u32) -> Option<Object> {
         self.objects.shift_remove(&path_hash)
     }
 
@@ -234,38 +234,38 @@ impl BinTree {
 
     /// Returns an iterator over the objects in the tree.
     #[inline]
-    pub fn iter(&self) -> impl Iterator<Item = (&u32, &BinTreeObject)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&u32, &Object)> {
         self.objects.iter()
     }
 
     /// Returns a mutable iterator over the objects in the tree.
     #[inline]
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&u32, &mut BinTreeObject)> {
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&u32, &mut Object)> {
         self.objects.iter_mut()
     }
 }
 
-impl<'a> IntoIterator for &'a BinTree {
-    type Item = (&'a u32, &'a BinTreeObject);
-    type IntoIter = indexmap::map::Iter<'a, u32, BinTreeObject>;
+impl<'a> IntoIterator for &'a Bin {
+    type Item = (&'a u32, &'a Object);
+    type IntoIter = indexmap::map::Iter<'a, u32, Object>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.objects.iter()
     }
 }
 
-impl<'a> IntoIterator for &'a mut BinTree {
-    type Item = (&'a u32, &'a mut BinTreeObject);
-    type IntoIter = indexmap::map::IterMut<'a, u32, BinTreeObject>;
+impl<'a> IntoIterator for &'a mut Bin {
+    type Item = (&'a u32, &'a mut Object);
+    type IntoIter = indexmap::map::IterMut<'a, u32, Object>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.objects.iter_mut()
     }
 }
 
-impl IntoIterator for BinTree {
-    type Item = (u32, BinTreeObject);
-    type IntoIter = indexmap::map::IntoIter<u32, BinTreeObject>;
+impl IntoIterator for Bin {
+    type Item = (u32, Object);
+    type IntoIter = indexmap::map::IntoIter<u32, Object>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.objects.into_iter()
@@ -289,7 +289,7 @@ impl IntoIterator for BinTree {
 #[derive(Debug, Default, Clone)]
 pub struct BinTreeBuilder {
     is_override: bool,
-    objects: Vec<BinTreeObject>,
+    objects: Vec<Object>,
     dependencies: Vec<String>,
 }
 
@@ -320,13 +320,13 @@ impl BinTreeBuilder {
     }
 
     /// Adds a single object.
-    pub fn object(mut self, obj: BinTreeObject) -> Self {
+    pub fn object(mut self, obj: Object) -> Self {
         self.objects.push(obj);
         self
     }
 
     /// Adds multiple objects.
-    pub fn objects(mut self, objs: impl IntoIterator<Item = BinTreeObject>) -> Self {
+    pub fn objects(mut self, objs: impl IntoIterator<Item = Object>) -> Self {
         self.objects.extend(objs);
         self
     }
@@ -334,8 +334,8 @@ impl BinTreeBuilder {
     /// Builds the [`BinTree`].
     ///
     /// The resulting tree will have version 3, which is always used when writing.
-    pub fn build(self) -> BinTree {
-        BinTree {
+    pub fn build(self) -> Bin {
+        Bin {
             version: 3,
             is_override: self.is_override,
             objects: self.objects.into_iter().map(|o| (o.path_hash, o)).collect(),

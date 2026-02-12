@@ -14,7 +14,7 @@ fn main() {
     println!("Converting {input_path:?} to ritobin...");
 
     let mut file = File::open(input_path).map(BufReader::new).unwrap();
-    let tree = ltk_meta::BinTree::from_reader(&mut file).unwrap();
+    let tree = ltk_meta::Bin::from_reader(&mut file).unwrap();
 
     println!(" - {} objects", tree.objects.len());
 

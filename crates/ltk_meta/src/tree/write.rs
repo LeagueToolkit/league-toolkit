@@ -1,6 +1,6 @@
 use std::io;
 
-use super::BinTree;
+use super::Bin;
 use byteorder::{WriteBytesExt, LE};
 use ltk_io_ext::WriterExt;
 
@@ -10,7 +10,7 @@ use ltk_io_ext::WriterExt;
 /// dependencies and data overrides.
 pub const WRITE_VERSION: u32 = 3;
 
-impl BinTree {
+impl Bin {
     /// Writes a BinTree to a writer.
     ///
     /// The output will always use version 3 format, regardless of the

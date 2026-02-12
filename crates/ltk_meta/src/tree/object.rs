@@ -33,7 +33,7 @@ use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 /// ```
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
-pub struct BinTreeObject {
+pub struct Object {
     /// The unique path hash identifying this object.
     pub path_hash: u32,
 
@@ -44,7 +44,7 @@ pub struct BinTreeObject {
     pub properties: IndexMap<u32, BinProperty>,
 }
 
-impl BinTreeObject {
+impl Object {
     /// Creates a new `BinTreeObject` with the given path and class hashes.
     ///
     /// The object starts with no properties.
@@ -228,7 +228,7 @@ impl BinTreeObject {
     }
 }
 
-impl<'a> IntoIterator for &'a BinTreeObject {
+impl<'a> IntoIterator for &'a Object {
     type Item = (&'a u32, &'a BinProperty);
     type IntoIter = indexmap::map::Iter<'a, u32, BinProperty>;
 
@@ -237,7 +237,7 @@ impl<'a> IntoIterator for &'a BinTreeObject {
     }
 }
 
-impl<'a> IntoIterator for &'a mut BinTreeObject {
+impl<'a> IntoIterator for &'a mut Object {
     type Item = (&'a u32, &'a mut BinProperty);
     type IntoIter = indexmap::map::IterMut<'a, u32, BinProperty>;
 
@@ -246,7 +246,7 @@ impl<'a> IntoIterator for &'a mut BinTreeObject {
     }
 }
 
-impl IntoIterator for BinTreeObject {
+impl IntoIterator for Object {
     type Item = (u32, BinProperty);
     type IntoIter = indexmap::map::IntoIter<u32, BinProperty>;
 
@@ -330,8 +330,8 @@ impl BinTreeObjectBuilder {
     }
 
     /// Builds the [`BinTreeObject`].
-    pub fn build(self) -> BinTreeObject {
-        BinTreeObject {
+    pub fn build(self) -> Object {
+        Object {
             path_hash: self.path_hash,
             class_hash: self.class_hash,
             properties: self.properties,

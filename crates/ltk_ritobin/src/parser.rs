@@ -8,7 +8,7 @@ use indexmap::IndexMap;
 use ltk_hash::fnv1a::hash_lower;
 use ltk_meta::{
     value::{self, PropertyValueEnum},
-    BinProperty, BinTree, BinTreeObject, PropertyKind,
+    Bin, BinObject, BinProperty, PropertyKind,
 };
 use ltk_primitives::Color;
 use nom::{
@@ -912,7 +912,7 @@ impl RitobinFile {
     }
 
     /// Get the "entries" map as BinTreeObjects.
-    pub fn objects(&self) -> IndexMap<u32, BinTreeObject> {
+    pub fn objects(&self) -> IndexMap<u32, BinObject> {
         self.entries
             .get("entries")
             .and_then(|p| {
@@ -931,7 +931,7 @@ impl RitobinFile {
                                 {
                                     Some((
                                         path_hash,
-                                        BinTreeObject {
+                                        BinObject {
                                             path_hash,
                                             class_hash: struct_val.class_hash,
                                             properties: struct_val.properties.clone(),
@@ -951,8 +951,8 @@ impl RitobinFile {
     }
 
     /// Convert to a BinTree.
-    pub fn to_bin_tree(&self) -> BinTree {
-        BinTree::new(self.objects().into_values(), self.linked())
+    pub fn to_bin_tree(&self) -> Bin {
+        Bin::new(self.objects().into_values(), self.linked())
     }
 }
 
@@ -980,7 +980,7 @@ pub fn parse(input: &str) -> Result<RitobinFile, ParseError> {
 }
 
 /// Parse ritobin text directly to BinTree.
-pub fn parse_to_bin_tree(input: &str) -> Result<BinTree, ParseError> {
+pub fn parse_to_bin_tree(input: &str) -> Result<Bin, ParseError> {
     parse(input).map(|f| f.to_bin_tree())
 }
 

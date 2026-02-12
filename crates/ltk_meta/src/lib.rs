@@ -2,8 +2,8 @@
 pub mod property;
 pub use property::{value, BinProperty, Kind as PropertyKind, PropertyValueEnum};
 
-mod bin_tree;
-pub use bin_tree::*;
+pub mod tree;
+pub use tree::{Bin, Object as BinObject};
 
 mod error;
 pub use error::*;
