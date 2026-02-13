@@ -3,11 +3,11 @@
 use std::fmt::Write;
 
 use ltk_meta::{
-    value::{
-        ContainerValue, EmbeddedValue, MapValue, OptionalValue, PropertyValueEnum, StructValue,
-        UnorderedContainerValue,
+    property::{
+        values::{Embedded, Map, Optional, Struct, UnorderedContainer},
+        PropertyValueEnum,
     },
-    BinProperty, BinTree, BinTreeObject,
+    Bin, BinObject, BinProperty,
 };
 
 use crate::{
@@ -104,21 +104,18 @@ impl<'a, H: HashProvider> TextWriter<'a, H> {
         self.write_raw(type_name);
 
         match value {
-            PropertyValueEnum::Container(ContainerValue { item_kind, .. })
-            | PropertyValueEnum::UnorderedContainer(UnorderedContainerValue(ContainerValue {
-                item_kind,
-                ..
-            })) => {
+            PropertyValueEnum::Container(container)
+            | PropertyValueEnum::UnorderedContainer(UnorderedContainer(container)) => {
                 self.write_raw("[");
-                self.write_raw(kind_to_type_name(*item_kind));
+                self.write_raw(kind_to_type_name(container.item_kind()));
                 self.write_raw("]");
             }
-            PropertyValueEnum::Optional(OptionalValue { kind, .. }) => {
+            PropertyValueEnum::Optional(optional) => {
                 self.write_raw("[");
-                self.write_raw(kind_to_type_name(*kind));
+                self.write_raw(kind_to_type_name(optional.item_kind()));
                 self.write_raw("]");
             }
-            PropertyValueEnum::Map(MapValue {
+            PropertyValueEnum::Map(Map {
                 key_kind,
                 value_kind,
                 ..
@@ -252,11 +249,9 @@ impl<'a, H: HashProvider> TextWriter<'a, H> {
             }
             PropertyValueEnum::BitBool(v) => self.write_raw(if v.0 { "true" } else { "false" }),
 
-            PropertyValueEnum::Container(ContainerValue { items, .. })
-            | PropertyValueEnum::UnorderedContainer(UnorderedContainerValue(ContainerValue {
-                items,
-                ..
-            })) => {
+            PropertyValueEnum::Container(container)
+            | PropertyValueEnum::UnorderedContainer(UnorderedContainer(container)) => {
+                let items = container.clone().into_items().collect::<Vec<_>>();
                 if items.is_empty() {
                     self.write_raw("{}");
                 } else {
@@ -264,7 +259,7 @@ impl<'a, H: HashProvider> TextWriter<'a, H> {
                     self.indent();
                     for item in items {
                         self.pad();
-                        self.write_value(item)?;
+                        self.write_value(&item)?;
                         self.write_raw("\n");
                     }
                     self.dedent();
@@ -272,12 +267,12 @@ impl<'a, H: HashProvider> TextWriter<'a, H> {
                     self.write_raw("}");
                 }
             }
-            PropertyValueEnum::Optional(OptionalValue { value, .. }) => {
-                if let Some(inner) = value {
+            PropertyValueEnum::Optional(value) => {
+                if let Some(inner) = value.clone().into_inner() {
                     self.write_raw("{\n");
                     self.indent();
                     self.pad();
-                    self.write_value(inner)?;
+                    self.write_value(&inner)?;
                     self.write_raw("\n");
                     self.dedent();
                     self.pad();
@@ -286,7 +281,7 @@ impl<'a, H: HashProvider> TextWriter<'a, H> {
                     self.write_raw("{}");
                 }
             }
-            PropertyValueEnum::Map(MapValue { entries, .. }) => {
+            PropertyValueEnum::Map(Map { entries, .. }) => {
                 if entries.is_empty() {
                     self.write_raw("{}");
                 } else {
@@ -307,14 +302,14 @@ impl<'a, H: HashProvider> TextWriter<'a, H> {
             PropertyValueEnum::Struct(v) => {
                 self.write_struct_value(v)?;
             }
-            PropertyValueEnum::Embedded(EmbeddedValue(v)) => {
+            PropertyValueEnum::Embedded(Embedded(v)) => {
                 self.write_struct_value(v)?;
             }
         }
         Ok(())
     }
 
-    fn write_struct_value(&mut self, v: &StructValue) -> Result<(), WriteError> {
+    fn write_struct_value(&mut self, v: &Struct) -> Result<(), WriteError> {
         if v.class_hash == 0 && v.properties.is_empty() {
             self.write_raw("null");
         } else {
@@ -347,8 +342,8 @@ impl<'a, H: HashProvider> TextWriter<'a, H> {
         Ok(())
     }
 
-    /// Write a BinTree to the buffer.
-    pub fn write_tree(&mut self, tree: &BinTree) -> Result<(), WriteError> {
+    /// Write a Bin to the buffer.
+    pub fn write_tree(&mut self, tree: &Bin) -> Result<(), WriteError> {
         // Header
         self.write_raw("#PROP_text\n");
 
@@ -384,8 +379,8 @@ impl<'a, H: HashProvider> TextWriter<'a, H> {
         Ok(())
     }
 
-    /// Write a single BinTreeObject.
-    fn write_object(&mut self, obj: &BinTreeObject) -> Result<(), WriteError> {
+    /// Write a single [`BinObject`].
+    fn write_object(&mut self, obj: &BinObject) -> Result<(), WriteError> {
         self.pad();
         self.write_entry_hash(obj.path_hash)?;
         self.write_raw(" = ");
@@ -419,34 +414,31 @@ impl Default for TextWriter<'_, HexHashProvider> {
 // Public API Functions
 // ============================================================================
 
-/// Write a BinTree to ritobin text format (hashes as hex).
-pub fn write(tree: &BinTree) -> Result<String, WriteError> {
+/// Write a [`Bin`] to ritobin text format (hashes as hex).
+pub fn write(tree: &Bin) -> Result<String, WriteError> {
     let mut writer = TextWriter::new();
     writer.write_tree(tree)?;
     Ok(writer.into_string())
 }
 
-/// Write a BinTree to ritobin text format with custom configuration.
-pub fn write_with_config(tree: &BinTree, config: WriterConfig) -> Result<String, WriteError> {
+/// Write a [`Bin`] to ritobin text format with custom configuration.
+pub fn write_with_config(tree: &Bin, config: WriterConfig) -> Result<String, WriteError> {
     static HEX_PROVIDER: HexHashProvider = HexHashProvider;
     let mut writer = TextWriter::with_config_and_hashes(config, &HEX_PROVIDER);
     writer.write_tree(tree)?;
     Ok(writer.into_string())
 }
 
-/// Write a BinTree to ritobin text format with hash name lookup.
-pub fn write_with_hashes<H: HashProvider>(
-    tree: &BinTree,
-    hashes: &H,
-) -> Result<String, WriteError> {
+/// Write a [`Bin`] to ritobin text format with hash name lookup.
+pub fn write_with_hashes<H: HashProvider>(tree: &Bin, hashes: &H) -> Result<String, WriteError> {
     let mut writer = TextWriter::with_hashes(hashes);
     writer.write_tree(tree)?;
     Ok(writer.into_string())
 }
 
-/// Write a BinTree to ritobin text format with configuration and hash name lookup.
+/// Write a [`Bin`] to ritobin text format with configuration and hash name lookup.
 pub fn write_with_config_and_hashes<H: HashProvider>(
-    tree: &BinTree,
+    tree: &Bin,
     config: WriterConfig,
     hashes: &H,
 ) -> Result<String, WriteError> {
@@ -461,18 +453,18 @@ pub fn write_with_config_and_hashes<H: HashProvider>(
 
 /// A builder for creating ritobin files programmatically and converting to text.
 ///
-/// This is a convenience wrapper around [`ltk_meta::BinTreeBuilder`]
+/// This is a convenience wrapper around [`ltk_meta::Builder`]
 /// that adds methods for direct text output.
 ///
 /// # Examples
 ///
 /// ```
 /// use ltk_ritobin::writer::RitobinBuilder;
-/// use ltk_meta::BinTreeObject;
+/// use ltk_meta::BinObject;
 ///
 /// let text = RitobinBuilder::new()
 ///     .dependency("base.bin")
-///     .object(BinTreeObject::new(0x1234, 0x5678))
+///     .object(BinObject::new(0x1234, 0x5678))
 ///     .to_text()
 ///     .unwrap();
 /// ```
@@ -480,11 +472,11 @@ pub fn write_with_config_and_hashes<H: HashProvider>(
 pub struct RitobinBuilder {
     is_override: bool,
     dependencies: Vec<String>,
-    objects: Vec<BinTreeObject>,
+    objects: Vec<BinObject>,
 }
 
 impl RitobinBuilder {
-    /// Creates a new `RitobinBuilder` with default values.
+    /// Creates a new [`RitobinBuilder`] with default values.
     pub fn new() -> Self {
         Self::default()
     }
@@ -510,22 +502,22 @@ impl RitobinBuilder {
     }
 
     /// Adds a single object.
-    pub fn object(mut self, obj: BinTreeObject) -> Self {
+    pub fn object(mut self, obj: BinObject) -> Self {
         self.objects.push(obj);
         self
     }
 
     /// Adds multiple objects.
-    pub fn objects(mut self, objs: impl IntoIterator<Item = BinTreeObject>) -> Self {
+    pub fn objects(mut self, objs: impl IntoIterator<Item = BinObject>) -> Self {
         self.objects.extend(objs);
         self
     }
 
-    /// Builds the [`BinTree`].
+    /// Builds the [`Bin`].
     ///
     /// The resulting tree will have version 3, which is always used when writing.
-    pub fn build(self) -> BinTree {
-        BinTree::builder()
+    pub fn build(self) -> Bin {
+        Bin::builder()
             .is_override(self.is_override)
             .dependencies(self.dependencies)
             .objects(self.objects)
@@ -560,7 +552,7 @@ mod tests {
 
     #[test]
     fn test_write_simple() {
-        let tree = BinTree::new([], std::iter::empty::<&str>());
+        let tree = Bin::new([], std::iter::empty::<&str>());
         let text = write(&tree).unwrap();
         assert!(text.contains("#PROP_text"));
         assert!(text.contains("type: string = \"PROP\""));
@@ -569,7 +561,7 @@ mod tests {
 
     #[test]
     fn test_write_with_dependencies() {
-        let tree = BinTree::new(
+        let tree = Bin::new(
             std::iter::empty(),
             vec![
                 "path/to/dep1.bin".to_string(),
@@ -593,7 +585,7 @@ mod tests {
     #[test]
     fn test_write_with_hash_lookup() {
         use indexmap::IndexMap;
-        use ltk_meta::value::StringValue;
+        use ltk_meta::property::values::String;
 
         // Create a simple tree with a hash value
         let mut properties = IndexMap::new();
@@ -602,20 +594,20 @@ mod tests {
             name_hash,
             BinProperty {
                 name_hash,
-                value: PropertyValueEnum::String(StringValue("hello".to_string())),
+                value: PropertyValueEnum::String(String("hello".to_string())),
             },
         );
 
         let path_hash = ltk_hash::fnv1a::hash_lower("Test/Path");
         let class_hash = ltk_hash::fnv1a::hash_lower("TestClass");
 
-        let obj = BinTreeObject {
+        let obj = BinObject {
             path_hash,
             class_hash,
             properties,
         };
 
-        let tree = BinTree::new(std::iter::once(obj), std::iter::empty::<&str>());
+        let tree = Bin::new(std::iter::once(obj), std::iter::empty::<&str>());
 
         // Without hash lookup - should have hex values
         let text_hex = write(&tree).unwrap();
