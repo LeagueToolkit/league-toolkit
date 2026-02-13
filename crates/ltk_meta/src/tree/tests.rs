@@ -355,10 +355,7 @@ fn test_unordered_container_roundtrip() {
 fn test_optional_none_roundtrip() {
     let prop = make_prop(
         0x1234,
-        PropertyValueEnum::Optional(values::Optional {
-            kind: Kind::I32,
-            value: None,
-        }),
+        PropertyValueEnum::Optional(values::Optional::empty(Kind::I32).unwrap()),
     );
     let result = roundtrip_property(&prop);
     assert_eq!(prop, result);
@@ -368,10 +365,7 @@ fn test_optional_none_roundtrip() {
 fn test_optional_some_primitive_roundtrip() {
     let prop = make_prop(
         0x1234,
-        PropertyValueEnum::Optional(values::Optional {
-            kind: Kind::I32,
-            value: Some(Box::new(PropertyValueEnum::I32(values::I32(42)))),
-        }),
+        PropertyValueEnum::Optional(values::Optional::from(values::I32(42))),
     );
     let result = roundtrip_property(&prop);
     assert_eq!(prop, result);
@@ -381,12 +375,9 @@ fn test_optional_some_primitive_roundtrip() {
 fn test_optional_some_string_roundtrip() {
     let prop = make_prop(
         0x1234,
-        PropertyValueEnum::Optional(values::Optional {
-            kind: Kind::String,
-            value: Some(Box::new(PropertyValueEnum::String(values::String(
-                "optional value".into(),
-            )))),
-        }),
+        PropertyValueEnum::Optional(values::Optional::from(values::String(
+            "optional value".into(),
+        ))),
     );
     let result = roundtrip_property(&prop);
     assert_eq!(prop, result);
@@ -405,13 +396,10 @@ fn test_optional_some_struct_roundtrip() {
 
     let prop = make_prop(
         0x1234,
-        PropertyValueEnum::Optional(values::Optional {
-            kind: Kind::Struct,
-            value: Some(Box::new(PropertyValueEnum::Struct(values::Struct {
-                class_hash: 0xCCCC,
-                properties,
-            }))),
-        }),
+        PropertyValueEnum::Optional(values::Optional::from(values::Struct {
+            class_hash: 0xCCCC,
+            properties,
+        })),
     );
     let result = roundtrip_property(&prop);
     assert_eq!(prop, result);
@@ -749,12 +737,9 @@ fn test_bin_tree_complex_roundtrip() {
         0x5555,
         BinProperty {
             name_hash: 0x5555,
-            value: PropertyValueEnum::Optional(values::Optional {
-                kind: Kind::F32,
-                value: Some(Box::new(PropertyValueEnum::F32(values::F32(
-                    std::f32::consts::PI,
-                )))),
-            }),
+            value: PropertyValueEnum::Optional(values::Optional::from(values::F32(
+                std::f32::consts::PI,
+            ))),
         },
     );
 
