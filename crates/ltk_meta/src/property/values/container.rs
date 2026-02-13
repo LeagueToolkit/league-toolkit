@@ -1,7 +1,7 @@
 use std::io;
 
 use crate::{
-    property::Kind,
+    property::{values, Kind},
     traits::{PropertyExt, PropertyValueExt, ReadProperty, ReaderExt, WriteProperty, WriterExt},
     Error,
 };
@@ -17,27 +17,27 @@ mod iter;
 pub use iter::*;
 
 macro_rules! define_container_enum {
-    ( $( $variant:ident($ty:ty), )* ) => {
+    ( [$( $variant:ident, )*] ) => {
         #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
         #[derive(Clone, Debug, PartialEq)]
         pub enum Container {
             $(
-                $variant(Vec<$ty>),
+                $variant(Vec<values::$variant>),
             )*
         }
 
         $(
-            impl From<Vec<$ty>> for Container {
-                fn from(other: Vec<$ty>) -> Self {
+            impl From<Vec<values::$variant>> for Container {
+                fn from(other: Vec<values::$variant>) -> Self {
                     Self::$variant(other)
                 }
 
             }
         )*
         $(
-            impl FromIterator<$ty> for Container {
+            impl FromIterator<values::$variant> for Container {
                 fn from_iter<T>(iter: T) -> Self
-                    where T: IntoIterator<Item = $ty> {
+                    where T: IntoIterator<Item = values::$variant> {
                     Self::$variant(iter.into_iter().collect())
                 }
 
@@ -66,7 +66,9 @@ macro_rules! define_container_enum {
                                 if let PropertyValueEnum::$variant(inner) = v {
                                     items.push(inner);
                                 } else {
-                                    return Err(Error::MismatchedContainerTypes{expected: <$ty>::KIND, got: v.kind()});
+                                    return Err(Error::MismatchedContainerTypes{
+                                        expected: <values::$variant>::KIND, got: v.kind()
+                                    });
                                 }
                             }
 
@@ -84,7 +86,7 @@ macro_rules! define_container_enum {
     };
 }
 
-variants!(define_container_enum);
+container_variants!(define_container_enum);
 
 impl Default for Container {
     fn default() -> Self {
@@ -112,7 +114,7 @@ impl Container {
     #[inline(always)]
     #[must_use]
     pub fn item_kind(&self) -> Kind {
-        variants!(property_kinds, (self))
+        container_variants!(property_kinds, (self))
     }
 }
 
@@ -122,7 +124,7 @@ impl PropertyValueExt for Container {
 
 impl PropertyExt for Container {
     fn size_no_header(&self) -> usize {
-        match_property!(&self, |items| {
+        match_property!(&self, items => {
             9 + items.iter().map(|p| p.size_no_header()).sum::<usize>()
         })
     }
@@ -159,7 +161,7 @@ impl ReadProperty for Container {
 
         macro_rules! read_inner {
             (($value:expr)
-             $( $variant:ident($ty:ty), )*) => {
+             [$( $variant:ident, )*]) => {
                 match $value {
                     $(
                         Kind::$variant => {
@@ -171,7 +173,7 @@ impl ReadProperty for Container {
             };
         }
 
-        variants!(read_inner, (item_kind))
+        container_variants!(read_inner, (item_kind))
     }
 }
 

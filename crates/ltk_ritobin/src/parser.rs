@@ -543,10 +543,7 @@ fn parse_optional_value(input: Span, inner_kind: PropertyKind) -> ParseResult<va
     if let Ok((input, _)) = char::<Span, SpannedError>('}')(input) {
         return Ok((
             input,
-            values::Optional {
-                kind: inner_kind,
-                value: None,
-            },
+            values::Optional::empty(inner_kind).expect("invalid item type for optional"),
         ));
     }
 
@@ -557,10 +554,7 @@ fn parse_optional_value(input: Span, inner_kind: PropertyKind) -> ParseResult<va
 
     Ok((
         input,
-        values::Optional {
-            kind: inner_kind,
-            value: Some(Box::new(value)),
-        },
+        values::Optional::new(inner_kind, Some(value)).expect("valid inner item for optional"),
     ))
 }
 

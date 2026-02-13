@@ -110,9 +110,9 @@ impl<'a, H: HashProvider> TextWriter<'a, H> {
                 self.write_raw(kind_to_type_name(container.item_kind()));
                 self.write_raw("]");
             }
-            PropertyValueEnum::Optional(Optional { kind, .. }) => {
+            PropertyValueEnum::Optional(optional) => {
                 self.write_raw("[");
-                self.write_raw(kind_to_type_name(*kind));
+                self.write_raw(kind_to_type_name(optional.item_kind()));
                 self.write_raw("]");
             }
             PropertyValueEnum::Map(Map {
@@ -267,12 +267,12 @@ impl<'a, H: HashProvider> TextWriter<'a, H> {
                     self.write_raw("}");
                 }
             }
-            PropertyValueEnum::Optional(Optional { value, .. }) => {
-                if let Some(inner) = value {
+            PropertyValueEnum::Optional(value) => {
+                if let Some(inner) = value.clone().into_inner() {
                     self.write_raw("{\n");
                     self.indent();
                     self.pad();
-                    self.write_value(inner)?;
+                    self.write_value(&inner)?;
                     self.write_raw("\n");
                     self.dedent();
                     self.pad();

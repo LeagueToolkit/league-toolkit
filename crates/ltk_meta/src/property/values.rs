@@ -1,5 +1,6 @@
 //! Value types for [`super::BinProperty`].
 
+#[macro_use]
 mod container;
 mod embedded;
 mod map;
