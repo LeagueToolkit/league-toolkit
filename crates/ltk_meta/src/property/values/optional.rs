@@ -1,5 +1,5 @@
 use crate::{
-    property::{values, Kind},
+    property::{values, Kind, NoMeta},
     traits::{PropertyExt, PropertyValueExt, ReadProperty, ReaderExt, WriteProperty, WriterExt},
     Error, PropertyValueEnum,
 };
@@ -7,13 +7,17 @@ use ltk_io_ext::{ReaderExt as _, WriterExt as _};
 
 macro_rules! construct_enum {
     ([$( $variant:ident, )*]) => {
-        #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+        #[cfg_attr(
+            feature = "serde",
+            derive(serde::Serialize, serde::Deserialize),
+            serde(bound = "for <'dee> M: serde::Serialize + serde::Deserialize<'dee>")
+        )]
         #[derive(Clone, PartialEq, Debug)]
-        pub enum Optional {
-            $($variant(Option<values::$variant>),)*
+        pub enum Optional<M = NoMeta> {
+            $($variant(Option<values::$variant<M>>),)*
         }
 
-        impl Optional {
+        impl<M: Default> Optional<M> {
             #[inline(always)]
             #[must_use]
             /// Helper function to create an empty [`Optional`], if the property kind can be stored in one.
@@ -26,7 +30,7 @@ macro_rules! construct_enum {
         }
 
 
-        impl PropertyExt for Optional {
+        impl<M> PropertyExt for Optional<M> {
             fn size_no_header(&self) -> usize {
                 2 + match &self {
                     $(Self::$variant(inner) => inner.as_ref().map(|i| i.size_no_header()).unwrap_or_default(),)*
@@ -36,24 +40,24 @@ macro_rules! construct_enum {
 
 
         $(
-            impl From<Option<values::$variant>> for Optional {
-                fn from(other: Option<values::$variant>) -> Self {
+            impl<M: Default> From<Option<values::$variant<M>>> for Optional<M> {
+                fn from(other: Option<values::$variant<M>>) -> Self {
                     Self::$variant(other)
                 }
 
             }
         )*
         $(
-            impl From<values::$variant> for Optional {
-                fn from(other: values::$variant) -> Self {
+            impl<M: Default> From<values::$variant<M>> for Optional<M> {
+                fn from(other: values::$variant<M>) -> Self {
                     Self::$variant(Some(other))
                 }
 
             }
         )*
 
-        impl Optional {
-            pub fn new(item_kind: Kind, value: Option<PropertyValueEnum>) -> Result<Self, Error> {
+        impl<M: Default> Optional<M> {
+            pub fn new(item_kind: Kind, value: Option<PropertyValueEnum<M>>) -> Result<Self, Error> {
                 match item_kind {
                     $(Kind::$variant => match value {
                         Some(PropertyValueEnum::$variant(inner)) => Ok(Self::$variant(Some(inner))),
@@ -64,7 +68,7 @@ macro_rules! construct_enum {
                 }
             }
 
-            pub fn into_inner(self) -> Option<PropertyValueEnum> {
+            pub fn into_inner(self) -> Option<PropertyValueEnum<M>> {
                 match self {
                     $(Optional::$variant(item) => item.map(PropertyValueEnum::$variant),)*
                 }
@@ -75,13 +79,13 @@ macro_rules! construct_enum {
 
 container_variants!(construct_enum);
 
-impl Default for Optional {
+impl<M: Default> Default for Optional<M> {
     fn default() -> Self {
         Self::None(None)
     }
 }
 
-impl Optional {
+impl<M> Optional<M> {
     #[inline(always)]
     #[must_use]
     pub fn item_kind(&self) -> Kind {
@@ -101,11 +105,11 @@ impl Optional {
     }
 }
 
-impl PropertyValueExt for Optional {
+impl<M> PropertyValueExt for Optional<M> {
     const KIND: Kind = Kind::Optional;
 }
 
-impl ReadProperty for Optional {
+impl<M: Default> ReadProperty for Optional<M> {
     fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         legacy: bool,
@@ -135,7 +139,7 @@ impl ReadProperty for Optional {
         container_variants!(read_inner, (kind))
     }
 }
-impl WriteProperty for Optional {
+impl<M> WriteProperty for Optional<M> {
     fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
         &self,
         writer: &mut R,

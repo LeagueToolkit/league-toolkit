@@ -1,7 +1,7 @@
 use std::io;
 
 use crate::{
-    property::{values, Kind},
+    property::{values, Kind, NoMeta},
     traits::{PropertyExt, PropertyValueExt, ReadProperty, ReaderExt, WriteProperty, WriterExt},
     Error,
 };
@@ -18,36 +18,40 @@ pub use iter::*;
 
 macro_rules! define_container_enum {
     ( [$( $variant:ident, )*] ) => {
-        #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+        #[cfg_attr(
+            feature = "serde",
+            derive(serde::Serialize, serde::Deserialize),
+            serde(bound = "for <'dee> M: serde::Serialize + serde::Deserialize<'dee>")
+        )]
         #[derive(Clone, Debug, PartialEq)]
-        pub enum Container {
+        pub enum Container<M = NoMeta> {
             $(
-                $variant(Vec<values::$variant>),
+                $variant(Vec<values::$variant<M>>),
             )*
         }
 
         $(
-            impl From<Vec<values::$variant>> for Container {
-                fn from(other: Vec<values::$variant>) -> Self {
+            impl<M> From<Vec<values::$variant<M>>> for Container<M> {
+                fn from(other: Vec<values::$variant<M>>) -> Self {
                     Self::$variant(other)
                 }
 
             }
         )*
         $(
-            impl FromIterator<values::$variant> for Container {
+            impl<M> FromIterator<values::$variant<M>> for Container<M> {
                 fn from_iter<T>(iter: T) -> Self
-                    where T: IntoIterator<Item = values::$variant> {
+                    where T: IntoIterator<Item = values::$variant<M>> {
                     Self::$variant(iter.into_iter().collect())
                 }
 
             }
         )*
 
-        impl TryFrom<Vec<PropertyValueEnum>> for Container {
+        impl<M> TryFrom<Vec<PropertyValueEnum<M>>> for Container<M> {
             type Error = Error;
 
-            fn try_from(value: Vec<PropertyValueEnum>) -> Result<Self, Self::Error> {
+            fn try_from(value: Vec<PropertyValueEnum<M>>) -> Result<Self, Self::Error> {
                 let mut iter = value.into_iter();
 
                 let first = match iter.next() {
@@ -88,13 +92,13 @@ macro_rules! define_container_enum {
 
 container_variants!(define_container_enum);
 
-impl Default for Container {
+impl<M: Default> Default for Container<M> {
     fn default() -> Self {
         Self::None(Vec::new())
     }
 }
 
-impl Container {
+impl<M> Container<M> {
     pub fn new<T>(items: Vec<T>) -> Self
     where
         Self: From<Vec<T>>,
@@ -110,7 +114,7 @@ impl Container {
     }
 }
 
-impl Container {
+impl<M> Container<M> {
     #[inline(always)]
     #[must_use]
     pub fn item_kind(&self) -> Kind {
@@ -118,11 +122,11 @@ impl Container {
     }
 }
 
-impl PropertyValueExt for Container {
+impl<M> PropertyValueExt for Container<M> {
     const KIND: Kind = Kind::Container;
 }
 
-impl PropertyExt for Container {
+impl<M> PropertyExt for Container<M> {
     fn size_no_header(&self) -> usize {
         match_property!(&self, items => {
             9 + items.iter().map(|p| p.size_no_header()).sum::<usize>()
@@ -130,7 +134,7 @@ impl PropertyExt for Container {
     }
 }
 
-impl ReadProperty for Container {
+impl<M: Default> ReadProperty for Container<M> {
     fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         legacy: bool,
@@ -177,7 +181,7 @@ impl ReadProperty for Container {
     }
 }
 
-impl WriteProperty for Container {
+impl<M: Clone> WriteProperty for Container<M> {
     // TODO: legacy writing
     fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
         &self,

@@ -1,7 +1,7 @@
 use std::{hash::Hash, io};
 
 use crate::{
-    property::Kind,
+    property::{Kind, NoMeta},
     traits::{PropertyExt, PropertyValueExt, ReadProperty, ReaderExt, WriteProperty, WriterExt},
     Error, PropertyValueEnum,
 };
@@ -28,31 +28,20 @@ impl Hash for PropertyValueEnum {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, PartialEq, Hash, Debug)]
-#[repr(transparent)]
-pub struct PropertyValueUnsafeEq(pub PropertyValueEnum);
-impl Eq for PropertyValueUnsafeEq {}
-
-impl PropertyValueExt for PropertyValueUnsafeEq {
-    const KIND: Kind = Kind::Map;
-}
-
-impl PropertyExt for PropertyValueUnsafeEq {
-    fn size_no_header(&self) -> usize {
-        self.0.size_no_header()
-    }
-}
-
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(bound = "for <'dee> M: serde::Serialize + serde::Deserialize<'dee>")
+)]
 #[derive(Clone, PartialEq, Debug, Default)]
-pub struct Map {
+pub struct Map<M = NoMeta> {
     key_kind: Kind,
     value_kind: Kind,
     entries: Vec<(PropertyValueEnum, PropertyValueEnum)>,
+    pub meta: M,
 }
 
-impl Map {
+impl<M> Map<M> {
     #[inline(always)]
     #[must_use]
     pub fn key_kind(&self) -> Kind {
@@ -76,12 +65,15 @@ impl Map {
     pub fn into_entries(self) -> Vec<(PropertyValueEnum, PropertyValueEnum)> {
         self.entries
     }
+}
 
+impl<M: Default> Map<M> {
     pub fn empty(key_kind: Kind, value_kind: Kind) -> Self {
         Self {
             key_kind,
             value_kind,
             entries: Vec::new(),
+            meta: M::default(),
         }
     }
 
@@ -108,14 +100,15 @@ impl Map {
             key_kind,
             value_kind,
             entries,
+            meta: M::default(),
         })
     }
 }
 
-impl PropertyValueExt for Map {
+impl<M> PropertyValueExt for Map<M> {
     const KIND: Kind = Kind::Map;
 }
-impl PropertyExt for Map {
+impl<M> PropertyExt for Map<M> {
     fn size_no_header(&self) -> usize {
         1 + 1
             + 4
@@ -128,7 +121,7 @@ impl PropertyExt for Map {
     }
 }
 
-impl ReadProperty for Map {
+impl<M: Default> ReadProperty for Map<M> {
     fn from_reader<R: io::Read + io::Seek + ?Sized>(
         reader: &mut R,
         legacy: bool,
@@ -158,6 +151,7 @@ impl ReadProperty for Map {
                 key_kind,
                 value_kind,
                 entries,
+                meta: M::default(),
             })
         })?;
 
@@ -168,7 +162,7 @@ impl ReadProperty for Map {
         Ok(value)
     }
 }
-impl WriteProperty for Map {
+impl<M> WriteProperty for Map<M> {
     fn to_writer<R: io::Write + io::Seek + ?Sized>(
         &self,
         writer: &mut R,

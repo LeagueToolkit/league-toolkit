@@ -7,7 +7,7 @@ use glam::{Mat4, Vec2, Vec3, Vec4};
 use indexmap::IndexMap;
 use ltk_hash::fnv1a::hash_lower;
 use ltk_meta::{
-    property::{values, PropertyValueEnum},
+    property::{values, NoMeta, PropertyValueEnum},
     Bin, BinObject, BinProperty, PropertyKind,
 };
 use ltk_primitives::Color;
@@ -616,6 +616,7 @@ fn parse_pointer_value(input: Span) -> ParseResult<values::Struct> {
             values::Struct {
                 class_hash: 0,
                 properties: IndexMap::new(),
+                meta: NoMeta,
             },
         ));
     }
@@ -637,6 +638,7 @@ fn parse_pointer_value(input: Span) -> ParseResult<values::Struct> {
             values::Struct {
                 class_hash,
                 properties: IndexMap::new(),
+                meta: NoMeta,
             },
         ));
     }
@@ -649,6 +651,7 @@ fn parse_pointer_value(input: Span) -> ParseResult<values::Struct> {
         values::Struct {
             class_hash,
             properties,
+            meta: NoMeta,
         },
     ))
 }
@@ -664,90 +667,93 @@ fn parse_value_for_kind(input: Span, kind: PropertyKind) -> ParseResult<Property
     match kind {
         PropertyKind::None => {
             let (input, _) = preceded(ws, tag("null"))(input)?;
-            Ok((input, PropertyValueEnum::None(values::None)))
+            Ok((input, PropertyValueEnum::None(values::None::default())))
         }
         PropertyKind::Bool => {
             let (input, v) = parse_bool(input)?;
-            Ok((input, PropertyValueEnum::Bool(values::Bool(v))))
+            Ok((input, PropertyValueEnum::Bool(values::Bool::new(v))))
         }
         PropertyKind::I8 => {
             let (input, v) = parse_int::<i8>(input)?;
-            Ok((input, PropertyValueEnum::I8(values::I8(v))))
+            Ok((input, PropertyValueEnum::I8(values::I8::new(v))))
         }
         PropertyKind::U8 => {
             let (input, v) = parse_int::<u8>(input)?;
-            Ok((input, PropertyValueEnum::U8(values::U8(v))))
+            Ok((input, PropertyValueEnum::U8(values::U8::new(v))))
         }
         PropertyKind::I16 => {
             let (input, v) = parse_int::<i16>(input)?;
-            Ok((input, PropertyValueEnum::I16(values::I16(v))))
+            Ok((input, PropertyValueEnum::I16(values::I16::new(v))))
         }
         PropertyKind::U16 => {
             let (input, v) = parse_int::<u16>(input)?;
-            Ok((input, PropertyValueEnum::U16(values::U16(v))))
+            Ok((input, PropertyValueEnum::U16(values::U16::new(v))))
         }
         PropertyKind::I32 => {
             let (input, v) = parse_int::<i32>(input)?;
-            Ok((input, PropertyValueEnum::I32(values::I32(v))))
+            Ok((input, PropertyValueEnum::I32(values::I32::new(v))))
         }
         PropertyKind::U32 => {
             let (input, v) = hex_u32(input)?;
-            Ok((input, PropertyValueEnum::U32(values::U32(v))))
+            Ok((input, PropertyValueEnum::U32(values::U32::new(v))))
         }
         PropertyKind::I64 => {
             let (input, v) = parse_int::<i64>(input)?;
-            Ok((input, PropertyValueEnum::I64(values::I64(v))))
+            Ok((input, PropertyValueEnum::I64(values::I64::new(v))))
         }
         PropertyKind::U64 => {
             let (input, v) = hex_u64(input)?;
-            Ok((input, PropertyValueEnum::U64(values::U64(v))))
+            Ok((input, PropertyValueEnum::U64(values::U64::new(v))))
         }
         PropertyKind::F32 => {
             let (input, v) = parse_float(input)?;
-            Ok((input, PropertyValueEnum::F32(values::F32(v))))
+            Ok((input, PropertyValueEnum::F32(values::F32::new(v))))
         }
         PropertyKind::Vector2 => {
             let (input, v) = parse_vec2(input)?;
-            Ok((input, PropertyValueEnum::Vector2(values::Vector2(v))))
+            Ok((input, PropertyValueEnum::Vector2(values::Vector2::new(v))))
         }
         PropertyKind::Vector3 => {
             let (input, v) = parse_vec3(input)?;
-            Ok((input, PropertyValueEnum::Vector3(values::Vector3(v))))
+            Ok((input, PropertyValueEnum::Vector3(values::Vector3::new(v))))
         }
         PropertyKind::Vector4 => {
             let (input, v) = parse_vec4(input)?;
-            Ok((input, PropertyValueEnum::Vector4(values::Vector4(v))))
+            Ok((input, PropertyValueEnum::Vector4(values::Vector4::new(v))))
         }
         PropertyKind::Matrix44 => {
             let (input, v) = parse_mtx44(input)?;
-            Ok((input, PropertyValueEnum::Matrix44(values::Matrix44(v))))
+            Ok((input, PropertyValueEnum::Matrix44(values::Matrix44::new(v))))
         }
         PropertyKind::Color => {
             let (input, v) = parse_rgba(input)?;
-            Ok((input, PropertyValueEnum::Color(values::Color(v))))
+            Ok((input, PropertyValueEnum::Color(values::Color::new(v))))
         }
         PropertyKind::String => {
             let (input, v) = preceded(ws, quoted_string)(input)?;
-            Ok((input, PropertyValueEnum::String(values::String(v))))
+            Ok((input, PropertyValueEnum::String(values::String::new(v))))
         }
         PropertyKind::Hash => {
             let (input, v) = parse_hash_value(input)?;
-            Ok((input, PropertyValueEnum::Hash(values::Hash(v))))
+            Ok((input, PropertyValueEnum::Hash(values::Hash::new(v))))
         }
         PropertyKind::WadChunkLink => {
             let (input, v) = parse_file_hash(input)?;
             Ok((
                 input,
-                PropertyValueEnum::WadChunkLink(values::WadChunkLink(v)),
+                PropertyValueEnum::WadChunkLink(values::WadChunkLink::new(v)),
             ))
         }
         PropertyKind::ObjectLink => {
             let (input, v) = parse_link_value(input)?;
-            Ok((input, PropertyValueEnum::ObjectLink(values::ObjectLink(v))))
+            Ok((
+                input,
+                PropertyValueEnum::ObjectLink(values::ObjectLink::new(v)),
+            ))
         }
         PropertyKind::BitBool => {
             let (input, v) = parse_bool(input)?;
-            Ok((input, PropertyValueEnum::BitBool(values::BitBool(v))))
+            Ok((input, PropertyValueEnum::BitBool(values::BitBool::new(v))))
         }
         PropertyKind::Struct => {
             let (input, v) = parse_pointer_value(input)?;
@@ -872,8 +878,8 @@ impl RitobinFile {
     /// Get the "type" field value as a string.
     pub fn file_type(&self) -> Option<&str> {
         self.entries.get("type").and_then(|p| {
-            if let PropertyValueEnum::String(values::String(s)) = &p.value {
-                Some(s.as_str())
+            if let PropertyValueEnum::String(s) = &p.value {
+                Some(s.value.as_str())
             } else {
                 None
             }
@@ -883,8 +889,8 @@ impl RitobinFile {
     /// Get the "version" field as u32.
     pub fn version(&self) -> Option<u32> {
         self.entries.get("version").and_then(|p| {
-            if let PropertyValueEnum::U32(values::U32(v)) = &p.value {
-                Some(*v)
+            if let PropertyValueEnum::U32(v) = &p.value {
+                Some(**v)
             } else {
                 None
             }
@@ -897,7 +903,7 @@ impl RitobinFile {
             .get("linked")
             .and_then(|p| {
                 if let PropertyValueEnum::Container(values::Container::String(items)) = &p.value {
-                    Some(items.iter().cloned().map(|i| i.0).collect())
+                    Some(items.iter().cloned().map(|i| i.value).collect())
                 } else {
                     None
                 }
@@ -916,7 +922,7 @@ impl RitobinFile {
                             .iter()
                             .filter_map(|(key, value)| {
                                 let path_hash = match &key {
-                                    PropertyValueEnum::Hash(values::Hash(h)) => *h,
+                                    PropertyValueEnum::Hash(h) => **h,
                                     _ => return None,
                                 };
 
@@ -1015,7 +1021,7 @@ pos: vec3 = { 1.0, 2.5, -3.0 }
 "#;
         let file = parse(input).unwrap();
         let prop = file.entries.get("pos").unwrap();
-        if let PropertyValueEnum::Vector3(values::Vector3(v)) = &prop.value {
+        if let PropertyValueEnum::Vector3(v) = &prop.value {
             assert_eq!(v.x, 1.0);
             assert_eq!(v.y, 2.5);
             assert_eq!(v.z, -3.0);

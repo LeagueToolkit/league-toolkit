@@ -1,40 +1,66 @@
 use crate::{
-    property::Kind,
+    property::{Kind, NoMeta},
     traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty},
 };
 use byteorder::LE;
 use ltk_io_ext::{ReaderExt, WriterExt};
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[repr(transparent)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(bound = "for <'dee> M: serde::Serialize + serde::Deserialize<'dee>")
+)]
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
-pub struct String(pub std::string::String);
-
-impl PropertyValueExt for String {
-    const KIND: Kind = Kind::String;
+pub struct String<M = NoMeta> {
+    pub value: std::string::String,
+    pub meta: M,
 }
 
-impl PropertyExt for String {
-    fn size_no_header(&self) -> usize {
-        self.0.len() + 2
+impl<M: Default> String<M> {
+    #[inline(always)]
+    #[must_use]
+    pub fn new(value: std::string::String) -> Self {
+        Self {
+            value,
+            meta: M::default(),
+        }
     }
 }
 
-impl ReadProperty for String {
+impl<S: Into<std::string::String>, M: Default> From<S> for String<M> {
+    fn from(value: S) -> Self {
+        Self::new(value.into())
+    }
+}
+
+impl<M> PropertyValueExt for String<M> {
+    const KIND: Kind = Kind::String;
+}
+
+impl<M> PropertyExt for String<M> {
+    fn size_no_header(&self) -> usize {
+        self.value.len() + 2
+    }
+}
+
+impl<M: Default> ReadProperty for String<M> {
     fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         _legacy: bool,
     ) -> Result<Self, crate::Error> {
-        Ok(Self(reader.read_sized_string_u16::<LE>()?))
+        Ok(Self {
+            value: reader.read_sized_string_u16::<LE>()?,
+            meta: M::default(),
+        })
     }
 }
 
-impl WriteProperty for String {
+impl<M> WriteProperty for String<M> {
     fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
         &self,
         writer: &mut R,
         _legacy: bool,
     ) -> Result<(), std::io::Error> {
-        writer.write_len_prefixed_string::<LE, _>(&self.0)
+        writer.write_len_prefixed_string::<LE, _>(&self.value)
     }
 }

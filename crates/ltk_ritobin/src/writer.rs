@@ -179,33 +179,37 @@ impl<'a, H: HashProvider> TextWriter<'a, H> {
     fn write_value(&mut self, value: &PropertyValueEnum) -> Result<(), WriteError> {
         match value {
             PropertyValueEnum::None(_) => self.write_raw("null"),
-            PropertyValueEnum::Bool(v) => self.write_raw(if v.0 { "true" } else { "false" }),
-            PropertyValueEnum::I8(v) => write!(self.buffer, "{}", v.0)?,
-            PropertyValueEnum::U8(v) => write!(self.buffer, "{}", v.0)?,
-            PropertyValueEnum::I16(v) => write!(self.buffer, "{}", v.0)?,
-            PropertyValueEnum::U16(v) => write!(self.buffer, "{}", v.0)?,
-            PropertyValueEnum::I32(v) => write!(self.buffer, "{}", v.0)?,
-            PropertyValueEnum::U32(v) => write!(self.buffer, "{}", v.0)?,
-            PropertyValueEnum::I64(v) => write!(self.buffer, "{}", v.0)?,
-            PropertyValueEnum::U64(v) => write!(self.buffer, "{}", v.0)?,
-            PropertyValueEnum::F32(v) => write!(self.buffer, "{}", v.0)?,
+            PropertyValueEnum::Bool(v) => self.write_raw(if **v { "true" } else { "false" }),
+            PropertyValueEnum::I8(v) => write!(self.buffer, "{}", v.value)?,
+            PropertyValueEnum::U8(v) => write!(self.buffer, "{}", v.value)?,
+            PropertyValueEnum::I16(v) => write!(self.buffer, "{}", v.value)?,
+            PropertyValueEnum::U16(v) => write!(self.buffer, "{}", v.value)?,
+            PropertyValueEnum::I32(v) => write!(self.buffer, "{}", v.value)?,
+            PropertyValueEnum::U32(v) => write!(self.buffer, "{}", v.value)?,
+            PropertyValueEnum::I64(v) => write!(self.buffer, "{}", v.value)?,
+            PropertyValueEnum::U64(v) => write!(self.buffer, "{}", v.value)?,
+            PropertyValueEnum::F32(v) => write!(self.buffer, "{}", v.value)?,
             PropertyValueEnum::Vector2(v) => {
-                write!(self.buffer, "{{ {}, {} }}", v.0.x, v.0.y)?;
+                write!(self.buffer, "{{ {}, {} }}", v.value.x, v.value.y)?;
             }
             PropertyValueEnum::Vector3(v) => {
-                write!(self.buffer, "{{ {}, {}, {} }}", v.0.x, v.0.y, v.0.z)?;
+                write!(
+                    self.buffer,
+                    "{{ {}, {}, {} }}",
+                    v.value.x, v.value.y, v.value.z
+                )?;
             }
             PropertyValueEnum::Vector4(v) => {
                 write!(
                     self.buffer,
                     "{{ {}, {}, {}, {} }}",
-                    v.0.x, v.0.y, v.0.z, v.0.w
+                    v.value.x, v.value.y, v.value.z, v.value.w
                 )?;
             }
             PropertyValueEnum::Matrix44(v) => {
                 self.write_raw("{\n");
                 self.indent();
-                let arr = v.0.to_cols_array();
+                let arr = v.value.to_cols_array();
                 for (i, val) in arr.iter().enumerate() {
                     if i % 4 == 0 {
                         self.pad();
@@ -227,23 +231,23 @@ impl<'a, H: HashProvider> TextWriter<'a, H> {
                 write!(
                     self.buffer,
                     "{{ {}, {}, {}, {} }}",
-                    v.0.r, v.0.g, v.0.b, v.0.a
+                    v.value.r, v.value.g, v.value.b, v.value.a
                 )?;
             }
             PropertyValueEnum::String(v) => {
-                write!(self.buffer, "{:?}", v.0)?;
+                write!(self.buffer, "{:?}", v.value)?;
             }
             PropertyValueEnum::Hash(v) => {
-                self.write_hash_value(v.0)?;
+                self.write_hash_value(v.value)?;
             }
             PropertyValueEnum::WadChunkLink(v) => {
                 // WAD chunk links are u64 xxhash, we don't have lookup for these yet
-                write!(self.buffer, "{:#x}", v.0)?;
+                write!(self.buffer, "{:#x}", v.value)?;
             }
             PropertyValueEnum::ObjectLink(v) => {
-                self.write_link_hash(v.0)?;
+                self.write_link_hash(v.value)?;
             }
-            PropertyValueEnum::BitBool(v) => self.write_raw(if v.0 { "true" } else { "false" }),
+            PropertyValueEnum::BitBool(v) => self.write_raw(if v.value { "true" } else { "false" }),
 
             PropertyValueEnum::Container(container)
             | PropertyValueEnum::UnorderedContainer(UnorderedContainer(container)) => {
@@ -591,7 +595,7 @@ mod tests {
             name_hash,
             BinProperty {
                 name_hash,
-                value: PropertyValueEnum::String(String("hello".to_string())),
+                value: PropertyValueEnum::String(String::from("hello")),
             },
         );
 

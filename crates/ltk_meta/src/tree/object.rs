@@ -30,8 +30,8 @@ use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 ///
 /// // Builder pattern with properties
 /// let obj = BinObject::builder(0x1234, 0x5678)
-///     .property(0xAAAA, values::I32(42))
-///     .property(0xBBBB, values::String("hello".into()))
+///     .property(0xAAAA, values::I32::new(42))
+///     .property(0xBBBB, values::String::from("hello"))
 ///     .build();
 /// ```
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -77,9 +77,9 @@ impl BinObject {
     /// use ltk_meta::property::values;
     ///
     /// let obj = BinObject::builder(0x12345678, 0xABCDEF00)
-    ///     .property(0x1111, values::I32(42))
-    ///     .property(0x2222, values::String("hello".into()))
-    ///     .property(0x3333, values::Bool(true))
+    ///     .property(0x1111, values::I32::new(42))
+    ///     .property(0x2222, values::String::from("hello"))
+    ///     .property(0x3333, values::Bool::new(true))
     ///     .build();
     ///
     /// assert_eq!(obj.properties.len(), 3);

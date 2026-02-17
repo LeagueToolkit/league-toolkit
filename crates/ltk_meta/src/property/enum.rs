@@ -1,7 +1,7 @@
 use enum_dispatch::enum_dispatch;
 
 use crate::{
-    property::Kind,
+    property::{Kind, NoMeta},
     traits::{ReadProperty as _, WriteProperty as _},
     Error,
 };
@@ -43,25 +43,21 @@ macro_rules! variants {
 
 macro_rules! create_enum {
     ([$( $variant:ident, )*]) => {
-        #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+        #[cfg_attr(
+            feature = "serde",
+            derive(serde::Serialize, serde::Deserialize),
+            serde(bound = "for <'dee> M: serde::Serialize + serde::Deserialize<'dee>")
+        )]
         #[cfg_attr(feature = "serde", serde(tag = "kind", content = "value"))]
         #[derive(Clone, Debug, PartialEq)]
         #[enum_dispatch(PropertyExt)]
         /// The value part of a [`super::BinProperty`]. Holds the type of the value, and the value itself.
-        pub enum PropertyValueEnum {
-            $( $variant (pub self::$variant), )*
+        pub enum PropertyValueEnum<M = NoMeta> {
+            $( $variant (pub self::$variant<M>), )*
         }
 
 
-        impl PropertyValueEnum {
-            #[must_use]
-            pub fn kind(&self) -> Kind {
-                match self {
-                    $(Self::$variant(_) => Kind::$variant,)*
-                }
-            }
-
-
+        impl<M: Default> PropertyValueEnum<M> {
             pub fn from_reader<R: io::Read + std::io::Seek + ?Sized>(
                 reader: &mut R,
                 kind: Kind,
@@ -72,7 +68,8 @@ macro_rules! create_enum {
                 })
             }
 
-
+        }
+        impl<M: Clone> PropertyValueEnum<M> {
             pub fn to_writer<W: io::Write + io::Seek + ?Sized>(
                 &self,
                 writer: &mut W,
@@ -81,6 +78,14 @@ macro_rules! create_enum {
                     $(Self::$variant(inner) => inner.to_writer(writer, false)?,)*
                 };
                 Ok(())
+            }
+        }
+        impl<M> PropertyValueEnum<M> {
+            #[must_use]
+            pub fn kind(&self) -> Kind {
+                match self {
+                    $(Self::$variant(_) => Kind::$variant,)*
+                }
             }
         }
     };

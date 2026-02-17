@@ -34,8 +34,8 @@ let tree = Bin::builder()
     .dependency("common.bin")
     .object(
         BinObject::builder(0x12345678, 0xABCDEF00)
-            .property(0x1111, values::I32(42))
-            .property(0x2222, values::String("hello".into()))
+            .property(0x1111, values::I32::new(42))
+            .property(0x2222, values::String::from("hello"))
             .build()
     )
     .build();

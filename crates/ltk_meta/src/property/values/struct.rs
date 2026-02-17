@@ -1,7 +1,7 @@
 use std::io;
 
 use crate::{
-    property::Kind,
+    property::{Kind, NoMeta},
     traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty},
     BinProperty, Error,
 };
@@ -9,18 +9,23 @@ use byteorder::{ReadBytesExt as _, WriteBytesExt as _, LE};
 use indexmap::IndexMap;
 use ltk_io_ext::{measure, window_at};
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(bound = "for <'dee> M: serde::Serialize + serde::Deserialize<'dee>")
+)]
 #[derive(Clone, PartialEq, Debug, Default)]
-pub struct Struct {
+pub struct Struct<M = NoMeta> {
     pub class_hash: u32,
     pub properties: IndexMap<u32, BinProperty>,
+    pub meta: M,
 }
 
-impl PropertyValueExt for Struct {
+impl<M> PropertyValueExt for Struct<M> {
     const KIND: Kind = Kind::Struct;
 }
 
-impl PropertyExt for Struct {
+impl<M> PropertyExt for Struct<M> {
     fn size_no_header(&self) -> usize {
         match self.class_hash {
             0 => 4,
@@ -29,7 +34,7 @@ impl PropertyExt for Struct {
     }
 }
 
-impl ReadProperty for Struct {
+impl<M: Default> ReadProperty for Struct<M> {
     fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         legacy: bool,
@@ -54,6 +59,7 @@ impl ReadProperty for Struct {
             Ok::<_, Error>(Self {
                 class_hash,
                 properties,
+                meta: M::default(),
             })
         })?;
 
@@ -64,7 +70,7 @@ impl ReadProperty for Struct {
         Ok(value)
     }
 }
-impl WriteProperty for Struct {
+impl<M> WriteProperty for Struct<M> {
     fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
         &self,
         writer: &mut R,
