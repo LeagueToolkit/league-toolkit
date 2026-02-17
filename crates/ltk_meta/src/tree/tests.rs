@@ -413,11 +413,7 @@ fn test_optional_some_struct_roundtrip() {
 fn test_map_empty_roundtrip() {
     let prop = make_prop(
         0x1234,
-        PropertyValueEnum::Map(values::Map {
-            key_kind: Kind::U32,
-            value_kind: Kind::String,
-            entries: IndexMap::new(),
-        }),
+        PropertyValueEnum::Map(values::Map::empty(Kind::U32, Kind::String)),
     );
     let result = roundtrip_property(&prop);
     assert_eq!(prop, result);
@@ -425,23 +421,20 @@ fn test_map_empty_roundtrip() {
 
 #[test]
 fn test_map_u32_to_string_roundtrip() {
-    let mut entries = IndexMap::new();
-    entries.insert(
-        values::PropertyValueUnsafeEq(PropertyValueEnum::U32(values::U32(1))),
-        PropertyValueEnum::String(values::String("one".into())),
-    );
-    entries.insert(
-        values::PropertyValueUnsafeEq(PropertyValueEnum::U32(values::U32(2))),
-        PropertyValueEnum::String(values::String("two".into())),
-    );
+    let entries = vec![
+        (
+            PropertyValueEnum::U32(values::U32(1)),
+            PropertyValueEnum::String(values::String("one".into())),
+        ),
+        (
+            PropertyValueEnum::U32(values::U32(2)),
+            PropertyValueEnum::String(values::String("two".into())),
+        ),
+    ];
 
     let prop = make_prop(
         0x1234,
-        PropertyValueEnum::Map(values::Map {
-            key_kind: Kind::U32,
-            value_kind: Kind::String,
-            entries,
-        }),
+        PropertyValueEnum::Map(values::Map::new(Kind::U32, Kind::String, entries).unwrap()),
     );
     let result = roundtrip_property(&prop);
     assert_eq!(prop, result);
@@ -458,22 +451,17 @@ fn test_map_hash_to_struct_roundtrip() {
         },
     );
 
-    let mut entries = IndexMap::new();
-    entries.insert(
-        values::PropertyValueUnsafeEq(PropertyValueEnum::Hash(values::Hash(0xDEAD))),
+    let entries = vec![(
+        PropertyValueEnum::Hash(values::Hash(0xDEAD)),
         PropertyValueEnum::Struct(values::Struct {
             class_hash: 0xBEEF,
             properties: struct_props,
         }),
-    );
+    )];
 
     let prop = make_prop(
         0x1234,
-        PropertyValueEnum::Map(values::Map {
-            key_kind: Kind::Hash,
-            value_kind: Kind::Struct,
-            entries,
-        }),
+        PropertyValueEnum::Map(values::Map::new(Kind::Hash, Kind::Struct, entries).unwrap()),
     );
     let result = roundtrip_property(&prop);
     assert_eq!(prop, result);
