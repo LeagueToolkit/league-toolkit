@@ -37,7 +37,7 @@ impl Hash for PropertyValueEnum {
 pub struct Map<M = NoMeta> {
     key_kind: Kind,
     value_kind: Kind,
-    entries: Vec<(PropertyValueEnum, PropertyValueEnum)>,
+    entries: Vec<(PropertyValueEnum<M>, PropertyValueEnum<M>)>,
     pub meta: M,
 }
 
@@ -56,13 +56,13 @@ impl<M> Map<M> {
 
     #[inline(always)]
     #[must_use]
-    pub fn entries(&self) -> &[(PropertyValueEnum, PropertyValueEnum)] {
+    pub fn entries(&self) -> &[(PropertyValueEnum<M>, PropertyValueEnum<M>)] {
         &self.entries
     }
 
     #[inline(always)]
     #[must_use]
-    pub fn into_entries(self) -> Vec<(PropertyValueEnum, PropertyValueEnum)> {
+    pub fn into_entries(self) -> Vec<(PropertyValueEnum<M>, PropertyValueEnum<M>)> {
         self.entries
     }
 }
@@ -80,7 +80,7 @@ impl<M: Default> Map<M> {
     pub fn new(
         key_kind: Kind,
         value_kind: Kind,
-        entries: Vec<(PropertyValueEnum, PropertyValueEnum)>,
+        entries: Vec<(PropertyValueEnum<M>, PropertyValueEnum<M>)>,
     ) -> Result<Self, Error> {
         for (k, v) in &entries {
             if k.kind() != key_kind {
@@ -139,7 +139,8 @@ impl<M: Default> ReadProperty for Map<M> {
         let size = reader.read_u32::<LE>()?;
         let (real_size, value) = measure(reader, |reader| {
             let len = reader.read_u32::<LE>()? as _;
-            let mut entries = Vec::with_capacity(len);
+            let mut entries: Vec<(PropertyValueEnum<M>, PropertyValueEnum<M>)> =
+                Vec::with_capacity(len);
             for _ in 0..len {
                 entries.push((
                     key_kind.read(reader, legacy)?,
@@ -162,7 +163,7 @@ impl<M: Default> ReadProperty for Map<M> {
         Ok(value)
     }
 }
-impl<M> WriteProperty for Map<M> {
+impl<M: Clone> WriteProperty for Map<M> {
     fn to_writer<R: io::Write + io::Seek + ?Sized>(
         &self,
         writer: &mut R,
