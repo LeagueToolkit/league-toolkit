@@ -902,7 +902,9 @@ impl RitobinFile {
         self.entries
             .get("linked")
             .and_then(|p| {
-                if let PropertyValueEnum::Container(values::Container::String(items)) = &p.value {
+                if let PropertyValueEnum::Container(values::Container::String { items, .. }) =
+                    &p.value
+                {
                     Some(items.iter().cloned().map(|i| i.value).collect())
                 } else {
                     None

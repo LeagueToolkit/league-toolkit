@@ -34,7 +34,7 @@ impl<M> From<IntoItemsInner<M>> for IntoItems<M> {
 
 macro_rules! define_dyn_iter {
     ( [$( $variant:ident, )*] ) => {
-        enum ItemsDynInner<'a, M> {
+        pub(super) enum ItemsDynInner<'a, M> {
             $($variant(std::slice::Iter<'a, values::$variant<M>>),)*
         }
 
@@ -57,7 +57,7 @@ macro_rules! define_dyn_iter {
         )*
 
 
-        enum IntoItemsInner<M> {
+        pub(super) enum IntoItemsInner<M> {
             $($variant(std::vec::IntoIter<values::$variant<M>>),)*
         }
         impl<M> Iterator for IntoItemsInner<M> {
@@ -82,20 +82,3 @@ macro_rules! define_dyn_iter {
 }
 
 container_variants!(define_dyn_iter);
-
-impl<M> Container<M> {
-    /// Iterator that returns each item as a [`PropertyValueEnum`] for convenience.
-    #[inline(always)]
-    #[must_use]
-    pub fn into_items(self) -> IntoItems<M> {
-        match_property!(self, inner => {
-            IntoItems::from(IntoItemsInner::from(inner.into_iter()))
-        })
-    }
-    /// Iterator over each item as a dyn [`PropertyValueDyn`].
-    #[inline(always)]
-    #[must_use]
-    pub fn items_dyn(&self) -> ItemsDyn<'_, M> {
-        match_property!(&self, items => ItemsDynInner::from(items.iter())).into()
-    }
-}

@@ -9,7 +9,9 @@ use crate::{
     serde(bound = "for <'dee> M: serde::Serialize + serde::Deserialize<'dee>")
 )]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
-pub struct None<M = NoMeta>(M);
+pub struct None<M = NoMeta> {
+    pub meta: M,
+}
 impl<M> PropertyValueExt for None<M> {
     const KIND: Kind = Kind::None;
 }
@@ -24,7 +26,7 @@ impl<M: Default> ReadProperty for None<M> {
         _reader: &mut R,
         _legacy: bool,
     ) -> Result<Self, crate::Error> {
-        Ok(Self(M::default()))
+        Ok(Self { meta: M::default() })
     }
 }
 impl<M> WriteProperty for None<M> {

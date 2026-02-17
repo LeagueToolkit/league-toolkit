@@ -92,7 +92,7 @@ macro_rules! property_kinds {
      [$( $variant:ident, )*] ) => {
         match $value {
             $(
-                Self::$variant(_) => <crate::property::values::$variant>::KIND,
+                Self::$variant {..} => <crate::property::values::$variant>::KIND,
             )*
         }
     };

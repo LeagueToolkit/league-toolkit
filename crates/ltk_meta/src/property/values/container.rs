@@ -26,29 +26,49 @@ macro_rules! define_container_enum {
         #[derive(Clone, Debug, PartialEq)]
         pub enum Container<M = NoMeta> {
             $(
-                $variant(Vec<values::$variant<M>>),
+                $variant {
+                    items: Vec<values::$variant<M>>,
+                    meta: M,
+                },
             )*
         }
 
+
+        impl<M> PropertyExt for Container<M> {
+            fn size_no_header(&self) -> usize {
+                match &self {
+                    $(Self::$variant{items,..} => {
+                        9 + items.iter().map(|p| p.size_no_header()).sum::<usize>()
+                    })*
+                }
+            }
+        }
+
         $(
-            impl<M> From<Vec<values::$variant<M>>> for Container<M> {
+            impl<M: Default> From<Vec<values::$variant<M>>> for Container<M> {
                 fn from(other: Vec<values::$variant<M>>) -> Self {
-                    Self::$variant(other)
+                    Self::$variant {
+                        items: other,
+                        meta: M::default(),
+                    }
                 }
 
             }
         )*
         $(
-            impl<M> FromIterator<values::$variant<M>> for Container<M> {
+            impl<M: Default> FromIterator<values::$variant<M>> for Container<M> {
                 fn from_iter<T>(iter: T) -> Self
                     where T: IntoIterator<Item = values::$variant<M>> {
-                    Self::$variant(iter.into_iter().collect())
+                    Self::$variant {
+                        items: iter.into_iter().collect(),
+                        meta: M::default(),
+                    }
                 }
 
             }
         )*
 
-        impl<M> TryFrom<Vec<PropertyValueEnum<M>>> for Container<M> {
+        impl<M: Default> TryFrom<Vec<PropertyValueEnum<M>>> for Container<M> {
             type Error = Error;
 
             fn try_from(value: Vec<PropertyValueEnum<M>>) -> Result<Self, Self::Error> {
@@ -76,7 +96,7 @@ macro_rules! define_container_enum {
                                 }
                             }
 
-                            return Ok(Container::$variant(items));
+                            return Ok(Container::$variant{ items, meta: M::default() });
                         },
                     )*
                     other => {
@@ -87,6 +107,26 @@ macro_rules! define_container_enum {
             }
         }
 
+        impl<M> Container<M> {
+            /// Iterator that returns each item as a [`PropertyValueEnum`] for convenience.
+            #[inline(always)]
+            #[must_use]
+            pub fn into_items(self) -> IntoItems<M> {
+                match self {
+                    $(Self::$variant{items,..} => {
+                        IntoItems::from(iter::IntoItemsInner::from(items.into_iter()))
+                    })*
+                }
+            }
+            /// Iterator over each item as a dyn [`PropertyValueDyn`].
+            #[inline(always)]
+            #[must_use]
+            pub fn items_dyn(&self) -> ItemsDyn<'_, M> {
+                match &self {
+                    $(Self::$variant{ items, .. } => ItemsDynInner::from(items.iter()).into(),)*
+                }
+            }
+        }
     };
 }
 
@@ -94,7 +134,10 @@ container_variants!(define_container_enum);
 
 impl<M: Default> Default for Container<M> {
     fn default() -> Self {
-        Self::None(Vec::new())
+        Self::None {
+            items: Vec::new(),
+            meta: M::default(),
+        }
     }
 }
 
@@ -124,14 +167,6 @@ impl<M> Container<M> {
 
 impl<M> PropertyValueExt for Container<M> {
     const KIND: Kind = Kind::Container;
-}
-
-impl<M> PropertyExt for Container<M> {
-    fn size_no_header(&self) -> usize {
-        match_property!(&self, items => {
-            9 + items.iter().map(|p| p.size_no_header()).sum::<usize>()
-        })
-    }
 }
 
 impl<M: Default> ReadProperty for Container<M> {
@@ -169,7 +204,7 @@ impl<M: Default> ReadProperty for Container<M> {
                 match $value {
                     $(
                         Kind::$variant => {
-                            read(reader, legacy).map(|items| Self::$variant(items))
+                            read(reader, legacy).map(|items| Self::$variant{items, meta: M::default()})
                         },
                     )*
                     kind => { return Err(Error::InvalidNesting(kind)) }
