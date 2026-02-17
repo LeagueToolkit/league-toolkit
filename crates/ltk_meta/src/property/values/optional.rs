@@ -29,7 +29,6 @@ macro_rules! construct_enum {
             }
         }
 
-
         impl<M> PropertyExt for Optional<M> {
             fn size_no_header(&self) -> usize {
                 2 + match &self {
@@ -37,7 +36,6 @@ macro_rules! construct_enum {
                 }
             }
         }
-
 
         $(
             impl<M: Default> From<Option<values::$variant<M>>> for Optional<M> {
