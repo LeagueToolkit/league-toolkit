@@ -77,6 +77,14 @@ impl Map {
         self.entries
     }
 
+    pub fn empty(key_kind: Kind, value_kind: Kind) -> Self {
+        Self {
+            key_kind,
+            value_kind,
+            entries: Vec::new(),
+        }
+    }
+
     pub fn new(
         key_kind: Kind,
         value_kind: Kind,
