@@ -4,7 +4,7 @@ use std::fmt::Write;
 
 use ltk_meta::{
     property::{
-        values::{Embedded, Map, Optional, Struct, UnorderedContainer},
+        values::{Embedded, Struct, UnorderedContainer},
         PropertyValueEnum,
     },
     Bin, BinObject, BinProperty,
@@ -286,9 +286,9 @@ impl<'a, H: HashProvider> TextWriter<'a, H> {
                     self.indent();
                     for (key, value) in entries {
                         self.pad();
-                        self.write_value(&key)?;
+                        self.write_value(key)?;
                         self.write_raw(" = ");
-                        self.write_value(&value)?;
+                        self.write_value(value)?;
                         self.write_raw("\n");
                     }
                     self.dedent();
