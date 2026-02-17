@@ -27,12 +27,6 @@ impl<M: Default> String<M> {
     }
 }
 
-impl<S: Into<std::string::String>, M: Default> From<S> for String<M> {
-    fn from(value: S) -> Self {
-        Self::new(value.into())
-    }
-}
-
 impl<M> PropertyValueExt for String<M> {
     const KIND: Kind = Kind::String;
 }
@@ -62,5 +56,24 @@ impl<M> WriteProperty for String<M> {
         _legacy: bool,
     ) -> Result<(), std::io::Error> {
         writer.write_len_prefixed_string::<LE, _>(&self.value)
+    }
+}
+
+impl<S: Into<std::string::String>, M: Default> From<S> for String<M> {
+    fn from(value: S) -> Self {
+        Self::new(value.into())
+    }
+}
+impl<M> AsRef<std::string::String> for String<M> {
+    fn as_ref(&self) -> &std::string::String {
+        &self.value
+    }
+}
+
+impl<M> std::ops::Deref for String<M> {
+    type Target = std::string::String;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
     }
 }
