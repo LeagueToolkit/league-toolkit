@@ -41,3 +41,23 @@ impl<M: Clone> WriteProperty for UnorderedContainer<M> {
         self.0.to_writer(writer, legacy)
     }
 }
+
+impl<S: Into<Container<M>>, M: Default> From<S> for UnorderedContainer<M> {
+    fn from(value: S) -> Self {
+        Self(value.into())
+    }
+}
+
+impl<M> AsRef<Container<M>> for UnorderedContainer<M> {
+    fn as_ref(&self) -> &Container<M> {
+        &self.0
+    }
+}
+
+impl<M> std::ops::Deref for UnorderedContainer<M> {
+    type Target = Container<M>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
