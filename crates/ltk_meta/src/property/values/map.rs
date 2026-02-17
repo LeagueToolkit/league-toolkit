@@ -6,7 +6,6 @@ use crate::{
     Error, PropertyValueEnum,
 };
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
-use indexmap::IndexMap;
 use ltk_io_ext::{measure, window_at};
 
 // FIXME (alan): do with hash here what we do with Eq
@@ -48,9 +47,61 @@ impl PropertyExt for PropertyValueUnsafeEq {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, PartialEq, Debug, Default)]
 pub struct Map {
-    pub key_kind: Kind,
-    pub value_kind: Kind,
-    pub entries: IndexMap<PropertyValueUnsafeEq, PropertyValueEnum>,
+    key_kind: Kind,
+    value_kind: Kind,
+    entries: Vec<(PropertyValueEnum, PropertyValueEnum)>,
+}
+
+impl Map {
+    #[inline(always)]
+    #[must_use]
+    pub fn key_kind(&self) -> Kind {
+        self.key_kind
+    }
+
+    #[inline(always)]
+    #[must_use]
+    pub fn value_kind(&self) -> Kind {
+        self.value_kind
+    }
+
+    #[inline(always)]
+    #[must_use]
+    pub fn entries(&self) -> &[(PropertyValueEnum, PropertyValueEnum)] {
+        &self.entries
+    }
+
+    #[inline(always)]
+    #[must_use]
+    pub fn into_entries(self) -> Vec<(PropertyValueEnum, PropertyValueEnum)> {
+        self.entries
+    }
+
+    pub fn new(
+        key_kind: Kind,
+        value_kind: Kind,
+        entries: Vec<(PropertyValueEnum, PropertyValueEnum)>,
+    ) -> Result<Self, Error> {
+        for (k, v) in &entries {
+            if k.kind() != key_kind {
+                return Err(Error::MismatchedContainerTypes {
+                    expected: key_kind,
+                    got: k.kind(),
+                });
+            }
+            if v.kind() != value_kind {
+                return Err(Error::MismatchedContainerTypes {
+                    expected: value_kind,
+                    got: v.kind(),
+                });
+            }
+        }
+        Ok(Self {
+            key_kind,
+            value_kind,
+            entries,
+        })
+    }
 }
 
 impl PropertyValueExt for Map {
@@ -68,6 +119,7 @@ impl PropertyExt for Map {
                 .sum::<usize>()
     }
 }
+
 impl ReadProperty for Map {
     fn from_reader<R: io::Read + io::Seek + ?Sized>(
         reader: &mut R,
@@ -86,12 +138,12 @@ impl ReadProperty for Map {
         let size = reader.read_u32::<LE>()?;
         let (real_size, value) = measure(reader, |reader| {
             let len = reader.read_u32::<LE>()? as _;
-            let mut entries = IndexMap::with_capacity(len);
+            let mut entries = Vec::with_capacity(len);
             for _ in 0..len {
-                entries.insert(
-                    key_kind.read(reader, legacy).map(PropertyValueUnsafeEq)?,
+                entries.push((
+                    key_kind.read(reader, legacy)?,
                     value_kind.read(reader, legacy)?,
-                );
+                ));
             }
 
             Ok::<_, Error>(Self {
@@ -130,7 +182,7 @@ impl WriteProperty for Map {
             writer.write_u32::<LE>(self.entries.len() as _)?;
 
             for (k, v) in self.entries.iter() {
-                k.0.to_writer(writer)?;
+                k.to_writer(writer)?;
                 v.to_writer(writer)?;
             }
 

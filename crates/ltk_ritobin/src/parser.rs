@@ -506,11 +506,11 @@ fn parse_map_entries(
     input: Span,
     key_kind: PropertyKind,
     value_kind: PropertyKind,
-) -> ParseResult<IndexMap<values::PropertyValueUnsafeEq, PropertyValueEnum>> {
+) -> ParseResult<Vec<(PropertyValueEnum, PropertyValueEnum)>> {
     let (input, _) = preceded(ws, char('{'))(input)?;
     let (input, _) = ws(input)?;
 
-    let mut entries = IndexMap::new();
+    let mut entries = Vec::new();
     let mut remaining = input;
 
     loop {
@@ -526,7 +526,7 @@ fn parse_map_entries(
         let (r, _) = preceded(ws, char('='))(r)?;
         let (r, value) = parse_value_for_kind(r, value_kind)?;
 
-        entries.insert(values::PropertyValueUnsafeEq(key), value);
+        entries.push((key, value));
 
         let (r, _) = ws(r)?;
         let (r, _) = opt(char(','))(r)?;
@@ -805,11 +805,9 @@ fn parse_value_for_type<'a>(
             let (input, entries) = parse_map_entries(input, key_kind, value_kind)?;
             Ok((
                 input,
-                PropertyValueEnum::Map(values::Map {
-                    key_kind,
-                    value_kind,
-                    entries,
-                }),
+                PropertyValueEnum::Map(
+                    values::Map::new(key_kind, value_kind, entries).expect("valid items in map"),
+                ),
             ))
         }
         _ => parse_value_for_kind(input, ty.kind),
@@ -912,12 +910,12 @@ impl RitobinFile {
         self.entries
             .get("entries")
             .and_then(|p| {
-                if let PropertyValueEnum::Map(values::Map { entries, .. }) = &p.value {
+                if let PropertyValueEnum::Map(map) = &p.value {
                     Some(
-                        entries
+                        map.entries()
                             .iter()
                             .filter_map(|(key, value)| {
-                                let path_hash = match &key.0 {
+                                let path_hash = match &key {
                                     PropertyValueEnum::Hash(values::Hash(h)) => *h,
                                     _ => return None,
                                 };

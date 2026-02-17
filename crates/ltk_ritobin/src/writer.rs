@@ -115,15 +115,11 @@ impl<'a, H: HashProvider> TextWriter<'a, H> {
                 self.write_raw(kind_to_type_name(optional.item_kind()));
                 self.write_raw("]");
             }
-            PropertyValueEnum::Map(Map {
-                key_kind,
-                value_kind,
-                ..
-            }) => {
+            PropertyValueEnum::Map(map) => {
                 self.write_raw("[");
-                self.write_raw(kind_to_type_name(*key_kind));
+                self.write_raw(kind_to_type_name(map.key_kind()));
                 self.write_raw(",");
-                self.write_raw(kind_to_type_name(*value_kind));
+                self.write_raw(kind_to_type_name(map.value_kind()));
                 self.write_raw("]");
             }
             _ => {}
@@ -281,7 +277,8 @@ impl<'a, H: HashProvider> TextWriter<'a, H> {
                     self.write_raw("{}");
                 }
             }
-            PropertyValueEnum::Map(Map { entries, .. }) => {
+            PropertyValueEnum::Map(map) => {
+                let entries = map.entries();
                 if entries.is_empty() {
                     self.write_raw("{}");
                 } else {
@@ -289,9 +286,9 @@ impl<'a, H: HashProvider> TextWriter<'a, H> {
                     self.indent();
                     for (key, value) in entries {
                         self.pad();
-                        self.write_value(&key.0)?;
+                        self.write_value(&key)?;
                         self.write_raw(" = ");
-                        self.write_value(value)?;
+                        self.write_value(&value)?;
                         self.write_raw("\n");
                     }
                     self.dedent();
