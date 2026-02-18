@@ -7,14 +7,8 @@ use glam::{Mat4, Vec2, Vec3, Vec4};
 use indexmap::IndexMap;
 use ltk_hash::fnv1a::hash_lower;
 use ltk_meta::{
-    value::{
-        BitBoolValue, BoolValue, ColorValue, ContainerValue, EmbeddedValue, F32Value, HashValue,
-        I16Value, I32Value, I64Value, I8Value, MapValue, Matrix44Value, NoneValue, ObjectLinkValue,
-        OptionalValue, PropertyValueEnum, PropertyValueUnsafeEq, StringValue, StructValue,
-        U16Value, U32Value, U64Value, U8Value, UnorderedContainerValue, Vector2Value, Vector3Value,
-        Vector4Value, WadChunkLinkValue,
-    },
-    BinProperty, BinPropertyKind, BinTree, BinTreeObject,
+    property::{values, NoMeta, PropertyValueEnum},
+    Bin, BinObject, BinProperty, PropertyKind,
 };
 use ltk_primitives::Color;
 use nom::{
@@ -307,7 +301,7 @@ fn parse_float(input: Span) -> ParseResult<f32> {
 // ============================================================================
 
 /// Parse a type name and return the BinPropertyKind.
-fn parse_type_name(input: Span) -> ParseResult<BinPropertyKind> {
+fn parse_type_name(input: Span) -> ParseResult<PropertyKind> {
     let (input, type_span) = word(input)?;
     match type_name_to_kind(type_span.fragment()) {
         Some(kind) => Ok((input, kind)),
@@ -319,9 +313,7 @@ fn parse_type_name(input: Span) -> ParseResult<BinPropertyKind> {
 }
 
 /// Parse container type parameters: `\[type\]` or `\[key,value\]`.
-fn parse_container_type_params(
-    input: Span,
-) -> ParseResult<(BinPropertyKind, Option<BinPropertyKind>)> {
+fn parse_container_type_params(input: Span) -> ParseResult<(PropertyKind, Option<PropertyKind>)> {
     preceded(
         ws,
         delimited(
@@ -347,12 +339,12 @@ fn parse_container_type_params(
 fn parse_type(input: Span) -> ParseResult<RitobinType> {
     let (input, kind) = parse_type_name(input)?;
 
-    if kind.is_container() || kind == BinPropertyKind::Optional {
+    if kind.is_container() || kind == PropertyKind::Optional {
         let (input, (inner, value_kind)) = parse_container_type_params(input)?;
-        if kind == BinPropertyKind::Map {
+        if kind == PropertyKind::Map {
             Ok((
                 input,
-                RitobinType::map(inner, value_kind.unwrap_or(BinPropertyKind::None)),
+                RitobinType::map(inner, value_kind.unwrap_or(PropertyKind::None)),
             ))
         } else {
             Ok((input, RitobinType::container(kind, inner)))
@@ -483,10 +475,7 @@ fn parse_link_value(input: Span) -> ParseResult<u32> {
 }
 
 /// Parse items in a list/container.
-fn parse_list_items(
-    input: Span,
-    item_kind: BinPropertyKind,
-) -> ParseResult<Vec<PropertyValueEnum>> {
+fn parse_list_items(input: Span, item_kind: PropertyKind) -> ParseResult<Vec<PropertyValueEnum>> {
     let (input, _) = preceded(ws, char('{'))(input)?;
     let (input, _) = ws(input)?;
 
@@ -515,13 +504,13 @@ fn parse_list_items(
 /// Parse map entries.
 fn parse_map_entries(
     input: Span,
-    key_kind: BinPropertyKind,
-    value_kind: BinPropertyKind,
-) -> ParseResult<IndexMap<PropertyValueUnsafeEq, PropertyValueEnum>> {
+    key_kind: PropertyKind,
+    value_kind: PropertyKind,
+) -> ParseResult<Vec<(PropertyValueEnum, PropertyValueEnum)>> {
     let (input, _) = preceded(ws, char('{'))(input)?;
     let (input, _) = ws(input)?;
 
-    let mut entries = IndexMap::new();
+    let mut entries = Vec::new();
     let mut remaining = input;
 
     loop {
@@ -537,7 +526,7 @@ fn parse_map_entries(
         let (r, _) = preceded(ws, char('='))(r)?;
         let (r, value) = parse_value_for_kind(r, value_kind)?;
 
-        entries.insert(PropertyValueUnsafeEq(key), value);
+        entries.push((key, value));
 
         let (r, _) = ws(r)?;
         let (r, _) = opt(char(','))(r)?;
@@ -546,7 +535,7 @@ fn parse_map_entries(
 }
 
 /// Parse optional value.
-fn parse_optional_value(input: Span, inner_kind: BinPropertyKind) -> ParseResult<OptionalValue> {
+fn parse_optional_value(input: Span, inner_kind: PropertyKind) -> ParseResult<values::Optional> {
     let (input, _) = preceded(ws, char('{'))(input)?;
     let (input, _) = ws(input)?;
 
@@ -554,10 +543,7 @@ fn parse_optional_value(input: Span, inner_kind: BinPropertyKind) -> ParseResult
     if let Ok((input, _)) = char::<Span, SpannedError>('}')(input) {
         return Ok((
             input,
-            OptionalValue {
-                kind: inner_kind,
-                value: None,
-            },
+            values::Optional::empty(inner_kind).expect("invalid item type for optional"),
         ));
     }
 
@@ -568,10 +554,7 @@ fn parse_optional_value(input: Span, inner_kind: BinPropertyKind) -> ParseResult
 
     Ok((
         input,
-        OptionalValue {
-            kind: inner_kind,
-            value: Some(Box::new(value)),
-        },
+        values::Optional::new(inner_kind, Some(value)).expect("valid inner item for optional"),
     ))
 }
 
@@ -623,16 +606,17 @@ fn parse_field(input: Span) -> ParseResult<BinProperty> {
 }
 
 /// Parse a pointer value (null or name { fields }).
-fn parse_pointer_value(input: Span) -> ParseResult<StructValue> {
+fn parse_pointer_value(input: Span) -> ParseResult<values::Struct> {
     let (input, _) = ws(input)?;
 
     // Check for null
     if let Ok((input, _)) = tag::<&str, Span, SpannedError>("null")(input) {
         return Ok((
             input,
-            StructValue {
+            values::Struct {
                 class_hash: 0,
                 properties: IndexMap::new(),
+                meta: NoMeta,
             },
         ));
     }
@@ -651,9 +635,10 @@ fn parse_pointer_value(input: Span) -> ParseResult<StructValue> {
     if let Ok((input, _)) = tag::<&str, Span, SpannedError>("{}")(input) {
         return Ok((
             input,
-            StructValue {
+            values::Struct {
                 class_hash,
                 properties: IndexMap::new(),
+                meta: NoMeta,
             },
         ));
     }
@@ -663,119 +648,126 @@ fn parse_pointer_value(input: Span) -> ParseResult<StructValue> {
 
     Ok((
         input,
-        StructValue {
+        values::Struct {
             class_hash,
             properties,
+            meta: NoMeta,
         },
     ))
 }
 
 /// Parse an embed value (name { fields }).
-fn parse_embed_value(input: Span) -> ParseResult<EmbeddedValue> {
+fn parse_embed_value(input: Span) -> ParseResult<values::Embedded> {
     let (input, struct_val) = parse_pointer_value(input)?;
-    Ok((input, EmbeddedValue(struct_val)))
+    Ok((input, values::Embedded(struct_val)))
 }
 
 /// Parse a value given a BinPropertyKind.
-fn parse_value_for_kind(input: Span, kind: BinPropertyKind) -> ParseResult<PropertyValueEnum> {
+fn parse_value_for_kind(input: Span, kind: PropertyKind) -> ParseResult<PropertyValueEnum> {
     match kind {
-        BinPropertyKind::None => {
+        PropertyKind::None => {
             let (input, _) = preceded(ws, tag("null"))(input)?;
-            Ok((input, PropertyValueEnum::None(NoneValue)))
+            Ok((input, PropertyValueEnum::None(values::None::default())))
         }
-        BinPropertyKind::Bool => {
+        PropertyKind::Bool => {
             let (input, v) = parse_bool(input)?;
-            Ok((input, PropertyValueEnum::Bool(BoolValue(v))))
+            Ok((input, PropertyValueEnum::Bool(values::Bool::new(v))))
         }
-        BinPropertyKind::I8 => {
+        PropertyKind::I8 => {
             let (input, v) = parse_int::<i8>(input)?;
-            Ok((input, PropertyValueEnum::I8(I8Value(v))))
+            Ok((input, PropertyValueEnum::I8(values::I8::new(v))))
         }
-        BinPropertyKind::U8 => {
+        PropertyKind::U8 => {
             let (input, v) = parse_int::<u8>(input)?;
-            Ok((input, PropertyValueEnum::U8(U8Value(v))))
+            Ok((input, PropertyValueEnum::U8(values::U8::new(v))))
         }
-        BinPropertyKind::I16 => {
+        PropertyKind::I16 => {
             let (input, v) = parse_int::<i16>(input)?;
-            Ok((input, PropertyValueEnum::I16(I16Value(v))))
+            Ok((input, PropertyValueEnum::I16(values::I16::new(v))))
         }
-        BinPropertyKind::U16 => {
+        PropertyKind::U16 => {
             let (input, v) = parse_int::<u16>(input)?;
-            Ok((input, PropertyValueEnum::U16(U16Value(v))))
+            Ok((input, PropertyValueEnum::U16(values::U16::new(v))))
         }
-        BinPropertyKind::I32 => {
+        PropertyKind::I32 => {
             let (input, v) = parse_int::<i32>(input)?;
-            Ok((input, PropertyValueEnum::I32(I32Value(v))))
+            Ok((input, PropertyValueEnum::I32(values::I32::new(v))))
         }
-        BinPropertyKind::U32 => {
+        PropertyKind::U32 => {
             let (input, v) = hex_u32(input)?;
-            Ok((input, PropertyValueEnum::U32(U32Value(v))))
+            Ok((input, PropertyValueEnum::U32(values::U32::new(v))))
         }
-        BinPropertyKind::I64 => {
+        PropertyKind::I64 => {
             let (input, v) = parse_int::<i64>(input)?;
-            Ok((input, PropertyValueEnum::I64(I64Value(v))))
+            Ok((input, PropertyValueEnum::I64(values::I64::new(v))))
         }
-        BinPropertyKind::U64 => {
+        PropertyKind::U64 => {
             let (input, v) = hex_u64(input)?;
-            Ok((input, PropertyValueEnum::U64(U64Value(v))))
+            Ok((input, PropertyValueEnum::U64(values::U64::new(v))))
         }
-        BinPropertyKind::F32 => {
+        PropertyKind::F32 => {
             let (input, v) = parse_float(input)?;
-            Ok((input, PropertyValueEnum::F32(F32Value(v))))
+            Ok((input, PropertyValueEnum::F32(values::F32::new(v))))
         }
-        BinPropertyKind::Vector2 => {
+        PropertyKind::Vector2 => {
             let (input, v) = parse_vec2(input)?;
-            Ok((input, PropertyValueEnum::Vector2(Vector2Value(v))))
+            Ok((input, PropertyValueEnum::Vector2(values::Vector2::new(v))))
         }
-        BinPropertyKind::Vector3 => {
+        PropertyKind::Vector3 => {
             let (input, v) = parse_vec3(input)?;
-            Ok((input, PropertyValueEnum::Vector3(Vector3Value(v))))
+            Ok((input, PropertyValueEnum::Vector3(values::Vector3::new(v))))
         }
-        BinPropertyKind::Vector4 => {
+        PropertyKind::Vector4 => {
             let (input, v) = parse_vec4(input)?;
-            Ok((input, PropertyValueEnum::Vector4(Vector4Value(v))))
+            Ok((input, PropertyValueEnum::Vector4(values::Vector4::new(v))))
         }
-        BinPropertyKind::Matrix44 => {
+        PropertyKind::Matrix44 => {
             let (input, v) = parse_mtx44(input)?;
-            Ok((input, PropertyValueEnum::Matrix44(Matrix44Value(v))))
+            Ok((input, PropertyValueEnum::Matrix44(values::Matrix44::new(v))))
         }
-        BinPropertyKind::Color => {
+        PropertyKind::Color => {
             let (input, v) = parse_rgba(input)?;
-            Ok((input, PropertyValueEnum::Color(ColorValue(v))))
+            Ok((input, PropertyValueEnum::Color(values::Color::new(v))))
         }
-        BinPropertyKind::String => {
+        PropertyKind::String => {
             let (input, v) = preceded(ws, quoted_string)(input)?;
-            Ok((input, PropertyValueEnum::String(StringValue(v))))
+            Ok((input, PropertyValueEnum::String(values::String::new(v))))
         }
-        BinPropertyKind::Hash => {
+        PropertyKind::Hash => {
             let (input, v) = parse_hash_value(input)?;
-            Ok((input, PropertyValueEnum::Hash(HashValue(v))))
+            Ok((input, PropertyValueEnum::Hash(values::Hash::new(v))))
         }
-        BinPropertyKind::WadChunkLink => {
+        PropertyKind::WadChunkLink => {
             let (input, v) = parse_file_hash(input)?;
-            Ok((input, PropertyValueEnum::WadChunkLink(WadChunkLinkValue(v))))
+            Ok((
+                input,
+                PropertyValueEnum::WadChunkLink(values::WadChunkLink::new(v)),
+            ))
         }
-        BinPropertyKind::ObjectLink => {
+        PropertyKind::ObjectLink => {
             let (input, v) = parse_link_value(input)?;
-            Ok((input, PropertyValueEnum::ObjectLink(ObjectLinkValue(v))))
+            Ok((
+                input,
+                PropertyValueEnum::ObjectLink(values::ObjectLink::new(v)),
+            ))
         }
-        BinPropertyKind::BitBool => {
+        PropertyKind::BitBool => {
             let (input, v) = parse_bool(input)?;
-            Ok((input, PropertyValueEnum::BitBool(BitBoolValue(v))))
+            Ok((input, PropertyValueEnum::BitBool(values::BitBool::new(v))))
         }
-        BinPropertyKind::Struct => {
+        PropertyKind::Struct => {
             let (input, v) = parse_pointer_value(input)?;
             Ok((input, PropertyValueEnum::Struct(v)))
         }
-        BinPropertyKind::Embedded => {
+        PropertyKind::Embedded => {
             let (input, v) = parse_embed_value(input)?;
             Ok((input, PropertyValueEnum::Embedded(v)))
         }
         // Container types need additional type info, handled separately
-        BinPropertyKind::Container
-        | BinPropertyKind::UnorderedContainer
-        | BinPropertyKind::Optional
-        | BinPropertyKind::Map => Err(NomErr::Failure(SpannedError::expected(
+        PropertyKind::Container
+        | PropertyKind::UnorderedContainer
+        | PropertyKind::Optional
+        | PropertyKind::Map => Err(NomErr::Failure(SpannedError::expected(
             input,
             "non-container type",
         ))),
@@ -788,44 +780,40 @@ fn parse_value_for_type<'a>(
     ty: &RitobinType,
 ) -> ParseResult<'a, PropertyValueEnum> {
     match ty.kind {
-        BinPropertyKind::Container => {
-            let inner_kind = ty.inner_kind.unwrap_or(BinPropertyKind::None);
+        PropertyKind::Container => {
+            let inner_kind = ty.inner_kind.unwrap_or(PropertyKind::None);
             let (input, items) = parse_list_items(input, inner_kind)?;
             Ok((
                 input,
-                PropertyValueEnum::Container(ContainerValue {
-                    item_kind: inner_kind,
-                    items,
-                }),
+                PropertyValueEnum::Container(
+                    values::Container::try_from(items).unwrap_or_default(),
+                ), // TODO: handle error here
             ))
         }
-        BinPropertyKind::UnorderedContainer => {
-            let inner_kind = ty.inner_kind.unwrap_or(BinPropertyKind::None);
+        PropertyKind::UnorderedContainer => {
+            let inner_kind = ty.inner_kind.unwrap_or(PropertyKind::None);
             let (input, items) = parse_list_items(input, inner_kind)?;
             Ok((
                 input,
-                PropertyValueEnum::UnorderedContainer(UnorderedContainerValue(ContainerValue {
-                    item_kind: inner_kind,
-                    items,
-                })),
+                PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(
+                    values::Container::try_from(items).unwrap_or_default(), // TODO: handle error here
+                )),
             ))
         }
-        BinPropertyKind::Optional => {
-            let inner_kind = ty.inner_kind.unwrap_or(BinPropertyKind::None);
+        PropertyKind::Optional => {
+            let inner_kind = ty.inner_kind.unwrap_or(PropertyKind::None);
             let (input, opt_val) = parse_optional_value(input, inner_kind)?;
             Ok((input, PropertyValueEnum::Optional(opt_val)))
         }
-        BinPropertyKind::Map => {
-            let key_kind = ty.inner_kind.unwrap_or(BinPropertyKind::Hash);
-            let value_kind = ty.value_kind.unwrap_or(BinPropertyKind::None);
+        PropertyKind::Map => {
+            let key_kind = ty.inner_kind.unwrap_or(PropertyKind::Hash);
+            let value_kind = ty.value_kind.unwrap_or(PropertyKind::None);
             let (input, entries) = parse_map_entries(input, key_kind, value_kind)?;
             Ok((
                 input,
-                PropertyValueEnum::Map(MapValue {
-                    key_kind,
-                    value_kind,
-                    entries,
-                }),
+                PropertyValueEnum::Map(
+                    values::Map::new(key_kind, value_kind, entries).expect("valid items in map"),
+                ),
             ))
         }
         _ => parse_value_for_kind(input, ty.kind),
@@ -890,8 +878,8 @@ impl RitobinFile {
     /// Get the "type" field value as a string.
     pub fn file_type(&self) -> Option<&str> {
         self.entries.get("type").and_then(|p| {
-            if let PropertyValueEnum::String(StringValue(s)) = &p.value {
-                Some(s.as_str())
+            if let PropertyValueEnum::String(s) = &p.value {
+                Some(s.value.as_str())
             } else {
                 None
             }
@@ -901,8 +889,8 @@ impl RitobinFile {
     /// Get the "version" field as u32.
     pub fn version(&self) -> Option<u32> {
         self.entries.get("version").and_then(|p| {
-            if let PropertyValueEnum::U32(U32Value(v)) = &p.value {
-                Some(*v)
+            if let PropertyValueEnum::U32(v) = &p.value {
+                Some(**v)
             } else {
                 None
             }
@@ -914,19 +902,10 @@ impl RitobinFile {
         self.entries
             .get("linked")
             .and_then(|p| {
-                if let PropertyValueEnum::Container(ContainerValue { items, .. }) = &p.value {
-                    Some(
-                        items
-                            .iter()
-                            .filter_map(|item| {
-                                if let PropertyValueEnum::String(StringValue(s)) = item {
-                                    Some(s.clone())
-                                } else {
-                                    None
-                                }
-                            })
-                            .collect(),
-                    )
+                if let PropertyValueEnum::Container(values::Container::String { items, .. }) =
+                    &p.value
+                {
+                    Some(items.iter().cloned().map(|i| i.value).collect())
                 } else {
                     None
                 }
@@ -935,26 +914,26 @@ impl RitobinFile {
     }
 
     /// Get the "entries" map as BinTreeObjects.
-    pub fn objects(&self) -> IndexMap<u32, BinTreeObject> {
+    pub fn objects(&self) -> IndexMap<u32, BinObject> {
         self.entries
             .get("entries")
             .and_then(|p| {
-                if let PropertyValueEnum::Map(MapValue { entries, .. }) = &p.value {
+                if let PropertyValueEnum::Map(map) = &p.value {
                     Some(
-                        entries
+                        map.entries()
                             .iter()
                             .filter_map(|(key, value)| {
-                                let path_hash = match &key.0 {
-                                    PropertyValueEnum::Hash(HashValue(h)) => *h,
+                                let path_hash = match &key {
+                                    PropertyValueEnum::Hash(h) => **h,
                                     _ => return None,
                                 };
 
-                                if let PropertyValueEnum::Embedded(EmbeddedValue(struct_val)) =
+                                if let PropertyValueEnum::Embedded(values::Embedded(struct_val)) =
                                     value
                                 {
                                     Some((
                                         path_hash,
-                                        BinTreeObject {
+                                        BinObject {
                                             path_hash,
                                             class_hash: struct_val.class_hash,
                                             properties: struct_val.properties.clone(),
@@ -974,8 +953,8 @@ impl RitobinFile {
     }
 
     /// Convert to a BinTree.
-    pub fn to_bin_tree(&self) -> BinTree {
-        BinTree::new(self.objects().into_values(), self.linked())
+    pub fn to_bin_tree(&self) -> Bin {
+        Bin::new(self.objects().into_values(), self.linked())
     }
 }
 
@@ -1003,7 +982,7 @@ pub fn parse(input: &str) -> Result<RitobinFile, ParseError> {
 }
 
 /// Parse ritobin text directly to BinTree.
-pub fn parse_to_bin_tree(input: &str) -> Result<BinTree, ParseError> {
+pub fn parse_to_bin_tree(input: &str) -> Result<Bin, ParseError> {
     parse(input).map(|f| f.to_bin_tree())
 }
 
@@ -1044,7 +1023,7 @@ pos: vec3 = { 1.0, 2.5, -3.0 }
 "#;
         let file = parse(input).unwrap();
         let prop = file.entries.get("pos").unwrap();
-        if let PropertyValueEnum::Vector3(Vector3Value(v)) = &prop.value {
+        if let PropertyValueEnum::Vector3(v) = &prop.value {
             assert_eq!(v.x, 1.0);
             assert_eq!(v.y, 2.5);
             assert_eq!(v.z, -3.0);
@@ -1063,7 +1042,7 @@ data: embed = TestClass {
 "#;
         let file = parse(input).unwrap();
         let prop = file.entries.get("data").unwrap();
-        if let PropertyValueEnum::Embedded(EmbeddedValue(s)) = &prop.value {
+        if let PropertyValueEnum::Embedded(values::Embedded(s)) = &prop.value {
             assert_eq!(s.class_hash, hash_lower("TestClass"));
             assert_eq!(s.properties.len(), 2);
         } else {

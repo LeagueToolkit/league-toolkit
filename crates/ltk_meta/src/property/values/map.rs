@@ -1,15 +1,12 @@
 use std::{hash::Hash, io};
 
 use crate::{
-    property::BinPropertyKind,
-    traits::{PropertyValue, ReadProperty, ReaderExt, WriteProperty, WriterExt},
-    Error,
+    property::{Kind, NoMeta},
+    traits::{PropertyExt, PropertyValueExt, ReadProperty, ReaderExt, WriteProperty, WriterExt},
+    Error, PropertyValueEnum,
 };
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
-use indexmap::IndexMap;
 use ltk_io_ext::{measure, window_at};
-
-use super::PropertyValueEnum;
 
 // FIXME (alan): do with hash here what we do with Eq
 impl Hash for PropertyValueEnum {
@@ -31,27 +28,87 @@ impl Hash for PropertyValueEnum {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, PartialEq, Hash, Debug)]
-#[repr(transparent)]
-pub struct PropertyValueUnsafeEq(pub PropertyValueEnum);
-impl Eq for PropertyValueUnsafeEq {}
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(bound = "for <'dee> M: serde::Serialize + serde::Deserialize<'dee>")
+)]
+#[derive(Clone, PartialEq, Debug, Default)]
+pub struct Map<M = NoMeta> {
+    key_kind: Kind,
+    value_kind: Kind,
+    entries: Vec<(PropertyValueEnum<M>, PropertyValueEnum<M>)>,
+    pub meta: M,
+}
 
-impl PropertyValue for PropertyValueUnsafeEq {
-    fn size_no_header(&self) -> usize {
-        self.0.size_no_header()
+impl<M> Map<M> {
+    #[inline(always)]
+    #[must_use]
+    pub fn key_kind(&self) -> Kind {
+        self.key_kind
+    }
+
+    #[inline(always)]
+    #[must_use]
+    pub fn value_kind(&self) -> Kind {
+        self.value_kind
+    }
+
+    #[inline(always)]
+    #[must_use]
+    pub fn entries(&self) -> &[(PropertyValueEnum<M>, PropertyValueEnum<M>)] {
+        &self.entries
+    }
+
+    #[inline(always)]
+    #[must_use]
+    pub fn into_entries(self) -> Vec<(PropertyValueEnum<M>, PropertyValueEnum<M>)> {
+        self.entries
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, PartialEq, Debug, Default)]
-pub struct MapValue {
-    pub key_kind: BinPropertyKind,
-    pub value_kind: BinPropertyKind,
-    pub entries: IndexMap<PropertyValueUnsafeEq, PropertyValueEnum>,
+impl<M: Default> Map<M> {
+    pub fn empty(key_kind: Kind, value_kind: Kind) -> Self {
+        Self {
+            key_kind,
+            value_kind,
+            entries: Vec::new(),
+            meta: M::default(),
+        }
+    }
+
+    pub fn new(
+        key_kind: Kind,
+        value_kind: Kind,
+        entries: Vec<(PropertyValueEnum<M>, PropertyValueEnum<M>)>,
+    ) -> Result<Self, Error> {
+        for (k, v) in &entries {
+            if k.kind() != key_kind {
+                return Err(Error::MismatchedContainerTypes {
+                    expected: key_kind,
+                    got: k.kind(),
+                });
+            }
+            if v.kind() != value_kind {
+                return Err(Error::MismatchedContainerTypes {
+                    expected: value_kind,
+                    got: v.kind(),
+                });
+            }
+        }
+        Ok(Self {
+            key_kind,
+            value_kind,
+            entries,
+            meta: M::default(),
+        })
+    }
 }
 
-impl PropertyValue for MapValue {
+impl<M> PropertyValueExt for Map<M> {
+    const KIND: Kind = Kind::Map;
+}
+impl<M> PropertyExt for Map<M> {
     fn size_no_header(&self) -> usize {
         1 + 1
             + 4
@@ -63,7 +120,8 @@ impl PropertyValue for MapValue {
                 .sum::<usize>()
     }
 }
-impl ReadProperty for MapValue {
+
+impl<M: Default> ReadProperty for Map<M> {
     fn from_reader<R: io::Read + io::Seek + ?Sized>(
         reader: &mut R,
         legacy: bool,
@@ -81,18 +139,20 @@ impl ReadProperty for MapValue {
         let size = reader.read_u32::<LE>()?;
         let (real_size, value) = measure(reader, |reader| {
             let len = reader.read_u32::<LE>()? as _;
-            let mut entries = IndexMap::with_capacity(len);
+            let mut entries: Vec<(PropertyValueEnum<M>, PropertyValueEnum<M>)> =
+                Vec::with_capacity(len);
             for _ in 0..len {
-                entries.insert(
-                    key_kind.read(reader, legacy).map(PropertyValueUnsafeEq)?,
+                entries.push((
+                    key_kind.read(reader, legacy)?,
                     value_kind.read(reader, legacy)?,
-                );
+                ));
             }
 
             Ok::<_, Error>(Self {
                 key_kind,
                 value_kind,
                 entries,
+                meta: M::default(),
             })
         })?;
 
@@ -103,7 +163,7 @@ impl ReadProperty for MapValue {
         Ok(value)
     }
 }
-impl WriteProperty for MapValue {
+impl<M: Clone> WriteProperty for Map<M> {
     fn to_writer<R: io::Write + io::Seek + ?Sized>(
         &self,
         writer: &mut R,
@@ -125,7 +185,7 @@ impl WriteProperty for MapValue {
             writer.write_u32::<LE>(self.entries.len() as _)?;
 
             for (k, v) in self.entries.iter() {
-                k.0.to_writer(writer)?;
+                k.to_writer(writer)?;
                 v.to_writer(writer)?;
             }
 

@@ -1,11 +1,7 @@
-use super::traits::{ReaderExt as _, WriterExt as _};
 use super::Error;
-use byteorder::{ReadBytesExt as _, WriteBytesExt as _, LE};
+use crate::PropertyValueEnum;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::io;
-
-pub mod value;
-pub use value::PropertyValueEnum;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(
@@ -22,7 +18,7 @@ pub use value::PropertyValueEnum;
     Default,
 )]
 #[repr(u8)]
-pub enum BinPropertyKind {
+pub enum Kind {
     // PRIMITIVE TYPES
     #[default]
     None = 0,
@@ -56,7 +52,7 @@ pub enum BinPropertyKind {
     BitBool = 128 | 7,
 }
 
-impl BinPropertyKind {
+impl Kind {
     /// Converts a u8 into a BinPropertyKind, accounting for pre/post WadChunkLink.
     ///
     /// The WadChunkLink bin property type was newly added by Riot. For some reason they decided to put it in the middle of the enum,
@@ -66,8 +62,8 @@ impl BinPropertyKind {
     ///
     /// "Non-legacy" property types can just be used as is.
     ///
-    pub fn unpack(raw: u8, legacy: bool) -> Result<BinPropertyKind, Error> {
-        use BinPropertyKind as BPK;
+    pub fn unpack(raw: u8, legacy: bool) -> Result<Kind, Error> {
+        use Kind as BPK;
         if !legacy {
             return Ok(BPK::try_from_primitive(raw)?);
         }
@@ -83,14 +79,14 @@ impl BinPropertyKind {
             fudged += 1;
         }
 
-        Ok(BinPropertyKind::try_from_primitive(fudged)?)
+        Ok(Kind::try_from_primitive(fudged)?)
     }
 
     /// Whether this property kind is a primitive type. (i8, u8, .. u32, u64, f32, Vector2, Vector3, Vector4, Matrix44, Color, String, Hash, WadChunkLink),
     #[inline(always)]
     #[must_use]
     pub fn is_primitive(&self) -> bool {
-        use BinPropertyKind::*;
+        use Kind::*;
         matches!(
             self,
             None | Bool
@@ -124,7 +120,7 @@ impl BinPropertyKind {
     #[inline(always)]
     #[must_use]
     pub fn subtype_count(&self) -> u8 {
-        use BinPropertyKind::*;
+        use Kind::*;
         match self {
             Container | UnorderedContainer | Optional => 1,
             Map => 2,
@@ -133,15 +129,15 @@ impl BinPropertyKind {
     }
 
     #[inline(always)]
-    pub fn read<R: io::Read + std::io::Seek + ?Sized>(
+    pub fn read<R: io::Read + std::io::Seek + ?Sized, M: Default>(
         self,
         reader: &mut R,
         legacy: bool,
-    ) -> Result<PropertyValueEnum, super::Error> {
+    ) -> Result<PropertyValueEnum<M>, super::Error> {
         PropertyValueEnum::from_reader(reader, self, legacy)
     }
 
-    pub fn default_value(self) -> PropertyValueEnum {
+    pub fn default_value<M: Default>(self) -> PropertyValueEnum<M> {
         match self {
             Self::None => PropertyValueEnum::None(Default::default()),
             Self::Bool => PropertyValueEnum::Bool(Default::default()),
@@ -171,43 +167,5 @@ impl BinPropertyKind {
             Self::Map => PropertyValueEnum::Map(Default::default()),
             Self::BitBool => PropertyValueEnum::BitBool(Default::default()),
         }
-    }
-}
-
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, PartialEq, Debug)]
-pub struct BinProperty {
-    pub name_hash: u32,
-    #[cfg_attr(feature = "serde", serde(flatten))]
-    pub value: PropertyValueEnum,
-}
-
-use super::traits::PropertyValue as _;
-impl BinProperty {
-    /// Read a BinProperty from a reader. This will read the name_hash, prop kind and then value, in that order.
-    pub fn from_reader<R: io::Read + std::io::Seek + ?Sized>(
-        reader: &mut R,
-        legacy: bool,
-    ) -> Result<Self, Error> {
-        let name_hash = reader.read_u32::<LE>()?;
-        let kind = reader.read_property_kind(legacy)?;
-
-        Ok(Self {
-            name_hash,
-            value: PropertyValueEnum::from_reader(reader, kind, legacy)?,
-        })
-    }
-    pub fn to_writer<W: io::Write + std::io::Seek + ?Sized>(
-        &self,
-        writer: &mut W,
-    ) -> Result<(), io::Error> {
-        writer.write_u32::<LE>(self.name_hash)?;
-        writer.write_property_kind(self.value.kind())?;
-
-        self.value.to_writer(writer)?;
-        Ok(())
-    }
-    pub fn size(&self) -> usize {
-        5 + self.value.size_no_header()
     }
 }

@@ -1,4 +1,4 @@
-//! Tests for BinTree reading and writing
+//! Tests for Bin reading and writing
 
 use std::io::Cursor;
 
@@ -6,9 +6,9 @@ use glam::{Mat4, Vec2, Vec3, Vec4};
 use indexmap::IndexMap;
 use ltk_primitives::Color;
 
-use crate::property::value::*;
-use crate::property::{BinProperty, BinPropertyKind, PropertyValueEnum};
-use crate::{BinTree, BinTreeObject};
+use crate::property::{values, NoMeta};
+use crate::property::{BinProperty, Kind, PropertyValueEnum};
+use crate::{Bin, BinObject as Object};
 
 /// Helper to roundtrip a property value through write/read
 fn roundtrip_property(prop: &BinProperty) -> BinProperty {
@@ -20,14 +20,14 @@ fn roundtrip_property(prop: &BinProperty) -> BinProperty {
     BinProperty::from_reader(&mut cursor, false).expect("read failed")
 }
 
-/// Helper to roundtrip a BinTree through write/read
-fn roundtrip_tree(tree: &BinTree) -> BinTree {
+/// Helper to roundtrip a Bin through write/read
+fn roundtrip_tree(tree: &Bin) -> Bin {
     let mut buffer = Vec::new();
     let mut cursor = Cursor::new(&mut buffer);
     tree.to_writer(&mut cursor).expect("write failed");
 
     cursor.set_position(0);
-    BinTree::from_reader(&mut cursor).expect("read failed")
+    Bin::from_reader(&mut cursor).expect("read failed")
 }
 
 /// Helper to create a BinProperty with a given name hash and value
@@ -41,7 +41,7 @@ fn make_prop(name_hash: u32, value: PropertyValueEnum) -> BinProperty {
 
 #[test]
 fn test_none_property_roundtrip() {
-    let prop = make_prop(0x1234, PropertyValueEnum::None(NoneValue));
+    let prop = make_prop(0x1234, PropertyValueEnum::None(values::None::default()));
     let result = roundtrip_property(&prop);
     assert_eq!(prop, result);
 }
@@ -49,7 +49,7 @@ fn test_none_property_roundtrip() {
 #[test]
 fn test_bool_property_roundtrip() {
     for value in [true, false] {
-        let prop = make_prop(0x1234, PropertyValueEnum::Bool(BoolValue(value)));
+        let prop = make_prop(0x1234, PropertyValueEnum::Bool(values::Bool::new(value)));
         let result = roundtrip_property(&prop);
         assert_eq!(prop, result);
     }
@@ -58,7 +58,10 @@ fn test_bool_property_roundtrip() {
 #[test]
 fn test_bitbool_property_roundtrip() {
     for value in [true, false] {
-        let prop = make_prop(0x1234, PropertyValueEnum::BitBool(BitBoolValue(value)));
+        let prop = make_prop(
+            0x1234,
+            PropertyValueEnum::BitBool(values::BitBool::new(value)),
+        );
         let result = roundtrip_property(&prop);
         assert_eq!(prop, result);
     }
@@ -67,7 +70,7 @@ fn test_bitbool_property_roundtrip() {
 #[test]
 fn test_i8_property_roundtrip() {
     for value in [i8::MIN, -1, 0, 1, i8::MAX] {
-        let prop = make_prop(0x1234, PropertyValueEnum::I8(I8Value(value)));
+        let prop = make_prop(0x1234, PropertyValueEnum::I8(values::I8::new(value)));
         let result = roundtrip_property(&prop);
         assert_eq!(prop, result);
     }
@@ -76,7 +79,7 @@ fn test_i8_property_roundtrip() {
 #[test]
 fn test_u8_property_roundtrip() {
     for value in [u8::MIN, 1, 128, u8::MAX] {
-        let prop = make_prop(0x1234, PropertyValueEnum::U8(U8Value(value)));
+        let prop = make_prop(0x1234, PropertyValueEnum::U8(values::U8::new(value)));
         let result = roundtrip_property(&prop);
         assert_eq!(prop, result);
     }
@@ -85,7 +88,7 @@ fn test_u8_property_roundtrip() {
 #[test]
 fn test_i16_property_roundtrip() {
     for value in [i16::MIN, -1, 0, 1, i16::MAX] {
-        let prop = make_prop(0x1234, PropertyValueEnum::I16(I16Value(value)));
+        let prop = make_prop(0x1234, PropertyValueEnum::I16(values::I16::new(value)));
         let result = roundtrip_property(&prop);
         assert_eq!(prop, result);
     }
@@ -94,7 +97,7 @@ fn test_i16_property_roundtrip() {
 #[test]
 fn test_u16_property_roundtrip() {
     for value in [u16::MIN, 1, 32768, u16::MAX] {
-        let prop = make_prop(0x1234, PropertyValueEnum::U16(U16Value(value)));
+        let prop = make_prop(0x1234, PropertyValueEnum::U16(values::U16::new(value)));
         let result = roundtrip_property(&prop);
         assert_eq!(prop, result);
     }
@@ -103,7 +106,7 @@ fn test_u16_property_roundtrip() {
 #[test]
 fn test_i32_property_roundtrip() {
     for value in [i32::MIN, -1, 0, 1, i32::MAX] {
-        let prop = make_prop(0x1234, PropertyValueEnum::I32(I32Value(value)));
+        let prop = make_prop(0x1234, PropertyValueEnum::I32(values::I32::new(value)));
         let result = roundtrip_property(&prop);
         assert_eq!(prop, result);
     }
@@ -112,7 +115,7 @@ fn test_i32_property_roundtrip() {
 #[test]
 fn test_u32_property_roundtrip() {
     for value in [u32::MIN, 1, 0x8000_0000, u32::MAX] {
-        let prop = make_prop(0x1234, PropertyValueEnum::U32(U32Value(value)));
+        let prop = make_prop(0x1234, PropertyValueEnum::U32(values::U32::new(value)));
         let result = roundtrip_property(&prop);
         assert_eq!(prop, result);
     }
@@ -121,7 +124,7 @@ fn test_u32_property_roundtrip() {
 #[test]
 fn test_i64_property_roundtrip() {
     for value in [i64::MIN, -1, 0, 1, i64::MAX] {
-        let prop = make_prop(0x1234, PropertyValueEnum::I64(I64Value(value)));
+        let prop = make_prop(0x1234, PropertyValueEnum::I64(values::I64::new(value)));
         let result = roundtrip_property(&prop);
         assert_eq!(prop, result);
     }
@@ -130,7 +133,7 @@ fn test_i64_property_roundtrip() {
 #[test]
 fn test_u64_property_roundtrip() {
     for value in [u64::MIN, 1, 0x8000_0000_0000_0000, u64::MAX] {
-        let prop = make_prop(0x1234, PropertyValueEnum::U64(U64Value(value)));
+        let prop = make_prop(0x1234, PropertyValueEnum::U64(values::U64::new(value)));
         let result = roundtrip_property(&prop);
         assert_eq!(prop, result);
     }
@@ -139,7 +142,7 @@ fn test_u64_property_roundtrip() {
 #[test]
 fn test_f32_property_roundtrip() {
     for value in [0.0, 1.0, -1.0, f32::MIN, f32::MAX, std::f32::consts::PI] {
-        let prop = make_prop(0x1234, PropertyValueEnum::F32(F32Value(value)));
+        let prop = make_prop(0x1234, PropertyValueEnum::F32(values::F32::new(value)));
         let result = roundtrip_property(&prop);
         assert_eq!(prop, result);
     }
@@ -154,7 +157,10 @@ fn test_vector2_property_roundtrip() {
         Vec2::new(f32::MIN, f32::MAX),
     ];
     for value in values {
-        let prop = make_prop(0x1234, PropertyValueEnum::Vector2(Vector2Value(value)));
+        let prop = make_prop(
+            0x1234,
+            PropertyValueEnum::Vector2(values::Vector2::new(value)),
+        );
         let result = roundtrip_property(&prop);
         assert_eq!(prop, result);
     }
@@ -169,7 +175,10 @@ fn test_vector3_property_roundtrip() {
         Vec3::new(f32::MIN, 0.0, f32::MAX),
     ];
     for value in values {
-        let prop = make_prop(0x1234, PropertyValueEnum::Vector3(Vector3Value(value)));
+        let prop = make_prop(
+            0x1234,
+            PropertyValueEnum::Vector3(values::Vector3::new(value)),
+        );
         let result = roundtrip_property(&prop);
         assert_eq!(prop, result);
     }
@@ -184,7 +193,10 @@ fn test_vector4_property_roundtrip() {
         Vec4::new(f32::MIN, 0.0, 0.0, f32::MAX),
     ];
     for value in values {
-        let prop = make_prop(0x1234, PropertyValueEnum::Vector4(Vector4Value(value)));
+        let prop = make_prop(
+            0x1234,
+            PropertyValueEnum::Vector4(values::Vector4::new(value)),
+        );
         let result = roundtrip_property(&prop);
         assert_eq!(prop, result);
     }
@@ -203,7 +215,10 @@ fn test_matrix44_property_roundtrip() {
         ),
     ];
     for value in values {
-        let prop = make_prop(0x1234, PropertyValueEnum::Matrix44(Matrix44Value(value)));
+        let prop = make_prop(
+            0x1234,
+            PropertyValueEnum::Matrix44(values::Matrix44::new(value)),
+        );
         let result = roundtrip_property(&prop);
         assert_eq!(prop, result);
     }
@@ -218,7 +233,7 @@ fn test_color_property_roundtrip() {
         Color::new(0, 128, 255, 100),
     ];
     for value in values {
-        let prop = make_prop(0x1234, PropertyValueEnum::Color(ColorValue(value)));
+        let prop = make_prop(0x1234, PropertyValueEnum::Color(values::Color::new(value)));
         let result = roundtrip_property(&prop);
         assert_eq!(prop, result);
     }
@@ -233,7 +248,10 @@ fn test_string_property_roundtrip() {
         "a".repeat(1000),
     ];
     for value in values {
-        let prop = make_prop(0x1234, PropertyValueEnum::String(StringValue(value)));
+        let prop = make_prop(
+            0x1234,
+            PropertyValueEnum::String(values::String::new(value)),
+        );
         let result = roundtrip_property(&prop);
         assert_eq!(prop, result);
     }
@@ -242,7 +260,7 @@ fn test_string_property_roundtrip() {
 #[test]
 fn test_hash_property_roundtrip() {
     for value in [0u32, 1, 0xDEADBEEF, u32::MAX] {
-        let prop = make_prop(0x1234, PropertyValueEnum::Hash(HashValue(value)));
+        let prop = make_prop(0x1234, PropertyValueEnum::Hash(values::Hash::new(value)));
         let result = roundtrip_property(&prop);
         assert_eq!(prop, result);
     }
@@ -253,7 +271,7 @@ fn test_wad_chunk_link_property_roundtrip() {
     for value in [0u64, 1, 0xDEAD_BEEF_CAFE_BABE, u64::MAX] {
         let prop = make_prop(
             0x1234,
-            PropertyValueEnum::WadChunkLink(WadChunkLinkValue(value)),
+            PropertyValueEnum::WadChunkLink(values::WadChunkLink::new(value)),
         );
         let result = roundtrip_property(&prop);
         assert_eq!(prop, result);
@@ -265,7 +283,7 @@ fn test_object_link_property_roundtrip() {
     for value in [0u32, 1, 0xDEADBEEF, u32::MAX] {
         let prop = make_prop(
             0x1234,
-            PropertyValueEnum::ObjectLink(ObjectLinkValue(value)),
+            PropertyValueEnum::ObjectLink(values::ObjectLink::new(value)),
         );
         let result = roundtrip_property(&prop);
         assert_eq!(prop, result);
@@ -280,10 +298,7 @@ fn test_object_link_property_roundtrip() {
 fn test_container_empty_roundtrip() {
     let prop = make_prop(
         0x1234,
-        PropertyValueEnum::Container(ContainerValue {
-            item_kind: BinPropertyKind::I32,
-            items: vec![],
-        }),
+        PropertyValueEnum::Container(values::Container::empty::<values::I32>()),
     );
     let result = roundtrip_property(&prop);
     assert_eq!(prop, result);
@@ -293,14 +308,11 @@ fn test_container_empty_roundtrip() {
 fn test_container_with_primitives_roundtrip() {
     let prop = make_prop(
         0x1234,
-        PropertyValueEnum::Container(ContainerValue {
-            item_kind: BinPropertyKind::I32,
-            items: vec![
-                PropertyValueEnum::I32(I32Value(1)),
-                PropertyValueEnum::I32(I32Value(2)),
-                PropertyValueEnum::I32(I32Value(3)),
-            ],
-        }),
+        PropertyValueEnum::Container(values::Container::from(vec![
+            values::I32::new(1),
+            values::I32::new(2),
+            values::I32::new(3),
+        ])),
     );
     let result = roundtrip_property(&prop);
     assert_eq!(prop, result);
@@ -310,13 +322,10 @@ fn test_container_with_primitives_roundtrip() {
 fn test_container_with_strings_roundtrip() {
     let prop = make_prop(
         0x1234,
-        PropertyValueEnum::Container(ContainerValue {
-            item_kind: BinPropertyKind::String,
-            items: vec![
-                PropertyValueEnum::String(StringValue("hello".into())),
-                PropertyValueEnum::String(StringValue("world".into())),
-            ],
-        }),
+        PropertyValueEnum::Container(values::Container::from(vec![
+            values::String::from("hello"),
+            values::String::from("world"),
+        ])),
     );
     let result = roundtrip_property(&prop);
     assert_eq!(prop, result);
@@ -329,19 +338,17 @@ fn test_container_with_structs_roundtrip() {
         0xAAAA,
         BinProperty {
             name_hash: 0xAAAA,
-            value: PropertyValueEnum::I32(I32Value(42)),
+            value: PropertyValueEnum::I32(values::I32::new(42)),
         },
     );
 
     let prop = make_prop(
         0x1234,
-        PropertyValueEnum::Container(ContainerValue {
-            item_kind: BinPropertyKind::Struct,
-            items: vec![PropertyValueEnum::Struct(StructValue {
-                class_hash: 0xBBBB,
-                properties,
-            })],
-        }),
+        PropertyValueEnum::Container(values::Container::from(vec![values::Struct {
+            class_hash: 0xBBBB,
+            properties,
+            meta: NoMeta,
+        }])),
     );
     let result = roundtrip_property(&prop);
     assert_eq!(prop, result);
@@ -351,13 +358,9 @@ fn test_container_with_structs_roundtrip() {
 fn test_unordered_container_roundtrip() {
     let prop = make_prop(
         0x1234,
-        PropertyValueEnum::UnorderedContainer(UnorderedContainerValue(ContainerValue {
-            item_kind: BinPropertyKind::U32,
-            items: vec![
-                PropertyValueEnum::U32(U32Value(100)),
-                PropertyValueEnum::U32(U32Value(200)),
-            ],
-        })),
+        PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(values::Container::from(
+            vec![values::U32::new(100), values::U32::new(200)],
+        ))),
     );
     let result = roundtrip_property(&prop);
     assert_eq!(prop, result);
@@ -371,10 +374,7 @@ fn test_unordered_container_roundtrip() {
 fn test_optional_none_roundtrip() {
     let prop = make_prop(
         0x1234,
-        PropertyValueEnum::Optional(OptionalValue {
-            kind: BinPropertyKind::I32,
-            value: None,
-        }),
+        PropertyValueEnum::Optional(values::Optional::empty(Kind::I32).unwrap()),
     );
     let result = roundtrip_property(&prop);
     assert_eq!(prop, result);
@@ -384,10 +384,7 @@ fn test_optional_none_roundtrip() {
 fn test_optional_some_primitive_roundtrip() {
     let prop = make_prop(
         0x1234,
-        PropertyValueEnum::Optional(OptionalValue {
-            kind: BinPropertyKind::I32,
-            value: Some(Box::new(PropertyValueEnum::I32(I32Value(42)))),
-        }),
+        PropertyValueEnum::Optional(values::Optional::from(values::I32::new(42))),
     );
     let result = roundtrip_property(&prop);
     assert_eq!(prop, result);
@@ -397,12 +394,9 @@ fn test_optional_some_primitive_roundtrip() {
 fn test_optional_some_string_roundtrip() {
     let prop = make_prop(
         0x1234,
-        PropertyValueEnum::Optional(OptionalValue {
-            kind: BinPropertyKind::String,
-            value: Some(Box::new(PropertyValueEnum::String(StringValue(
-                "optional value".into(),
-            )))),
-        }),
+        PropertyValueEnum::Optional(values::Optional::from(values::String::from(
+            "optional value",
+        ))),
     );
     let result = roundtrip_property(&prop);
     assert_eq!(prop, result);
@@ -415,19 +409,17 @@ fn test_optional_some_struct_roundtrip() {
         0xAAAA,
         BinProperty {
             name_hash: 0xAAAA,
-            value: PropertyValueEnum::Bool(BoolValue(true)),
+            value: PropertyValueEnum::Bool(values::Bool::from(true)),
         },
     );
 
     let prop = make_prop(
         0x1234,
-        PropertyValueEnum::Optional(OptionalValue {
-            kind: BinPropertyKind::Struct,
-            value: Some(Box::new(PropertyValueEnum::Struct(StructValue {
-                class_hash: 0xCCCC,
-                properties,
-            }))),
-        }),
+        PropertyValueEnum::Optional(values::Optional::from(values::Struct {
+            class_hash: 0xCCCC,
+            properties,
+            meta: NoMeta,
+        })),
     );
     let result = roundtrip_property(&prop);
     assert_eq!(prop, result);
@@ -441,11 +433,7 @@ fn test_optional_some_struct_roundtrip() {
 fn test_map_empty_roundtrip() {
     let prop = make_prop(
         0x1234,
-        PropertyValueEnum::Map(MapValue {
-            key_kind: BinPropertyKind::U32,
-            value_kind: BinPropertyKind::String,
-            entries: IndexMap::new(),
-        }),
+        PropertyValueEnum::Map(values::Map::empty(Kind::U32, Kind::String)),
     );
     let result = roundtrip_property(&prop);
     assert_eq!(prop, result);
@@ -453,23 +441,20 @@ fn test_map_empty_roundtrip() {
 
 #[test]
 fn test_map_u32_to_string_roundtrip() {
-    let mut entries = IndexMap::new();
-    entries.insert(
-        PropertyValueUnsafeEq(PropertyValueEnum::U32(U32Value(1))),
-        PropertyValueEnum::String(StringValue("one".into())),
-    );
-    entries.insert(
-        PropertyValueUnsafeEq(PropertyValueEnum::U32(U32Value(2))),
-        PropertyValueEnum::String(StringValue("two".into())),
-    );
+    let entries = vec![
+        (
+            PropertyValueEnum::U32(values::U32::new(1)),
+            PropertyValueEnum::String(values::String::from("one")),
+        ),
+        (
+            PropertyValueEnum::U32(values::U32::new(2)),
+            PropertyValueEnum::String(values::String::from("two")),
+        ),
+    ];
 
     let prop = make_prop(
         0x1234,
-        PropertyValueEnum::Map(MapValue {
-            key_kind: BinPropertyKind::U32,
-            value_kind: BinPropertyKind::String,
-            entries,
-        }),
+        PropertyValueEnum::Map(values::Map::new(Kind::U32, Kind::String, entries).unwrap()),
     );
     let result = roundtrip_property(&prop);
     assert_eq!(prop, result);
@@ -482,26 +467,22 @@ fn test_map_hash_to_struct_roundtrip() {
         0x1111,
         BinProperty {
             name_hash: 0x1111,
-            value: PropertyValueEnum::F32(F32Value(std::f32::consts::PI)),
+            value: PropertyValueEnum::F32(values::F32::new(std::f32::consts::PI)),
         },
     );
 
-    let mut entries = IndexMap::new();
-    entries.insert(
-        PropertyValueUnsafeEq(PropertyValueEnum::Hash(HashValue(0xDEAD))),
-        PropertyValueEnum::Struct(StructValue {
+    let entries = vec![(
+        PropertyValueEnum::Hash(values::Hash::new(0xDEAD)),
+        PropertyValueEnum::Struct(values::Struct {
             class_hash: 0xBEEF,
             properties: struct_props,
+            meta: NoMeta,
         }),
-    );
+    )];
 
     let prop = make_prop(
         0x1234,
-        PropertyValueEnum::Map(MapValue {
-            key_kind: BinPropertyKind::Hash,
-            value_kind: BinPropertyKind::Struct,
-            entries,
-        }),
+        PropertyValueEnum::Map(values::Map::new(Kind::Hash, Kind::Struct, entries).unwrap()),
     );
     let result = roundtrip_property(&prop);
     assert_eq!(prop, result);
@@ -515,9 +496,10 @@ fn test_map_hash_to_struct_roundtrip() {
 fn test_struct_empty_roundtrip() {
     let prop = make_prop(
         0x1234,
-        PropertyValueEnum::Struct(StructValue {
+        PropertyValueEnum::Struct(values::Struct {
             class_hash: 0,
             properties: IndexMap::new(),
+            meta: NoMeta,
         }),
     );
     let result = roundtrip_property(&prop);
@@ -531,29 +513,30 @@ fn test_struct_with_properties_roundtrip() {
         0x1111,
         BinProperty {
             name_hash: 0x1111,
-            value: PropertyValueEnum::I32(I32Value(42)),
+            value: PropertyValueEnum::I32(values::I32::new(42)),
         },
     );
     properties.insert(
         0x2222,
         BinProperty {
             name_hash: 0x2222,
-            value: PropertyValueEnum::String(StringValue("test".into())),
+            value: PropertyValueEnum::String(values::String::from("test")),
         },
     );
     properties.insert(
         0x3333,
         BinProperty {
             name_hash: 0x3333,
-            value: PropertyValueEnum::Bool(BoolValue(true)),
+            value: PropertyValueEnum::Bool(values::Bool::new(true)),
         },
     );
 
     let prop = make_prop(
         0x1234,
-        PropertyValueEnum::Struct(StructValue {
+        PropertyValueEnum::Struct(values::Struct {
             class_hash: 0xABCD,
             properties,
+            meta: NoMeta,
         }),
     );
     let result = roundtrip_property(&prop);
@@ -567,7 +550,7 @@ fn test_struct_nested_roundtrip() {
         0xAAAA,
         BinProperty {
             name_hash: 0xAAAA,
-            value: PropertyValueEnum::F32(F32Value(1.5)),
+            value: PropertyValueEnum::F32(values::F32::new(1.5)),
         },
     );
 
@@ -576,18 +559,20 @@ fn test_struct_nested_roundtrip() {
         0xBBBB,
         BinProperty {
             name_hash: 0xBBBB,
-            value: PropertyValueEnum::Struct(StructValue {
+            value: PropertyValueEnum::Struct(values::Struct {
                 class_hash: 0x1111,
                 properties: inner_props,
+                meta: NoMeta,
             }),
         },
     );
 
     let prop = make_prop(
         0x1234,
-        PropertyValueEnum::Struct(StructValue {
+        PropertyValueEnum::Struct(values::Struct {
             class_hash: 0x2222,
             properties: outer_props,
+            meta: NoMeta,
         }),
     );
     let result = roundtrip_property(&prop);
@@ -605,15 +590,16 @@ fn test_embedded_roundtrip() {
         0x1111,
         BinProperty {
             name_hash: 0x1111,
-            value: PropertyValueEnum::Vector3(Vector3Value(Vec3::new(1.0, 2.0, 3.0))),
+            value: PropertyValueEnum::Vector3(values::Vector3::new(Vec3::new(1.0, 2.0, 3.0))),
         },
     );
 
     let prop = make_prop(
         0x1234,
-        PropertyValueEnum::Embedded(EmbeddedValue(StructValue {
+        PropertyValueEnum::Embedded(values::Embedded(values::Struct {
             class_hash: 0xEEEE,
             properties,
+            meta: NoMeta,
         })),
     );
     let result = roundtrip_property(&prop);
@@ -621,12 +607,12 @@ fn test_embedded_roundtrip() {
 }
 
 // =============================================================================
-// BinTreeObject Tests
+// Object Tests
 // =============================================================================
 
 #[test]
 fn test_bin_tree_object_empty_roundtrip() {
-    let obj = BinTreeObject {
+    let obj = Object {
         path_hash: 0x1234,
         class_hash: 0x5678,
         properties: IndexMap::new(),
@@ -637,8 +623,7 @@ fn test_bin_tree_object_empty_roundtrip() {
     obj.to_writer(&mut cursor).expect("write failed");
 
     cursor.set_position(0);
-    let result =
-        BinTreeObject::from_reader(&mut cursor, obj.class_hash, false).expect("read failed");
+    let result = Object::from_reader(&mut cursor, obj.class_hash, false).expect("read failed");
     assert_eq!(obj, result);
 }
 
@@ -649,18 +634,18 @@ fn test_bin_tree_object_with_properties_roundtrip() {
         0xAAAA,
         BinProperty {
             name_hash: 0xAAAA,
-            value: PropertyValueEnum::I32(I32Value(100)),
+            value: PropertyValueEnum::I32(values::I32::new(100)),
         },
     );
     properties.insert(
         0xBBBB,
         BinProperty {
             name_hash: 0xBBBB,
-            value: PropertyValueEnum::String(StringValue("object property".into())),
+            value: PropertyValueEnum::String(values::String::from("object property")),
         },
     );
 
-    let obj = BinTreeObject {
+    let obj = Object {
         path_hash: 0x1234,
         class_hash: 0x5678,
         properties,
@@ -671,25 +656,24 @@ fn test_bin_tree_object_with_properties_roundtrip() {
     obj.to_writer(&mut cursor).expect("write failed");
 
     cursor.set_position(0);
-    let result =
-        BinTreeObject::from_reader(&mut cursor, obj.class_hash, false).expect("read failed");
+    let result = Object::from_reader(&mut cursor, obj.class_hash, false).expect("read failed");
     assert_eq!(obj, result);
 }
 
 // =============================================================================
-// BinTree Tests
+// Bin Tests
 // =============================================================================
 
 #[test]
 fn test_bin_tree_empty_roundtrip() {
-    let tree = BinTree::new([], std::iter::empty::<String>());
+    let tree = Bin::new([], std::iter::empty::<String>());
     let result = roundtrip_tree(&tree);
     assert_eq!(tree, result);
 }
 
 #[test]
 fn test_bin_tree_with_dependencies_roundtrip() {
-    let tree = BinTree::new(
+    let tree = Bin::new(
         [],
         ["dependency1.bin".to_string(), "dependency2.bin".to_string()],
     );
@@ -704,17 +688,17 @@ fn test_bin_tree_with_objects_roundtrip() {
         0xAAAA,
         BinProperty {
             name_hash: 0xAAAA,
-            value: PropertyValueEnum::I32(I32Value(42)),
+            value: PropertyValueEnum::I32(values::I32::new(42)),
         },
     );
 
-    let obj = BinTreeObject {
+    let obj = Object {
         path_hash: 0x1234,
         class_hash: 0x5678,
         properties,
     };
 
-    let tree = BinTree::new([obj], std::iter::empty::<String>());
+    let tree = Bin::new([obj], std::iter::empty::<String>());
     let result = roundtrip_tree(&tree);
     assert_eq!(tree, result);
 }
@@ -727,32 +711,29 @@ fn test_bin_tree_complex_roundtrip() {
         0x1111,
         BinProperty {
             name_hash: 0x1111,
-            value: PropertyValueEnum::Bool(BoolValue(true)),
+            value: PropertyValueEnum::Bool(values::Bool::new(true)),
         },
     );
     obj1_props.insert(
         0x2222,
         BinProperty {
             name_hash: 0x2222,
-            value: PropertyValueEnum::String(StringValue("test string".into())),
+            value: PropertyValueEnum::String(values::String::from("test string")),
         },
     );
     obj1_props.insert(
         0x3333,
         BinProperty {
             name_hash: 0x3333,
-            value: PropertyValueEnum::Container(ContainerValue {
-                item_kind: BinPropertyKind::I32,
-                items: vec![
-                    PropertyValueEnum::I32(I32Value(1)),
-                    PropertyValueEnum::I32(I32Value(2)),
-                    PropertyValueEnum::I32(I32Value(3)),
-                ],
-            }),
+            value: PropertyValueEnum::Container(values::Container::from(vec![
+                values::I32::new(1),
+                values::I32::new(2),
+                values::I32::new(3),
+            ])),
         },
     );
 
-    let obj1 = BinTreeObject {
+    let obj1 = Object {
         path_hash: 0xAAAA,
         class_hash: 0xBBBB,
         properties: obj1_props,
@@ -763,29 +744,24 @@ fn test_bin_tree_complex_roundtrip() {
         0x4444,
         BinProperty {
             name_hash: 0x4444,
-            value: PropertyValueEnum::Vector3(Vector3Value(Vec3::new(1.0, 2.0, 3.0))),
+            value: PropertyValueEnum::Vector3(values::Vector3::new(Vec3::new(1.0, 2.0, 3.0))),
         },
     );
     obj2_props.insert(
         0x5555,
         BinProperty {
             name_hash: 0x5555,
-            value: PropertyValueEnum::Optional(OptionalValue {
-                kind: BinPropertyKind::F32,
-                value: Some(Box::new(PropertyValueEnum::F32(F32Value(
-                    std::f32::consts::PI,
-                )))),
-            }),
+            value: PropertyValueEnum::Optional(values::F32::new(std::f32::consts::PI).into()),
         },
     );
 
-    let obj2 = BinTreeObject {
+    let obj2 = Object {
         path_hash: 0xCCCC,
         class_hash: 0xDDDD,
         properties: obj2_props,
     };
 
-    let tree = BinTree::new(
+    let tree = Bin::new(
         [obj1, obj2],
         ["dep1.bin".to_string(), "dep2.bin".to_string()],
     );
@@ -802,33 +778,33 @@ fn test_property_kind_roundtrip() {
     use crate::traits::{ReaderExt, WriterExt};
 
     let kinds = [
-        BinPropertyKind::None,
-        BinPropertyKind::Bool,
-        BinPropertyKind::I8,
-        BinPropertyKind::U8,
-        BinPropertyKind::I16,
-        BinPropertyKind::U16,
-        BinPropertyKind::I32,
-        BinPropertyKind::U32,
-        BinPropertyKind::I64,
-        BinPropertyKind::U64,
-        BinPropertyKind::F32,
-        BinPropertyKind::Vector2,
-        BinPropertyKind::Vector3,
-        BinPropertyKind::Vector4,
-        BinPropertyKind::Matrix44,
-        BinPropertyKind::Color,
-        BinPropertyKind::String,
-        BinPropertyKind::Hash,
-        BinPropertyKind::WadChunkLink,
-        BinPropertyKind::Container,
-        BinPropertyKind::UnorderedContainer,
-        BinPropertyKind::Struct,
-        BinPropertyKind::Embedded,
-        BinPropertyKind::ObjectLink,
-        BinPropertyKind::Optional,
-        BinPropertyKind::Map,
-        BinPropertyKind::BitBool,
+        Kind::None,
+        Kind::Bool,
+        Kind::I8,
+        Kind::U8,
+        Kind::I16,
+        Kind::U16,
+        Kind::I32,
+        Kind::U32,
+        Kind::I64,
+        Kind::U64,
+        Kind::F32,
+        Kind::Vector2,
+        Kind::Vector3,
+        Kind::Vector4,
+        Kind::Matrix44,
+        Kind::Color,
+        Kind::String,
+        Kind::Hash,
+        Kind::WadChunkLink,
+        Kind::Container,
+        Kind::UnorderedContainer,
+        Kind::Struct,
+        Kind::Embedded,
+        Kind::ObjectLink,
+        Kind::Optional,
+        Kind::Map,
+        Kind::BitBool,
     ];
 
     for kind in kinds {
@@ -854,7 +830,7 @@ fn test_deeply_nested_struct() {
         0x1111,
         BinProperty {
             name_hash: 0x1111,
-            value: PropertyValueEnum::I32(I32Value(42)),
+            value: PropertyValueEnum::I32(values::I32::new(42)),
         },
     );
 
@@ -863,9 +839,10 @@ fn test_deeply_nested_struct() {
         0x2222,
         BinProperty {
             name_hash: 0x2222,
-            value: PropertyValueEnum::Struct(StructValue {
+            value: PropertyValueEnum::Struct(values::Struct {
                 class_hash: 0xAAAA,
                 properties: deepest_props,
+                meta: NoMeta,
             }),
         },
     );
@@ -875,18 +852,20 @@ fn test_deeply_nested_struct() {
         0x3333,
         BinProperty {
             name_hash: 0x3333,
-            value: PropertyValueEnum::Struct(StructValue {
+            value: PropertyValueEnum::Struct(values::Struct {
                 class_hash: 0xBBBB,
                 properties: level2_props,
+                meta: NoMeta,
             }),
         },
     );
 
     let prop = make_prop(
         0x4444,
-        PropertyValueEnum::Struct(StructValue {
+        PropertyValueEnum::Struct(values::Struct {
             class_hash: 0xCCCC,
             properties: level1_props,
+            meta: NoMeta,
         }),
     );
     let result = roundtrip_property(&prop);
@@ -900,25 +879,27 @@ fn test_container_with_embedded_roundtrip() {
         0x1111,
         BinProperty {
             name_hash: 0x1111,
-            value: PropertyValueEnum::U32(U32Value(999)),
+            value: PropertyValueEnum::U32(values::U32::new(999)),
         },
     );
 
     let prop = make_prop(
         0x1234,
-        PropertyValueEnum::Container(ContainerValue {
-            item_kind: BinPropertyKind::Embedded,
-            items: vec![
-                PropertyValueEnum::Embedded(EmbeddedValue(StructValue {
+        PropertyValueEnum::Container(
+            values::Container::try_from(vec![
+                PropertyValueEnum::Embedded(values::Embedded(values::Struct {
                     class_hash: 0xAAAA,
                     properties: embedded_props.clone(),
+                    meta: NoMeta,
                 })),
-                PropertyValueEnum::Embedded(EmbeddedValue(StructValue {
+                PropertyValueEnum::Embedded(values::Embedded(values::Struct {
                     class_hash: 0xBBBB,
                     properties: embedded_props,
+                    meta: NoMeta,
                 })),
-            ],
-        }),
+            ])
+            .unwrap(),
+        ),
     );
     let result = roundtrip_property(&prop);
     assert_eq!(prop, result);
@@ -927,74 +908,59 @@ fn test_container_with_embedded_roundtrip() {
 #[test]
 fn test_all_primitive_kinds_in_container() {
     // Test that all primitive kinds can be stored in containers
-    let test_cases: Vec<(BinPropertyKind, PropertyValueEnum)> = vec![
+    let test_cases: Vec<(Kind, PropertyValueEnum)> = vec![
+        (Kind::Bool, PropertyValueEnum::Bool(values::Bool::new(true))),
+        (Kind::I8, PropertyValueEnum::I8(values::I8::new(-1))),
+        (Kind::U8, PropertyValueEnum::U8(values::U8::new(1))),
+        (Kind::I16, PropertyValueEnum::I16(values::I16::new(-100))),
+        (Kind::U16, PropertyValueEnum::U16(values::U16::new(100))),
+        (Kind::I32, PropertyValueEnum::I32(values::I32::new(-1000))),
+        (Kind::U32, PropertyValueEnum::U32(values::U32::new(1000))),
+        (Kind::I64, PropertyValueEnum::I64(values::I64::new(-10000))),
+        (Kind::U64, PropertyValueEnum::U64(values::U64::new(10000))),
+        (Kind::F32, PropertyValueEnum::F32(values::F32::new(1.5))),
         (
-            BinPropertyKind::Bool,
-            PropertyValueEnum::Bool(BoolValue(true)),
-        ),
-        (BinPropertyKind::I8, PropertyValueEnum::I8(I8Value(-1))),
-        (BinPropertyKind::U8, PropertyValueEnum::U8(U8Value(1))),
-        (BinPropertyKind::I16, PropertyValueEnum::I16(I16Value(-100))),
-        (BinPropertyKind::U16, PropertyValueEnum::U16(U16Value(100))),
-        (
-            BinPropertyKind::I32,
-            PropertyValueEnum::I32(I32Value(-1000)),
-        ),
-        (BinPropertyKind::U32, PropertyValueEnum::U32(U32Value(1000))),
-        (
-            BinPropertyKind::I64,
-            PropertyValueEnum::I64(I64Value(-10000)),
+            Kind::Vector2,
+            PropertyValueEnum::Vector2(values::Vector2::new(Vec2::ONE)),
         ),
         (
-            BinPropertyKind::U64,
-            PropertyValueEnum::U64(U64Value(10000)),
-        ),
-        (BinPropertyKind::F32, PropertyValueEnum::F32(F32Value(1.5))),
-        (
-            BinPropertyKind::Vector2,
-            PropertyValueEnum::Vector2(Vector2Value(Vec2::ONE)),
+            Kind::Vector3,
+            PropertyValueEnum::Vector3(values::Vector3::new(Vec3::ONE)),
         ),
         (
-            BinPropertyKind::Vector3,
-            PropertyValueEnum::Vector3(Vector3Value(Vec3::ONE)),
+            Kind::Vector4,
+            PropertyValueEnum::Vector4(values::Vector4::new(Vec4::ONE)),
         ),
         (
-            BinPropertyKind::Vector4,
-            PropertyValueEnum::Vector4(Vector4Value(Vec4::ONE)),
+            Kind::Matrix44,
+            PropertyValueEnum::Matrix44(values::Matrix44::new(Mat4::IDENTITY)),
         ),
         (
-            BinPropertyKind::Matrix44,
-            PropertyValueEnum::Matrix44(Matrix44Value(Mat4::IDENTITY)),
+            Kind::Color,
+            PropertyValueEnum::Color(values::Color::new(Color::new(255, 128, 64, 32))),
         ),
         (
-            BinPropertyKind::Color,
-            PropertyValueEnum::Color(ColorValue(Color::new(255, 128, 64, 32))),
+            Kind::String,
+            PropertyValueEnum::String(values::String::from("test")),
         ),
         (
-            BinPropertyKind::String,
-            PropertyValueEnum::String(StringValue("test".into())),
+            Kind::Hash,
+            PropertyValueEnum::Hash(values::Hash::new(0xDEADBEEF)),
         ),
         (
-            BinPropertyKind::Hash,
-            PropertyValueEnum::Hash(HashValue(0xDEADBEEF)),
+            Kind::WadChunkLink,
+            PropertyValueEnum::WadChunkLink(values::WadChunkLink::new(0xCAFEBABE)),
         ),
         (
-            BinPropertyKind::WadChunkLink,
-            PropertyValueEnum::WadChunkLink(WadChunkLinkValue(0xCAFEBABE)),
-        ),
-        (
-            BinPropertyKind::ObjectLink,
-            PropertyValueEnum::ObjectLink(ObjectLinkValue(0x12345678)),
+            Kind::ObjectLink,
+            PropertyValueEnum::ObjectLink(values::ObjectLink::new(0x12345678)),
         ),
     ];
 
     for (kind, value) in test_cases {
         let prop = make_prop(
             0x1234,
-            PropertyValueEnum::Container(ContainerValue {
-                item_kind: kind,
-                items: vec![value],
-            }),
+            PropertyValueEnum::Container(values::Container::try_from(vec![value]).unwrap()),
         );
         let result = roundtrip_property(&prop);
         assert_eq!(prop, result, "Failed for kind {:?}", kind);
