@@ -21,6 +21,12 @@ pub struct BucketGridConfig {
 /// Errors that can occur when building bucketed geometry.
 #[derive(Debug, thiserror::Error)]
 pub enum BuildError {
+    #[error("buckets_per_side must be greater than 0")]
+    ZeroBucketsPerSide,
+
+    #[error("bucket grid size {0}x{0} overflows usize")]
+    GridSizeOverflow(u16),
+
     #[error("index count ({0}) is not a multiple of 3")]
     InvalidIndexCount(usize),
 
@@ -61,6 +67,15 @@ impl BucketedGeometry {
         face_visibility_flags: Option<&[EnvironmentVisibility]>,
     ) -> Result<BucketedGeometry, BuildError> {
         // Phase 1: Validate & compute world bounds
+        if config.buckets_per_side == 0 {
+            return Err(BuildError::ZeroBucketsPerSide);
+        }
+
+        let n_usize = config.buckets_per_side as usize;
+        let total_buckets = n_usize
+            .checked_mul(n_usize)
+            .ok_or(BuildError::GridSizeOverflow(config.buckets_per_side))?;
+
         if !indices.len().is_multiple_of(3) {
             return Err(BuildError::InvalidIndexCount(indices.len()));
         }
@@ -112,11 +127,10 @@ impl BucketedGeometry {
         let n = config.buckets_per_side as f32;
         let bucket_size_x = (max_x - min_x) / n;
         let bucket_size_z = (max_z - min_z) / n;
-        let n_usize = config.buckets_per_side as usize;
 
         // Phase 3: Assign triangles to buckets & classify
         let mut bucket_faces: Vec<Vec<FaceAssignment>> =
-            (0..n_usize * n_usize).map(|_| Vec::new()).collect();
+            (0..total_buckets).map(|_| Vec::new()).collect();
 
         for face_idx in 0..face_count {
             let i0 = indices[face_idx * 3];
@@ -168,7 +182,7 @@ impl BucketedGeometry {
         // Phase 4: Pack geometry buffers
         let mut global_vertices: Vec<Vec3> = Vec::new();
         let mut global_indices: Vec<u16> = Vec::new();
-        let mut buckets: Vec<GeometryBucket> = Vec::with_capacity(n_usize * n_usize);
+        let mut buckets: Vec<GeometryBucket> = Vec::with_capacity(total_buckets);
         let mut reordered_visibility_flags: Vec<EnvironmentVisibility> =
             if face_visibility_flags.is_some() {
                 Vec::with_capacity(face_count)

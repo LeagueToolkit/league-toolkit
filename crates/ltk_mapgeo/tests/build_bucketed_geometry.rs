@@ -33,6 +33,19 @@ fn empty_indices_with_vertices_returns_disabled() {
 // ── Validation errors ────────────────────────────────────────────────
 
 #[test]
+fn zero_buckets_per_side() {
+    let config = BucketGridConfig {
+        buckets_per_side: 0,
+        visibility_controller_path_hash: 0,
+    };
+    let vertices = vec![Vec3::ZERO; 3];
+    let indices = vec![0, 1, 2];
+
+    let err = BucketedGeometry::build(&config, &vertices, &indices, None).unwrap_err();
+    assert!(matches!(err, BuildError::ZeroBucketsPerSide));
+}
+
+#[test]
 fn invalid_index_count_not_multiple_of_3() {
     let config = BucketGridConfig {
         buckets_per_side: 4,
