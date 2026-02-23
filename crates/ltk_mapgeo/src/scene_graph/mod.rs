@@ -5,6 +5,8 @@
 
 mod bucket;
 mod bucketed_geometry;
+mod build;
 
 pub use bucket::*;
 pub use bucketed_geometry::*;
+pub use build::{BucketGridConfig, BuildError};
