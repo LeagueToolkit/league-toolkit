@@ -431,7 +431,7 @@ fn parse_mtx44(input: Span) -> ParseResult<Mat4> {
 
     let (remaining, _) = preceded(ws, char('}'))(remaining)?;
 
-    Ok((remaining, Mat4::from_cols_array(&values)))
+    Ok((remaining, Mat4::from_cols_array(&values).transpose()))
 }
 
 /// Parse rgba: { r, g, b, a }

@@ -209,7 +209,7 @@ impl<'a, H: HashProvider> TextWriter<'a, H> {
             PropertyValueEnum::Matrix44(v) => {
                 self.write_raw("{\n");
                 self.indent();
-                let arr = v.value.to_cols_array();
+                let arr = v.value.transpose().to_cols_array();
                 for (i, val) in arr.iter().enumerate() {
                     if i % 4 == 0 {
                         self.pad();
