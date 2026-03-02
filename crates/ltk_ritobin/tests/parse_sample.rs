@@ -245,7 +245,7 @@ fn test_matrix44_roundtrip_ordering() {
     //
     // glam is column-major internally so:
     let expected = Mat4::from_cols_array(&[
-        1.0, 5.0, 9.0, 13.0,  // col0
+        1.0, 5.0, 9.0, 13.0, // col0
         2.0, 6.0, 10.0, 14.0, // col1
         3.0, 7.0, 11.0, 15.0, // col2
         4.0, 8.0, 12.0, 16.0, // col3
@@ -274,18 +274,28 @@ entries: map[hash,embed] = {
         PropertyValueEnum::Matrix44(v) => v.value,
         other => panic!("Expected Matrix44, got {:?}", other),
     };
-    assert_eq!(parsed_mat, expected, "Parsed Mat4 should match expected column-major layout");
+    assert_eq!(
+        parsed_mat, expected,
+        "Parsed Mat4 should match expected column-major layout"
+    );
 
     // 2) Write back to text, parse again, verify values survive the round-trip
     let output = write(&tree).expect("Failed to write tree");
     let file2 = parse(&output).expect("Failed to re-parse written output");
     let tree2 = file2.to_bin_tree();
-    let obj2 = tree2.objects.values().next().expect("Expected one object after round-trip");
+    let obj2 = tree2
+        .objects
+        .values()
+        .next()
+        .expect("Expected one object after round-trip");
     let roundtrip_mat = match &obj2.properties.values().next().unwrap().value {
         PropertyValueEnum::Matrix44(v) => v.value,
         other => panic!("Expected Matrix44 after round-trip, got {:?}", other),
     };
-    assert_eq!(roundtrip_mat, expected, "Matrix44 should survive text round-trip unchanged");
+    assert_eq!(
+        roundtrip_mat, expected,
+        "Matrix44 should survive text round-trip unchanged"
+    );
 }
 
 #[test]
