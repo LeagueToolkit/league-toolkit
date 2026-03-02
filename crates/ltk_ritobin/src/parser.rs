@@ -431,6 +431,8 @@ fn parse_mtx44(input: Span) -> ParseResult<Mat4> {
 
     let (remaining, _) = preceded(ws, char('}'))(remaining)?;
 
+    // text values are row-major but from_cols_array expects column-major,
+    // so transpose to get the correct internal layout.
     Ok((remaining, Mat4::from_cols_array(&values).transpose()))
 }
 
