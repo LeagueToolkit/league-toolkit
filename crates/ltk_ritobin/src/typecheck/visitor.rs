@@ -6,11 +6,8 @@ use std::{
 use indexmap::IndexMap;
 use ltk_hash::fnv1a;
 use ltk_meta::{
-    value::{
-        ContainerValue, EmbeddedValue, HashValue, MapValue, OptionalValue, StringValue,
-        UnorderedContainerValue, Vector2Value, Vector3Value,
-    },
-    BinPropertyKind, PropertyValueEnum,
+    property::{values, NoMeta},
+    PropertyKind, PropertyValueEnum,
 };
 
 use crate::{
@@ -306,19 +303,10 @@ impl PropertyValueExt for PropertyValueEnum {
     fn rito_type(&self) -> RitoType {
         let base = self.kind();
         let subtypes = match self {
-            PropertyValueEnum::Map(MapValue {
-                key_kind,
-                value_kind,
-                ..
-            }) => [Some(*key_kind), Some(*value_kind)],
-            PropertyValueEnum::UnorderedContainer(UnorderedContainerValue(ContainerValue {
-                item_kind,
-                ..
-            })) => [Some(*item_kind), None],
-            PropertyValueEnum::Container(ContainerValue { item_kind, .. }) => {
-                [Some(*item_kind), None]
-            }
-            PropertyValueEnum::Optional(OptionalValue { kind, .. }) => [Some(*kind), None],
+            PropertyValueEnum::Map(map) => [Some(map.key_kind()), Some(map.value_kind())],
+            PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(container))
+            | PropertyValueEnum::Container(container) => [Some(container.item_kind()), None],
+            PropertyValueEnum::Optional(optional) => [Some(optional.item_kind()), None],
 
             _ => [None, None],
         };
@@ -328,8 +316,8 @@ impl PropertyValueExt for PropertyValueEnum {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RitoType {
-    pub base: BinPropertyKind,
-    pub subtypes: [Option<BinPropertyKind>; 2],
+    pub base: PropertyKind,
+    pub subtypes: [Option<PropertyKind>; 2],
 }
 
 impl Display for RitoType {
@@ -347,42 +335,37 @@ impl Display for RitoType {
 }
 
 impl RitoType {
-    pub fn simple(kind: BinPropertyKind) -> Self {
+    pub fn simple(kind: PropertyKind) -> Self {
         Self {
             base: kind,
             subtypes: [None, None],
         }
     }
 
-    fn subtype(&self, idx: usize) -> BinPropertyKind {
+    fn subtype(&self, idx: usize) -> PropertyKind {
         self.subtypes[idx].unwrap_or_default()
     }
 
-    fn value_subtype(&self) -> Option<BinPropertyKind> {
+    fn value_subtype(&self) -> Option<PropertyKind> {
         self.subtypes[1].or(self.subtypes[0])
     }
 
     pub fn make_default(&self) -> PropertyValueEnum {
         match self.base {
-            BinPropertyKind::Map => PropertyValueEnum::Map(MapValue {
-                key_kind: self.subtype(0),
-                value_kind: self.subtype(1),
-                ..Default::default()
-            }),
-            BinPropertyKind::UnorderedContainer => {
-                PropertyValueEnum::UnorderedContainer(UnorderedContainerValue(ContainerValue {
-                    item_kind: self.subtype(0),
-                    ..Default::default()
-                }))
+            PropertyKind::Map => {
+                PropertyValueEnum::Map(values::Map::empty(self.subtype(0), self.subtype(1)))
             }
-            BinPropertyKind::Container => PropertyValueEnum::Container(ContainerValue {
-                item_kind: self.subtype(0),
-                ..Default::default()
-            }),
-            BinPropertyKind::Optional => PropertyValueEnum::Optional(OptionalValue {
-                kind: self.subtype(0),
-                value: None,
-            }),
+            PropertyKind::UnorderedContainer => {
+                PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(
+                    values::Container::empty(self.subtype(0)).unwrap_or_default(),
+                ))
+            }
+            PropertyKind::Container => PropertyValueEnum::Container(
+                values::Container::empty(self.subtype(0)).unwrap_or_default(),
+            ),
+            PropertyKind::Optional => PropertyValueEnum::Optional(
+                values::Optional::empty(self.subtype(0)).unwrap_or_default(),
+            ),
 
             _ => self.base.default_value(),
         }
@@ -427,7 +410,7 @@ pub fn resolve_rito_type(ctx: &mut Ctx<'_>, tree: &Cst) -> Result<RitoType, Diag
     let base_span = base.span;
 
     let base =
-        BinPropertyKind::from_ritobin_name(&ctx.text[base.span]).ok_or(UnknownType(base.span))?;
+        PropertyKind::from_ritobin_name(&ctx.text[base.span]).ok_or(UnknownType(base.span))?;
 
     let subtypes = match c
         .clone()
@@ -450,7 +433,7 @@ pub fn resolve_rito_type(ctx: &mut Ctx<'_>, tree: &Cst) -> Result<RitoType, Diag
                 .iter()
                 .filter_map(|c| c.tree().filter(|t| t.kind == Kind::TypeArg))
                 .map(|t| {
-                    let resolved = BinPropertyKind::from_ritobin_name(&ctx.text[t.span]);
+                    let resolved = PropertyKind::from_ritobin_name(&ctx.text[t.span]);
                     if resolved.is_none() {
                         ctx.diagnostics.push(UnknownType(t.span).unwrap());
                     }
@@ -492,10 +475,9 @@ pub fn resolve_rito_type(ctx: &mut Ctx<'_>, tree: &Cst) -> Result<RitoType, Diag
 pub fn resolve_value(
     ctx: &mut Ctx,
     tree: &Cst,
-    kind_hint: Option<BinPropertyKind>,
+    kind_hint: Option<PropertyKind>,
 ) -> Result<Option<Spanned<PropertyValueEnum>>, Diagnostic> {
-    use ltk_meta::value::*;
-    use BinPropertyKind as K;
+    use PropertyKind as K;
     use PropertyValueEnum as P;
 
     // dbg!(tree, kind_hint);
@@ -540,12 +522,14 @@ pub fn resolve_value(
                 }
             };
             match kind_hint {
-                K::Struct => P::Struct(StructValue {
+                K::Struct => P::Struct(values::Struct {
                     class_hash,
+                    meta: NoMeta,
                     properties: Default::default(),
                 }),
-                K::Embedded => P::Embedded(EmbeddedValue(StructValue {
+                K::Embedded => P::Embedded(values::Embedded(values::Struct {
                     class_hash,
+                    meta: NoMeta,
                     properties: Default::default(),
                 })),
                 other => {
@@ -572,7 +556,7 @@ pub fn resolve_value(
                 cst::Child::Token(Token {
                     kind: TokenKind::String,
                     span,
-                }) => P::String(StringValue(ctx.text[span].into())).with_span(*span),
+                }) => P::String(ctx.text[span].into()).with_span(*span),
                 cst::Child::Token(Token {
                     kind: TokenKind::Number,
                     span,
@@ -583,31 +567,33 @@ pub fn resolve_value(
                     };
 
                     match kind_hint {
-                        K::U8 => P::U8(U8Value(
+                        K::U8 => P::U8(
+                            txt.parse::<u8>()
+                                .map_err(|_| Diagnostic::ResolveLiteral)?
+                                .into(),
+                        ),
+                        K::U16 => P::U16(values::U16::new(
                             txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
                         )),
-                        K::U16 => P::U16(U16Value(
+                        K::U32 => P::U32(values::U32::new(
                             txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
                         )),
-                        K::U32 => P::U32(U32Value(
+                        K::U64 => P::U64(values::U64::new(
                             txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
                         )),
-                        K::U64 => P::U64(U64Value(
+                        K::I8 => P::I8(values::I8::new(
                             txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
                         )),
-                        K::I8 => P::I8(I8Value(
+                        K::I16 => P::I16(values::I16::new(
                             txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
                         )),
-                        K::I16 => P::I16(I16Value(
+                        K::I32 => P::I32(values::I32::new(
                             txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
                         )),
-                        K::I32 => P::I32(I32Value(
+                        K::I64 => P::I64(values::I64::new(
                             txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
                         )),
-                        K::I64 => P::I64(I64Value(
-                            txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
-                        )),
-                        K::F32 => P::F32(F32Value(
+                        K::F32 => P::F32(values::F32::new(
                             txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
                         )),
                         _ => {
@@ -667,8 +653,7 @@ pub fn resolve_entry(
                     .unwrap(),
                 );
                 return Ok(IrEntry {
-                    key: PropertyValueEnum::String(StringValue(ctx.text[key.span].into()))
-                        .with_span(key.span),
+                    key: PropertyValueEnum::String(ctx.text[key.span].into()).with_span(key.span),
                     value: parent.make_default().with_span(value.span),
                 });
             }
@@ -698,7 +683,7 @@ pub fn resolve_entry(
     };
 
     Ok(IrEntry {
-        key: PropertyValueEnum::String(StringValue(ctx.text[key.span].into())).with_span(key.span),
+        key: PropertyValueEnum::String(ctx.text[key.span].into()).with_span(key.span),
         value,
     })
 }
@@ -711,26 +696,26 @@ impl TypeChecker<'_> {
     fn merge_ir(&mut self, mut parent: IrItem, child: IrItem) -> IrItem {
         match &mut parent.value_mut().inner {
             PropertyValueEnum::Container(list)
-            | PropertyValueEnum::UnorderedContainer(UnorderedContainerValue(list)) => {
+            | PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(list)) => {
                 match child {
                     IrItem::ListItem(IrListItem(value)) => {
-                        let value = match list.item_kind == value.kind() {
-                            true => value.inner, // FIXME: span info inside all containers??
-                            false => {
+                        match list.push(value.inner) {
+                            Ok(_) => {}
+                            Err(ltk_meta::Error::MismatchedContainerTypes { expected, got }) => {
                                 self.ctx.diagnostics.push(
                                     TypeMismatch {
-                                        span: value.span,
-                                        expected: RitoType::simple(list.item_kind),
+                                        span: value.span, // FIXME: span info inside all containers
+                                        expected: RitoType::simple(expected),
                                         expected_span: None, // TODO: would be nice here
-                                        got: RitoType::simple(value.kind()).into(),
+                                        got: RitoType::simple(got).into(),
                                     }
                                     .unwrap(),
                                 );
-                                list.item_kind.default_value()
                             }
-                        };
-
-                        list.items.push(value);
+                            Err(e) => {
+                                todo!("handle unexpected error");
+                            }
+                        }
                     }
                     IrItem::Entry(IrEntry { key, value }) => {
                         eprintln!("list item must be list item");
@@ -739,15 +724,15 @@ impl TypeChecker<'_> {
                 }
             }
             PropertyValueEnum::Struct(struct_val)
-            | PropertyValueEnum::Embedded(EmbeddedValue(struct_val)) => {
+            | PropertyValueEnum::Embedded(values::Embedded(struct_val)) => {
                 let IrItem::Entry(IrEntry { key, value }) = child else {
                     eprintln!("struct item must be entry");
                     return parent;
                 };
 
                 let key = match key.inner {
-                    PropertyValueEnum::String(StringValue(str)) => fnv1a::hash_lower(&str),
-                    PropertyValueEnum::Hash(HashValue(hash)) => hash,
+                    PropertyValueEnum::String(str) => fnv1a::hash_lower(&str),
+                    PropertyValueEnum::Hash(hash) => *hash,
                     other => {
                         eprintln!("{other:?} not valid hash");
                         return parent;
@@ -768,24 +753,23 @@ impl TypeChecker<'_> {
                     eprintln!("map item must be entry");
                     return parent;
                 };
-                let value = match map_value.value_kind == value.kind() {
-                    true => value.inner, // FIXME: span info inside all containers??
-                    false => {
+                match map_value.push(key.inner, value.inner) {
+                    Ok(()) => {}
+                    Err(ltk_meta::Error::MismatchedContainerTypes { expected, got }) => {
                         self.ctx.diagnostics.push(
                             TypeMismatch {
                                 span: value.span,
-                                expected: RitoType::simple(map_value.value_kind),
+                                expected: RitoType::simple(expected),
                                 expected_span: None, // TODO: would be nice here
-                                got: RitoType::simple(value.kind()).into(),
+                                got: RitoType::simple(got).into(),
                             }
                             .unwrap(),
                         );
-                        map_value.value_kind.default_value()
                     }
-                };
-                map_value
-                    .entries
-                    .insert(ltk_meta::value::PropertyValueUnsafeEq(key.inner), value);
+                    Err(e) => {
+                        todo!("handle unexpected err");
+                    }
+                }
             }
             other => {
                 eprintln!("cant inject into {:?}", other.kind())
@@ -801,10 +785,10 @@ fn populate_vec_or_color(
 ) -> Result<(), MaybeSpanDiag> {
     let resolve_f32 = |n: Spanned<PropertyValueEnum>| -> Result<f32, MaybeSpanDiag> {
         match n.inner {
-            PropertyValueEnum::F32(F32Value(n)) => Ok(n),
+            PropertyValueEnum::F32(values::F32 { value: n, .. }) => Ok(n),
             _ => Err(TypeMismatch {
                 span: n.span,
-                expected: RitoType::simple(BinPropertyKind::F32),
+                expected: RitoType::simple(PropertyKind::F32),
                 expected_span: None, // TODO: would be nice
                 got: RitoTypeOrVirtual::RitoType(RitoType::simple(n.inner.kind())),
             }
@@ -813,10 +797,10 @@ fn populate_vec_or_color(
     };
     let resolve_u8 = |n: Spanned<PropertyValueEnum>| -> Result<u8, MaybeSpanDiag> {
         match n.inner {
-            PropertyValueEnum::U8(U8Value(n)) => Ok(n),
+            PropertyValueEnum::U8(values::U8 { value: n, .. }) => Ok(n),
             _ => Err(TypeMismatch {
                 span: n.span,
-                expected: RitoType::simple(BinPropertyKind::U8),
+                expected: RitoType::simple(PropertyKind::U8),
                 expected_span: None, // TODO: would be nice
                 got: RitoTypeOrVirtual::RitoType(RitoType::simple(n.inner.kind())),
             }
@@ -838,30 +822,29 @@ fn populate_vec_or_color(
         Ok(item)
     };
 
-    use ltk_meta::value::*;
     use PropertyValueEnum as V;
     let mut span = Span::new(0, 0); // FIXME: get a span in here stat
     let expected;
     match &mut **target.value_mut() {
-        V::Vector2(Vector2Value(vec)) => {
+        V::Vector2(values::Vector2 { value: vec, .. }) => {
             vec.x = resolve_f32(get_next(&mut span)?)?;
             vec.y = resolve_f32(get_next(&mut span)?)?;
             expected = ColorOrVec::Vec2;
         }
-        V::Vector3(Vector3Value(vec)) => {
+        V::Vector3(values::Vector3 { value: vec, .. }) => {
             vec.x = resolve_f32(get_next(&mut span)?)?;
             vec.y = resolve_f32(get_next(&mut span)?)?;
             vec.z = resolve_f32(get_next(&mut span)?)?;
             expected = ColorOrVec::Vec3;
         }
-        V::Vector4(Vector4Value(vec)) => {
+        V::Vector4(values::Vector4 { value: vec, .. }) => {
             vec.x = resolve_f32(get_next(&mut span)?)?;
             vec.y = resolve_f32(get_next(&mut span)?)?;
             vec.z = resolve_f32(get_next(&mut span)?)?;
             vec.w = resolve_f32(get_next(&mut span)?)?;
             expected = ColorOrVec::Vec4;
         }
-        V::Color(ColorValue(color)) => {
+        V::Color(values::Color { value: color, .. }) => {
             color.r = resolve_u8(get_next(&mut span)?)?;
             color.g = resolve_u8(get_next(&mut span)?)?;
             color.b = resolve_u8(get_next(&mut span)?)?;
@@ -918,7 +901,7 @@ impl Visitor for TypeChecker<'_> {
 
                 let parent_type = parent.value().rito_type();
 
-                use BinPropertyKind as K;
+                use PropertyKind as K;
                 match parent_type.base {
                     K::Container | K::UnorderedContainer => {
                         let value_type = parent_type
@@ -944,10 +927,10 @@ impl Visitor for TypeChecker<'_> {
 
                 let parent_type = parent.value().rito_type();
 
-                use BinPropertyKind as K;
+                use PropertyKind as K;
                 let color_vec_type = match parent_type.base {
-                    K::Vector2 | K::Vector3 | K::Vector4 => Some(BinPropertyKind::F32),
-                    K::Color => Some(BinPropertyKind::U8),
+                    K::Vector2 | K::Vector3 | K::Vector4 => Some(K::F32),
+                    K::Color => Some(K::U8),
                     _ => None,
                 };
 
@@ -1059,7 +1042,10 @@ impl Visitor for TypeChecker<'_> {
                                 key:
                                     Spanned {
                                         span: key_span,
-                                        inner: PropertyValueEnum::String(StringValue(key)),
+                                        inner:
+                                            PropertyValueEnum::String(values::String {
+                                                value: key, ..
+                                            }),
                                     },
                                 value,
                             }),

@@ -1,11 +1,11 @@
-use ltk_meta::BinPropertyKind;
+use ltk_meta::PropertyKind;
 
 pub trait RitobinName: Sized {
     fn from_ritobin_name(name: &str) -> Option<Self>;
     fn to_ritobin_name(self) -> &'static str;
 }
 
-impl RitobinName for BinPropertyKind {
+impl RitobinName for PropertyKind {
     fn from_ritobin_name(name: &str) -> Option<Self> {
         match name {
             "none" => Some(Self::None),
