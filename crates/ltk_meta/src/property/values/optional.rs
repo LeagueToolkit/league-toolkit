@@ -84,6 +84,13 @@ impl<M: Default> Default for Optional<M> {
 }
 
 impl<M> Optional<M> {
+    pub fn empty_const<T>() -> Self
+    where
+        Self: From<Option<T>>,
+    {
+        Self::from(None)
+    }
+
     #[inline(always)]
     #[must_use]
     pub fn item_kind(&self) -> Kind {
