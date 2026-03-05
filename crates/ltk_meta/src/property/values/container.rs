@@ -108,6 +108,21 @@ macro_rules! define_container_enum {
         }
 
         impl<M> Container<M> {
+
+            pub fn push(&mut self, value: PropertyValueEnum<M>) -> Result<(), Error>{
+                let got = value.kind();
+                let expected = self.item_kind();
+                match (self, value) {
+                    $((Self::$variant{items,..}, PropertyValueEnum::$variant(item)) => {
+                        items.push(item);
+                        Ok(())
+                    })*
+                    _ => {
+                        Err(Error::MismatchedContainerTypes { got, expected })
+                    }
+                }
+            }
+
             /// Iterator that returns each item as a [`PropertyValueEnum`] for convenience.
             #[inline(always)]
             #[must_use]
