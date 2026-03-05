@@ -108,6 +108,19 @@ macro_rules! define_container_enum {
         }
 
         impl<M> Container<M> {
+            pub fn empty(item_kind: Kind) -> Result<Self, Error>
+            where
+                M: Default
+            {
+                match item_kind {
+                    $(Kind::$variant => Ok(Self::$variant {
+                        items: vec![],
+                        meta: M::default(),
+                    }),)*
+                    kind => Err(Error::InvalidNesting(kind)),
+
+                }
+            }
 
             pub fn push(&mut self, value: PropertyValueEnum<M>) -> Result<(), Error>{
                 let got = value.kind();
@@ -164,7 +177,7 @@ impl<M> Container<M> {
         Self::from(items)
     }
 
-    pub fn empty<T>() -> Self
+    pub fn empty_const<T>() -> Self
     where
         Self: From<Vec<T>>,
     {
