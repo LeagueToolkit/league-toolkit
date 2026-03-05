@@ -65,6 +65,28 @@ impl<M> Map<M> {
     pub fn into_entries(self) -> Vec<(PropertyValueEnum<M>, PropertyValueEnum<M>)> {
         self.entries
     }
+
+    #[inline(always)]
+    pub fn push(
+        &mut self,
+        key: PropertyValueEnum<M>,
+        value: PropertyValueEnum<M>,
+    ) -> Result<(), Error> {
+        if self.key_kind != key.kind() {
+            return Err(Error::MismatchedContainerTypes {
+                expected: self.key_kind,
+                got: key.kind(),
+            });
+        }
+        if self.value_kind != value.kind() {
+            return Err(Error::MismatchedContainerTypes {
+                expected: self.value_kind,
+                got: value.kind(),
+            });
+        }
+        self.entries.push((key, value));
+        Ok(())
+    }
 }
 
 impl<M: Default> Map<M> {
