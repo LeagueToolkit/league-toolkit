@@ -17,7 +17,7 @@ use ltk_io_ext::{measure, window_at};
 #[derive(Clone, PartialEq, Debug, Default)]
 pub struct Struct<M = NoMeta> {
     pub class_hash: u32,
-    pub properties: IndexMap<u32, BinProperty>,
+    pub properties: IndexMap<u32, BinProperty<M>>,
     pub meta: M,
 }
 
@@ -75,7 +75,7 @@ impl<M: Default> ReadProperty for Struct<M> {
         Ok(value)
     }
 }
-impl<M> WriteProperty for Struct<M> {
+impl<M: Clone> WriteProperty for Struct<M> {
     fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
         &self,
         writer: &mut R,

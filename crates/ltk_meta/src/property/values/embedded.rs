@@ -35,7 +35,7 @@ impl<M: Default> ReadProperty for Embedded<M> {
         Struct::<M>::from_reader(reader, legacy).map(Self)
     }
 }
-impl<M> WriteProperty for Embedded<M> {
+impl<M: Clone> WriteProperty for Embedded<M> {
     fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
         &self,
         writer: &mut R,
