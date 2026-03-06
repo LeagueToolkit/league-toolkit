@@ -20,6 +20,7 @@ pub trait PropertyExt {
 
     type Meta;
     fn meta(&self) -> &Self::Meta;
+    fn meta_mut(&mut self) -> &mut Self::Meta;
 }
 
 pub trait PropertyValueExt {

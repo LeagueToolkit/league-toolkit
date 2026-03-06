@@ -146,6 +146,9 @@ impl<M> PropertyExt for Map<M> {
     fn meta(&self) -> &Self::Meta {
         &self.meta
     }
+    fn meta_mut(&mut self) -> &mut Self::Meta {
+        &mut self.meta
+    }
 }
 
 impl<M: Default> ReadProperty for Map<M> {

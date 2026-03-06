@@ -43,7 +43,13 @@ macro_rules! construct_enum {
                 match &self {
                     $(Self::$variant{meta, ..} => meta,)*
                 }
-
+            }
+            fn meta_mut(&mut self) -> &mut Self::Meta {
+                match self {
+                    $(Self::$variant{meta, ..} => {
+                        meta
+                    })*
+                }
             }
         }
 

@@ -26,6 +26,9 @@ impl<M> PropertyExt for UnorderedContainer<M> {
     fn meta(&self) -> &Self::Meta {
         self.0.meta()
     }
+    fn meta_mut(&mut self) -> &mut Self::Meta {
+        self.0.meta_mut()
+    }
 }
 
 impl<M: Default> ReadProperty for UnorderedContainer<M> {

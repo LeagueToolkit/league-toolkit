@@ -51,6 +51,13 @@ macro_rules! define_container_enum {
                     })*
                 }
             }
+            fn meta_mut(&mut self) -> &mut Self::Meta {
+                match self {
+                    $(Self::$variant{meta,..} => {
+                        meta
+                    })*
+                }
+            }
         }
 
         $(
