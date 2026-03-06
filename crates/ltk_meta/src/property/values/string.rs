@@ -35,6 +35,11 @@ impl<M> PropertyExt for String<M> {
     fn size_no_header(&self) -> usize {
         self.value.len() + 2
     }
+
+    type Meta = M;
+    fn meta(&self) -> &Self::Meta {
+        &self.meta
+    }
 }
 
 impl<M: Default> ReadProperty for String<M> {

@@ -19,6 +19,11 @@ impl<M> PropertyExt for None<M> {
     fn size_no_header(&self) -> usize {
         0
     }
+
+    type Meta = M;
+    fn meta(&self) -> &Self::Meta {
+        &self.meta
+    }
 }
 
 impl<M: Default> ReadProperty for None<M> {

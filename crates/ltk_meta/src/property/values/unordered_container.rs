@@ -21,6 +21,11 @@ impl<M> PropertyExt for UnorderedContainer<M> {
     fn size_no_header(&self) -> usize {
         self.0.size_no_header()
     }
+
+    type Meta = M;
+    fn meta(&self) -> &Self::Meta {
+        self.0.meta()
+    }
 }
 
 impl<M: Default> ReadProperty for UnorderedContainer<M> {

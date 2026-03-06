@@ -32,6 +32,11 @@ impl<M> PropertyExt for Struct<M> {
             _ => 10 + self.properties.values().map(|p| p.size()).sum::<usize>(),
         }
     }
+
+    type Meta = M;
+    fn meta(&self) -> &Self::Meta {
+        &self.meta
+    }
 }
 
 impl<M: Default> ReadProperty for Struct<M> {
