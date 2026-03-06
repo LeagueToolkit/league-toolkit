@@ -11,7 +11,7 @@ use super::Error;
 use byteorder::{ReadBytesExt as _, WriteBytesExt as _, LE};
 use std::io;
 
-use crate::traits::PropertyExt;
+use crate::{traits::PropertyExt, Bin};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -30,6 +30,15 @@ pub struct BinProperty<M = NoMeta> {
 }
 
 impl<M> BinProperty<M> {
+    #[inline(always)]
+    #[must_use]
+    pub fn no_meta(self) -> BinProperty<NoMeta> {
+        BinProperty {
+            name_hash: self.name_hash,
+            value: self.value.no_meta(),
+        }
+    }
+
     /// Read a BinProperty from a reader. This will read the name_hash, prop kind and then value, in that order.
     pub fn from_reader<R: io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,

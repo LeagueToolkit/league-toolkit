@@ -44,6 +44,21 @@ pub struct Map<M = NoMeta> {
 impl<M> Map<M> {
     #[inline(always)]
     #[must_use]
+    pub fn no_meta(self) -> Map<NoMeta> {
+        Map {
+            key_kind: self.key_kind,
+            value_kind: self.value_kind,
+            entries: self
+                .entries
+                .into_iter()
+                .map(|(k, v)| (k.no_meta(), v.no_meta()))
+                .collect(),
+            meta: NoMeta,
+        }
+    }
+
+    #[inline(always)]
+    #[must_use]
     pub fn key_kind(&self) -> Kind {
         self.key_kind
     }

@@ -30,8 +30,16 @@ impl<M> PropertyExt for None<M> {
 }
 
 impl<M> None<M> {
+    #[inline(always)]
+    #[must_use]
     pub fn new(meta: M) -> Self {
         Self { meta }
+    }
+
+    #[inline(always)]
+    #[must_use]
+    pub fn no_meta(self) -> None<NoMeta> {
+        None { meta: NoMeta }
     }
 }
 

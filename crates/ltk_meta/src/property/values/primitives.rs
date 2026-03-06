@@ -32,6 +32,18 @@ macro_rules! impl_prim {
             pub fn new_with_meta(value: $rust, meta: M) -> Self {
                 Self { value, meta }
             }
+
+            #[inline(always)]
+            #[must_use]
+            pub fn with_meta<T>(self, meta: T) -> $name<T> {
+                $name { value: self.value, meta }
+            }
+
+            #[inline(always)]
+            #[must_use]
+            pub fn no_meta(self) -> $name<NoMeta> {
+                self.with_meta(NoMeta)
+            }
         }
 
         impl<M> PropertyExt for $name<M> {
