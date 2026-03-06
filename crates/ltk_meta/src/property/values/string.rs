@@ -16,13 +16,28 @@ pub struct String<M = NoMeta> {
     pub meta: M,
 }
 
-impl<M: Default> String<M> {
+impl<M> String<M> {
     #[inline(always)]
     #[must_use]
-    pub fn new(value: std::string::String) -> Self {
-        Self {
-            value,
-            meta: M::default(),
+    pub fn new(value: std::string::String) -> Self
+    where
+        M: Default,
+    {
+        Self::new_with_meta(value, M::default())
+    }
+
+    #[inline(always)]
+    #[must_use]
+    pub fn new_with_meta(value: std::string::String, meta: M) -> Self {
+        Self { value, meta }
+    }
+
+    #[inline(always)]
+    #[must_use]
+    pub fn with_meta<T>(self, meta: T) -> String<T> {
+        String {
+            value: self.value,
+            meta,
         }
     }
 }
