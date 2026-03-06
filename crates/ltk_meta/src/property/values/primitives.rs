@@ -43,6 +43,9 @@ macro_rules! impl_prim {
             fn meta(&self) -> &Self::Meta {
                 &self.meta
             }
+            fn meta_mut(&mut self) -> &mut Self::Meta {
+                &mut self.meta
+            }
         }
 
         impl<M> PropertyValueExt for $name<M> {

@@ -96,6 +96,12 @@ macro_rules! create_enum {
                      $(Self::$variant(i) => i.meta(),)*
                  }
             }
+            fn meta_mut(&mut self) -> &mut Self::Meta {
+                 match self {
+                     $(Self::$variant(i) => i.meta_mut(),)*
+                 }
+            }
+
             fn size(&self, include_header: bool) -> usize {
                  match self {
                      $(Self::$variant(i) => i.size(include_header),)*

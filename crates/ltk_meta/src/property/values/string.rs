@@ -55,6 +55,9 @@ impl<M> PropertyExt for String<M> {
     fn meta(&self) -> &Self::Meta {
         &self.meta
     }
+    fn meta_mut(&mut self) -> &mut Self::Meta {
+        &mut self.meta
+    }
 }
 
 impl<M: Default> ReadProperty for String<M> {
