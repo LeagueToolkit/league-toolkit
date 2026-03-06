@@ -20,11 +20,17 @@ macro_rules! impl_prim {
             pub meta: M
         }
 
-        impl<M: Default> $name<M> {
+        impl<M> $name<M> {
             #[inline(always)]
             #[must_use]
-            pub fn new(value: $rust) -> Self {
-                Self { value, meta: M::default() }
+            pub fn new(value: $rust) -> Self where M: Default {
+                Self::new_with_meta(value, M::default())
+            }
+
+            #[inline(always)]
+            #[must_use]
+            pub fn new_with_meta(value: $rust, meta: M) -> Self {
+                Self { value, meta }
             }
         }
 
