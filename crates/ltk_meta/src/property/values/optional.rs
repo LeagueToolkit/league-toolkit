@@ -20,15 +20,23 @@ macro_rules! construct_enum {
             },)*
         }
 
-        impl<M: Default> Optional<M> {
+        impl<M> Optional<M> {
             #[inline(always)]
             #[must_use]
             /// Helper function to create an empty [`Optional`], if the property kind can be stored in one.
-            pub fn empty(kind: Kind) -> Option<Self> {
+            pub fn empty(kind: Kind) -> Option<Self> where M: Default {
                 Some(match kind {
                     $(Kind::$variant => Self::$variant{value: None, meta: M::default()},)*
                     _ => return None
                 })
+            }
+
+            #[inline(always)]
+            #[must_use]
+            pub fn no_meta(self) -> Optional<NoMeta> {
+                match self {
+                    $(Self::$variant{ value, meta: _ } => Optional::$variant{ value: value.map(|v| v.no_meta()), meta: NoMeta },)*
+                }
             }
         }
 

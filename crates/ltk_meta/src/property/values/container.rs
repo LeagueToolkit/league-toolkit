@@ -124,6 +124,8 @@ macro_rules! define_container_enum {
         }
 
         impl<M> Container<M> {
+            #[inline(always)]
+            #[must_use]
             pub fn empty(item_kind: Kind) -> Result<Self, Error>
             where
                 M: Default
@@ -135,6 +137,19 @@ macro_rules! define_container_enum {
                     }),)*
                     kind => Err(Error::InvalidNesting(kind)),
 
+                }
+            }
+
+            #[inline(always)]
+            #[must_use]
+            pub fn no_meta(self) -> Container<NoMeta> {
+                match self {
+                    $(Self::$variant{items,..} => {
+                        Container::$variant {
+                            items: items.into_iter().map(|i| i.no_meta()).collect(),
+                            meta: NoMeta
+                        }
+                    })*
                 }
             }
 

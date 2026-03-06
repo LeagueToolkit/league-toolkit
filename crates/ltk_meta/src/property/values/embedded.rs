@@ -13,6 +13,14 @@ use super::Struct;
 #[derive(Clone, PartialEq, Debug, Default)]
 pub struct Embedded<M = NoMeta>(pub Struct<M>);
 
+impl<M> Embedded<M> {
+    #[inline(always)]
+    #[must_use]
+    pub fn no_meta(self) -> Embedded<NoMeta> {
+        Embedded(self.0.no_meta())
+    }
+}
+
 impl<M> PropertyValueExt for Embedded<M> {
     const KIND: Kind = Kind::Embedded;
 }

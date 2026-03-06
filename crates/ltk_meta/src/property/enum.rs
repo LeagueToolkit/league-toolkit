@@ -80,11 +80,20 @@ macro_rules! create_enum {
             }
         }
         impl<M> PropertyValueEnum<M> {
+            #[inline(always)]
             #[must_use]
             pub fn kind(&self) -> Kind {
                 match self {
                     $(Self::$variant(_) => Kind::$variant,)*
                 }
+            }
+
+            #[inline(always)]
+            #[must_use]
+            pub fn no_meta(self) -> PropertyValueEnum<NoMeta> {
+                 match self {
+                     $(Self::$variant(i) => PropertyValueEnum::$variant(i.no_meta()),)*
+                 }
             }
 
         }

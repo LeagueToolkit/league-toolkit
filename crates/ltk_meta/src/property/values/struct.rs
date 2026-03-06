@@ -21,6 +21,22 @@ pub struct Struct<M = NoMeta> {
     pub meta: M,
 }
 
+impl<M> Struct<M> {
+    #[inline(always)]
+    #[must_use]
+    pub fn no_meta(self) -> Struct<NoMeta> {
+        Struct {
+            class_hash: self.class_hash,
+            properties: self
+                .properties
+                .into_iter()
+                .map(|(k, v)| (k, v.no_meta()))
+                .collect(),
+            meta: NoMeta,
+        }
+    }
+}
+
 impl<M> PropertyValueExt for Struct<M> {
     const KIND: Kind = Kind::Struct;
 }

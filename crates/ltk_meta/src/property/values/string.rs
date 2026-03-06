@@ -40,6 +40,12 @@ impl<M> String<M> {
             meta,
         }
     }
+
+    #[inline(always)]
+    #[must_use]
+    pub fn no_meta(self) -> String<NoMeta> {
+        self.with_meta(NoMeta)
+    }
 }
 
 impl<M> PropertyValueExt for String<M> {
