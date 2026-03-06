@@ -26,6 +26,12 @@ impl<M> PropertyExt for None<M> {
     }
 }
 
+impl<M> None<M> {
+    pub fn new(meta: M) -> Self {
+        Self { meta }
+    }
+}
+
 impl<M: Default> ReadProperty for None<M> {
     fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
         _reader: &mut R,
