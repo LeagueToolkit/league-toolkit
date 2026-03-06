@@ -14,7 +14,10 @@ macro_rules! construct_enum {
         )]
         #[derive(Clone, PartialEq, Debug)]
         pub enum Optional<M = NoMeta> {
-            $($variant(Option<values::$variant<M>>),)*
+            $($variant{
+                value: Option<values::$variant<M>>,
+                meta: M
+            },)*
         }
 
         impl<M: Default> Optional<M> {
@@ -23,7 +26,7 @@ macro_rules! construct_enum {
             /// Helper function to create an empty [`Optional`], if the property kind can be stored in one.
             pub fn empty(kind: Kind) -> Option<Self> {
                 Some(match kind {
-                    $(Kind::$variant => Self::$variant(None),)*
+                    $(Kind::$variant => Self::$variant{value: None, meta: M::default()},)*
                     _ => return None
                 })
             }
@@ -32,15 +35,22 @@ macro_rules! construct_enum {
         impl<M> PropertyExt for Optional<M> {
             fn size_no_header(&self) -> usize {
                 2 + match &self {
-                    $(Self::$variant(inner) => inner.as_ref().map(|i| i.size_no_header()).unwrap_or_default(),)*
+                    $(Self::$variant{value, ..} => value.as_ref().map(|i| i.size_no_header()).unwrap_or_default(),)*
                 }
+            }
+            type Meta = M;
+            fn meta(&self) -> &Self::Meta {
+                match &self {
+                    $(Self::$variant{meta, ..} => meta,)*
+                }
+
             }
         }
 
         $(
             impl<M: Default> From<Option<values::$variant<M>>> for Optional<M> {
                 fn from(other: Option<values::$variant<M>>) -> Self {
-                    Self::$variant(other)
+                    Self::$variant{value: other, meta: M::default()}
                 }
 
             }
@@ -48,27 +58,50 @@ macro_rules! construct_enum {
         $(
             impl<M: Default> From<values::$variant<M>> for Optional<M> {
                 fn from(other: values::$variant<M>) -> Self {
-                    Self::$variant(Some(other))
+                    Self::$variant{value: Some(other), meta: M::default()}
                 }
 
             }
         )*
 
-        impl<M: Default> Optional<M> {
-            pub fn new(item_kind: Kind, value: Option<PropertyValueEnum<M>>) -> Result<Self, Error> {
+        impl<M> Optional<M> {
+            #[inline(always)]
+            pub fn new(item_kind: Kind, value: Option<PropertyValueEnum<M>>) -> Result<Self, Error> where M: Default {
+                Self::new_with_meta(item_kind, value, M::default())
+            }
+            #[inline(always)]
+            pub fn new_with_meta(item_kind: Kind, value: Option<PropertyValueEnum<M>>, meta: M) -> Result<Self, Error> {
                 match item_kind {
                     $(Kind::$variant => match value {
-                        Some(PropertyValueEnum::$variant(inner)) => Ok(Self::$variant(Some(inner))),
-                        None => Ok(Self::$variant(None)),
+                        Some(PropertyValueEnum::$variant(inner)) => Ok(Self::$variant{value: Some(inner), meta}),
+                        None => Ok(Self::$variant{value: None, meta}),
                         Some(value) => Err(Error::MismatchedContainerTypes {expected: item_kind, got: value.kind()}),
                     },)*
                     kind => Err(Error::InvalidNesting(kind)),
                 }
             }
 
-            pub fn into_inner(self) -> Option<PropertyValueEnum<M>> {
+            #[inline(always)]
+            #[must_use]
+            pub fn into_parts(self) -> (Option<PropertyValueEnum<M>>, M) {
                 match self {
-                    $(Optional::$variant(item) => item.map(PropertyValueEnum::$variant),)*
+                    $(Optional::$variant{ value, meta } => (value.map(PropertyValueEnum::$variant), meta),)*
+                }
+            }
+
+            #[inline(always)]
+            #[must_use]
+            pub fn is_some(&self) -> bool {
+                match self {
+                    $(Self::$variant{value,..} => value.is_some(),)*
+                }
+            }
+
+            #[inline(always)]
+            #[must_use]
+            pub fn is_none(&self) -> bool {
+                match self {
+                    $(Self::$variant{value,..} => value.is_none(),)*
                 }
             }
         }
@@ -79,7 +112,10 @@ container_variants!(construct_enum);
 
 impl<M: Default> Default for Optional<M> {
     fn default() -> Self {
-        Self::None(None)
+        Self::None {
+            value: None,
+            meta: M::default(),
+        }
     }
 }
 
@@ -97,16 +133,11 @@ impl<M> Optional<M> {
         container_variants!(property_kinds, (self))
     }
 
-    #[inline(always)]
-    #[must_use]
-    pub fn is_some(&self) -> bool {
-        match_property!(self, inner => inner.is_some())
+    pub fn into_inner(self) -> Option<PropertyValueEnum<M>> {
+        self.into_parts().0
     }
-
-    #[inline(always)]
-    #[must_use]
-    pub fn is_none(&self) -> bool {
-        match_property!(self, inner => inner.is_none())
+    pub fn into_meta(self) -> M {
+        self.into_parts().1
     }
 }
 
@@ -132,8 +163,8 @@ impl<M: Default> ReadProperty for Optional<M> {
                 match $value {
                     $(
                         Kind::$variant => match is_some {
-                            true => values::$variant::from_reader(reader, legacy).map(Some).map(Self::$variant),
-                            false => Ok(Self::$variant(None)),
+                            true => Ok(values::$variant::from_reader(reader, legacy)?.into()),
+                            false => Ok(Self::empty_const::<values::$variant<M>>()),
                         },
                     )*
                     kind => { return Err(Error::InvalidNesting(kind)) }
@@ -156,14 +187,19 @@ impl<M> WriteProperty for Optional<M> {
         writer.write_property_kind(self.item_kind())?;
         writer.write_bool(self.is_some())?;
 
-        match_property!(
-            self,
-            Some(inner) => {
-                inner.to_writer(writer, legacy)?;
-            },
-            _ => {}
-        );
+        macro_rules! write_inner {
+            (($value:expr)
+             [$( $variant:ident, )*]) => {
+                match $value {
+                    $(
+                        Self::$variant{value: Some(value),..} => value.to_writer(writer, legacy),
 
-        Ok(())
+                    )*
+                    _ => { Ok(()) }
+                }
+            };
+        }
+
+        container_variants!(write_inner, (self))
     }
 }

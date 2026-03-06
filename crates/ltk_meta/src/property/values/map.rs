@@ -141,6 +141,11 @@ impl<M> PropertyExt for Map<M> {
                 .map(|(k, v)| k.size_no_header() + v.size_no_header())
                 .sum::<usize>()
     }
+
+    type Meta = M;
+    fn meta(&self) -> &Self::Meta {
+        &self.meta
+    }
 }
 
 impl<M: Default> ReadProperty for Map<M> {

@@ -21,6 +21,10 @@ impl<M> PropertyExt for Embedded<M> {
     fn size_no_header(&self) -> usize {
         self.0.size_no_header()
     }
+    type Meta = M;
+    fn meta(&self) -> &Self::Meta {
+        self.0.meta()
+    }
 }
 
 impl<M: Default> ReadProperty for Embedded<M> {

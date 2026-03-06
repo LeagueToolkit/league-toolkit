@@ -6,7 +6,7 @@ use crate::{
 
 pub struct ItemsDyn<'a, M>(ItemsDynInner<'a, M>);
 impl<'a, M> Iterator for ItemsDyn<'a, M> {
-    type Item = &'a dyn PropertyValueDyn;
+    type Item = &'a dyn PropertyValueDyn<Meta = M>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.0.next()
@@ -39,7 +39,7 @@ macro_rules! define_dyn_iter {
         }
 
         impl<'a, M> Iterator for ItemsDynInner<'a, M> {
-            type Item = &'a dyn PropertyValueDyn;
+            type Item = &'a dyn PropertyValueDyn<Meta = M>;
 
             fn next(&mut self) -> Option<Self::Item> {
                 match self {

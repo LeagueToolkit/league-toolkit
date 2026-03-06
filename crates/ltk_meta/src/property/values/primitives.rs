@@ -32,6 +32,11 @@ macro_rules! impl_prim {
             fn size_no_header(&self) -> usize {
                 core::mem::size_of::<$rust>()
             }
+
+            type Meta = M;
+            fn meta(&self) -> &Self::Meta {
+                &self.meta
+            }
         }
 
         impl<M> PropertyValueExt for $name<M> {

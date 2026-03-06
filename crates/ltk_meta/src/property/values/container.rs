@@ -42,6 +42,15 @@ macro_rules! define_container_enum {
                     })*
                 }
             }
+
+            type Meta = M;
+            fn meta(&self) -> &Self::Meta {
+                match &self {
+                    $(Self::$variant{meta,..} => {
+                        meta
+                    })*
+                }
+            }
         }
 
         $(
