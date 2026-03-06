@@ -1,5 +1,5 @@
 use super::Error;
-use crate::PropertyValueEnum;
+use crate::{property::values, PropertyValueEnum};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::io;
 
