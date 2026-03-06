@@ -80,6 +80,7 @@ entries: map[hash,embed] = {
                     };
 
                     if let PropertyValueEnum::Embedded(values::Embedded(struct_val)) = value {
+                        let struct_val = struct_val.no_meta();
                         Some(BinObject {
                             path_hash,
                             class_hash: struct_val.class_hash,
