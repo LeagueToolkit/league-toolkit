@@ -175,7 +175,7 @@ impl<M: Default> ReadProperty for Optional<M> {
         container_variants!(read_inner, (kind))
     }
 }
-impl<M> WriteProperty for Optional<M> {
+impl<M: Clone> WriteProperty for Optional<M> {
     fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
         &self,
         writer: &mut R,
