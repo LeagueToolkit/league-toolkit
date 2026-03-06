@@ -70,7 +70,7 @@ entries: map[hash,embed] = {
         let objects = roots
             .swap_remove("entries")
             .map(|v| {
-                let PropertyValueEnum::Map(map) = v.inner else {
+                let PropertyValueEnum::Map(map) = v else {
                     panic!("entries must be map");
                 };
                 map.into_entries().into_iter().filter_map(|(key, value)| {

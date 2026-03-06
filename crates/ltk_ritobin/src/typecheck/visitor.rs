@@ -7,6 +7,7 @@ use indexmap::IndexMap;
 use ltk_hash::fnv1a;
 use ltk_meta::{
     property::{values, NoMeta},
+    traits::PropertyExt,
     PropertyKind, PropertyValueEnum,
 };
 
@@ -18,41 +19,6 @@ use crate::{
     typecheck::RitobinName,
 };
 
-pub trait SpannedExt {
-    fn with_span(self, span: Span) -> Spanned<Self>
-    where
-        Self: Sized,
-    {
-        Spanned::new(self, span)
-    }
-}
-impl<T: Sized> SpannedExt for T {}
-
-#[derive(Debug, Clone, Copy)]
-pub struct Spanned<T> {
-    pub span: Span,
-    pub inner: T,
-}
-
-impl<T> Spanned<T> {
-    pub fn new(item: T, span: Span) -> Self {
-        Self { inner: item, span }
-    }
-}
-
-impl<T> Deref for Spanned<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-impl<T> DerefMut for Spanned<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
-}
-
 #[derive(Debug, Clone)]
 pub enum ClassKind {
     Str(String),
@@ -61,12 +27,12 @@ pub enum ClassKind {
 
 #[derive(Debug, Clone)]
 pub struct IrEntry {
-    pub key: Spanned<PropertyValueEnum>,
-    pub value: Spanned<PropertyValueEnum>,
+    pub key: PropertyValueEnum<Span>,
+    pub value: PropertyValueEnum<Span>,
 }
 
 #[derive(Debug, Clone)]
-pub struct IrListItem(pub Spanned<PropertyValueEnum>);
+pub struct IrListItem(pub PropertyValueEnum<Span>);
 
 #[derive(Debug, Clone)]
 pub enum IrItem {
@@ -94,19 +60,19 @@ impl IrItem {
             _ => None,
         }
     }
-    pub fn value(&self) -> &Spanned<PropertyValueEnum> {
+    pub fn value(&self) -> &PropertyValueEnum<Span> {
         match self {
             IrItem::Entry(i) => &i.value,
             IrItem::ListItem(i) => &i.0,
         }
     }
-    pub fn value_mut(&mut self) -> &mut Spanned<PropertyValueEnum> {
+    pub fn value_mut(&mut self) -> &mut PropertyValueEnum<Span> {
         match self {
             IrItem::Entry(i) => &mut i.value,
             IrItem::ListItem(i) => &mut i.0,
         }
     }
-    pub fn into_value(self) -> Spanned<PropertyValueEnum> {
+    pub fn into_value(self) -> PropertyValueEnum<Span> {
         match self {
             IrItem::Entry(i) => i.value,
             IrItem::ListItem(i) => i.0,
@@ -116,7 +82,7 @@ impl IrItem {
 
 pub struct TypeChecker<'a> {
     ctx: Ctx<'a>,
-    pub root: IndexMap<String, Spanned<PropertyValueEnum>>,
+    pub root: IndexMap<String, PropertyValueEnum<Span>>,
     // current: Option<(PropertyValueEnum, PropertyValueEnum)>,
     stack: Vec<(u32, IrItem)>,
     list_queue: Vec<IrListItem>,
@@ -139,7 +105,7 @@ impl<'a> TypeChecker<'a> {
     pub fn into_parts(
         self,
     ) -> (
-        IndexMap<String, Spanned<PropertyValueEnum>>,
+        IndexMap<String, PropertyValueEnum<Span>>,
         Vec<DiagnosticWithSpan>,
     ) {
         (self.root, self.ctx.diagnostics)
@@ -299,7 +265,7 @@ use Diagnostic::*;
 pub trait PropertyValueExt {
     fn rito_type(&self) -> RitoType;
 }
-impl PropertyValueExt for PropertyValueEnum {
+impl<M> PropertyValueExt for PropertyValueEnum<M> {
     fn rito_type(&self) -> RitoType {
         let base = self.kind();
         let subtypes = match self {
@@ -350,8 +316,8 @@ impl RitoType {
         self.subtypes[1].or(self.subtypes[0])
     }
 
-    pub fn make_default(&self) -> PropertyValueEnum {
-        match self.base {
+    pub fn make_default(&self, span: Span) -> PropertyValueEnum<Span> {
+        let mut value = match self.base {
             PropertyKind::Map => {
                 PropertyValueEnum::Map(values::Map::empty(self.subtype(0), self.subtype(1)))
             }
@@ -368,7 +334,9 @@ impl RitoType {
             ),
 
             _ => self.base.default_value(),
-        }
+        };
+        *value.meta_mut() = span;
+        value
     }
 }
 pub enum Statement {
@@ -476,7 +444,7 @@ pub fn resolve_value(
     ctx: &mut Ctx,
     tree: &Cst,
     kind_hint: Option<PropertyKind>,
-) -> Result<Option<Spanned<PropertyValueEnum>>, Diagnostic> {
+) -> Result<Option<PropertyValueEnum<Span>>, Diagnostic> {
     use PropertyKind as K;
     use PropertyValueEnum as P;
 
@@ -524,12 +492,12 @@ pub fn resolve_value(
             match kind_hint {
                 K::Struct => P::Struct(values::Struct {
                     class_hash,
-                    meta: NoMeta,
+                    meta: class.span,
                     properties: Default::default(),
                 }),
                 K::Embedded => P::Embedded(values::Embedded(values::Struct {
                     class_hash,
-                    meta: NoMeta,
+                    meta: class.span,
                     properties: Default::default(),
                 })),
                 other => {
@@ -542,7 +510,6 @@ pub fn resolve_value(
                     });
                 }
             }
-            .with_span(class.span)
         }
         cst::Child::Tree(Cst {
             kind: Kind::Literal,
@@ -556,7 +523,7 @@ pub fn resolve_value(
                 cst::Child::Token(Token {
                     kind: TokenKind::String,
                     span,
-                }) => P::String(ctx.text[span].into()).with_span(*span),
+                }) => values::String::new_with_meta(ctx.text[span].into(), *span).into(),
                 cst::Child::Token(Token {
                     kind: TokenKind::Number,
                     span,
@@ -567,34 +534,41 @@ pub fn resolve_value(
                     };
 
                     match kind_hint {
-                        K::U8 => P::U8(
-                            txt.parse::<u8>()
-                                .map_err(|_| Diagnostic::ResolveLiteral)?
-                                .into(),
-                        ),
-                        K::U16 => P::U16(values::U16::new(
-                            txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                        K::U8 => P::U8(values::U8::new_with_meta(
+                            txt.parse::<u8>().map_err(|_| Diagnostic::ResolveLiteral)?,
+                            *span,
                         )),
-                        K::U32 => P::U32(values::U32::new(
+                        K::U16 => P::U16(values::U16::new_with_meta(
                             txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                            *span,
                         )),
-                        K::U64 => P::U64(values::U64::new(
+                        K::U32 => P::U32(values::U32::new_with_meta(
                             txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                            *span,
                         )),
-                        K::I8 => P::I8(values::I8::new(
+                        K::U64 => P::U64(values::U64::new_with_meta(
                             txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                            *span,
                         )),
-                        K::I16 => P::I16(values::I16::new(
+                        K::I8 => P::I8(values::I8::new_with_meta(
                             txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                            *span,
                         )),
-                        K::I32 => P::I32(values::I32::new(
+                        K::I16 => P::I16(values::I16::new_with_meta(
                             txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                            *span,
                         )),
-                        K::I64 => P::I64(values::I64::new(
+                        K::I32 => P::I32(values::I32::new_with_meta(
                             txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                            *span,
                         )),
-                        K::F32 => P::F32(values::F32::new(
+                        K::I64 => P::I64(values::I64::new_with_meta(
                             txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                            *span,
+                        )),
+                        K::F32 => P::F32(values::F32::new_with_meta(
+                            txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                            *span,
                         )),
                         _ => {
                             return Err(TypeMismatch {
@@ -605,7 +579,6 @@ pub fn resolve_value(
                             });
                         }
                     }
-                    .with_span(*span)
                 }
                 _ => return Ok(None),
             }
@@ -653,8 +626,8 @@ pub fn resolve_entry(
                     .unwrap(),
                 );
                 return Ok(IrEntry {
-                    key: PropertyValueEnum::String(ctx.text[key.span].into()).with_span(key.span),
-                    value: parent.make_default().with_span(value.span),
+                    key: values::String::new_with_meta(ctx.text[key.span].into(), key.span).into(),
+                    value: parent.make_default(value.span),
                 });
             }
         }
@@ -671,7 +644,7 @@ pub fn resolve_entry(
             true => ivalue,
             false => {
                 return Err(TypeMismatch {
-                    span: ivalue.span,
+                    span: *ivalue.meta(),
                     expected: kind,
                     expected_span: kind_span,
                     got: ivalue.rito_type().into(),
@@ -679,11 +652,11 @@ pub fn resolve_entry(
                 .into())
             }
         },
-        (Some(kind), _) => kind.make_default().with_span(value_span),
+        (Some(kind), _) => kind.make_default(value_span),
     };
 
     Ok(IrEntry {
-        key: PropertyValueEnum::String(ctx.text[key.span].into()).with_span(key.span),
+        key: values::String::new_with_meta(ctx.text[key.span].into(), key.span).into(),
         value,
     })
 }
@@ -694,17 +667,18 @@ pub fn resolve_list(ctx: &mut Ctx, tree: &Cst) -> Result<(), Diagnostic> {
 
 impl TypeChecker<'_> {
     fn merge_ir(&mut self, mut parent: IrItem, child: IrItem) -> IrItem {
-        match &mut parent.value_mut().inner {
+        match &mut parent.value_mut() {
             PropertyValueEnum::Container(list)
             | PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(list)) => {
                 match child {
                     IrItem::ListItem(IrListItem(value)) => {
-                        match list.push(value.inner) {
+                        let span = *value.meta();
+                        match list.push(value) {
                             Ok(_) => {}
                             Err(ltk_meta::Error::MismatchedContainerTypes { expected, got }) => {
                                 self.ctx.diagnostics.push(
                                     TypeMismatch {
-                                        span: value.span, // FIXME: span info inside all containers
+                                        span,
                                         expected: RitoType::simple(expected),
                                         expected_span: None, // TODO: would be nice here
                                         got: RitoType::simple(got).into(),
@@ -730,7 +704,7 @@ impl TypeChecker<'_> {
                     return parent;
                 };
 
-                let key = match key.inner {
+                let key = match key {
                     PropertyValueEnum::String(str) => fnv1a::hash_lower(&str),
                     PropertyValueEnum::Hash(hash) => *hash,
                     other => {
@@ -743,7 +717,7 @@ impl TypeChecker<'_> {
                     key,
                     ltk_meta::BinProperty {
                         name_hash: key,
-                        value: value.inner,
+                        value: value,
                     },
                 );
             }
@@ -753,12 +727,13 @@ impl TypeChecker<'_> {
                     eprintln!("map item must be entry");
                     return parent;
                 };
-                match map_value.push(key.inner, value.inner) {
+                let span = *value.meta();
+                match map_value.push(key, value) {
                     Ok(()) => {}
                     Err(ltk_meta::Error::MismatchedContainerTypes { expected, got }) => {
                         self.ctx.diagnostics.push(
                             TypeMismatch {
-                                span: value.span,
+                                span,
                                 expected: RitoType::simple(expected),
                                 expected_span: None, // TODO: would be nice here
                                 got: RitoType::simple(got).into(),
@@ -783,26 +758,29 @@ fn populate_vec_or_color(
     target: &mut IrItem,
     items: &mut Vec<IrListItem>,
 ) -> Result<(), MaybeSpanDiag> {
-    let resolve_f32 = |n: Spanned<PropertyValueEnum>| -> Result<f32, MaybeSpanDiag> {
-        match n.inner {
-            PropertyValueEnum::F32(values::F32 { value: n, .. }) => Ok(n),
+    let resolve_f32 = |n: PropertyValueEnum<Span>| -> Result<f32, MaybeSpanDiag> {
+        match n {
+            PropertyValueEnum::F32(values::F32 {
+                value: n,
+                meta: span,
+            }) => Ok(n),
             _ => Err(TypeMismatch {
-                span: n.span,
+                span: *n.meta(),
                 expected: RitoType::simple(PropertyKind::F32),
                 expected_span: None, // TODO: would be nice
-                got: RitoTypeOrVirtual::RitoType(RitoType::simple(n.inner.kind())),
+                got: RitoTypeOrVirtual::RitoType(RitoType::simple(n.kind())),
             }
             .into()),
         }
     };
-    let resolve_u8 = |n: Spanned<PropertyValueEnum>| -> Result<u8, MaybeSpanDiag> {
-        match n.inner {
+    let resolve_u8 = |n: PropertyValueEnum<Span>| -> Result<u8, MaybeSpanDiag> {
+        match n {
             PropertyValueEnum::U8(values::U8 { value: n, .. }) => Ok(n),
             _ => Err(TypeMismatch {
-                span: n.span,
+                span: *n.meta(),
                 expected: RitoType::simple(PropertyKind::U8),
                 expected_span: None, // TODO: would be nice
-                got: RitoTypeOrVirtual::RitoType(RitoType::simple(n.inner.kind())),
+                got: RitoTypeOrVirtual::RitoType(RitoType::simple(n.kind())),
             }
             .into()),
         }
@@ -818,14 +796,14 @@ fn populate_vec_or_color(
                 expected: ColorOrVec::Vec2,
             })?
             .0;
-        *span = item.span;
+        *span = *item.meta();
         Ok(item)
     };
 
     use PropertyValueEnum as V;
     let mut span = Span::new(0, 0); // FIXME: get a span in here stat
     let expected;
-    match &mut **target.value_mut() {
+    match target.value_mut() {
         V::Vector2(values::Vector2 { value: vec, .. }) => {
             vec.x = resolve_f32(get_next(&mut span)?)?;
             vec.y = resolve_f32(get_next(&mut span)?)?;
@@ -859,7 +837,7 @@ fn populate_vec_or_color(
     if let Some(extra) = items.next() {
         let count = 1 + items.count();
         return Err(TooManyItems {
-            span: extra.0.span,
+            span: *extra.0.meta(),
             extra: count as _,
             expected,
         }
@@ -909,9 +887,11 @@ impl Visitor for TypeChecker<'_> {
                             .expect("container must have value_subtype");
                         self.stack.push((
                             depth,
-                            IrItem::ListItem(IrListItem(
-                                value_type.default_value().with_span(tree.span),
-                            )),
+                            IrItem::ListItem(IrListItem({
+                                let mut v = value_type.default_value();
+                                *v.meta_mut() = tree.span;
+                                v
+                            })),
                         ));
                     }
                     _ => {}
@@ -1023,7 +1003,7 @@ impl Visitor for TypeChecker<'_> {
                 if !self.list_queue.is_empty() {
                     // let (d, mut ir) = &mut ir;
                     if let Err(e) = populate_vec_or_color(&mut ir.1, &mut self.list_queue) {
-                        self.ctx.diagnostics.push(e.fallback(ir.1.value().span));
+                        self.ctx.diagnostics.push(e.fallback(*ir.1.value().meta()));
                     }
                     // self.stack.push((d, ir));
                     // return Visit::Continue;
@@ -1040,13 +1020,10 @@ impl Visitor for TypeChecker<'_> {
                             _,
                             IrItem::Entry(IrEntry {
                                 key:
-                                    Spanned {
-                                        span: key_span,
-                                        inner:
-                                            PropertyValueEnum::String(values::String {
-                                                value: key, ..
-                                            }),
-                                    },
+                                    PropertyValueEnum::String(values::String {
+                                        value: key,
+                                        meta: key_span,
+                                    }),
                                 value,
                             }),
                         ) = ir.clone()
@@ -1059,7 +1036,7 @@ impl Visitor for TypeChecker<'_> {
                         if let Some(existing) = self.root.insert(key, value) {
                             self.ctx.diagnostics.push(
                                 ShadowedEntry {
-                                    shadowee: existing.span,
+                                    shadowee: *existing.meta(),
                                     shadower: key_span,
                                 }
                                 .unwrap(),
