@@ -101,4 +101,20 @@ mod test {
             80,
         );
     }
+
+    #[test]
+    fn long_string_list() {
+        assert_pretty(
+            r#"
+linked: list[string] = { "DATA/Characters/Viego/Viego.bin"
+    "DATA/Viego_Skins_Skin0_Skins_Skin1_Skins_Skin10_Skins_Skin11_Skins_Skin12_Skins_Skin13_Skins_Skin14_Skins_Skin15_Skins_Skin16_Skins_Skin17_Skins_Skin18_Skins_Skin2_Skins_Skin3_Skins_Skin4_Skins_Skin43_Skins_Skin5_Skins_Skin6_Skins_Skin7_Skins_Skin8.bin"
+}
+"#,
+            r#"linked: list[string] = {
+    "DATA/Characters/Viego/Viego.bin"
+    "DATA/Viego_Skins_Skin0_Skins_Skin1_Skins_Skin10_Skins_Skin11_Skins_Skin12_Skins_Skin13_Skins_Skin14_Skins_Skin15_Skins_Skin16_Skins_Skin17_Skins_Skin18_Skins_Skin2_Skins_Skin3_Skins_Skin4_Skins_Skin43_Skins_Skin5_Skins_Skin6_Skins_Skin7_Skins_Skin8.bin"
+}"#,
+            80,
+        );
+    }
 }

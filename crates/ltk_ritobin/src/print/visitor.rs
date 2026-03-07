@@ -373,8 +373,8 @@ impl<'a, W: fmt::Write> Visitor for Printer<'a, W> {
                         };
                         mode.replace(Mode::Break);
                     }
-                    self.softline();
                 }
+                self.softline();
             }
             Kind::Entry => {
                 self.line();
