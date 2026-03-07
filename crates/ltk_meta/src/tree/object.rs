@@ -8,6 +8,8 @@ use std::io;
 use indexmap::IndexMap;
 use ltk_io_ext::{measure, window_at};
 
+use crate::property::NoMeta;
+
 use super::super::{BinProperty, Error, PropertyValueEnum};
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 
@@ -34,9 +36,13 @@ use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 ///     .property(0xBBBB, values::String::from("hello"))
 ///     .build();
 /// ```
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(bound = "for <'dee> M: serde::Serialize + serde::Deserialize<'dee>")
+)]
 #[derive(Debug, Clone, PartialEq)]
-pub struct BinObject {
+pub struct BinObject<M = NoMeta> {
     /// The unique path hash identifying this object.
     pub path_hash: u32,
 
@@ -44,7 +50,7 @@ pub struct BinObject {
     pub class_hash: u32,
 
     /// The properties of this object, keyed by their name hash.
-    pub properties: IndexMap<u32, BinProperty>,
+    pub properties: IndexMap<u32, BinProperty<M>>,
 }
 
 impl BinObject {

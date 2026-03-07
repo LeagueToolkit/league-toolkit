@@ -20,17 +20,43 @@ macro_rules! impl_prim {
             pub meta: M
         }
 
-        impl<M: Default> $name<M> {
+        impl<M> $name<M> {
             #[inline(always)]
             #[must_use]
-            pub fn new(value: $rust) -> Self {
-                Self { value, meta: M::default() }
+            pub fn new(value: $rust) -> Self where M: Default {
+                Self::new_with_meta(value, M::default())
+            }
+
+            #[inline(always)]
+            #[must_use]
+            pub fn new_with_meta(value: $rust, meta: M) -> Self {
+                Self { value, meta }
+            }
+
+            #[inline(always)]
+            #[must_use]
+            pub fn with_meta<T>(self, meta: T) -> $name<T> {
+                $name { value: self.value, meta }
+            }
+
+            #[inline(always)]
+            #[must_use]
+            pub fn no_meta(self) -> $name<NoMeta> {
+                self.with_meta(NoMeta)
             }
         }
 
         impl<M> PropertyExt for $name<M> {
             fn size_no_header(&self) -> usize {
                 core::mem::size_of::<$rust>()
+            }
+
+            type Meta = M;
+            fn meta(&self) -> &Self::Meta {
+                &self.meta
+            }
+            fn meta_mut(&mut self) -> &mut Self::Meta {
+                &mut self.meta
             }
         }
 
