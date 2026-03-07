@@ -24,8 +24,6 @@ pub fn parse(text: &str) -> cst::Cst {
 
 #[cfg(test)]
 mod test {
-    use ltk_meta::{property::values, Bin, BinObject, BinProperty, PropertyValueEnum};
-
     use crate::typecheck::visitor::TypeChecker;
 
     use super::*;
@@ -34,14 +32,8 @@ mod test {
         let text = r#"
 entries: map[hash,embed] = {
     "myPath" = VfxEmitter {
-        a: list[vec2] = {
-            {2 2} 
-        }
-        e: list[embed] = {
-            Foo {
-                a: string = ""
-            }
-        }
+        a: string = "hello"
+        b: list[i8] = {3 6 1}
     }
 }
 "#;
@@ -59,41 +51,14 @@ entries: map[hash,embed] = {
         let mut checker = TypeChecker::new(text);
         cst.walk(&mut checker);
 
-        let (mut roots, errors) = checker.into_parts();
+        // let (mut roots, errors) = checker.into_parts();
+        let (tree, errors) = checker.collect_to_bin();
 
         eprintln!("{str}\n====== type errors: ======\n");
         for err in errors {
             eprintln!("{:?}: {:#?}", &text[err.span], err.diagnostic);
         }
 
-        eprintln!("{roots:#?}");
-        let objects = roots
-            .swap_remove("entries")
-            .map(|v| {
-                let PropertyValueEnum::Map(map) = v else {
-                    panic!("entries must be map");
-                };
-                map.into_entries().into_iter().filter_map(|(key, value)| {
-                    let path_hash = match &key {
-                        PropertyValueEnum::Hash(h) => **h,
-                        _ => return None,
-                    };
-
-                    if let PropertyValueEnum::Embedded(values::Embedded(struct_val)) = value {
-                        let struct_val = struct_val.no_meta();
-                        Some(BinObject {
-                            path_hash,
-                            class_hash: struct_val.class_hash,
-                            properties: struct_val.properties.clone(),
-                        })
-                    } else {
-                        None
-                    }
-                })
-            })
-            .expect("no 'entries' entry");
-
-        let tree = Bin::new(objects, [""]);
-        eprintln!("{tree:#?}");
+        eprintln!("==== FINAL TREE =====\n{tree:#?}");
     }
 }
