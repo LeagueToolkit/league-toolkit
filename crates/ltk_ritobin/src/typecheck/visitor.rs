@@ -8,7 +8,7 @@ use ltk_hash::fnv1a;
 use ltk_meta::{
     property::{values, NoMeta},
     traits::PropertyExt,
-    PropertyKind, PropertyValueEnum,
+    Bin, BinObject, PropertyKind, PropertyValueEnum,
 };
 
 use crate::{
@@ -157,6 +157,12 @@ pub enum Diagnostic {
     UnknownType(Span),
     MissingType(Span),
 
+    MissingEntriesMap,
+    InvalidEntriesMap {
+        span: Span,
+        got: RitoType,
+    },
+
     TypeMismatch {
         span: Span,
         expected: RitoType,
@@ -201,7 +207,8 @@ pub enum Diagnostic {
 impl Diagnostic {
     pub fn span(&self) -> Option<&Span> {
         match self {
-            MissingTree(_) | EmptyTree(_) | MissingToken(_) | RootNonEntry | ResolveLiteral => None,
+            MissingTree(_) | EmptyTree(_) | MissingToken(_) | RootNonEntry | ResolveLiteral
+            | MissingEntriesMap => None,
             UnknownType(span)
             | SubtypeCountMismatch { span, .. }
             | UnexpectedSubtypes { span, .. }
@@ -211,7 +218,8 @@ impl Diagnostic {
             | InvalidHash(span)
             | AmbiguousNumeric(span)
             | NotEnoughItems { span, .. }
-            | TooManyItems { span, .. } => Some(span),
+            | TooManyItems { span, .. }
+            | InvalidEntriesMap { span, .. } => Some(span),
         }
     }
 
@@ -369,6 +377,26 @@ where
 pub struct Ctx<'a> {
     text: &'a str,
     diagnostics: Vec<DiagnosticWithSpan>,
+}
+
+pub fn coerce_type<M: Debug>(
+    value: PropertyValueEnum<M>,
+    to: PropertyKind,
+) -> Option<PropertyValueEnum<M>> {
+    match to {
+        PropertyKind::Hash => Some(match value {
+            PropertyValueEnum::Hash(_) => return Some(value),
+            PropertyValueEnum::String(str) => {
+                values::Hash::new_with_meta(fnv1a::hash_lower(&str), str.meta).into()
+            }
+            other => {
+                eprintln!("\x1b[41mcannot coerce {other:?} to {to:?}\x1b[0m");
+                return None;
+            }
+        }),
+        to if to == value.kind() => Some(value),
+        _ => None,
+    }
 }
 
 pub fn resolve_rito_type(ctx: &mut Ctx<'_>, tree: &Cst) -> Result<RitoType, Diagnostic> {
@@ -665,8 +693,50 @@ pub fn resolve_list(ctx: &mut Ctx, tree: &Cst) -> Result<(), Diagnostic> {
     Ok(())
 }
 
-impl TypeChecker<'_> {
+impl<'a> TypeChecker<'a> {
+    pub fn collect_to_bin(mut self) -> (Bin, Vec<DiagnosticWithSpan>) {
+        let objects = self
+            .root
+            .swap_remove("entries")
+            .and_then(|v| {
+                let PropertyValueEnum::Map(map) = v else {
+                    self.ctx.diagnostics.push(
+                        InvalidEntriesMap {
+                            span: *v.meta(),
+                            got: RitoType::simple(v.kind()),
+                        }
+                        .unwrap(),
+                    );
+                    return None;
+                };
+                Some(map.into_entries().into_iter().filter_map(|(key, value)| {
+                    let PropertyValueEnum::Hash(path_hash) = coerce_type(key, PropertyKind::Hash)?
+                    else {
+                        return None;
+                    };
+
+                    if let PropertyValueEnum::Embedded(values::Embedded(struct_val)) = value {
+                        let struct_val = struct_val.no_meta();
+                        eprintln!("struct_val: {struct_val:?}");
+                        Some(BinObject {
+                            path_hash: *path_hash,
+                            class_hash: struct_val.class_hash,
+                            properties: struct_val.properties.clone(),
+                        })
+                    } else {
+                        None
+                    }
+                }))
+            })
+            .expect("no 'entries' entry");
+
+        let tree = Bin::new(objects, [""]);
+
+        (tree, self.ctx.diagnostics)
+    }
+
     fn merge_ir(&mut self, mut parent: IrItem, child: IrItem) -> IrItem {
+        eprintln!("\x1b[0;33mmerge {child:?}\n-----> {parent:?}\x1b[0m");
         match &mut parent.value_mut() {
             PropertyValueEnum::Container(list)
             | PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(list)) => {
@@ -692,7 +762,7 @@ impl TypeChecker<'_> {
                         }
                     }
                     IrItem::Entry(IrEntry { key, value }) => {
-                        eprintln!("list item must be list item");
+                        eprintln!("\x1b[41mlist item must be list item\x1b[0m");
                         return parent;
                     }
                 }
@@ -700,24 +770,21 @@ impl TypeChecker<'_> {
             PropertyValueEnum::Struct(struct_val)
             | PropertyValueEnum::Embedded(values::Embedded(struct_val)) => {
                 let IrItem::Entry(IrEntry { key, value }) = child else {
-                    eprintln!("struct item must be entry");
+                    eprintln!("\x1b[41mstruct item must be entry\x1b[0m");
                     return parent;
                 };
 
-                let key = match key {
-                    PropertyValueEnum::String(str) => fnv1a::hash_lower(&str),
-                    PropertyValueEnum::Hash(hash) => *hash,
-                    other => {
-                        eprintln!("{other:?} not valid hash");
-                        return parent;
-                    }
+                let Some(PropertyValueEnum::Hash(key)) = coerce_type(key, PropertyKind::Hash)
+                else {
+                    // eprintln!("\x1b[41m{other:?} not valid hash\x1b[0m");
+                    return parent;
                 };
 
                 struct_val.properties.insert(
-                    key,
+                    *key,
                     ltk_meta::BinProperty {
-                        name_hash: key,
-                        value: value,
+                        name_hash: *key,
+                        value,
                     },
                 );
             }
@@ -728,6 +795,10 @@ impl TypeChecker<'_> {
                     return parent;
                 };
                 let span = *value.meta();
+                let Some(key) = coerce_type(key, PropertyKind::Hash) else {
+                    // eprintln!("\x1b[41m{other:?} not valid hash\x1b[0m");
+                    return parent;
+                };
                 match map_value.push(key, value) {
                     Ok(()) => {}
                     Err(ltk_meta::Error::MismatchedContainerTypes { expected, got }) => {
@@ -760,10 +831,7 @@ fn populate_vec_or_color(
 ) -> Result<(), MaybeSpanDiag> {
     let resolve_f32 = |n: PropertyValueEnum<Span>| -> Result<f32, MaybeSpanDiag> {
         match n {
-            PropertyValueEnum::F32(values::F32 {
-                value: n,
-                meta: span,
-            }) => Ok(n),
+            PropertyValueEnum::F32(values::F32 { value: n, .. }) => Ok(n),
             _ => Err(TypeMismatch {
                 span: *n.meta(),
                 expected: RitoType::simple(PropertyKind::F32),
