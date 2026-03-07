@@ -24,7 +24,7 @@ pub fn parse(text: &str) -> cst::Cst {
 
 #[cfg(test)]
 mod test {
-    use crate::typecheck::visitor::TypeChecker;
+    use crate::{print::Printer, typecheck::visitor::TypeChecker};
 
     use super::*;
     #[test]
@@ -60,5 +60,67 @@ entries: map[hash,embed] = {
         }
 
         eprintln!("==== FINAL TREE =====\n{tree:#?}");
+    }
+
+    #[test]
+    fn writer_test() {
+        let text = r#"
+entries: map[hash,embed] = {
+    "myPath" = VfxEmitter {
+        a: string = "hello"
+        b: list[i8] = {3 6 1}
+    }
+    "cock" = VfxEmitterDefinitionData {
+                rate: embed = ValueFloat {
+                    constantValue: f32 = 1
+                }
+                particleLifetime: embed = ValueFloat {
+                    constantValue: f32 = 1
+                }
+                particleLinger: option[f32] = {
+                    2
+                }
+                lifetime: option[f32] = {
+                    1
+                }
+                emitterName: string = "JudgementCut"
+                bindWeight: embed = ValueFloat {
+                    constantValue: f32 = 1
+                }
+                primitive: pointer = VfxPrimitiveMesh {
+                    mMesh: embed = VfxMeshDefinitionData {
+                        mMeshName: string = "ASSETS/Characters/viego/Skins/base/judgementcut.skn"
+                        mMeshSkeletonName: string = "ASSETS/Characters/viego/Skins/base/judgementcut.skl"
+                        mAnimationName: string = "ASSETS/Characters/viego/Skins/base/judgementcut.anm"
+                    }
+                }
+                birthScale0: embed = ValueVector3 {
+                    constantValue: vec3 = { 15, 15, 15 }
+                }
+                blendMode: u8 = 1
+                disableBackfaceCull: bool = true
+                miscRenderFlags: u8 = 1
+                texture: string = "ASSETS/Characters/viego/Skins/base/slashes.dds"
+                particleUVScrollRate: embed = IntegratedValueVector2 {
+                    constantValue: vec2 = { 1, 0 }
+                    dynamics: pointer = VfxAnimatedVector2fVariableData {
+                        times: list[f32] = {
+                            0
+                        }
+                        values: list[vec2] = {
+                            { 1, 0 }
+                        }
+                    }
+                }
+            }
+}
+"#;
+        let cst = parse(text);
+
+        let mut str = String::new();
+        let mut printer = Printer::new(text, &mut str);
+        cst.walk(&mut printer);
+
+        println!("========\n{str}");
     }
 }
