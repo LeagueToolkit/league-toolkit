@@ -1,6 +1,9 @@
 use std::fmt::Display;
 
-use crate::parse::{self, tokenizer::Token, Span};
+use crate::{
+    parse::{self, tokenizer::Token, Span},
+    typecheck::visitor::DiagnosticWithSpan,
+};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[rustfmt::skip]
@@ -81,6 +84,12 @@ macro_rules! format_to {
     };
 }
 impl Cst {
+    pub fn build_bin(&self, text: &str) -> (ltk_meta::Bin, Vec<DiagnosticWithSpan>) {
+        let mut checker = crate::typecheck::visitor::TypeChecker::new(text);
+        self.walk(&mut checker);
+        checker.collect_to_bin()
+    }
+
     pub fn print(&self, buf: &mut String, level: usize, source: &str) {
         let parent_indent = "│ ".repeat(level.saturating_sub(1));
         let indent = match level > 0 {
