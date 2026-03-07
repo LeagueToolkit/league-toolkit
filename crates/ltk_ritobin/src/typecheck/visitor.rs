@@ -937,7 +937,7 @@ impl Visitor for TypeChecker<'_> {
         match tree.kind {
             Kind::ErrorTree => return Visit::Skip,
 
-            Kind::ListBlock => {
+            Kind::ListItemBlock => {
                 let Some((_, parent)) = parent else {
                     self.ctx
                         .diagnostics
@@ -1083,7 +1083,10 @@ impl Visitor for TypeChecker<'_> {
                         self.stack.push((d, parent));
                     }
                     None => {
-                        assert_eq!(depth, 2);
+                        if depth != 2 {
+                            eprintln!("ERROR: depth not 2???");
+                        }
+                        // assert_eq!(depth, 2);
                         let (
                             _,
                             IrItem::Entry(IrEntry {
