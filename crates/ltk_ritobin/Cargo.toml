@@ -28,5 +28,6 @@ serde = { workspace = true, optional = true }
 salsa = "0.22.0"
 
 [dev-dependencies]
-insta = { workspace = true }
+insta.workspace = true
+pretty_assertions.workspace = true
 
