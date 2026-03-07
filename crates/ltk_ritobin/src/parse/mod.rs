@@ -118,9 +118,16 @@ entries: map[hash,embed] = {
         let cst = parse(text);
 
         let mut str = String::new();
-        let mut printer = Printer::new(text, &mut str);
-        cst.walk(&mut printer);
+        cst.print(&mut str, 0, text);
 
+        println!("============= CST ===========");
+        println!("{str}");
+
+        let mut str = String::new();
+        let size = 100;
+        Printer::new(text, &mut str, size).print(&cst).unwrap();
+
+        println!("{}", "*".repeat(size));
         println!("========\n{str}");
     }
 }

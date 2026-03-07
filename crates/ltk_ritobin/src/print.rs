@@ -1,8 +1,3 @@
-use std::{
-    cell::RefCell,
-    fmt::{self},
-};
-
 use crate::parse::{
     cst::{visitor::Visit, Cst, Kind, Visitor},
     Span, TokenKind,
@@ -14,100 +9,74 @@ pub enum PrintError {
     FmtError(#[from] fmt::Error),
 }
 
-#[derive(Default)]
-struct Flags {
-    break_pre: bool,
-    break_post: bool,
-    space_pre: bool,
-    space_post: bool,
+use std::fmt::{self, Write};
+
+mod visitor;
+
+pub struct Printer<'a, W: Write> {
+    visitor: visitor::Printer<'a, W>,
 }
 
-pub struct Printer<'a, W: fmt::Write> {
-    source: &'a str,
-    out: &'a mut W,
-    error: Option<PrintError>,
-    indent: u32,
-    flags: Flags,
-    default_flags: Flags,
-}
-
-impl<'a, W: fmt::Write> Printer<'a, W> {
-    pub fn new(source: &'a str, dest: &'a mut W) -> Self {
+impl<'a, W: Write> Printer<'a, W> {
+    pub fn new(src: &'a str, out: W, width: usize) -> Self {
         Self {
-            source,
-            out: dest,
-            error: None,
-            indent: 0,
-            flags: Flags::default(),
-            default_flags: Flags::default(),
+            visitor: visitor::Printer::new(src, out, width),
         }
     }
 
     pub fn print(mut self, cst: &Cst) -> Result<(), PrintError> {
-        cst.walk(&mut self);
-        match self.error.take() {
-            Some(err) => Err(err),
-            None => Ok(()),
+        cst.walk(&mut self.visitor);
+        self.visitor.flush()?;
+        if let Some(e) = self.visitor.error {
+            return Err(e);
         }
-    }
-
-    fn visit_token_inner(
-        &mut self,
-        token: &crate::parse::Token,
-        context: &crate::parse::cst::Cst,
-    ) -> Result<(), PrintError> {
-        let token_txt = self.source[token.span].trim();
-        if token_txt.is_empty() {
-            return Ok(());
-        }
-
-        match token.kind {
-            TokenKind::RCurly => {
-                self.indent -= 1;
-                self.flags.break_pre = true;
-            }
-            TokenKind::LCurly => {
-                self.flags.space_pre = true;
-                self.flags.break_post = true;
-            }
-            TokenKind::Colon => {
-                self.flags.space_post = true;
-            }
-            TokenKind::Eq => {
-                self.flags.space_pre = true;
-                self.flags.space_post = true;
-            }
-            TokenKind::Comma => {
-                self.flags.break_post = self.flags.break_pre;
-                self.flags.break_pre = false;
-                self.flags.space_post = true;
-            }
-            _ => {
-                eprintln!("{:?}", context.kind);
-            }
-        }
-
-        if self.flags.break_pre {
-            self.out.write_char('\n')?;
-            for _ in 0..self.indent {
-                self.out.write_str("    ")?;
-            }
-        } else if self.flags.space_pre {
-            self.out.write_char(' ')?;
-        }
-        self.out.write_str(token_txt)?;
-
-        self.flags.break_pre = self.flags.break_post;
-        self.flags.break_post = false;
-
-        self.flags.space_pre = self.flags.space_post;
-        self.flags.space_post = false;
-
-        if token.kind == TokenKind::LCurly {
-            self.indent += 1;
-        }
-
         Ok(())
     }
 }
 
+#[cfg(test)]
+mod test {
+    use crate::{parse::parse, print::Printer};
+
+    fn assert_pretty(input: &str, is: &str, size: usize) {
+        let cst = parse(input);
+
+        let mut str = String::new();
+        Printer::new(input, &mut str, size).print(&cst).unwrap();
+
+        pretty_assertions::assert_eq!(str, is);
+    }
+
+    #[test]
+    fn simple_list() {
+        assert_pretty(
+            r#" b  :  list [ i8, ] = {  3, 6 1 }"#,
+            r#"b: list[i8] = { 3, 6, 1 }"#,
+            80,
+        );
+    }
+
+    #[test]
+    fn nested_list() {
+        assert_pretty(
+            r#" nestedList  :  list [ vec2, ] = {  {3, 6} {1 10000} }"#,
+            r#"nestedList: list[vec2] = {
+    { 3, 6 }
+    { 1, 10000 }
+}"#,
+            80,
+        );
+    }
+
+    #[test]
+    fn big_guy() {
+        assert_pretty(
+            r#" nestedList  :  list [ vec2, ] = {  {3, 6} {1 10000} }"#,
+            r#"nestedList: list[vec2] = {
+    { 3, 6 }
+    { 1, 10000 }
+}"#,
+            80,
+        );
+    }
+}

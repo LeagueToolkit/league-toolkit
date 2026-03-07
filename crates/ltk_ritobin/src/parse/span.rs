@@ -23,6 +23,12 @@ impl Span {
     pub fn intersects(&self, other: &Span) -> bool {
         self.start < other.end && other.start < self.end
     }
+
+    #[must_use]
+    #[inline]
+    pub fn len(&self) -> u32 {
+        self.end - self.start
+    }
 }
 
 impl std::ops::Index<Span> for str {
