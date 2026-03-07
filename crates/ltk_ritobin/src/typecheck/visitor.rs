@@ -717,7 +717,7 @@ impl<'a> TypeChecker<'a> {
 
                     if let PropertyValueEnum::Embedded(values::Embedded(struct_val)) = value {
                         let struct_val = struct_val.no_meta();
-                        eprintln!("struct_val: {struct_val:?}");
+                        // eprintln!("struct_val: {struct_val:?}");
                         Some(BinObject {
                             path_hash: *path_hash,
                             class_hash: struct_val.class_hash,
@@ -736,7 +736,7 @@ impl<'a> TypeChecker<'a> {
     }
 
     fn merge_ir(&mut self, mut parent: IrItem, child: IrItem) -> IrItem {
-        eprintln!("\x1b[0;33mmerge {child:?}\n-----> {parent:?}\x1b[0m");
+        // eprintln!("\x1b[0;33mmerge {child:?}\n-----> {parent:?}\x1b[0m");
         match &mut parent.value_mut() {
             PropertyValueEnum::Container(list)
             | PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(list)) => {
@@ -988,7 +988,7 @@ impl Visitor for TypeChecker<'_> {
 
                 match resolve_value(&mut self.ctx, tree, value_hint) {
                     Ok(Some(item)) => {
-                        eprintln!("{indent}  list item {item:?}");
+                        // eprintln!("{indent}  list item {item:?}");
                         if color_vec_type.is_some() {
                             self.list_queue.push(IrListItem(item));
                         } else {
@@ -996,7 +996,7 @@ impl Visitor for TypeChecker<'_> {
                         }
                     }
                     Ok(None) => {
-                        eprintln!("{indent}  ERROR empty item");
+                        // eprintln!("{indent}  ERROR empty item");
                     }
                     Err(e) => self.ctx.diagnostics.push(e.default_span(tree.span)),
                 }
@@ -1007,7 +1007,7 @@ impl Visitor for TypeChecker<'_> {
                     .map_err(|e| e.fallback(tree.span))
                 {
                     Ok(entry) => {
-                        eprintln!("{indent}  push {entry:?}");
+                        // eprintln!("{indent}  push {entry:?}");
                         self.stack.push((depth, IrItem::Entry(entry)));
                     }
                     Err(e) => self.ctx.diagnostics.push(e),
