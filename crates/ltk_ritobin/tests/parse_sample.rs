@@ -1,6 +1,6 @@
 //! Integration test for parsing a sample ritobin file.
 
-// use ltk_ritobin::{parse, write, ParseError};
+use ltk_ritobin::parse::parse;
 
 const SAMPLE_RITOBIN: &str = r#"#PROP_text
 type: string = "PROP"
@@ -43,47 +43,53 @@ entries: map[hash,embed] = {
 }
 "#;
 
-// #[test]
-// fn test_parse_sample() {
-//     let file = parse(SAMPLE_RITOBIN).expect("Failed to parse sample");
-//
-//     // Verify basic fields
-//     assert_eq!(file.file_type(), Some("PROP"));
-//     assert_eq!(file.version(), Some(3));
-//
-//     // Verify dependencies
-//     let linked = file.linked();
-//     assert_eq!(linked.len(), 2);
-//     assert!(linked[0].contains("Animations"));
-//
-//     // Verify objects
-//     let objects = file.objects();
-//     assert_eq!(objects.len(), 1);
-//
-//     // Convert to BinTree
-//     let tree = file.to_bin_tree();
-//     assert_eq!(tree.version, 3);
-//     assert_eq!(tree.dependencies.len(), 2);
-//     assert_eq!(tree.objects.len(), 1);
-// }
-//
-// #[test]
-// fn test_roundtrip() {
-//     let file = parse(SAMPLE_RITOBIN).expect("Failed to parse sample");
-//     let tree = file.to_bin_tree();
-//
-//     // Write back to text
-//     let output = write(&tree).expect("Failed to write");
-//
-//     // Parse again
-//     let file2 = parse(&output).expect("Failed to parse output");
-//     let tree2 = file2.to_bin_tree();
-//
-//     // Verify structure is preserved
-//     assert_eq!(tree.version, tree2.version);
-//     assert_eq!(tree.dependencies.len(), tree2.dependencies.len());
-//     assert_eq!(tree.objects.len(), tree2.objects.len());
-// }
+#[test]
+fn test_parse_sample() {
+    let cst = parse(SAMPLE_RITOBIN);
+
+    // Verify basic fields
+    // assert_eq!(file.file_type(), Some("PROP"));
+    // assert_eq!(file.version(), Some(3));
+
+    // Verify dependencies
+    // let linked = file.linked();
+    // assert_eq!(linked.len(), 2);
+    // assert!(linked[0].contains("Animations"));
+
+    // Verify objects
+    // let objects = file.objects();
+    // assert_eq!(objects.len(), 1);
+
+    // Convert to BinTree
+    let (tree, errors) = cst.build_bin(SAMPLE_RITOBIN);
+
+    if !errors.is_empty() {
+        eprintln!("{errors:#?}");
+        panic!("errors building bin tree");
+    }
+
+    assert_eq!(tree.version, 3);
+    assert_eq!(tree.dependencies.len(), 2);
+    assert_eq!(tree.objects.len(), 1);
+}
+
+#[test]
+fn test_roundtrip() {
+    let cst = parse(SAMPLE_RITOBIN);
+    let (tree, errors) = cst.build_bin(SAMPLE_RITOBIN);
+
+    // Write back to text
+    // let output = write(&tree).expect("Failed to write");
+
+    // Parse again
+    // let file2 = parse(&output).expect("Failed to parse output");
+    // let tree2 = file2.to_bin_tree();
+
+    // Verify structure is preserved
+    // assert_eq!(tree.version, tree2.version);
+    // assert_eq!(tree.dependencies.len(), tree2.dependencies.len());
+    // assert_eq!(tree.objects.len(), tree2.objects.len());
+}
 //
 // #[test]
 // fn test_parse_primitives() {
