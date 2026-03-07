@@ -165,7 +165,12 @@ impl<'a, W: Write> Printer<'a, W> {
                     }
                 }
                 Cmd::Space => {
-                    if !block_space {
+                    if !block_space
+                        && self
+                            .queue
+                            .front()
+                            .is_some_and(|c| !matches!(c, Cmd::SoftLine | Cmd::Line))
+                    {
                         self.out.write_char(' ')?;
                         self.col += 1;
                         block_space = true;
@@ -229,6 +234,8 @@ impl<'a, W: Write> Printer<'a, W> {
                 Cmd::Dedent(n) => {
                     self.indent -= n;
                 }
+
+                _ => {}
             }
         }
 
@@ -256,13 +263,14 @@ impl<'a, W: Write> Printer<'a, W> {
             return Ok(());
         }
 
-        eprintln!("->{:?}", token.kind);
+        // eprintln!("->{:?}", token.kind);
         match token.kind {
             TokenKind::LCurly => {
                 self.space();
                 self.text("{");
                 self.indent(4);
-                self.softline();
+                self.space();
+                // self.softline();
             }
 
             TokenKind::RCurly => {
@@ -316,7 +324,8 @@ impl<'a, W: fmt::Write> Visitor for Printer<'a, W> {
                     grp,
                 });
             }
-            Kind::ListBlock => {
+            Kind::ListItemBlock => {
+                self.softline();
                 let grp = self.begin_group(None);
 
                 let len = tree
@@ -340,7 +349,7 @@ impl<'a, W: fmt::Write> Visitor for Printer<'a, W> {
                     .iter()
                     .filter(|n| {
                         n.tree()
-                            .is_some_and(|t| matches!(t.kind, Kind::ListItem | Kind::ListBlock))
+                            .is_some_and(|t| matches!(t.kind, Kind::ListItem | Kind::ListItemBlock))
                     })
                     .count();
                 if len > 0 {
@@ -349,6 +358,22 @@ impl<'a, W: fmt::Write> Visitor for Printer<'a, W> {
                         idx: 0,
                         grp,
                     });
+                }
+            }
+            Kind::Class => {}
+            Kind::ListItem => {
+                if tree
+                    .children
+                    .first()
+                    .is_some_and(|c| c.tree().is_some_and(|t| t.kind == Kind::Class))
+                {
+                    if let Some(list) = self.list_stack.last_mut() {
+                        let Cmd::Begin(mode) = self.queue.get_mut(list.grp.0).unwrap() else {
+                            unreachable!("grp pointing at non begin cmd");
+                        };
+                        mode.replace(Mode::Break);
+                    }
+                    self.softline();
                 }
             }
             Kind::Entry => {
@@ -360,10 +385,10 @@ impl<'a, W: fmt::Write> Visitor for Printer<'a, W> {
     }
     fn exit_tree(&mut self, tree: &Cst) -> Visit {
         match tree.kind {
-            Kind::ListBlock | Kind::Block | Kind::TypeArgList => {
+            Kind::ListItemBlock | Kind::Block | Kind::TypeArgList => {
                 self.list_stack.pop();
                 self.end_group();
-                eprintln!("exit {} | stack: {}", tree.kind, self.list_stack.len());
+                // eprintln!("exit {} | stack: {}", tree.kind, self.list_stack.len());
                 if let Some(list) = self.list_stack.last_mut() {
                     let Cmd::Begin(mode) = self.queue.get_mut(list.grp.0).unwrap() else {
                         unreachable!("grp pointing at non begin cmd");

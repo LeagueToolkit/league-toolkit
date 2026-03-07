@@ -11,7 +11,7 @@ pub enum Kind {
   ErrorTree,
   File, 
   TypeExpr, TypeArgList, TypeArg,
-  Block, BlockKey, Class, ListItem, ListBlock,
+  Block, BlockKey, Class, ListItem, ListItemBlock,
 
   Entry, EntryKey, EntryValue, EntryTerminator,
   Literal,
@@ -35,7 +35,7 @@ impl Display for Kind {
             Self::BlockKey => "key",
             Self::Class => "bin class",
             Self::ListItem => "list item",
-            Self::ListBlock => "list item (block)",
+            Self::ListItemBlock => "list item (block)",
             Self::Comment => "comment",
         })
     }

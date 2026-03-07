@@ -33,7 +33,7 @@ pub fn stmt_or_list_item(p: &mut Parser) -> (MarkClosed, TreeKind) {
         }
         (LCurly, _, _) => {
             let m = block(p);
-            res = (p.close(m, TreeKind::ListBlock), TreeKind::ListBlock);
+            res = (p.close(m, TreeKind::ListItemBlock), TreeKind::ListItemBlock);
             p.eat(Comma);
         }
         (Name | HexLit | String | Number | True | False, _, _) => {
@@ -104,15 +104,15 @@ pub fn entry_value(p: &mut Parser) -> bool {
     p.scope(TreeKind::EntryValue, |p| {
         match (p.nth(0), p.nth(1)) {
             (Name, _) | (HexLit, LCurly) => {
-                p.scope(TreeKind::ListItem, |p| {
-                    p.scope(TreeKind::Class, |p| {
-                        p.advance();
-                        if p.at(LCurly) {
-                            let block = block(p);
-                            p.close(block, TreeKind::Block);
-                        }
-                    });
+                // p.scope(TreeKind::ListItem, |p| {
+                p.scope(TreeKind::Class, |p| {
+                    p.advance();
+                    if p.at(LCurly) {
+                        let block = block(p);
+                        p.close(block, TreeKind::Block);
+                    }
                 });
+                // });
             }
             (UnterminatedString, _) => {
                 p.advance_with_error(ErrorKind::UnterminatedString, None);

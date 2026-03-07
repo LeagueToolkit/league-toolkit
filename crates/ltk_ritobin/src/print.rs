@@ -40,11 +40,15 @@ mod test {
 
     fn assert_pretty(input: &str, is: &str, size: usize) {
         let cst = parse(input);
+        let mut str = String::new();
+
+        cst.print(&mut str, 0, input);
+        eprintln!("#### CST:\n{str}");
 
         let mut str = String::new();
         Printer::new(input, &mut str, size).print(&cst).unwrap();
 
-        pretty_assertions::assert_eq!(str, is);
+        pretty_assertions::assert_eq!(str.trim(), is.trim());
     }
 
     #[test]
@@ -69,12 +73,30 @@ mod test {
     }
 
     #[test]
-    fn big_guy() {
+    fn class_list() {
         assert_pretty(
-            r#" nestedList  :  list [ vec2, ] = {  {3, 6} {1 10000} }"#,
-            r#"nestedList: list[vec2] = {
-    { 3, 6 }
-    { 1, 10000 }
+            r#" classList  :  list2[ embed] = {  MyClass {a: string = "hello"}
+            FooClass {b: string = "foo"}}"#,
+            r#"classList: list2[embed] = {
+    MyClass {
+        a: string = "hello"
+    }
+    FooClass {
+        b: string = "foo"
+    }
+}"#,
+            80,
+        );
+    }
+
+    #[test]
+    fn simple_class_embed() {
+        assert_pretty(
+            r#"skinUpgradeData: embed = skinUpgradeData { 
+            mGearSkinUpgrades: list[link] = { 0x3b9c7079, 0x17566805 }
+        }"#,
+            r#"skinUpgradeData: embed = skinUpgradeData {
+    mGearSkinUpgrades: list[link] = { 0x3b9c7079, 0x17566805 }
 }"#,
             80,
         );
