@@ -42,6 +42,22 @@ macro_rules! define_container_enum {
                     })*
                 }
             }
+
+            type Meta = M;
+            fn meta(&self) -> &Self::Meta {
+                match &self {
+                    $(Self::$variant{meta,..} => {
+                        meta
+                    })*
+                }
+            }
+            fn meta_mut(&mut self) -> &mut Self::Meta {
+                match self {
+                    $(Self::$variant{meta,..} => {
+                        meta
+                    })*
+                }
+            }
         }
 
         $(
@@ -108,6 +124,49 @@ macro_rules! define_container_enum {
         }
 
         impl<M> Container<M> {
+            #[inline(always)]
+            #[must_use]
+            pub fn empty(item_kind: Kind) -> Result<Self, Error>
+            where
+                M: Default
+            {
+                match item_kind {
+                    $(Kind::$variant => Ok(Self::$variant {
+                        items: vec![],
+                        meta: M::default(),
+                    }),)*
+                    kind => Err(Error::InvalidNesting(kind)),
+
+                }
+            }
+
+            #[inline(always)]
+            #[must_use]
+            pub fn no_meta(self) -> Container<NoMeta> {
+                match self {
+                    $(Self::$variant{items,..} => {
+                        Container::$variant {
+                            items: items.into_iter().map(|i| i.no_meta()).collect(),
+                            meta: NoMeta
+                        }
+                    })*
+                }
+            }
+
+            pub fn push(&mut self, value: PropertyValueEnum<M>) -> Result<(), Error>{
+                let got = value.kind();
+                let expected = self.item_kind();
+                match (self, value) {
+                    $((Self::$variant{items,..}, PropertyValueEnum::$variant(item)) => {
+                        items.push(item);
+                        Ok(())
+                    })*
+                    _ => {
+                        Err(Error::MismatchedContainerTypes { got, expected })
+                    }
+                }
+            }
+
             /// Iterator that returns each item as a [`PropertyValueEnum`] for convenience.
             #[inline(always)]
             #[must_use]
@@ -149,7 +208,7 @@ impl<M> Container<M> {
         Self::from(items)
     }
 
-    pub fn empty<T>() -> Self
+    pub fn empty_const<T>() -> Self
     where
         Self: From<Vec<T>>,
     {

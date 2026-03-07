@@ -13,6 +13,14 @@ use super::Struct;
 #[derive(Clone, PartialEq, Debug, Default)]
 pub struct Embedded<M = NoMeta>(pub Struct<M>);
 
+impl<M> Embedded<M> {
+    #[inline(always)]
+    #[must_use]
+    pub fn no_meta(self) -> Embedded<NoMeta> {
+        Embedded(self.0.no_meta())
+    }
+}
+
 impl<M> PropertyValueExt for Embedded<M> {
     const KIND: Kind = Kind::Embedded;
 }
@@ -20,6 +28,13 @@ impl<M> PropertyValueExt for Embedded<M> {
 impl<M> PropertyExt for Embedded<M> {
     fn size_no_header(&self) -> usize {
         self.0.size_no_header()
+    }
+    type Meta = M;
+    fn meta(&self) -> &Self::Meta {
+        self.0.meta()
+    }
+    fn meta_mut(&mut self) -> &mut Self::Meta {
+        self.0.meta_mut()
     }
 }
 
@@ -31,7 +46,7 @@ impl<M: Default> ReadProperty for Embedded<M> {
         Struct::<M>::from_reader(reader, legacy).map(Self)
     }
 }
-impl<M> WriteProperty for Embedded<M> {
+impl<M: Clone> WriteProperty for Embedded<M> {
     fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
         &self,
         writer: &mut R,
