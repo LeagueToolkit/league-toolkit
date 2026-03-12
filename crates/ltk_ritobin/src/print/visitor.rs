@@ -385,7 +385,11 @@ impl<'a, W: fmt::Write> Visitor for Printer<'a, W> {
     }
     fn exit_tree(&mut self, tree: &Cst) -> Visit {
         match tree.kind {
-            Kind::ListItemBlock | Kind::Block | Kind::TypeArgList => {
+            Kind::TypeArgList => {
+                self.list_stack.pop();
+                self.end_group();
+            }
+            Kind::ListItemBlock | Kind::Block => {
                 self.list_stack.pop();
                 self.end_group();
                 // eprintln!("exit {} | stack: {}", tree.kind, self.list_stack.len());
