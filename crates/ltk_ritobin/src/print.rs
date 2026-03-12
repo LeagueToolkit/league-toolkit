@@ -61,12 +61,12 @@ mod test {
     }
 
     #[test]
-    fn nested_list() {
+    fn vec2_list() {
         assert_pretty(
-            r#" nestedList  :  list [ vec2, ] = {  {3, 6} {1 10000} }"#,
-            r#"nestedList: list[vec2] = {
-    { 3, 6 }
-    { 1, 10000 }
+            r#" vec2List  :  list [ vec2, ] = {  {3, 6} {1 10000} }"#,
+            r#"vec2List: list[vec2] = {
+    { 3, 6 } 
+    { 1, 10000 } 
 }"#,
             80,
         );
@@ -113,6 +113,23 @@ linked: list[string] = { "DATA/Characters/Viego/Viego.bin"
             r#"linked: list[string] = {
     "DATA/Characters/Viego/Viego.bin"
     "DATA/Viego_Skins_Skin0_Skins_Skin1_Skins_Skin10_Skins_Skin11_Skins_Skin12_Skins_Skin13_Skins_Skin14_Skins_Skin15_Skins_Skin16_Skins_Skin17_Skins_Skin18_Skins_Skin2_Skins_Skin3_Skins_Skin4_Skins_Skin43_Skins_Skin5_Skins_Skin6_Skins_Skin7_Skins_Skin8.bin"
+}"#,
+            80,
+        );
+    }
+
+    #[test]
+    fn list_of_list_of_link() {
+        assert_pretty(
+            r#"BorderAugments: list2[embed] = {
+    0x4a70b12c {
+        AugmentGroup: list2[link] = { 0x383e4602 }
+    }
+}"#,
+            r#"BorderAugments: list2[embed] = {
+    0x4a70b12c {
+        AugmentGroup: list2[link] = { 0x383e4602 } 
+    }
 }"#,
             80,
         );
