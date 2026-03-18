@@ -1,6 +1,6 @@
 //! Integration test for parsing a sample ritobin file.
 
-use ltk_ritobin::parse::parse;
+use ltk_ritobin::{parse::parse, print::print_bin};
 
 const SAMPLE_RITOBIN: &str = r#"#PROP_text
 type: string = "PROP"
@@ -77,18 +77,25 @@ fn test_parse_sample() {
 fn test_roundtrip() {
     let cst = parse(SAMPLE_RITOBIN);
     let (tree, errors) = cst.build_bin(SAMPLE_RITOBIN);
+    // assert!(errors.is_empty());
 
     // Write back to text
-    // let output = write(&tree).expect("Failed to write");
+    let output = print_bin(&tree, 80).expect("Failed to write");
 
     // Parse again
-    // let file2 = parse(&output).expect("Failed to parse output");
-    // let tree2 = file2.to_bin_tree();
+    let cst2 = parse(&output);
+
+    let mut str = String::new();
+    cst2.print(&mut str, 0, &output);
+    println!("reparsed:\n{str}");
+
+    let (tree2, errors) = cst2.build_bin(&output);
+    // assert!(errors.is_empty());
 
     // Verify structure is preserved
-    // assert_eq!(tree.version, tree2.version);
-    // assert_eq!(tree.dependencies.len(), tree2.dependencies.len());
-    // assert_eq!(tree.objects.len(), tree2.objects.len());
+    assert_eq!(tree.version, tree2.version);
+    assert_eq!(tree.dependencies.len(), tree2.dependencies.len());
+    assert_eq!(tree.objects.len(), tree2.objects.len());
 }
 //
 // #[test]
