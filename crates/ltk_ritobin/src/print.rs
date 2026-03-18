@@ -1,5 +1,7 @@
+use ltk_meta::Bin;
+
 use crate::parse::{
-    cst::{visitor::Visit, Cst, Kind, Visitor},
+    cst::{builder::bin_to_cst, visitor::Visit, Cst, Kind, Visitor},
     Span, TokenKind,
 };
 
@@ -30,8 +32,23 @@ impl<'a, W: Write> Printer<'a, W> {
         if let Some(e) = self.visitor.error {
             return Err(e);
         }
+        eprintln!("max q size: {}", self.visitor.queue_size_max);
         Ok(())
     }
+}
+
+pub fn print_bin(bin: &Bin, width: usize) -> Result<String, PrintError> {
+    let mut str = String::new();
+
+    let (buf, cst) = bin_to_cst(bin);
+
+    let mut tmp = String::new();
+    cst.print(&mut tmp, 0, &buf);
+    println!("[print] cst:\n{tmp}");
+
+    Printer::new(&buf, &mut str, width).print(&cst)?;
+
+    Ok(str)
 }
 
 #[cfg(test)]
