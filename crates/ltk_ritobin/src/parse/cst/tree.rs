@@ -117,8 +117,9 @@ impl Cst {
                 Child::Token(token) => {
                     format_to!(
                         buf,
-                        "{parent_indent}│ {bar} {:?}\n",
-                        &source[token.span.start as _..token.span.end as _]
+                        "{parent_indent}│ {bar} {:?} ({:?})\n",
+                        &source[token.span.start as _..token.span.end as _],
+                        token.kind,
                     )
                 }
                 Child::Tree(tree) => tree.print(buf, level + 1, source),
