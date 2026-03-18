@@ -378,8 +378,9 @@ impl<'a, W: Write> Printer<'a, W> {
         context: &Cst,
     ) -> Result<(), PrintError> {
         let txt = self.src[token.span].trim();
+        let print_value = token.kind.print_value();
 
-        if txt.is_empty() {
+        if txt.is_empty() && print_value.is_none() {
             return Ok(());
         }
 
@@ -412,6 +413,22 @@ impl<'a, W: Write> Printer<'a, W> {
                 self.space();
                 self.text("=");
                 self.space();
+            }
+
+            TokenKind::LBrack => {
+                self.text("[");
+            }
+            TokenKind::RBrack => {
+                self.text("]");
+            }
+            TokenKind::Quote => {
+                self.text("\"");
+            }
+            TokenKind::False => {
+                self.text("false");
+            }
+            TokenKind::True => {
+                self.text("true");
             }
 
             _ => {

@@ -27,6 +27,35 @@ impl TokenKind {
     pub fn is_string(&self) -> bool {
         matches!(self, Self::String | Self::UnterminatedString)
     }
+
+    pub fn print_value(&self) -> Option<&'static str> {
+        match self {
+            TokenKind::Unknown => None,
+            TokenKind::Eof => None,
+            TokenKind::Newline => None,
+            TokenKind::LParen => Some("("),
+            TokenKind::RParen => Some(")"),
+            TokenKind::LCurly => Some("{"),
+            TokenKind::RCurly => Some("}"),
+            TokenKind::LBrack => Some("["),
+            TokenKind::RBrack => Some("]"),
+            TokenKind::Eq => Some("="),
+            TokenKind::Comma => Some(","),
+            TokenKind::Colon => Some(":"),
+            TokenKind::SemiColon => Some(";"),
+            TokenKind::Star => Some("*"),
+            TokenKind::Slash => Some("/"),
+            TokenKind::Quote => Some("\""),
+            TokenKind::String => None,
+            TokenKind::UnterminatedString => None,
+            TokenKind::Comment => None,
+            TokenKind::True => Some("true"),
+            TokenKind::False => Some("false"),
+            TokenKind::Name => None,
+            TokenKind::Number => None,
+            TokenKind::HexLit => None,
+        }
+    }
 }
 
 impl Display for TokenKind {
