@@ -13,7 +13,7 @@ use ltk_meta::{
 
 use crate::{
     parse::{
-        cst::{self, visitor::Visit, Cst, Kind, Visitor},
+        cst::{self, visitor::Visit, Child, Cst, Kind, Visitor},
         Span, Token, TokenKind,
     },
     typecheck::RitobinName,
@@ -624,6 +624,45 @@ pub fn resolve_entry(
 
     let key = c.expect_tree(Kind::EntryKey)?;
 
+    let (key, key_span) = match key.children.first().ok_or(InvalidHash(key.span))? {
+        Child::Token(Token {
+            kind: TokenKind::Name,
+            span,
+        }) => (
+            PropertyValueEnum::from(values::String::from(&ctx.text[span])),
+            *span,
+        ),
+        Child::Token(Token {
+            kind: TokenKind::String,
+            span,
+        }) => (
+            PropertyValueEnum::from(values::String::from(&ctx.text[span])), // TODO: trim quotes
+            *span,
+        ),
+        Child::Token(Token {
+            kind: TokenKind::HexLit,
+            span,
+        }) => {
+            // TODO: better err here?
+            (
+                PropertyValueEnum::Hash(
+                    u32::from_str_radix(
+                        ctx.text[span]
+                            .strip_prefix("0x")
+                            .ok_or(InvalidHash(*span))?,
+                        16,
+                    )
+                    .map_err(|_| InvalidHash(*span))?
+                    .into(),
+                ),
+                *span,
+            )
+        }
+        _ => {
+            return Err(InvalidHash(key.span).into());
+        }
+    };
+
     let parent_value_kind = parent_value_kind
         .and_then(|p| p.value_subtype())
         .map(RitoType::simple);
@@ -654,7 +693,7 @@ pub fn resolve_entry(
                     .unwrap(),
                 );
                 return Ok(IrEntry {
-                    key: values::String::new_with_meta(ctx.text[key.span].into(), key.span).into(),
+                    key,
                     value: parent.make_default(value.span),
                 });
             }
@@ -667,7 +706,7 @@ pub fn resolve_entry(
 
     let value = match (kind, resolved_val) {
         (None, Some(value)) => value,
-        (None, None) => return Err(MissingType(key.span).into()),
+        (None, None) => return Err(MissingType(key_span).into()),
         (Some(kind), Some(ivalue)) => match ivalue.kind() == kind.base {
             true => ivalue,
             false => {
@@ -683,10 +722,7 @@ pub fn resolve_entry(
         (Some(kind), _) => kind.make_default(value_span),
     };
 
-    Ok(IrEntry {
-        key: values::String::new_with_meta(ctx.text[key.span].into(), key.span).into(),
-        value,
-    })
+    Ok(IrEntry { key, value })
 }
 
 pub fn resolve_list(ctx: &mut Ctx, tree: &Cst) -> Result<(), Diagnostic> {
