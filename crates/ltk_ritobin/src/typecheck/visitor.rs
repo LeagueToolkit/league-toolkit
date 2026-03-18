@@ -962,7 +962,9 @@ impl Visitor for TypeChecker<'_> {
                             })),
                         ));
                     }
-                    _ => {}
+                    parent_type => {
+                        eprintln!("[warn] got {parent_type:?} in ListItemBlock");
+                    }
                 }
             }
             Kind::ListItem => {
@@ -1084,7 +1086,9 @@ impl Visitor for TypeChecker<'_> {
                     }
                     None => {
                         if depth != 2 {
-                            eprintln!("ERROR: depth not 2???");
+                            // eprintln!("ERROR: depth not 2??? - {depth}");
+                            // eprintln!("{ir:?}");
+                            return Visit::Continue;
                         }
                         // assert_eq!(depth, 2);
                         let (
