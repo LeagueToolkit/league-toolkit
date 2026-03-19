@@ -100,8 +100,10 @@ impl<'a, W: fmt::Write, H: HashProvider> CstVisitor<'a, W, H> {
                 self.list_stack.pop();
                 // eprintln!("exit {} | stack: {}", tree.kind, self.list_stack.len());
                 if let Some(list) = self.list_stack.last() {
-                    self.force_group(list.grp, Mode::Break);
-                    self.softline();
+                    if list.len > 1 {
+                        self.force_group(list.grp, Mode::Break);
+                        self.softline();
+                    }
                 }
                 self.end_group();
             }
