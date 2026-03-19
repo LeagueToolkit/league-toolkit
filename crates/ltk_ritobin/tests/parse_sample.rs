@@ -58,20 +58,27 @@ fn tree(input: &str) -> String {
 fn test_roundtrip() {
     let cst = parse(SAMPLE_RITOBIN);
     let (tree, errors) = cst.build_bin(SAMPLE_RITOBIN);
-    assert!(errors.is_empty());
+    assert!(errors.is_empty(), "errors = {errors:#?}");
 
     // Write back to text
     let output = tree.print().expect("Failed to write");
 
+    println!("output:\n{output}");
+
     // Parse again
     let cst2 = parse(&output);
+    assert!(
+        cst2.errors.is_empty(),
+        "reparse errors = {:#?}",
+        cst2.errors
+    );
 
     let mut str = String::new();
     cst2.print(&mut str, 0, &output);
     println!("reparsed:\n{str}");
 
     let (tree2, errors) = cst2.build_bin(&output);
-    // assert!(errors.is_empty());
+    assert!(errors.is_empty(), "build bin errors = {errors:#?}");
 
     // Verify structure is preserved
     assert_eq!(tree.version, tree2.version);
