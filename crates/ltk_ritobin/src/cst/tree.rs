@@ -5,6 +5,7 @@ use crate::{
     typecheck::visitor::DiagnosticWithSpan,
 };
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[rustfmt::skip]
 pub enum Kind {
@@ -41,14 +42,17 @@ impl Display for Kind {
     }
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct Cst {
     pub span: Span,
     pub kind: Kind,
     pub children: Vec<Child>,
+    #[cfg_attr(feature = "serde", serde(skip_deserializing))]
     pub errors: Vec<parse::Error>,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub enum Child {
     Token(Token),

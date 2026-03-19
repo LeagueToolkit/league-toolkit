@@ -1,5 +1,6 @@
 use crate::parse::{cst, tokenizer::TokenKind, Span};
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Debug, Clone, Copy)]
 pub enum ErrorKind {
     Expected {
@@ -19,6 +20,7 @@ pub enum ErrorKind {
     Custom(&'static str),
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Debug, Clone, Copy)]
 pub struct Error {
     pub span: Span,
