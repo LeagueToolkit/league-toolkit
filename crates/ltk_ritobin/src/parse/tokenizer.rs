@@ -2,6 +2,7 @@ use std::fmt::Display;
 
 use crate::parse::Span;
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[rustfmt::skip]
 pub enum TokenKind {
@@ -89,6 +90,7 @@ impl Display for TokenKind {
     }
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug)]
 pub struct Token {
     pub kind: TokenKind,
