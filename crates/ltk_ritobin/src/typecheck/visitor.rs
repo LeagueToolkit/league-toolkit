@@ -859,6 +859,31 @@ impl<'a> TypeChecker<'a> {
                     }
                 }
             }
+            PropertyValueEnum::Optional(option) => {
+                let IrItem::ListItem(IrListItem(child)) = child else {
+                    eprintln!("\x1b[41moptional value must be list item\x1b[0m");
+                    return parent;
+                };
+                if child.kind() != option.item_kind() {
+                    self.ctx.diagnostics.push(
+                        TypeMismatch {
+                            span: *child.meta(),
+                            expected: RitoType::simple(option.item_kind()),
+                            expected_span: None, // TODO: would be nice here
+                            got: child.rito_type().into(),
+                        }
+                        .unwrap(),
+                    );
+                    return parent;
+                }
+
+                *option = values::Optional::new_with_meta(
+                    option.item_kind(),
+                    Some(child),
+                    *option.meta(),
+                )
+                .unwrap();
+            }
             other => {
                 eprintln!("cant inject into {:?}", other.kind())
             }
@@ -1019,7 +1044,7 @@ impl Visitor for TypeChecker<'_> {
 
                 use PropertyKind as K;
                 match parent_type.base {
-                    K::Container | K::UnorderedContainer => {
+                    K::Container | K::UnorderedContainer | K::Optional => {
                         let value_type = parent_type
                             .value_subtype()
                             .expect("container must have value_subtype");
