@@ -90,12 +90,21 @@ impl<H: HashProvider> Builder<H> {
         )
     }
 
+    fn bool(&self, v: bool) -> Child {
+        tree(
+            Kind::Literal,
+            vec![token(match v {
+                true => Tok::True,
+                false => Tok::False,
+            })],
+        )
+    }
+
     fn value_to_cst<M: Clone>(&mut self, value: &PropertyValueEnum<M>) -> Child {
         match value {
-            PropertyValueEnum::Bool(b) => tree(
-                Kind::Literal,
-                vec![token(if **b { Tok::True } else { Tok::False })],
-            ),
+            PropertyValueEnum::Bool(b) => self.bool(**b),
+            PropertyValueEnum::BitBool(b) => self.bool(**b),
+
             PropertyValueEnum::None(_) => {
                 tree(Kind::Literal, vec![token(Tok::LCurly), token(Tok::RCurly)])
             }
@@ -166,10 +175,8 @@ impl<H: HashProvider> Builder<H> {
             PropertyValueEnum::Color(color) => todo!(),
             PropertyValueEnum::Hash(hash) => todo!(),
             PropertyValueEnum::WadChunkLink(wad_chunk_link) => todo!(),
-            PropertyValueEnum::Struct(_) => todo!(),
-            PropertyValueEnum::Embedded(embedded) => {
-                let children = embedded
-                    .0
+            PropertyValueEnum::Embedded(values::Embedded(s)) | PropertyValueEnum::Struct(s) => {
+                let children = s
                     .properties
                     .iter()
                     .map(|(k, v)| {
@@ -182,7 +189,6 @@ impl<H: HashProvider> Builder<H> {
                 tree(Kind::Class, vec![token(Tok::HexLit), self.block(children)])
             }
             PropertyValueEnum::ObjectLink(object_link) => todo!(),
-            PropertyValueEnum::BitBool(bit_bool) => todo!(),
             PropertyValueEnum::Optional(optional) => {
                 let children = match optional.clone().into_inner() {
                     Some(v) => vec![self.value_to_cst(&v)],
