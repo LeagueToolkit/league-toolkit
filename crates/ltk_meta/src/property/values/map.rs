@@ -44,6 +44,21 @@ pub struct Map<M = NoMeta> {
 impl<M> Map<M> {
     #[inline(always)]
     #[must_use]
+    pub fn no_meta(self) -> Map<NoMeta> {
+        Map {
+            key_kind: self.key_kind,
+            value_kind: self.value_kind,
+            entries: self
+                .entries
+                .into_iter()
+                .map(|(k, v)| (k.no_meta(), v.no_meta()))
+                .collect(),
+            meta: NoMeta,
+        }
+    }
+
+    #[inline(always)]
+    #[must_use]
     pub fn key_kind(&self) -> Kind {
         self.key_kind
     }
@@ -64,6 +79,28 @@ impl<M> Map<M> {
     #[must_use]
     pub fn into_entries(self) -> Vec<(PropertyValueEnum<M>, PropertyValueEnum<M>)> {
         self.entries
+    }
+
+    #[inline(always)]
+    pub fn push(
+        &mut self,
+        key: PropertyValueEnum<M>,
+        value: PropertyValueEnum<M>,
+    ) -> Result<(), Error> {
+        if self.key_kind != key.kind() {
+            return Err(Error::MismatchedContainerTypes {
+                expected: self.key_kind,
+                got: key.kind(),
+            });
+        }
+        if self.value_kind != value.kind() {
+            return Err(Error::MismatchedContainerTypes {
+                expected: self.value_kind,
+                got: value.kind(),
+            });
+        }
+        self.entries.push((key, value));
+        Ok(())
     }
 }
 
@@ -118,6 +155,14 @@ impl<M> PropertyExt for Map<M> {
                 .iter()
                 .map(|(k, v)| k.size_no_header() + v.size_no_header())
                 .sum::<usize>()
+    }
+
+    type Meta = M;
+    fn meta(&self) -> &Self::Meta {
+        &self.meta
+    }
+    fn meta_mut(&mut self) -> &mut Self::Meta {
+        &mut self.meta
     }
 }
 

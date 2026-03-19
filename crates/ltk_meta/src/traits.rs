@@ -7,7 +7,6 @@ use enum_dispatch::enum_dispatch;
 const HEADER_SIZE: usize = 5;
 
 /// General methods for property values
-#[enum_dispatch]
 pub trait PropertyExt {
     /// Get the size of the property value, including the kind header if specified
     fn size(&self, include_header: bool) -> usize {
@@ -18,6 +17,10 @@ pub trait PropertyExt {
             }
     }
     fn size_no_header(&self) -> usize;
+
+    type Meta;
+    fn meta(&self) -> &Self::Meta;
+    fn meta_mut(&mut self) -> &mut Self::Meta;
 }
 
 pub trait PropertyValueExt {
