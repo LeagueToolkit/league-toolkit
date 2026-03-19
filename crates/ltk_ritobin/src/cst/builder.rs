@@ -30,8 +30,7 @@ pub fn token(kind: Tok) -> Child {
 
 impl Builder {
     pub fn number(&mut self, v: impl AsRef<str>) -> Child {
-        self.buf.write_str(v.as_ref()).unwrap();
-        token(Tok::Number)
+        tree(Kind::Literal, vec![self.spanned_token(Tok::Number, v)])
     }
 
     pub fn spanned_token(&mut self, kind: Tok, str: impl AsRef<str>) -> Child {
@@ -72,25 +71,46 @@ impl Builder {
             PropertyValueEnum::None(_) => {
                 tree(Kind::Literal, vec![token(Tok::LCurly), token(Tok::RCurly)])
             }
-            PropertyValueEnum::U8(n) => tree(Kind::Literal, vec![token(Tok::Number)]),
-            PropertyValueEnum::U16(n) => tree(Kind::Literal, vec![token(Tok::Number)]),
-            PropertyValueEnum::U32(n) => tree(Kind::Literal, vec![token(Tok::Number)]),
-            PropertyValueEnum::U64(n) => tree(Kind::Literal, vec![token(Tok::Number)]),
-            PropertyValueEnum::I8(n) => tree(Kind::Literal, vec![token(Tok::Number)]),
-            PropertyValueEnum::I16(n) => tree(Kind::Literal, vec![token(Tok::Number)]),
-            PropertyValueEnum::I32(n) => tree(Kind::Literal, vec![token(Tok::Number)]),
-            PropertyValueEnum::I64(n) => tree(Kind::Literal, vec![token(Tok::Number)]),
-            PropertyValueEnum::F32(n) => tree(Kind::Literal, vec![token(Tok::Number)]),
-            PropertyValueEnum::Vector2(v) => tree(Kind::Literal, vec![token(Tok::Number)]),
-            PropertyValueEnum::Vector3(v) => tree(Kind::Literal, vec![token(Tok::Number)]),
-            PropertyValueEnum::Vector4(v) => tree(Kind::Literal, vec![token(Tok::Number)]),
+            PropertyValueEnum::U8(n) => self.number(n.to_string()),
+            PropertyValueEnum::U16(n) => self.number(n.to_string()),
+            PropertyValueEnum::U32(n) => self.number(n.to_string()),
+            PropertyValueEnum::U64(n) => self.number(n.to_string()),
+            PropertyValueEnum::I8(n) => self.number(n.to_string()),
+            PropertyValueEnum::I16(n) => self.number(n.to_string()),
+            PropertyValueEnum::I32(n) => self.number(n.to_string()),
+            PropertyValueEnum::I64(n) => self.number(n.to_string()),
+            PropertyValueEnum::F32(n) => self.number(n.to_string()),
+            PropertyValueEnum::Vector2(v) => {
+                let items = v
+                    .to_array()
+                    .iter()
+                    .flat_map(|v| [self.number(v.to_string()), token(Tok::Comma)])
+                    .collect();
+                self.block(items)
+            }
+            PropertyValueEnum::Vector3(v) => {
+                let items = v
+                    .to_array()
+                    .iter()
+                    .map(|v| self.number(v.to_string()))
+                    .collect();
+                self.block(items)
+            }
+            PropertyValueEnum::Vector4(v) => {
+                let items = v
+                    .to_array()
+                    .iter()
+                    .map(|v| self.number(v.to_string()))
+                    .collect();
+                self.block(items)
+            }
             PropertyValueEnum::String(s) => tree(
                 Kind::Literal,
                 vec![token(Tok::Quote), self.string(&**s), token(Tok::Quote)],
             ),
             PropertyValueEnum::Container(container)
             | PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(container)) => {
-                let mut children = vec![token(Tok::LBrack)];
+                let mut children = vec![token(Tok::LCurly)];
 
                 for (i, item) in container.clone().into_items().enumerate() {
                     if i > 0 {
@@ -99,7 +119,7 @@ impl Builder {
                     children.push(self.value_to_cst(&item));
                 }
 
-                children.push(token(Tok::RBrack));
+                children.push(token(Tok::RCurly));
                 tree(Kind::TypeArgList, children)
             }
             PropertyValueEnum::Matrix44(matrix44) => todo!(),
@@ -156,7 +176,6 @@ impl Builder {
                 ),
             ];
             if let Some(sub) = rito_type.subtypes[1] {
-                args.push(token(Tok::Comma));
                 args.push(tree(
                     Kind::TypeArg,
                     vec![self.spanned_token(Tok::Name, kind_to_type_name(sub))],
@@ -293,7 +312,8 @@ mod test {
             Bin::builder()
                 .object(
                     BinObject::builder(0xDEADBEEF, 0x12344321)
-                        .property(0x44444444, values::String::from("hello"))
+                        .property(0x1, values::String::from("hello"))
+                        .property(0x2, values::U64::new(9))
                         .property(
                             0x9191919,
                             values::Container::new(vec![
