@@ -708,11 +708,10 @@ pub fn resolve_entry(
 
     let kind = kind.or(parent_value_kind);
 
-    let resolved_val =
-        resolve_value(ctx, value, kind.map(|k| k.base))?.and_then(|value| match kind {
-            Some(kind) => coerce_type(value, kind.base),
-            None => Some(value),
-        });
+    let resolved_val = resolve_value(ctx, value, kind.map(|k| k.base))?.map(|value| match kind {
+        Some(kind) => coerce_type(value.clone(), kind.base).unwrap_or(value),
+        None => value,
+    });
 
     let value = match (kind, resolved_val) {
         (None, Some(value)) => value,
