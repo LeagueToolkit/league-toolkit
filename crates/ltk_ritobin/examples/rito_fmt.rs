@@ -1,6 +1,6 @@
 use std::{fs::File, io::BufReader, path::PathBuf, str::FromStr};
 
-use ltk_ritobin::print::Printer;
+use ltk_ritobin::print::{CstPrinter, PrintConfig};
 
 fn main() {
     let mut args = std::env::args().skip(1);
@@ -24,7 +24,16 @@ fn main() {
     // eprintln!("#### CST:\n{str}");
 
     let mut str = String::new();
-    Printer::new(&input, &mut str, size).print(&cst).unwrap();
+    CstPrinter::new(
+        &input,
+        &mut str,
+        PrintConfig {
+            line_width: size,
+            ..Default::default()
+        },
+    )
+    .print(&cst)
+    .unwrap();
 
     println!("{str}");
 }

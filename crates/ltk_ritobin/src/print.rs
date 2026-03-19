@@ -1,59 +1,83 @@
-use ltk_meta::Bin;
-
-use crate::parse::{
-    cst::{builder::bin_to_cst, visitor::Visit, Cst, Kind, Visitor},
-    Span, TokenKind,
-};
-
 #[derive(Debug, thiserror::Error)]
 pub enum PrintError {
     #[error(transparent)]
     FmtError(#[from] fmt::Error),
 }
 
-use std::fmt::{self, Write};
+use std::fmt::{self};
 
-mod visitor;
+use ltk_meta::Bin;
 
-pub struct Printer<'a, W: Write> {
-    visitor: visitor::Printer<'a, W>,
+use crate::hashes::HashProvider;
+
+pub mod command;
+pub mod visitor;
+
+mod config;
+pub use config::*;
+
+mod printers;
+pub use printers::*;
+
+// pub fn print_bin(bin: &Bin, width: usize) -> Result<String, PrintError> {
+//     let mut str = String::new();
+//
+//     let (buf, cst) = bin_to_cst(bin);
+//
+//     let mut tmp = String::new();
+//     cst.print(&mut tmp, 0, &buf);
+//     println!("[print] cst:\n{tmp}");
+//
+//     Printer::new(&buf, &mut str, width).print(&cst)?;
+//
+//     Ok(str)
+// }
+
+pub trait Print {
+    /// Print as ritobin code to the given writer (using default config, which prints hashes as hex).
+    fn print_to_writer<W: fmt::Write>(&self, writer: &mut W) -> Result<usize, PrintError> {
+        Self::print_to_writer_with_config::<W, ()>(self, writer, Default::default())
+    }
+    /// Print as ritobin code to the given writer, using the given config.
+    fn print_to_writer_with_config<W: fmt::Write, H: HashProvider>(
+        &self,
+        writer: &mut W,
+        config: PrintConfig<H>,
+    ) -> Result<usize, PrintError>;
+
+    /// Print as ritobin code to a string (using default config, which prints hashes as hex).
+    fn print(&self) -> Result<String, PrintError> {
+        let mut str = String::new();
+        Self::print_to_writer(self, &mut str)?;
+        Ok(str)
+    }
+    /// Print as ritobin code to a string, using the given config.
+    fn print_with_config<H: HashProvider>(
+        &self,
+        config: PrintConfig<H>,
+    ) -> Result<String, PrintError> {
+        let mut str = String::new();
+        Self::print_to_writer_with_config(self, &mut str, config)?;
+        Ok(str)
+    }
 }
 
-impl<'a, W: Write> Printer<'a, W> {
-    pub fn new(src: &'a str, out: W, width: usize) -> Self {
-        Self {
-            visitor: visitor::Printer::new(src, out, width),
-        }
+impl Print for Bin {
+    fn print_to_writer_with_config<W: fmt::Write, H: HashProvider>(
+        &self,
+        writer: &mut W,
+        config: PrintConfig<H>,
+    ) -> Result<usize, PrintError> {
+        BinPrinter::new().with_config(config).print(self, writer)
     }
-
-    pub fn print(mut self, cst: &Cst) -> Result<(), PrintError> {
-        cst.walk(&mut self.visitor);
-        self.visitor.flush()?;
-        if let Some(e) = self.visitor.error {
-            return Err(e);
-        }
-        eprintln!("max q size: {}", self.visitor.queue_size_max);
-        Ok(())
-    }
-}
-
-pub fn print_bin(bin: &Bin, width: usize) -> Result<String, PrintError> {
-    let mut str = String::new();
-
-    let (buf, cst) = bin_to_cst(bin);
-
-    let mut tmp = String::new();
-    cst.print(&mut tmp, 0, &buf);
-    println!("[print] cst:\n{tmp}");
-
-    Printer::new(&buf, &mut str, width).print(&cst)?;
-
-    Ok(str)
 }
 
 #[cfg(test)]
 mod test {
-    use crate::{parse::parse, print::Printer};
+    use crate::{
+        parse::parse,
+        print::{config::PrintConfig, CstPrinter},
+    };
 
     fn assert_pretty(input: &str, is: &str, size: usize) {
         let cst = parse(input);
@@ -63,7 +87,17 @@ mod test {
         eprintln!("#### CST:\n{str}");
 
         let mut str = String::new();
-        Printer::new(input, &mut str, size).print(&cst).unwrap();
+        CstPrinter::new(
+            input,
+            &mut str,
+            PrintConfig {
+                indent_size: 4,
+                line_width: size,
+                hashes: (),
+            },
+        )
+        .print(&cst)
+        .unwrap();
 
         pretty_assertions::assert_eq!(str.trim(), is.trim());
     }

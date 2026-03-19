@@ -1,7 +1,5 @@
-use crate::parse::{
-    cst::{tree::Child, Cst},
-    tokenizer::Token,
-};
+use super::{tree::Child, Cst};
+use crate::parse::tokenizer::Token;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Visit {

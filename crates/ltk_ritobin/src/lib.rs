@@ -44,15 +44,12 @@
 // Nom-style parsers use elided lifetimes extensively
 #![allow(mismatched_lifetime_syntaxes)]
 
-pub mod error;
+pub mod cst;
 pub mod hashes;
 pub mod parse;
 pub mod print;
 pub mod typecheck;
 pub mod types;
-pub mod writer;
 
-pub use error::*;
 pub use hashes::*;
 pub use types::*;
-pub use writer::*;

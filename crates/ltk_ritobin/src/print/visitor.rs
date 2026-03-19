@@ -4,34 +4,20 @@ use std::{
 };
 
 use crate::{
-    parse::{
-        cst::{visitor::Visit, Cst, Kind, Visitor},
-        TokenKind,
+    cst::{visitor::Visit, Cst, Kind, Visitor},
+    parse::TokenKind,
+    print::{
+        command::{Cmd, Mode},
+        PrintConfig, PrintError,
     },
-    print::PrintError,
+    HashProvider,
 };
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub enum Mode {
-    Flat,
-    Break,
-}
+mod r#impl;
+pub mod state;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct GroupId(usize);
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub enum Cmd<'a> {
-    Text(&'a str),
-    TextIf(&'a str, Mode),
-    Line,
-    SoftLine,
-    Space,
-    Begin(Option<Mode>),
-    End,
-    Indent(usize),
-    Dedent(usize),
-}
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 struct ListContext {
@@ -42,10 +28,11 @@ struct ListContext {
 
 const MAX_QUEUE: usize = 4096;
 
-pub struct Printer<'a, W: Write> {
+pub struct CstVisitor<'a, W: Write, H: HashProvider> {
+    config: PrintConfig<H>,
+
     src: &'a str,
     out: W,
-    width: usize,
     col: usize,
     indent: usize,
 
@@ -66,12 +53,12 @@ pub struct Printer<'a, W: Write> {
     block_line: bool,
 }
 
-impl<'a, W: Write> Printer<'a, W> {
-    pub fn new(src: &'a str, out: W, width: usize) -> Self {
+impl<'a, W: Write, H: HashProvider> CstVisitor<'a, W, H> {
+    pub fn new(src: &'a str, out: W, config: PrintConfig<H>) -> Self {
         Self {
             src,
             out,
-            width,
+            config,
             col: 0,
             indent: 0,
             printed: 0,
@@ -113,10 +100,7 @@ impl<'a, W: Write> Printer<'a, W> {
     }
 
     pub fn space(&mut self) {
-        if matches!(
-            self.queue.back(),
-            Some(Cmd::Space) | Some(Cmd::Line) | Some(Cmd::SoftLine)
-        ) {
+        if self.queue.back().is_some_and(|c| c.is_whitespace()) {
             // eprintln!("# skipping Space! ({:?})", self.queue.back());
             return;
         }
@@ -127,10 +111,7 @@ impl<'a, W: Write> Printer<'a, W> {
         if self.queue.is_empty() && self.printed == 0 {
             return;
         }
-        if matches!(
-            self.queue.back(),
-            Some(Cmd::Space) | Some(Cmd::Line) | Some(Cmd::SoftLine)
-        ) {
+        if self.queue.back().is_some_and(|c| c.is_whitespace()) {
             // eprintln!("# replacing ({:?}) w/ Line", self.queue.back());
             self.queue.pop_back();
         }
@@ -140,10 +121,7 @@ impl<'a, W: Write> Printer<'a, W> {
         if self.queue.is_empty() && self.printed == 0 {
             return;
         }
-        if matches!(
-            self.queue.back(),
-            Some(Cmd::Space) | Some(Cmd::Line) | Some(Cmd::SoftLine)
-        ) {
+        if self.queue.back().is_some_and(|c| c.is_whitespace()) {
             // eprintln!("# replacing ({:?}) w/ SoftLine", self.queue.back());
             self.queue.pop_back();
         }
@@ -193,7 +171,7 @@ impl<'a, W: Write> Printer<'a, W> {
     /// break the first/oldest group if running size is too big (bottom of the stack)
     pub fn check_running_size(&mut self) {
         if let Some(size) = self.size_stack.last() {
-            if self.col + size > self.width {
+            if self.col + size > self.config.line_width {
                 self.break_first_group();
             }
         }
@@ -210,7 +188,7 @@ impl<'a, W: Write> Printer<'a, W> {
             match cmd {
                 Cmd::Text(s) | Cmd::TextIf(s, Mode::Flat) => {
                     col += s.len();
-                    if col > self.width {
+                    if col > self.config.line_width {
                         return false;
                     }
                 }
@@ -368,198 +346,6 @@ impl<'a, W: Write> Printer<'a, W> {
                 *group = Mode::Break;
             } else {
                 break; // stop once we hit an already broken group
-            }
-        }
-    }
-
-    fn visit_token_inner(
-        &mut self,
-        token: &crate::parse::Token,
-        context: &Cst,
-    ) -> Result<(), PrintError> {
-        let txt = self.src[token.span].trim();
-        let print_value = token.kind.print_value();
-
-        if txt.is_empty() && print_value.is_none() {
-            return Ok(());
-        }
-
-        // eprintln!("->{:?}", token.kind);
-        match token.kind {
-            TokenKind::LCurly => {
-                self.space();
-                self.text("{");
-                self.indent(4);
-                self.space();
-                // self.softline();
-            }
-
-            TokenKind::RCurly => {
-                self.dedent(4);
-                self.softline();
-                self.text("}");
-            }
-
-            TokenKind::Comma => {
-                // self.text_if(",", Mode::Flat);
-                // self.softline();
-            }
-            TokenKind::Colon => {
-                self.text(":");
-                self.space();
-            }
-
-            TokenKind::Eq => {
-                self.space();
-                self.text("=");
-                self.space();
-            }
-
-            TokenKind::LBrack => {
-                self.text("[");
-            }
-            TokenKind::RBrack => {
-                self.text("]");
-            }
-            TokenKind::Quote => {
-                self.text("\"");
-            }
-            TokenKind::False => {
-                self.text("false");
-            }
-            TokenKind::True => {
-                self.text("true");
-            }
-
-            _ => {
-                self.text(txt);
-            }
-        }
-        self.print_safe()?;
-        // self.flush()?;
-        Ok(())
-    }
-}
-
-impl<'a, W: fmt::Write> Visitor for Printer<'a, W> {
-    fn enter_tree(&mut self, tree: &Cst) -> Visit {
-        match tree.kind {
-            Kind::TypeArgList => {
-                let grp = self.begin_group(Some(Mode::Flat));
-                // eprintln!("{:#?}", tree.children);
-                self.list_stack.push(ListContext {
-                    len: tree
-                        .children
-                        .iter()
-                        .filter(|n| n.tree().is_some_and(|t| t.kind == Kind::TypeArg))
-                        .count()
-                        .try_into()
-                        .unwrap(),
-                    idx: 0,
-                    grp,
-                });
-            }
-            Kind::ListItemBlock => {
-                self.softline();
-                let grp = self.begin_group(None);
-
-                let len = tree
-                    .children
-                    .iter()
-                    .filter(|n| n.tree().is_some_and(|t| t.kind == Kind::ListItem))
-                    .count();
-                if len > 0 {
-                    self.list_stack.push(ListContext {
-                        len: len.try_into().unwrap(),
-                        idx: 0,
-                        grp,
-                    });
-                }
-            }
-            Kind::Block => {
-                // eprintln!("BLOCK: {:#?}", tree.children);
-                let grp = self.begin_group(None);
-                let len = tree
-                    .children
-                    .iter()
-                    .filter(|n| {
-                        n.tree()
-                            .is_some_and(|t| matches!(t.kind, Kind::ListItem | Kind::ListItemBlock))
-                    })
-                    .count();
-                if len > 0 {
-                    self.list_stack.push(ListContext {
-                        len: len.try_into().unwrap(),
-                        idx: 0,
-                        grp,
-                    });
-                }
-            }
-            Kind::Class => {}
-            Kind::ListItem => {
-                if tree
-                    .children
-                    .first()
-                    .is_some_and(|c| c.tree().is_some_and(|t| t.kind == Kind::Class))
-                {
-                    if let Some(list) = self.list_stack.last() {
-                        self.force_group(list.grp, Mode::Break);
-                    }
-                }
-                self.softline();
-            }
-            Kind::Entry => {
-                self.line();
-                // self.flush().unwrap();
-            }
-            _ => {}
-        }
-        Visit::Continue
-    }
-    fn exit_tree(&mut self, tree: &Cst) -> Visit {
-        match tree.kind {
-            Kind::TypeArgList => {
-                self.list_stack.pop();
-                self.end_group();
-            }
-            Kind::ListItemBlock | Kind::Block => {
-                self.list_stack.pop();
-                // eprintln!("exit {} | stack: {}", tree.kind, self.list_stack.len());
-                if let Some(list) = self.list_stack.last() {
-                    self.force_group(list.grp, Mode::Break);
-                    self.softline();
-                }
-                self.end_group();
-            }
-            Kind::ListItem | Kind::TypeArg => {
-                if let Some(ctx) = self.list_stack.last() {
-                    let last_item = ctx.idx + 1 == ctx.len;
-
-                    if !last_item {
-                        self.text_if(",", Mode::Flat);
-                        self.space();
-                        if tree.kind == Kind::ListItem {
-                            self.softline();
-                        }
-                    }
-
-                    self.list_stack.last_mut().unwrap(/* guaranteed by if let */).idx += 1;
-                }
-            }
-            _ => {}
-        }
-        Visit::Continue
-    }
-    fn visit_token(
-        &mut self,
-        token: &crate::parse::Token,
-        context: &crate::parse::cst::Cst,
-    ) -> Visit {
-        match self.visit_token_inner(token, context) {
-            Ok(_) => Visit::Continue,
-            Err(e) => {
-                self.error.replace(e);
-                Visit::Stop
             }
         }
     }

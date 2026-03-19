@@ -1,9 +1,9 @@
-use crate::parse::{
+use crate::{
     cst::{
         visitor::{Visit, Visitor},
         Cst,
     },
-    Error,
+    parse::Error,
 };
 
 #[derive(Default)]
