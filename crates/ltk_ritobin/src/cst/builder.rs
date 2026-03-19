@@ -176,17 +176,13 @@ impl<H: HashProvider> Builder<H> {
             PropertyValueEnum::Hash(hash) => todo!(),
             PropertyValueEnum::WadChunkLink(wad_chunk_link) => todo!(),
             PropertyValueEnum::Embedded(values::Embedded(s)) | PropertyValueEnum::Struct(s) => {
+                let k = self.spanned_token(Tok::HexLit, format!("0x{:x}", s.class_hash));
                 let children = s
                     .properties
                     .iter()
-                    .map(|(k, v)| {
-                        let k = self.spanned_token(Tok::HexLit, k.to_string());
-                        let t = self.rito_type(v.value.rito_type());
-                        let v = self.property_to_cst(v);
-                        self.entry(k, Some(t), v)
-                    })
+                    .map(|(k, v)| self.property_to_cst(v))
                     .collect();
-                tree(Kind::Class, vec![token(Tok::HexLit), self.block(children)])
+                tree(Kind::Class, vec![k, self.block(children)])
             }
             PropertyValueEnum::ObjectLink(object_link) => todo!(),
             PropertyValueEnum::Optional(optional) => {
@@ -234,7 +230,7 @@ impl<H: HashProvider> Builder<H> {
         tree(Kind::TypeExpr, children)
     }
     fn property_to_cst<M: Clone>(&mut self, prop: &BinProperty<M>) -> Child {
-        let k = self.spanned_token(Tok::HexLit, prop.name_hash.to_string());
+        let k = self.spanned_token(Tok::HexLit, format!("0x{:x}", prop.name_hash));
         let t = self.rito_type(prop.value.rito_type());
         let v = self.value_to_cst(&prop.value);
         self.entry(k, Some(t), v)
