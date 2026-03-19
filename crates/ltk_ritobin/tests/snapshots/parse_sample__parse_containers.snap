@@ -1,0 +1,143 @@
+---
+source: crates/ltk_ritobin/tests/parse_sample.rs
+expression: "tree(r#\"\ntest_list: list[string] = {\n    \"item1\"\n    \"item2\"\n    \"item3\"\n}\ntest_list2: list2[u32] = {\n    1\n    2\n    3\n}\ntest_option_some: option[string] = {\n    \"value\"\n}\ntest_option_none: option[string] = {}\ntest_map: map[hash,string] = {\n    0x12345678 = \"value1\"\n    0xdeadbeef = \"value2\"\n}\"#,)"
+---
+File - (0..287): "\ntest_list: list[string] = {\n    \"item1\"\n    \"item2\"\n    \"item3\"\n}\ntest_list2: list2[u32] = {\n    1\n    2\n    3\n}\ntest_option_some: option[string] = {\n    \"value\"\n}\ntest_option_none: option[string] = {}\ntest_map: map[hash,string] = {\n    0x12345678 = \"value1\"\n    0xdeadbeef = \"value2\"\n}"
+    Entry - (0..67): "\ntest_list: list[string] = {\n    \"item1\"\n    \"item2\"\n    \"item3\"\n}\n"
+        EntryKey - (1..10): "test_list"
+          "test_list" (Name)
+      ":" (Colon)
+        TypeExpr - (12..24): "list[string]"
+          "list" (Name)
+          "[" (LBrack)
+            TypeArgList - (17..23): "string"
+                TypeArg - (17..23): "string"
+                  "string" (Name)
+          "]" (RBrack)
+      "=" (Eq)
+        EntryValue - (26..66): " {\n    \"item1\"\n    \"item2\"\n    \"item3\"\n}"
+            Block - (27..66): "{\n    \"item1\"\n    \"item2\"\n    \"item3\"\n}"
+              "{" (LCurly)
+                ListItem - (28..40): "\n    \"item1\""
+                    Literal - (33..40): "\"item1\""
+                      "\"item1\"" (String)
+              "\n    " (Newline)
+                ListItem - (45..52): "\"item2\""
+                    Literal - (45..52): "\"item2\""
+                      "\"item2\"" (String)
+              "\n    " (Newline)
+                ListItem - (57..64): "\"item3\""
+                    Literal - (57..64): "\"item3\""
+                      "\"item3\"" (String)
+              "\n" (Newline)
+              "}" (RCurly)
+        EntryTerminator - (66..67): "\n"
+          "\n" (Newline)
+    Entry - (67..114): "test_list2: list2[u32] = {\n    1\n    2\n    3\n}\n"
+        EntryKey - (67..77): "test_list2"
+          "test_list2" (Name)
+      ":" (Colon)
+        TypeExpr - (79..89): "list2[u32]"
+          "list2" (Name)
+          "[" (LBrack)
+            TypeArgList - (85..88): "u32"
+                TypeArg - (85..88): "u32"
+                  "u32" (Name)
+          "]" (RBrack)
+      "=" (Eq)
+        EntryValue - (91..113): " {\n    1\n    2\n    3\n}"
+            Block - (92..113): "{\n    1\n    2\n    3\n}"
+              "{" (LCurly)
+                ListItem - (93..99): "\n    1"
+                    Literal - (98..99): "1"
+                      "1" (Number)
+              "\n    " (Newline)
+                ListItem - (104..105): "2"
+                    Literal - (104..105): "2"
+                      "2" (Number)
+              "\n    " (Newline)
+                ListItem - (110..111): "3"
+                    Literal - (110..111): "3"
+                      "3" (Number)
+              "\n" (Newline)
+              "}" (RCurly)
+        EntryTerminator - (113..114): "\n"
+          "\n" (Newline)
+    Entry - (114..165): "test_option_some: option[string] = {\n    \"value\"\n}\n"
+        EntryKey - (114..130): "test_option_some"
+          "test_option_some" (Name)
+      ":" (Colon)
+        TypeExpr - (132..146): "option[string]"
+          "option" (Name)
+          "[" (LBrack)
+            TypeArgList - (139..145): "string"
+                TypeArg - (139..145): "string"
+                  "string" (Name)
+          "]" (RBrack)
+      "=" (Eq)
+        EntryValue - (148..164): " {\n    \"value\"\n}"
+            Block - (149..164): "{\n    \"value\"\n}"
+              "{" (LCurly)
+                ListItem - (150..162): "\n    \"value\""
+                    Literal - (155..162): "\"value\""
+                      "\"value\"" (String)
+              "\n" (Newline)
+              "}" (RCurly)
+        EntryTerminator - (164..165): "\n"
+          "\n" (Newline)
+    Entry - (165..203): "test_option_none: option[string] = {}\n"
+        EntryKey - (165..181): "test_option_none"
+          "test_option_none" (Name)
+      ":" (Colon)
+        TypeExpr - (183..197): "option[string]"
+          "option" (Name)
+          "[" (LBrack)
+            TypeArgList - (190..196): "string"
+                TypeArg - (190..196): "string"
+                  "string" (Name)
+          "]" (RBrack)
+      "=" (Eq)
+        EntryValue - (199..202): " {}"
+            Block - (200..202): "{}"
+              "{" (LCurly)
+              "}" (RCurly)
+        EntryTerminator - (202..203): "\n"
+          "\n" (Newline)
+    Entry - (203..287): "test_map: map[hash,string] = {\n    0x12345678 = \"value1\"\n    0xdeadbeef = \"value2\"\n}"
+        EntryKey - (203..211): "test_map"
+          "test_map" (Name)
+      ":" (Colon)
+        TypeExpr - (213..229): "map[hash,string]"
+          "map" (Name)
+          "[" (LBrack)
+            TypeArgList - (217..228): "hash,string"
+                TypeArg - (217..221): "hash"
+                  "hash" (Name)
+              "," (Comma)
+                TypeArg - (222..228): "string"
+                  "string" (Name)
+          "]" (RBrack)
+      "=" (Eq)
+        EntryValue - (231..287): " {\n    0x12345678 = \"value1\"\n    0xdeadbeef = \"value2\"\n}"
+            Block - (232..287): "{\n    0x12345678 = \"value1\"\n    0xdeadbeef = \"value2\"\n}"
+              "{" (LCurly)
+                Entry - (233..264): "\n    0x12345678 = \"value1\"\n    "
+                    EntryKey - (238..248): "0x12345678"
+                      "0x12345678" (HexLit)
+                  "=" (Eq)
+                    EntryValue - (250..259): " \"value1\""
+                        Literal - (251..259): "\"value1\""
+                          "\"value1\"" (String)
+                    EntryTerminator - (259..264): "\n    "
+                      "\n    " (Newline)
+                Entry - (264..286): "0xdeadbeef = \"value2\"\n"
+                    EntryKey - (264..274): "0xdeadbeef"
+                      "0xdeadbeef" (HexLit)
+                  "=" (Eq)
+                    EntryValue - (276..285): " \"value2\""
+                        Literal - (277..285): "\"value2\""
+                          "\"value2\"" (String)
+                    EntryTerminator - (285..286): "\n"
+                      "\n" (Newline)
+              "}" (RCurly)
+        EntryTerminator - (287..287): ""
