@@ -298,7 +298,7 @@ fn test_object_link_property_roundtrip() {
 fn test_container_empty_roundtrip() {
     let prop = make_prop(
         0x1234,
-        PropertyValueEnum::Container(values::Container::empty::<values::I32>()),
+        PropertyValueEnum::Container(values::Container::empty_const::<values::I32>()),
     );
     let result = roundtrip_property(&prop);
     assert_eq!(prop, result);

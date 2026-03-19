@@ -17,8 +17,24 @@ use ltk_io_ext::{measure, window_at};
 #[derive(Clone, PartialEq, Debug, Default)]
 pub struct Struct<M = NoMeta> {
     pub class_hash: u32,
-    pub properties: IndexMap<u32, BinProperty>,
+    pub properties: IndexMap<u32, BinProperty<M>>,
     pub meta: M,
+}
+
+impl<M> Struct<M> {
+    #[inline(always)]
+    #[must_use]
+    pub fn no_meta(self) -> Struct<NoMeta> {
+        Struct {
+            class_hash: self.class_hash,
+            properties: self
+                .properties
+                .into_iter()
+                .map(|(k, v)| (k, v.no_meta()))
+                .collect(),
+            meta: NoMeta,
+        }
+    }
 }
 
 impl<M> PropertyValueExt for Struct<M> {
@@ -31,6 +47,14 @@ impl<M> PropertyExt for Struct<M> {
             0 => 4,
             _ => 10 + self.properties.values().map(|p| p.size()).sum::<usize>(),
         }
+    }
+
+    type Meta = M;
+    fn meta(&self) -> &Self::Meta {
+        &self.meta
+    }
+    fn meta_mut(&mut self) -> &mut Self::Meta {
+        &mut self.meta
     }
 }
 
@@ -70,7 +94,7 @@ impl<M: Default> ReadProperty for Struct<M> {
         Ok(value)
     }
 }
-impl<M> WriteProperty for Struct<M> {
+impl<M: Clone> WriteProperty for Struct<M> {
     fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
         &self,
         writer: &mut R,

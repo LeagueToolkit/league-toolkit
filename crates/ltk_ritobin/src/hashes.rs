@@ -28,13 +28,7 @@ pub trait HashProvider {
     fn lookup_type(&self, hash: u32) -> Option<&str>;
 }
 
-/// A hash provider that always returns `None`, causing all hashes to be written as hex.
-///
-/// This is the default provider and is useful when you don't have hash tables available.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct HexHashProvider;
-
-impl HashProvider for HexHashProvider {
+impl HashProvider for () {
     fn lookup_entry(&self, _hash: u32) -> Option<&str> {
         None
     }
@@ -230,8 +224,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_hex_provider() {
-        let provider = HexHashProvider;
+    fn test_empty_provider() {
+        let provider = ();
         assert_eq!(provider.lookup_entry(0x12345678), None);
         assert_eq!(provider.lookup_field(0x12345678), None);
         assert_eq!(provider.lookup_hash(0x12345678), None);

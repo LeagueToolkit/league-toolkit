@@ -1,5 +1,5 @@
 use crate::{
-    property::Kind,
+    property::{Kind, NoMeta},
     traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty},
 };
 
@@ -13,6 +13,12 @@ use super::Container;
 #[derive(Clone, PartialEq, Debug, Default)]
 pub struct UnorderedContainer<M>(pub Container<M>);
 
+impl<M> UnorderedContainer<M> {
+    pub fn no_meta(self) -> UnorderedContainer<NoMeta> {
+        UnorderedContainer(self.0.no_meta())
+    }
+}
+
 impl<M> PropertyValueExt for UnorderedContainer<M> {
     const KIND: Kind = Kind::UnorderedContainer;
 }
@@ -20,6 +26,14 @@ impl<M> PropertyValueExt for UnorderedContainer<M> {
 impl<M> PropertyExt for UnorderedContainer<M> {
     fn size_no_header(&self) -> usize {
         self.0.size_no_header()
+    }
+
+    type Meta = M;
+    fn meta(&self) -> &Self::Meta {
+        self.0.meta()
+    }
+    fn meta_mut(&mut self) -> &mut Self::Meta {
+        self.0.meta_mut()
     }
 }
 

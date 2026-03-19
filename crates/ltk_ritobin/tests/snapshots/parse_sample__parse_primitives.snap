@@ -1,0 +1,249 @@
+---
+source: crates/ltk_ritobin/tests/parse_sample.rs
+expression: debug
+---
+File - (0..459): "\ntest_bool: bool = true\ntest_i8: i8 = -128\ntest_u8: u8 = 255\ntest_i16: i16 = -32768\ntest_u16: u16 = 65535\ntest_i32: i32 = -2147483648\ntest_u32: u32 = 4294967295\ntest_f32: f32 = 3.14159\ntest_vec2: vec2 = { 1.0, 2.0 }\ntest_vec3: vec3 = { 1.0, 2.0, 3.0 }\ntest_vec4: vec4 = { 1.0, 2.0, 3.0, 4.0 }\ntest_rgba: rgba = { 255, 128, 64, 255 }\ntest_string: string = \"Hello, World!\"\ntest_hash: hash = 0xdeadbeef\ntest_link: link = \"path/to/object\"\ntest_flag: flag = false\n"
+    Entry - (0..24): "\ntest_bool: bool = true\n"
+        EntryKey - (1..10): "test_bool"
+          "test_bool" (Name)
+      ":" (Colon)
+        TypeExpr - (12..16): "bool"
+          "bool" (Name)
+      "=" (Eq)
+        EntryValue - (18..23): " true"
+            Literal - (19..23): "true"
+              "true" (True)
+        EntryTerminator - (23..24): "\n"
+          "\n" (Newline)
+    Entry - (24..43): "test_i8: i8 = -128\n"
+        EntryKey - (24..31): "test_i8"
+          "test_i8" (Name)
+      ":" (Colon)
+        TypeExpr - (33..35): "i8"
+          "i8" (Name)
+      "=" (Eq)
+        EntryValue - (37..42): " -128"
+            Literal - (38..42): "-128"
+              "-128" (Number)
+        EntryTerminator - (42..43): "\n"
+          "\n" (Newline)
+    Entry - (43..61): "test_u8: u8 = 255\n"
+        EntryKey - (43..50): "test_u8"
+          "test_u8" (Name)
+      ":" (Colon)
+        TypeExpr - (52..54): "u8"
+          "u8" (Name)
+      "=" (Eq)
+        EntryValue - (56..60): " 255"
+            Literal - (57..60): "255"
+              "255" (Number)
+        EntryTerminator - (60..61): "\n"
+          "\n" (Newline)
+    Entry - (61..84): "test_i16: i16 = -32768\n"
+        EntryKey - (61..69): "test_i16"
+          "test_i16" (Name)
+      ":" (Colon)
+        TypeExpr - (71..74): "i16"
+          "i16" (Name)
+      "=" (Eq)
+        EntryValue - (76..83): " -32768"
+            Literal - (77..83): "-32768"
+              "-32768" (Number)
+        EntryTerminator - (83..84): "\n"
+          "\n" (Newline)
+    Entry - (84..106): "test_u16: u16 = 65535\n"
+        EntryKey - (84..92): "test_u16"
+          "test_u16" (Name)
+      ":" (Colon)
+        TypeExpr - (94..97): "u16"
+          "u16" (Name)
+      "=" (Eq)
+        EntryValue - (99..105): " 65535"
+            Literal - (100..105): "65535"
+              "65535" (Number)
+        EntryTerminator - (105..106): "\n"
+          "\n" (Newline)
+    Entry - (106..134): "test_i32: i32 = -2147483648\n"
+        EntryKey - (106..114): "test_i32"
+          "test_i32" (Name)
+      ":" (Colon)
+        TypeExpr - (116..119): "i32"
+          "i32" (Name)
+      "=" (Eq)
+        EntryValue - (121..133): " -2147483648"
+            Literal - (122..133): "-2147483648"
+              "-2147483648" (Number)
+        EntryTerminator - (133..134): "\n"
+          "\n" (Newline)
+    Entry - (134..161): "test_u32: u32 = 4294967295\n"
+        EntryKey - (134..142): "test_u32"
+          "test_u32" (Name)
+      ":" (Colon)
+        TypeExpr - (144..147): "u32"
+          "u32" (Name)
+      "=" (Eq)
+        EntryValue - (149..160): " 4294967295"
+            Literal - (150..160): "4294967295"
+              "4294967295" (Number)
+        EntryTerminator - (160..161): "\n"
+          "\n" (Newline)
+    Entry - (161..185): "test_f32: f32 = 3.14159\n"
+        EntryKey - (161..169): "test_f32"
+          "test_f32" (Name)
+      ":" (Colon)
+        TypeExpr - (171..174): "f32"
+          "f32" (Name)
+      "=" (Eq)
+        EntryValue - (176..184): " 3.14159"
+            Literal - (177..184): "3.14159"
+              "3.14159" (Number)
+        EntryTerminator - (184..185): "\n"
+          "\n" (Newline)
+    Entry - (185..216): "test_vec2: vec2 = { 1.0, 2.0 }\n"
+        EntryKey - (185..194): "test_vec2"
+          "test_vec2" (Name)
+      ":" (Colon)
+        TypeExpr - (196..200): "vec2"
+          "vec2" (Name)
+      "=" (Eq)
+        EntryValue - (202..215): " { 1.0, 2.0 }"
+            Block - (203..215): "{ 1.0, 2.0 }"
+              "{" (LCurly)
+                ListItem - (204..208): " 1.0"
+                    Literal - (205..208): "1.0"
+                      "1.0" (Number)
+              "," (Comma)
+                ListItem - (209..213): " 2.0"
+                    Literal - (210..213): "2.0"
+                      "2.0" (Number)
+              "}" (RCurly)
+        EntryTerminator - (215..216): "\n"
+          "\n" (Newline)
+    Entry - (216..252): "test_vec3: vec3 = { 1.0, 2.0, 3.0 }\n"
+        EntryKey - (216..225): "test_vec3"
+          "test_vec3" (Name)
+      ":" (Colon)
+        TypeExpr - (227..231): "vec3"
+          "vec3" (Name)
+      "=" (Eq)
+        EntryValue - (233..251): " { 1.0, 2.0, 3.0 }"
+            Block - (234..251): "{ 1.0, 2.0, 3.0 }"
+              "{" (LCurly)
+                ListItem - (235..239): " 1.0"
+                    Literal - (236..239): "1.0"
+                      "1.0" (Number)
+              "," (Comma)
+                ListItem - (240..244): " 2.0"
+                    Literal - (241..244): "2.0"
+                      "2.0" (Number)
+              "," (Comma)
+                ListItem - (245..249): " 3.0"
+                    Literal - (246..249): "3.0"
+                      "3.0" (Number)
+              "}" (RCurly)
+        EntryTerminator - (251..252): "\n"
+          "\n" (Newline)
+    Entry - (252..293): "test_vec4: vec4 = { 1.0, 2.0, 3.0, 4.0 }\n"
+        EntryKey - (252..261): "test_vec4"
+          "test_vec4" (Name)
+      ":" (Colon)
+        TypeExpr - (263..267): "vec4"
+          "vec4" (Name)
+      "=" (Eq)
+        EntryValue - (269..292): " { 1.0, 2.0, 3.0, 4.0 }"
+            Block - (270..292): "{ 1.0, 2.0, 3.0, 4.0 }"
+              "{" (LCurly)
+                ListItem - (271..275): " 1.0"
+                    Literal - (272..275): "1.0"
+                      "1.0" (Number)
+              "," (Comma)
+                ListItem - (276..280): " 2.0"
+                    Literal - (277..280): "2.0"
+                      "2.0" (Number)
+              "," (Comma)
+                ListItem - (281..285): " 3.0"
+                    Literal - (282..285): "3.0"
+                      "3.0" (Number)
+              "," (Comma)
+                ListItem - (286..290): " 4.0"
+                    Literal - (287..290): "4.0"
+                      "4.0" (Number)
+              "}" (RCurly)
+        EntryTerminator - (292..293): "\n"
+          "\n" (Newline)
+    Entry - (293..333): "test_rgba: rgba = { 255, 128, 64, 255 }\n"
+        EntryKey - (293..302): "test_rgba"
+          "test_rgba" (Name)
+      ":" (Colon)
+        TypeExpr - (304..308): "rgba"
+          "rgba" (Name)
+      "=" (Eq)
+        EntryValue - (310..332): " { 255, 128, 64, 255 }"
+            Block - (311..332): "{ 255, 128, 64, 255 }"
+              "{" (LCurly)
+                ListItem - (312..316): " 255"
+                    Literal - (313..316): "255"
+                      "255" (Number)
+              "," (Comma)
+                ListItem - (317..321): " 128"
+                    Literal - (318..321): "128"
+                      "128" (Number)
+              "," (Comma)
+                ListItem - (322..325): " 64"
+                    Literal - (323..325): "64"
+                      "64" (Number)
+              "," (Comma)
+                ListItem - (326..330): " 255"
+                    Literal - (327..330): "255"
+                      "255" (Number)
+              "}" (RCurly)
+        EntryTerminator - (332..333): "\n"
+          "\n" (Newline)
+    Entry - (333..371): "test_string: string = \"Hello, World!\"\n"
+        EntryKey - (333..344): "test_string"
+          "test_string" (Name)
+      ":" (Colon)
+        TypeExpr - (346..352): "string"
+          "string" (Name)
+      "=" (Eq)
+        EntryValue - (354..370): " \"Hello, World!\""
+            Literal - (355..370): "\"Hello, World!\""
+              "\"Hello, World!\"" (String)
+        EntryTerminator - (370..371): "\n"
+          "\n" (Newline)
+    Entry - (371..400): "test_hash: hash = 0xdeadbeef\n"
+        EntryKey - (371..380): "test_hash"
+          "test_hash" (Name)
+      ":" (Colon)
+        TypeExpr - (382..386): "hash"
+          "hash" (Name)
+      "=" (Eq)
+        EntryValue - (388..399): " 0xdeadbeef"
+            Literal - (389..399): "0xdeadbeef"
+              "0xdeadbeef" (HexLit)
+        EntryTerminator - (399..400): "\n"
+          "\n" (Newline)
+    Entry - (400..435): "test_link: link = \"path/to/object\"\n"
+        EntryKey - (400..409): "test_link"
+          "test_link" (Name)
+      ":" (Colon)
+        TypeExpr - (411..415): "link"
+          "link" (Name)
+      "=" (Eq)
+        EntryValue - (417..434): " \"path/to/object\""
+            Literal - (418..434): "\"path/to/object\""
+              "\"path/to/object\"" (String)
+        EntryTerminator - (434..435): "\n"
+          "\n" (Newline)
+    Entry - (435..459): "test_flag: flag = false\n"
+        EntryKey - (435..444): "test_flag"
+          "test_flag" (Name)
+      ":" (Colon)
+        TypeExpr - (446..450): "flag"
+          "flag" (Name)
+      "=" (Eq)
+        EntryValue - (452..458): " false"
+            Literal - (453..458): "false"
+              "false" (False)
+        EntryTerminator - (458..459): "\n"
+          "\n" (Newline)

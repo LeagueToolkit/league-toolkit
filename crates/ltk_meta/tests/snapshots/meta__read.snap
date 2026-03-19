@@ -29,10 +29,13 @@ Bin(
                   607245356: {
                     "kind": Optional,
                     "name_hash": 607245356,
-                    "value": F32(Some(F32(
-                      value: 10.0,
+                    "value": F32(
+                      value: Some(F32(
+                        value: 10.0,
+                        meta: NoMeta,
+                      )),
                       meta: NoMeta,
-                    ))),
+                    ),
                   },
                   895082843: {
                     "kind": BitBool,
@@ -61,10 +64,13 @@ Bin(
                   1376955374: {
                     "kind": Optional,
                     "name_hash": 1376955374,
-                    "value": F32(Some(F32(
-                      value: 1.0,
+                    "value": F32(
+                      value: Some(F32(
+                        value: 1.0,
+                        meta: NoMeta,
+                      )),
                       meta: NoMeta,
-                    ))),
+                    ),
                   },
                   2927860839: {
                     "kind": Embedded,

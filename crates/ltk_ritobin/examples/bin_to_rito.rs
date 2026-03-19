@@ -1,4 +1,7 @@
-use ltk_ritobin::HashMapProvider;
+use ltk_ritobin::{
+    print::{Print, PrintConfig},
+    HashMapProvider,
+};
 use std::{fs::File, io::BufReader, path::PathBuf, str::FromStr};
 
 fn main() {
@@ -25,6 +28,8 @@ fn main() {
             .and_then(|p| PathBuf::from_str(&p).ok())
             .unwrap_or(std::env::current_dir().unwrap()),
     );
-    let text = ltk_ritobin::write_with_hashes(&tree, &hashes).unwrap();
+    let text = tree
+        .print_with_config(PrintConfig::default().with_hashes(hashes))
+        .unwrap();
     std::fs::write(output_path, text).unwrap();
 }
