@@ -12,10 +12,8 @@ use ltk_meta::{
 };
 
 use crate::{
-    parse::{
-        cst::{self, visitor::Visit, Child, Cst, Kind, Visitor},
-        Span, Token, TokenKind,
-    },
+    cst::{self, visitor::Visit, Child, Cst, Kind, Visitor},
+    parse::{Span, Token, TokenKind},
     typecheck::RitobinName,
 };
 

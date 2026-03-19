@@ -3,11 +3,9 @@ use std::fmt::Write;
 use ltk_meta::{property::values, Bin, BinObject, BinProperty, PropertyKind, PropertyValueEnum};
 
 use crate::{
+    cst::{Child, Cst, Kind},
     kind_to_type_name,
-    parse::{
-        cst::{Child, Cst, Kind},
-        Span, Token, TokenKind as Tok,
-    },
+    parse::{Span, Token, TokenKind as Tok},
     typecheck::visitor::{PropertyValueExt, RitoType},
 };
 
@@ -250,10 +248,7 @@ pub fn bin_to_cst(bin: &Bin) -> (String, Cst) {
 mod test {
     use ltk_meta::{property::values, Bin, BinObject};
 
-    use crate::{
-        parse::{cst::builder::bin_to_cst, parse},
-        print::Printer,
-    };
+    use crate::{cst::builder::bin_to_cst, parse::parse, print::CstPrinter};
 
     fn roundtrip(bin: Bin) {
         println!("bin: {bin:#?}");
@@ -267,7 +262,9 @@ mod test {
 
         let mut str = String::new();
 
-        Printer::new(&buf, &mut str, 80).print(&cst).unwrap();
+        CstPrinter::new(&buf, &mut str, Default::default())
+            .print(&cst)
+            .unwrap();
         println!("RITOBIN:\n{str}");
 
         let cst2 = parse(&str);
