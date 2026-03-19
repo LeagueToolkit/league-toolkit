@@ -36,6 +36,7 @@ pub struct CstVisitor<'a, W: Write, H: HashProvider> {
     col: usize,
     indent: usize,
 
+    pub printed_bytes: usize,
     printed: usize,
     pub queue: VecDeque<Cmd<'a>>,
     pub queue_size_max: usize,
@@ -62,6 +63,7 @@ impl<'a, W: Write, H: HashProvider> CstVisitor<'a, W, H> {
             col: 0,
             indent: 0,
             printed: 0,
+            printed_bytes: 0,
             queue: VecDeque::new(),
             queue_size_max: 0,
             modes: vec![Mode::Break],
@@ -226,6 +228,7 @@ impl<'a, W: Write, H: HashProvider> CstVisitor<'a, W, H> {
         match cmd {
             Cmd::Text(s) => {
                 self.out.write_str(s)?;
+                self.printed_bytes += s.len();
                 self.col += s.len();
                 self.block_space = false;
                 self.block_line = false;
@@ -233,6 +236,7 @@ impl<'a, W: Write, H: HashProvider> CstVisitor<'a, W, H> {
             Cmd::TextIf(s, mode) => {
                 if *self.modes.last().unwrap() == mode {
                     self.out.write_str(s)?;
+                    self.printed_bytes += s.len();
                     self.col += s.len();
                     self.block_space = false;
                     self.block_line = false;
@@ -241,6 +245,7 @@ impl<'a, W: Write, H: HashProvider> CstVisitor<'a, W, H> {
             Cmd::Space => {
                 if !self.block_space {
                     self.out.write_char(' ')?;
+                    self.printed_bytes += 1;
                     self.col += 1;
                     self.block_space = true;
                     self.block_line = false;
@@ -252,6 +257,7 @@ impl<'a, W: Write, H: HashProvider> CstVisitor<'a, W, H> {
                 for _ in 0..self.indent {
                     self.out.write_char(' ')?;
                 }
+                self.printed_bytes += self.indent + 1;
                 self.col = self.indent;
                 self.propagate_break();
                 self.block_space = true;
@@ -263,6 +269,7 @@ impl<'a, W: Write, H: HashProvider> CstVisitor<'a, W, H> {
                     if !self.block_space {
                         // eprintln!("  - not skipping -> space!");
                         self.out.write_char(' ')?;
+                        self.printed_bytes += 1;
                         self.col += 1;
                         self.block_space = true;
                         self.block_line = false;
@@ -275,6 +282,7 @@ impl<'a, W: Write, H: HashProvider> CstVisitor<'a, W, H> {
                         for _ in 0..self.indent {
                             self.out.write_char(' ')?;
                         }
+                        self.printed_bytes += self.indent + 1;
                         self.col = self.indent;
                         self.propagate_break();
                         self.block_space = true;

@@ -9,7 +9,7 @@ use ltk_meta::{
 };
 
 use crate::{
-    cst::Cst,
+    cst::{self, Cst},
     hashes::HashProvider,
     print::{PrintConfig, PrintError},
     types::kind_to_type_name,
@@ -26,14 +26,14 @@ impl<'a, W: Write, H: HashProvider> CstPrinter<'a, W, H> {
         }
     }
 
-    pub fn print(mut self, cst: &Cst) -> Result<(), PrintError> {
+    pub fn print(mut self, cst: &Cst) -> Result<usize, PrintError> {
         cst.walk(&mut self.visitor);
         self.visitor.flush()?;
         if let Some(e) = self.visitor.error {
             return Err(e);
         }
         eprintln!("max q size: {}", self.visitor.queue_size_max);
-        Ok(())
+        Ok(self.visitor.printed_bytes)
     }
 }
 
@@ -64,7 +64,10 @@ impl<H: HashProvider> BinPrinter<H> {
         tree: &Bin,
         writer: &mut W,
     ) -> Result<usize, PrintError> {
-        Ok(0)
+        let mut builder = cst::builder::Builder::new();
+        let cst = builder.build(tree);
+        let buf = builder.into_text_buffer();
+        CstPrinter::new(&buf, writer, Default::default()).print(&cst)
     }
 
     pub fn print_to_string(&mut self, tree: &Bin) -> Result<String, PrintError> {
