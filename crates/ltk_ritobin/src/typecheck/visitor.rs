@@ -842,7 +842,7 @@ impl<'a> TypeChecker<'a> {
                     return parent;
                 };
                 let span = *value.meta();
-                let Some(key) = coerce_type(key, PropertyKind::Hash) else {
+                let Some(key) = coerce_type(key, map_value.key_kind()) else {
                     // eprintln!("\x1b[41m{other:?} not valid hash\x1b[0m");
                     return parent;
                 };
