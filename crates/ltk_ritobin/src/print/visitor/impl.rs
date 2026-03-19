@@ -185,7 +185,11 @@ impl<'a, W: fmt::Write, H: HashProvider> CstVisitor<'a, W, H> {
             }
 
             _ => {
-                self.text(txt);
+                if let Some(print) = print_value {
+                    self.text(print);
+                } else {
+                    self.text(txt);
+                }
             }
         }
         self.print_safe()?;
