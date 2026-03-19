@@ -788,6 +788,7 @@ impl<'a> TypeChecker<'a> {
             | PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(list)) => {
                 match child {
                     IrItem::ListItem(IrListItem(value)) => {
+                        let value = coerce_type(value.clone(), list.item_kind()).unwrap_or(value);
                         let span = *value.meta();
                         match list.push(value) {
                             Ok(_) => {}
@@ -1062,7 +1063,10 @@ impl Visitor for TypeChecker<'_> {
                         ));
                     }
                     parent_type => {
-                        eprintln!("[warn] got {parent_type:?} in ListItemBlock");
+                        eprintln!(
+                            "[warn] got {parent_type:?} in ListItemBlock - {:?}",
+                            &self.ctx.text[tree.span]
+                        );
                     }
                 }
             }
