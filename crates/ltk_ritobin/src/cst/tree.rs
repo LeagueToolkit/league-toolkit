@@ -95,9 +95,10 @@ impl Cst {
     }
 
     pub fn print(&self, buf: &mut String, level: usize, source: &str) {
-        let parent_indent = "│ ".repeat(level.saturating_sub(1));
+        // let parent_indent = "│ ".repeat(level.saturating_sub(1));
+        let parent_indent = "    ".repeat(level.saturating_sub(1));
         let indent = match level > 0 {
-            true => "├ ",
+            true => "    ", // "├ "
             false => "",
         };
         let safe_span = match self.span.end >= self.span.start {
@@ -114,14 +115,15 @@ impl Cst {
         );
         for (i, child) in self.children.iter().enumerate() {
             let bar = match i + 1 == self.children.len() {
-                true => '└',
-                false => '├',
+                true => ' ',  // '└'
+                false => ' ', // '├'
             };
             match child {
                 Child::Token(token) => {
                     format_to!(
                         buf,
-                        "{parent_indent}│ {bar} {:?} ({:?})\n",
+                        // "{parent_indent}│ {bar} {:?} ({:?})\n",
+                        "{parent_indent}    {bar} {:?} ({:?})\n",
                         &source[token.span.start as _..token.span.end as _],
                         token.kind,
                     )
