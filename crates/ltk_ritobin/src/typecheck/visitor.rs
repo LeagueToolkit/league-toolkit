@@ -3,6 +3,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
+use glam::Vec4;
 use indexmap::IndexMap;
 use ltk_hash::fnv1a;
 use ltk_meta::{
@@ -145,6 +146,7 @@ pub enum ColorOrVec {
     Vec2,
     Vec3,
     Vec4,
+    Mat44,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -937,6 +939,34 @@ fn populate_vec_or_color(
             color.a = resolve_u8(get_next(&mut span)?)?;
             expected = ColorOrVec::Color;
         }
+        V::Matrix44(values::Matrix44 { value: mat, .. }) => {
+            mat.x_axis = Vec4::new(
+                resolve_f32(get_next(&mut span)?)?,
+                resolve_f32(get_next(&mut span)?)?,
+                resolve_f32(get_next(&mut span)?)?,
+                resolve_f32(get_next(&mut span)?)?,
+            );
+            mat.y_axis = Vec4::new(
+                resolve_f32(get_next(&mut span)?)?,
+                resolve_f32(get_next(&mut span)?)?,
+                resolve_f32(get_next(&mut span)?)?,
+                resolve_f32(get_next(&mut span)?)?,
+            );
+            mat.z_axis = Vec4::new(
+                resolve_f32(get_next(&mut span)?)?,
+                resolve_f32(get_next(&mut span)?)?,
+                resolve_f32(get_next(&mut span)?)?,
+                resolve_f32(get_next(&mut span)?)?,
+            );
+            mat.w_axis = Vec4::new(
+                resolve_f32(get_next(&mut span)?)?,
+                resolve_f32(get_next(&mut span)?)?,
+                resolve_f32(get_next(&mut span)?)?,
+                resolve_f32(get_next(&mut span)?)?,
+            );
+            *mat = mat.transpose();
+            expected = ColorOrVec::Mat44;
+        }
         _ => {
             unreachable!("non-empty list queue with non color/vec type receiver?");
         }
@@ -1019,7 +1049,7 @@ impl Visitor for TypeChecker<'_> {
 
                 use PropertyKind as K;
                 let color_vec_type = match parent_type.base {
-                    K::Vector2 | K::Vector3 | K::Vector4 => Some(K::F32),
+                    K::Vector2 | K::Vector3 | K::Vector4 | K::Matrix44 => Some(K::F32),
                     K::Color => Some(K::U8),
                     _ => None,
                 };
