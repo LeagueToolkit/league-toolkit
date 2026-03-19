@@ -11,6 +11,7 @@ use ltk_meta::{
     traits::PropertyExt,
     Bin, BinObject, PropertyKind, PropertyValueEnum,
 };
+use xxhash_rust::xxh64::xxh64;
 
 use crate::{
     cst::{self, visitor::Visit, Child, Cst, Kind, Visitor},
@@ -388,6 +389,30 @@ pub fn coerce_type<M: Debug>(
             PropertyValueEnum::Hash(_) => return Some(value),
             PropertyValueEnum::String(str) => {
                 values::Hash::new_with_meta(fnv1a::hash_lower(&str), str.meta).into()
+            }
+            other => {
+                eprintln!("\x1b[41mcannot coerce {other:?} to {to:?}\x1b[0m");
+                return None;
+            }
+        }),
+        PropertyKind::ObjectLink => Some(match value {
+            PropertyValueEnum::Hash(hash) => {
+                values::ObjectLink::new_with_meta(*hash, hash.meta).into()
+            }
+            PropertyValueEnum::ObjectLink(_) => return Some(value),
+            PropertyValueEnum::String(str) => {
+                values::ObjectLink::new_with_meta(fnv1a::hash_lower(&str), str.meta).into()
+            }
+            other => {
+                eprintln!("\x1b[41mcannot coerce {other:?} to {to:?}\x1b[0m");
+                return None;
+            }
+        }),
+        PropertyKind::WadChunkLink => Some(match value {
+            // FIXME: does the lexer give Hash when u64? if so we are cooked
+            PropertyValueEnum::WadChunkLink(_) => return Some(value),
+            PropertyValueEnum::String(str) => {
+                values::WadChunkLink::new_with_meta(xxh64(str.as_bytes(), 0), str.meta).into()
             }
             other => {
                 eprintln!("\x1b[41mcannot coerce {other:?} to {to:?}\x1b[0m");
