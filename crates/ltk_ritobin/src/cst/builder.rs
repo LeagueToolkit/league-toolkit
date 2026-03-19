@@ -84,7 +84,7 @@ impl Builder {
                 let items = v
                     .to_array()
                     .iter()
-                    .flat_map(|v| [self.number(v.to_string()), token(Tok::Comma)])
+                    .map(|v| tree(Kind::ListItem, vec![self.number(v.to_string())]))
                     .collect();
                 self.block(items)
             }
@@ -92,7 +92,7 @@ impl Builder {
                 let items = v
                     .to_array()
                     .iter()
-                    .map(|v| self.number(v.to_string()))
+                    .map(|v| tree(Kind::ListItem, vec![self.number(v.to_string())]))
                     .collect();
                 self.block(items)
             }
@@ -100,7 +100,23 @@ impl Builder {
                 let items = v
                     .to_array()
                     .iter()
-                    .map(|v| self.number(v.to_string()))
+                    .map(|v| tree(Kind::ListItem, vec![self.number(v.to_string())]))
+                    .collect();
+                self.block(items)
+            }
+            PropertyValueEnum::Matrix44(v) => {
+                let items = v
+                    .transpose() // ritobin text stores matrices row-major, glam::Mat4 is column-major.
+                    .to_cols_array_2d()
+                    .iter()
+                    .flat_map(|v| {
+                        [
+                            tree(Kind::ListItem, vec![self.number(v[0].to_string())]),
+                            tree(Kind::ListItem, vec![self.number(v[1].to_string())]),
+                            tree(Kind::ListItem, vec![self.number(v[2].to_string())]),
+                            tree(Kind::ListItem, vec![self.number(v[3].to_string())]),
+                        ]
+                    })
                     .collect();
                 self.block(items)
             }
@@ -112,17 +128,13 @@ impl Builder {
             | PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(container)) => {
                 let mut children = vec![token(Tok::LCurly)];
 
-                for (i, item) in container.clone().into_items().enumerate() {
-                    if i > 0 {
-                        children.push(token(Tok::Comma));
-                    }
-                    children.push(self.value_to_cst(&item));
+                for item in container.clone().into_items() {
+                    children.push(tree(Kind::ListItem, vec![self.value_to_cst(&item)]));
                 }
 
                 children.push(token(Tok::RCurly));
                 tree(Kind::TypeArgList, children)
             }
-            PropertyValueEnum::Matrix44(matrix44) => todo!(),
             PropertyValueEnum::Color(color) => todo!(),
             PropertyValueEnum::Hash(hash) => todo!(),
             PropertyValueEnum::WadChunkLink(wad_chunk_link) => todo!(),
@@ -293,7 +305,7 @@ mod test {
     }
 
     #[test]
-    fn simple() {
+    fn string() {
         roundtrip(
             Bin::builder()
                 .object(
@@ -303,8 +315,51 @@ mod test {
                 )
                 .build(),
         );
-
-        panic!();
+    }
+    #[test]
+    fn numerics() {
+        roundtrip(
+            Bin::builder()
+                .object(
+                    BinObject::builder(0xDEADBEEF, 0x12344321)
+                        .property(0x1, values::U64::new(12))
+                        .property(0x2, values::U32::new(23))
+                        .property(0x3, values::U16::new(34))
+                        .property(0x4, values::U8::new(45))
+                        .property(0x11, values::I64::new(-12))
+                        .property(0x22, values::I32::new(-23))
+                        .property(0x33, values::I16::new(-34))
+                        .property(0x44, values::I8::new(45))
+                        .property(0x99, values::F32::new(-45.45345))
+                        .property(0x98, values::F32::new(199999.))
+                        .build(),
+                )
+                .build(),
+        );
+    }
+    #[test]
+    fn vectors_and_matrix() {
+        roundtrip(
+            Bin::builder()
+                .object(
+                    BinObject::builder(0xDEADBEEF, 0x12344321)
+                        .property(0x1, values::Vector2::new(glam::Vec2::new(0.1, -65.0)))
+                        .property(0x2, values::Vector3::new(glam::Vec3::new(1000., -0.0, 2.)))
+                        .property(
+                            0x3,
+                            values::Vector4::new(glam::Vec4::new(0.1, -65.0, 100.0, 481.)),
+                        )
+                        .property(
+                            0x4,
+                            values::Matrix44::new(glam::Mat4::from_cols_array(&[
+                                0.1, 0.5, 0.7, 0.9, 10.0, 11.2, 13.8, 15.3, 19.52, -0.123, -55.11,
+                                -13.005, 23.0, 99.02, 101.1, 500.0,
+                            ])),
+                        )
+                        .build(),
+                )
+                .build(),
+        );
     }
     #[test]
     fn list() {
@@ -326,7 +381,5 @@ mod test {
                 )
                 .build(),
         );
-
-        panic!();
     }
 }
