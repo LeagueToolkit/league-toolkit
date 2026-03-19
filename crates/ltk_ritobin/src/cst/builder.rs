@@ -7,10 +7,12 @@ use crate::{
     kind_to_type_name,
     parse::{Span, Token, TokenKind as Tok},
     typecheck::visitor::{PropertyValueExt, RitoType},
+    HashProvider,
 };
 
-struct Builder {
+pub struct Builder<H: HashProvider> {
     buf: String,
+    hashes: H,
 }
 
 pub fn tree(kind: Kind, children: Vec<Child>) -> Child {
@@ -28,12 +30,38 @@ pub fn token(kind: Tok) -> Child {
     })
 }
 
-impl Builder {
-    pub fn number(&mut self, v: impl AsRef<str>) -> Child {
+impl Builder<()> {
+    pub fn new() -> Self {
+        Self {
+            buf: String::new(),
+            hashes: (),
+        }
+    }
+}
+
+impl<H: HashProvider> Builder<H> {
+    pub fn build(&mut self, bin: &Bin) -> Cst {
+        self.bin_to_cst(bin)
+    }
+
+    /// Get a reference to the underlying text buffer all Cst's built by this builder reference in
+    /// their spans.
+    pub fn text_buffer(&self) -> &str {
+        &self.buf
+    }
+    /// Get the underlying text buffer all Cst's built by this builder reference in
+    /// their spans.
+    pub fn into_text_buffer(self) -> String {
+        self.buf
+    }
+}
+
+impl<H: HashProvider> Builder<H> {
+    fn number(&mut self, v: impl AsRef<str>) -> Child {
         tree(Kind::Literal, vec![self.spanned_token(Tok::Number, v)])
     }
 
-    pub fn spanned_token(&mut self, kind: Tok, str: impl AsRef<str>) -> Child {
+    fn spanned_token(&mut self, kind: Tok, str: impl AsRef<str>) -> Child {
         let start = self.buf.len() as u32;
         self.buf.write_str(str.as_ref()).unwrap();
         let end = self.buf.len() as u32;
@@ -43,19 +71,19 @@ impl Builder {
         })
     }
 
-    pub fn string(&mut self, v: impl AsRef<str>) -> Child {
+    fn string(&mut self, v: impl AsRef<str>) -> Child {
         self.spanned_token(Tok::String, v)
     }
 
-    pub fn name(&mut self, v: impl AsRef<str>) -> Child {
+    fn name(&mut self, v: impl AsRef<str>) -> Child {
         self.spanned_token(Tok::Name, v)
     }
 
-    pub fn hex_lit(&mut self, v: impl AsRef<str>) -> Child {
+    fn hex_lit(&mut self, v: impl AsRef<str>) -> Child {
         self.spanned_token(Tok::HexLit, v)
     }
 
-    pub fn block(&self, children: Vec<Child>) -> Child {
+    fn block(&self, children: Vec<Child>) -> Child {
         tree(
             Kind::Block,
             [vec![token(Tok::LCurly)], children, vec![token(Tok::RCurly)]].concat(),
@@ -268,32 +296,28 @@ impl Builder {
     }
 }
 
-pub fn bin_to_cst(bin: &Bin) -> (String, Cst) {
-    let mut builder = Builder { buf: String::new() };
-    let cst = builder.bin_to_cst(bin);
-
-    (builder.buf, cst)
-}
-
 #[cfg(test)]
 mod test {
     use ltk_meta::{property::values, Bin, BinObject};
 
-    use crate::{cst::builder::bin_to_cst, parse::parse, print::CstPrinter};
+    use super::*;
+    use crate::{parse::parse, print::CstPrinter};
 
     fn roundtrip(bin: Bin) {
         println!("bin: {bin:#?}");
 
-        let (buf, cst) = bin_to_cst(&bin);
+        let mut builder = Builder::new();
+        let cst = builder.build(&bin);
+        let buf = builder.text_buffer();
 
         let mut str = String::new();
-        cst.print(&mut str, 0, &buf);
+        cst.print(&mut str, 0, buf);
 
         println!("cst:\n{str}");
 
         let mut str = String::new();
 
-        CstPrinter::new(&buf, &mut str, Default::default())
+        CstPrinter::new(buf, &mut str, Default::default())
             .print(&cst)
             .unwrap();
         println!("RITOBIN:\n{str}");
