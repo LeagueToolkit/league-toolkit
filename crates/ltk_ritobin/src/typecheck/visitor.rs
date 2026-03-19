@@ -764,7 +764,7 @@ impl<'a> TypeChecker<'a> {
             })
             .expect("no 'entries' entry");
 
-        let tree = Bin::new(objects, [""]);
+        let tree = Bin::new(objects, Vec::<String>::new());
 
         (tree, self.ctx.diagnostics)
     }
