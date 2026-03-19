@@ -30,6 +30,12 @@ impl Span {
     pub fn len(&self) -> u32 {
         self.end - self.start
     }
+
+    #[must_use]
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.end <= self.start
+    }
 }
 
 impl std::ops::Index<Span> for str {
