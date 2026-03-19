@@ -549,7 +549,11 @@ pub fn resolve_value(
                 cst::Child::Token(Token {
                     kind: TokenKind::String,
                     span,
-                }) => values::String::new_with_meta(ctx.text[span].into(), *span).into(),
+                }) => values::String::new_with_meta(
+                    ctx.text[Span::new(span.start + 1, span.end - 1)].into(),
+                    *span,
+                )
+                .into(),
                 cst::Child::Token(Token {
                     kind: TokenKind::Number,
                     span,
@@ -634,7 +638,9 @@ pub fn resolve_entry(
             kind: TokenKind::String,
             span,
         }) => (
-            PropertyValueEnum::from(values::String::from(&ctx.text[span])), // TODO: trim quotes
+            PropertyValueEnum::from(values::String::from(
+                &ctx.text[Span::new(span.start + 1, span.end - 1)],
+            )),
             *span,
         ),
         Child::Token(Token {
