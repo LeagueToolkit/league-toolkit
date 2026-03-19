@@ -15,7 +15,7 @@ impl Default for PrintConfig<()> {
     fn default() -> Self {
         Self {
             indent_size: 4,
-            line_width: 80,
+            line_width: 120,
             hashes: (),
         }
     }
