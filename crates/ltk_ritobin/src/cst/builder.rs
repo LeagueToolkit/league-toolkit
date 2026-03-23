@@ -316,6 +316,7 @@ mod test {
     use super::*;
     use crate::{parse::parse, print::CstPrinter};
 
+    // bin -> cst -> txt -> cst -> bin
     fn roundtrip(bin: Bin) {
         println!("bin: {bin:#?}");
 
@@ -336,7 +337,17 @@ mod test {
         println!("RITOBIN:\n{str}");
 
         let cst2 = parse(&str);
+        assert!(
+            cst2.errors.is_empty(),
+            "errors parsing ritobin - {:#?}",
+            cst2.errors
+        );
         let (bin2, errors) = cst2.build_bin(&str);
+
+        assert!(
+            errors.is_empty(),
+            "errors building tree from reparsed ritobin - {errors:#?}"
+        );
 
         pretty_assertions::assert_eq!(bin2, bin);
     }
