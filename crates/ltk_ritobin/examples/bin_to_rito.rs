@@ -11,7 +11,7 @@ fn main() {
         .and_then(|p| PathBuf::from_str(&p).ok())
         .zip(args.next().and_then(|p| PathBuf::from_str(&p).ok()))
     else {
-        eprintln!("Usage: './from_bin [PATH_TO_BIN] [OUTPUT_PATH]'");
+        eprintln!("Usage: './bin_to_rito [PATH_TO_BIN] [OUTPUT_PATH]'");
         return;
     };
     println!("Converting {input_path:?} to ritobin...");
