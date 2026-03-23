@@ -208,7 +208,14 @@ impl<H: HashProvider> Builder<H> {
                 tree(Kind::Literal, vec![token(Tok::LCurly), token(Tok::RCurly)])
             }
 
-            PropertyValueEnum::Map(_map) => todo!(),
+            PropertyValueEnum::Map(map) => {
+                let children = map
+                    .entries()
+                    .iter()
+                    .flat_map(|(k, v)| [self.value_to_cst(k), token(Tok::Eq), self.value_to_cst(v)])
+                    .collect();
+                self.block(children)
+            }
         }
     }
 
@@ -428,6 +435,30 @@ mod test {
                                 values::U64::new(6),
                                 values::U64::new(7),
                             ]),
+                        )
+                        .build(),
+                )
+                .build(),
+        );
+    }
+
+    #[test]
+    fn map() {
+        roundtrip(
+            Bin::builder()
+                .object(
+                    BinObject::builder(0xfeeb1e, 0x111)
+                        .property(
+                            0x1,
+                            values::Map::new(
+                                PropertyKind::String,
+                                PropertyKind::U64,
+                                vec![(
+                                    values::String::from("asdasd").into(),
+                                    values::U64::new(1).into(),
+                                )],
+                            )
+                            .unwrap(),
                         )
                         .build(),
                 )
