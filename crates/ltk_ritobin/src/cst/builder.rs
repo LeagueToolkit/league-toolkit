@@ -339,7 +339,7 @@ mod test {
     use ltk_meta::{property::values, Bin, BinObject};
 
     use super::*;
-    use crate::{parse::parse, print::CstPrinter};
+    use crate::print::CstPrinter;
 
     // bin -> cst -> txt -> cst -> bin
     fn roundtrip(bin: Bin) {
@@ -361,7 +361,7 @@ mod test {
             .unwrap();
         println!("RITOBIN:\n{str}");
 
-        let cst2 = parse(&str);
+        let cst2 = Cst::parse(&str);
         assert!(
             cst2.errors.is_empty(),
             "errors parsing ritobin - {:#?}",

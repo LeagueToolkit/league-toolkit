@@ -1,7 +1,11 @@
 use std::fmt::Display;
 
 use crate::{
-    parse::{self, tokenizer::Token, Span},
+    parse::{
+        self, impls,
+        tokenizer::{self, Token},
+        Parser, Span,
+    },
     typecheck::visitor::DiagnosticWithSpan,
 };
 
@@ -88,6 +92,13 @@ macro_rules! format_to {
     };
 }
 impl Cst {
+    pub fn parse(text: &str) -> Self {
+        let tokens = tokenizer::lex(text);
+        let mut p = Parser::new(text, tokens);
+        impls::file(&mut p);
+        p.build_tree()
+    }
+
     pub fn build_bin(&self, text: &str) -> (ltk_meta::Bin, Vec<DiagnosticWithSpan>) {
         let mut checker = crate::typecheck::visitor::TypeChecker::new(text);
         self.walk(&mut checker);

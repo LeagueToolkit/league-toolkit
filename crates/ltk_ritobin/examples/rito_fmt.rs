@@ -1,6 +1,9 @@
 use std::{path::PathBuf, str::FromStr};
 
-use ltk_ritobin::print::{CstPrinter, PrintConfig};
+use ltk_ritobin::{
+    cst::Cst,
+    print::{CstPrinter, PrintConfig},
+};
 
 fn main() {
     let mut args = std::env::args().skip(1);
@@ -17,7 +20,7 @@ fn main() {
 
     let input = std::fs::read_to_string(input_path).unwrap();
 
-    let cst = ltk_ritobin::parse::parse(&input);
+    let cst = Cst::parse(&input);
 
     // let mut str = String::new();
     // cst.print(&mut str, 0, &input);

@@ -61,12 +61,12 @@ impl Print for Bin {
 #[cfg(test)]
 mod test {
     use crate::{
-        parse::parse,
+        cst::Cst,
         print::{config::PrintConfig, CstPrinter},
     };
 
     fn assert_pretty(input: &str, is: &str, size: usize) {
-        let cst = parse(input);
+        let cst = Cst::parse(input);
         let mut str = String::new();
 
         cst.print(&mut str, 0, input);

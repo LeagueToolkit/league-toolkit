@@ -1,9 +1,11 @@
 //! Parser for ritobin text format with CST output for better error reporting.
 
-pub mod error;
+mod error;
 pub use error::*;
 
-pub mod parser;
+mod parser;
+pub use parser::*;
+
 pub mod tokenizer;
 pub use tokenizer::{Token, TokenKind};
 
@@ -14,16 +16,9 @@ pub use span::Span;
 
 use crate::cst;
 
-pub fn parse(text: &str) -> cst::Cst {
-    let tokens = tokenizer::lex(text);
-    let mut p = parser::Parser::new(text, tokens);
-    impls::file(&mut p);
-    p.build_tree()
-}
-
 #[cfg(test)]
 mod test {
-    use crate::{print::CstPrinter, typecheck::visitor::TypeChecker};
+    use crate::{cst::Cst, print::CstPrinter, typecheck::visitor::TypeChecker};
 
     use super::*;
     #[test]
@@ -35,7 +30,7 @@ entries: map[hash, embed] = {
     }
 }
 "#;
-        let cst = parse(text);
+        let cst = Cst::parse(text);
         let errors = cst::FlatErrors::walk(&cst);
 
         let mut str = String::new();
@@ -113,7 +108,7 @@ entries: map[hash,embed] = {
             }
 }
 "#;
-        let cst = parse(text);
+        let cst = Cst::parse(text);
 
         let mut str = String::new();
         cst.print(&mut str, 0, text);

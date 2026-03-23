@@ -1,6 +1,6 @@
 //! Integration test for parsing a sample ritobin file.
 
-use ltk_ritobin::{parse::parse, print::Print as _};
+use ltk_ritobin::{cst::Cst, print::Print as _};
 
 const SAMPLE_RITOBIN: &str = r#"#PROP_text
 type: string = "PROP"
@@ -44,19 +44,18 @@ entries: map[hash,embed] = {
 "#;
 
 fn tree(input: &str) -> String {
-    let cst = parse(input);
+    let cst = Cst::parse(input);
     assert!(cst.errors.is_empty());
 
     let mut debug = String::new();
     cst.print(&mut debug, 0, input);
 
-    // debug);
     debug
 }
 
 #[test]
 fn test_roundtrip() {
-    let cst = parse(SAMPLE_RITOBIN);
+    let cst = Cst::parse(SAMPLE_RITOBIN);
     let (tree, errors) = cst.build_bin(SAMPLE_RITOBIN);
     assert!(errors.is_empty(), "errors = {errors:#?}");
 
@@ -66,7 +65,7 @@ fn test_roundtrip() {
     println!("output:\n{output}");
 
     // Parse again
-    let cst2 = parse(&output);
+    let cst2 = Cst::parse(&output);
     assert!(
         cst2.errors.is_empty(),
         "reparse errors = {:#?}",
