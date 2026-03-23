@@ -30,10 +30,9 @@ mod test {
     #[test]
     fn smoke_test() {
         let text = r#"
-entries: map[hash,embed] = {
-    "myPath" = VfxEmitter {
-        a: string = "hello"
-        b: list[i8] = {3 6 1}
+entries: map[hash, embed] = {
+    "foo" = Foo {
+        guy: u32 = "asdasd"
     }
 }
 "#;

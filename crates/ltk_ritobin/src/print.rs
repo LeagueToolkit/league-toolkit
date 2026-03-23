@@ -179,7 +179,7 @@ linked: list[string] = { "DATA/Characters/Viego/Viego.bin"
 }"#,
             r#"BorderAugments: list2[embed] = {
     0x4a70b12c {
-        AugmentGroup: list2[link] = { 0x383e4602 } 
+        AugmentGroup: list2[link] = { 0x383e4602 }
     }
 }"#,
             80,
