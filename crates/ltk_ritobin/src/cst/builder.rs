@@ -1,4 +1,4 @@
-use std::fmt::Write;
+use std::fmt::{LowerHex, Write};
 
 use ltk_meta::{property::values, Bin, BinObject, BinProperty, PropertyKind, PropertyValueEnum};
 
@@ -60,6 +60,10 @@ impl<H: HashProvider> Builder<H> {
     }
 }
 
+fn hex_fmt<T: LowerHex>(v: T) -> String {
+    format!("0x{v:x}")
+}
+
 impl<H: HashProvider> Builder<H> {
     fn number(&mut self, v: impl AsRef<str>) -> Child {
         tree(Kind::Literal, vec![self.spanned_token(Tok::Number, v)])
@@ -79,12 +83,33 @@ impl<H: HashProvider> Builder<H> {
         self.spanned_token(Tok::String, v)
     }
 
-    fn name(&mut self, v: impl AsRef<str>) -> Child {
-        self.spanned_token(Tok::Name, v)
-    }
-
     fn hex_lit(&mut self, v: impl AsRef<str>) -> Child {
         self.spanned_token(Tok::HexLit, v)
+    }
+
+    fn hash_hash_lit(&mut self, h: u32) -> Child {
+        match self.hashes.lookup_hash(h).map(|h| format!("\"{h}\"")) {
+            Some(h) => self.spanned_token(Tok::String, h),
+            None => self.spanned_token(Tok::HexLit, hex_fmt(h)),
+        }
+    }
+    fn hash_type_lit(&mut self, h: u32) -> Child {
+        match self.hashes.lookup_type(h).map(|h| format!("\"{h}\"")) {
+            Some(h) => self.spanned_token(Tok::String, h),
+            None => self.spanned_token(Tok::HexLit, hex_fmt(h)),
+        }
+    }
+    fn hash_field_lit(&mut self, h: u32) -> Child {
+        match self.hashes.lookup_field(h).map(|h| format!("\"{h}\"")) {
+            Some(h) => self.spanned_token(Tok::String, h),
+            None => self.spanned_token(Tok::HexLit, hex_fmt(h)),
+        }
+    }
+    fn hash_entry_lit(&mut self, h: u32) -> Child {
+        match self.hashes.lookup_entry(h).map(|h| format!("\"{h}\"")) {
+            Some(h) => self.spanned_token(Tok::String, h),
+            None => self.spanned_token(Tok::HexLit, hex_fmt(h)),
+        }
     }
 
     fn block(&self, children: Vec<Child>) -> Child {
@@ -172,9 +197,9 @@ impl<H: HashProvider> Builder<H> {
             ),
 
             // hash/hash-likes
-            PropertyValueEnum::Hash(v) => self.hex_lit(format!("0x{:x}", **v)),
-            PropertyValueEnum::WadChunkLink(v) => self.hex_lit(format!("0x{:x}", **v)),
-            PropertyValueEnum::ObjectLink(v) => self.hex_lit(format!("0x{:x}", **v)),
+            PropertyValueEnum::Hash(h) => self.hash_hash_lit(**h),
+            PropertyValueEnum::WadChunkLink(h) => self.hex_lit(hex_fmt(**h)),
+            PropertyValueEnum::ObjectLink(h) => self.hash_hash_lit(**h),
 
             PropertyValueEnum::Container(container)
             | PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(container)) => {
@@ -188,7 +213,7 @@ impl<H: HashProvider> Builder<H> {
                 tree(Kind::TypeArgList, children)
             }
             PropertyValueEnum::Embedded(values::Embedded(s)) | PropertyValueEnum::Struct(s) => {
-                let k = self.spanned_token(Tok::HexLit, format!("0x{:x}", s.class_hash));
+                let k = self.hash_type_lit(s.class_hash);
                 let children = s
                     .properties
                     .iter()
@@ -253,7 +278,7 @@ impl<H: HashProvider> Builder<H> {
         tree(Kind::TypeExpr, children)
     }
     fn property_to_cst<M: Clone>(&mut self, prop: &BinProperty<M>) -> Child {
-        let k = self.spanned_token(Tok::HexLit, format!("0x{:x}", prop.name_hash));
+        let k = self.hash_field_lit(prop.name_hash);
         let t = self.rito_type(prop.value.rito_type());
         let v = self.value_to_cst(&prop.value);
         self.entry(k, Some(t), v)
@@ -264,14 +289,14 @@ impl<H: HashProvider> Builder<H> {
     }
 
     fn bin_object_to_cst(&mut self, obj: &BinObject) -> Child {
-        let k = self.hex_lit(format!("0x{:x}", obj.path_hash));
+        let k = self.hash_entry_lit(obj.path_hash);
 
-        let class_hash = self.hex_lit(format!("0x{:x}", obj.class_hash));
+        let class_hash = self.hash_type_lit(obj.class_hash);
         let class_values = obj
             .properties
             .iter()
             .map(|(k, v)| {
-                let k = tree(Kind::EntryKey, vec![self.hex_lit(format!("0x{k:x}"))]);
+                let k = tree(Kind::EntryKey, vec![self.hash_field_lit(*k)]);
                 let t = self.rito_type(v.value.rito_type());
                 let v = self.value_to_cst(&v.value);
                 self.entry(k, Some(t), v)
