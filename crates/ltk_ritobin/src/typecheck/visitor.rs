@@ -577,6 +577,19 @@ pub fn resolve_value(
                 )
                 .into(),
                 cst::Child::Token(Token {
+                    kind: TokenKind::HexLit,
+                    span,
+                }) => {
+                    let txt = &ctx.text[span]
+                        .strip_prefix("0x")
+                        .ok_or(Diagnostic::InvalidHash(*span))?;
+                    values::Hash::new_with_meta(
+                        u32::from_str_radix(txt, 16).map_err(|_| Diagnostic::InvalidHash(*span))?,
+                        *span,
+                    )
+                    .into()
+                }
+                cst::Child::Token(Token {
                     kind: TokenKind::Number,
                     span,
                 }) => {
