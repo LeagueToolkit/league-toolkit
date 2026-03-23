@@ -1,8 +1,7 @@
 use std::io;
 
-use super::property::{values::*, Kind, PropertyValueEnum};
+use super::property::Kind;
 use byteorder::{ReadBytesExt, WriteBytesExt};
-use enum_dispatch::enum_dispatch;
 
 const HEADER_SIZE: usize = 5;
 

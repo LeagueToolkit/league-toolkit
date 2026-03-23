@@ -1,5 +1,3 @@
-use enum_dispatch::enum_dispatch;
-
 use crate::{
     property::{Kind, NoMeta},
     traits::{PropertyExt, ReadProperty as _, WriteProperty as _},

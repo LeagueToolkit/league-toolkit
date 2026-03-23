@@ -125,7 +125,6 @@ macro_rules! define_container_enum {
 
         impl<M> Container<M> {
             #[inline(always)]
-            #[must_use]
             pub fn empty(item_kind: Kind) -> Result<Self, Error>
             where
                 M: Default

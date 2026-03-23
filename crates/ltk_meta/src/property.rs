@@ -11,7 +11,7 @@ use super::Error;
 use byteorder::{ReadBytesExt as _, WriteBytesExt as _, LE};
 use std::io;
 
-use crate::{traits::PropertyExt, Bin};
+use crate::traits::PropertyExt;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
