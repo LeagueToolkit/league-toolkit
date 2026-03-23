@@ -10,7 +10,6 @@ use crate::{
         command::{Cmd, Mode},
         PrintConfig, PrintError,
     },
-    HashProvider,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -25,8 +24,8 @@ struct ListContext {
 
 const MAX_QUEUE: usize = 4096;
 
-pub struct CstVisitor<'a, W: Write, H: HashProvider> {
-    config: PrintConfig<H>,
+pub struct CstVisitor<'a, W: Write> {
+    config: PrintConfig<()>,
 
     src: &'a str,
     out: W,
@@ -51,7 +50,7 @@ pub struct CstVisitor<'a, W: Write, H: HashProvider> {
     block_line: bool,
 }
 
-impl<'a, W: Write, H: HashProvider> CstVisitor<'a, W, H> {
+impl<'a, W: Write> CstVisitor<'a, W> {
     #[inline(always)]
     #[must_use]
     pub fn queue_size_max(&self) -> usize {
@@ -71,8 +70,8 @@ impl<'a, W: Write, H: HashProvider> CstVisitor<'a, W, H> {
     }
 }
 
-impl<'a, W: Write, H: HashProvider> CstVisitor<'a, W, H> {
-    pub fn new(src: &'a str, out: W, config: PrintConfig<H>) -> Self {
+impl<'a, W: Write> CstVisitor<'a, W> {
+    pub fn new(src: &'a str, out: W, config: PrintConfig<()>) -> Self {
         Self {
             src,
             out,
@@ -552,7 +551,7 @@ impl<'a, W: Write, H: HashProvider> CstVisitor<'a, W, H> {
     }
 }
 
-impl<'a, W: fmt::Write, H: HashProvider> Visitor for CstVisitor<'a, W, H> {
+impl<'a, W: fmt::Write> Visitor for CstVisitor<'a, W> {
     fn enter_tree(&mut self, tree: &Cst) -> Visit {
         match self.enter_tree_inner(tree) {
             Ok(_) => Visit::Continue,

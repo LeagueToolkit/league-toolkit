@@ -8,12 +8,12 @@ use crate::{
     print::{PrintConfig, PrintError},
 };
 
-pub struct CstPrinter<'a, W: Write, H: HashProvider> {
-    visitor: super::visitor::CstVisitor<'a, W, H>,
+pub struct CstPrinter<'a, W: Write> {
+    visitor: super::visitor::CstVisitor<'a, W>,
 }
 
-impl<'a, W: Write, H: HashProvider> CstPrinter<'a, W, H> {
-    pub fn new(src: &'a str, out: W, config: PrintConfig<H>) -> Self {
+impl<'a, W: Write> CstPrinter<'a, W> {
+    pub fn new(src: &'a str, out: W, config: PrintConfig<()>) -> Self {
         Self {
             visitor: super::visitor::CstVisitor::new(src, out, config),
         }
@@ -56,14 +56,20 @@ impl<H: HashProvider> BinPrinter<H> {
         &mut self,
         tree: &Bin,
         writer: &mut W,
-    ) -> Result<usize, PrintError> {
-        let mut builder = cst::builder::Builder::new();
+    ) -> Result<usize, PrintError>
+    where
+        H: Clone,
+    {
+        let mut builder = cst::builder::Builder::new(self.config.hashes.clone());
         let cst = builder.build(tree);
         let buf = builder.into_text_buffer();
         CstPrinter::new(&buf, writer, Default::default()).print(&cst)
     }
 
-    pub fn print_to_string(&mut self, tree: &Bin) -> Result<String, PrintError> {
+    pub fn print_to_string(&mut self, tree: &Bin) -> Result<String, PrintError>
+    where
+        H: Clone,
+    {
         let mut str = String::new();
         self.print(tree, &mut str)?;
         Ok(str)

@@ -25,7 +25,7 @@ pub trait Print {
         Self::print_to_writer_with_config::<W, ()>(self, writer, Default::default())
     }
     /// Print as ritobin code to the given writer, using the given config.
-    fn print_to_writer_with_config<W: fmt::Write, H: HashProvider>(
+    fn print_to_writer_with_config<W: fmt::Write, H: HashProvider + Clone>(
         &self,
         writer: &mut W,
         config: PrintConfig<H>,
@@ -38,7 +38,7 @@ pub trait Print {
         Ok(str)
     }
     /// Print as ritobin code to a string, using the given config.
-    fn print_with_config<H: HashProvider>(
+    fn print_with_config<H: HashProvider + Clone>(
         &self,
         config: PrintConfig<H>,
     ) -> Result<String, PrintError> {
@@ -49,7 +49,7 @@ pub trait Print {
 }
 
 impl Print for Bin {
-    fn print_to_writer_with_config<W: fmt::Write, H: HashProvider>(
+    fn print_to_writer_with_config<W: fmt::Write, H: HashProvider + Clone>(
         &self,
         writer: &mut W,
         config: PrintConfig<H>,

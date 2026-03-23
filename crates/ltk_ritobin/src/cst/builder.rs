@@ -30,16 +30,20 @@ pub fn token(kind: Tok) -> Child {
     })
 }
 
-impl Builder<()> {
-    pub fn new() -> Self {
-        Self {
-            buf: String::new(),
-            hashes: (),
-        }
+impl Default for Builder<()> {
+    fn default() -> Self {
+        Self::new(())
     }
 }
 
 impl<H: HashProvider> Builder<H> {
+    pub fn new(hashes: H) -> Self {
+        Self {
+            buf: String::new(),
+            hashes,
+        }
+    }
+
     pub fn build(&mut self, bin: &Bin) -> Cst {
         self.bin_to_cst(bin)
     }
@@ -308,7 +312,7 @@ mod test {
     fn roundtrip(bin: Bin) {
         println!("bin: {bin:#?}");
 
-        let mut builder = Builder::new();
+        let mut builder = Builder::default();
         let cst = builder.build(&bin);
         let buf = builder.text_buffer();
 
