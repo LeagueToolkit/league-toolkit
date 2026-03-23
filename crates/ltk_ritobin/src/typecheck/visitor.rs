@@ -11,7 +11,7 @@ use xxhash_rust::xxh64::xxh64;
 use crate::{
     cst::{self, visitor::Visit, Child, Cst, Kind, Visitor},
     parse::{Span, Token, TokenKind},
-    typecheck::RitobinName,
+    RitobinName,
 };
 
 #[derive(Debug, Clone)]
@@ -292,12 +292,12 @@ pub struct RitoType {
 
 impl Display for RitoType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let base = self.base.to_ritobin_name();
+        let base = self.base.to_rito_name();
         match self.subtypes {
             [None, None] => f.write_str(base),
-            [Some(a), None] => write!(f, "{base}[{}]", a.to_ritobin_name()),
+            [Some(a), None] => write!(f, "{base}[{}]", a.to_rito_name()),
             [Some(a), Some(b)] => {
-                write!(f, "{base}[{},{}]", a.to_ritobin_name(), b.to_ritobin_name())
+                write!(f, "{base}[{},{}]", a.to_rito_name(), b.to_rito_name())
             }
             _ => write!(f, "{base}[!!]"),
         }
@@ -425,8 +425,7 @@ pub fn resolve_rito_type(ctx: &mut Ctx<'_>, tree: &Cst) -> Result<RitoType, Diag
     let base = c.expect_token(TokenKind::Name)?;
     let base_span = base.span;
 
-    let base =
-        PropertyKind::from_ritobin_name(&ctx.text[base.span]).ok_or(UnknownType(base.span))?;
+    let base = PropertyKind::from_rito_name(&ctx.text[base.span]).ok_or(UnknownType(base.span))?;
 
     let subtypes = match c
         .clone()
@@ -449,7 +448,7 @@ pub fn resolve_rito_type(ctx: &mut Ctx<'_>, tree: &Cst) -> Result<RitoType, Diag
                 .iter()
                 .filter_map(|c| c.tree().filter(|t| t.kind == Kind::TypeArg))
                 .map(|t| {
-                    let resolved = PropertyKind::from_ritobin_name(&ctx.text[t.span]);
+                    let resolved = PropertyKind::from_rito_name(&ctx.text[t.span]);
                     if resolved.is_none() {
                         ctx.diagnostics.push(UnknownType(t.span).unwrap());
                     }

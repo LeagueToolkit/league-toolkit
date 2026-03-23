@@ -4,10 +4,9 @@ use ltk_meta::{property::values, Bin, BinObject, BinProperty, PropertyKind, Prop
 
 use crate::{
     cst::{Child, Cst, Kind},
-    kind_to_type_name,
     parse::{Span, Token, TokenKind as Tok},
     typecheck::visitor::{PropertyValueExt, RitoType},
-    HashProvider,
+    HashProvider, RitobinName as _,
 };
 
 pub struct Builder<H: HashProvider> {
@@ -255,20 +254,20 @@ impl<H: HashProvider> Builder<H> {
     }
 
     fn rito_type(&mut self, rito_type: RitoType) -> Child {
-        let mut children = vec![self.spanned_token(Tok::Name, kind_to_type_name(rito_type.base))];
+        let mut children = vec![self.spanned_token(Tok::Name, rito_type.base.to_rito_name())];
 
         if let Some(sub) = rito_type.subtypes[0] {
             let mut args = vec![
                 token(Tok::LBrack),
                 tree(
                     Kind::TypeArg,
-                    vec![self.spanned_token(Tok::Name, kind_to_type_name(sub))],
+                    vec![self.spanned_token(Tok::Name, sub.to_rito_name())],
                 ),
             ];
             if let Some(sub) = rito_type.subtypes[1] {
                 args.push(tree(
                     Kind::TypeArg,
-                    vec![self.spanned_token(Tok::Name, kind_to_type_name(sub))],
+                    vec![self.spanned_token(Tok::Name, sub.to_rito_name())],
                 ));
             }
             args.push(token(Tok::RBrack));
