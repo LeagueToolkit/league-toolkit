@@ -93,14 +93,14 @@ impl<H: HashProvider> Builder<H> {
         }
     }
     fn hash_type_lit(&mut self, h: u32) -> Child {
-        match self.hashes.lookup_type(h).map(|h| format!("\"{h}\"")) {
-            Some(h) => self.spanned_token(Tok::String, h),
+        match self.hashes.lookup_type(h).map(|h| h.to_string()) {
+            Some(h) => self.spanned_token(Tok::Name, h),
             None => self.spanned_token(Tok::HexLit, hex_fmt(h)),
         }
     }
     fn hash_field_lit(&mut self, h: u32) -> Child {
-        match self.hashes.lookup_field(h).map(|h| format!("\"{h}\"")) {
-            Some(h) => self.spanned_token(Tok::String, h),
+        match self.hashes.lookup_field(h).map(|h| h.to_string()) {
+            Some(h) => self.spanned_token(Tok::Name, h),
             None => self.spanned_token(Tok::HexLit, hex_fmt(h)),
         }
     }
