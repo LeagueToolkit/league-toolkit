@@ -236,7 +236,12 @@ impl<H: HashProvider> Builder<H> {
                 let children = map
                     .entries()
                     .iter()
-                    .flat_map(|(k, v)| [self.value_to_cst(k), token(Tok::Eq), self.value_to_cst(v)])
+                    .map(|(k, v)| {
+                        tree(
+                            Kind::Entry,
+                            vec![self.value_to_cst(k), token(Tok::Eq), self.value_to_cst(v)],
+                        )
+                    })
                     .collect();
                 self.block(children)
             }
