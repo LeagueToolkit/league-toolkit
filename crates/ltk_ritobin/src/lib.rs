@@ -53,3 +53,5 @@ pub mod types;
 
 pub use hashes::*;
 pub use types::*;
+
+pub use cst::Cst;
