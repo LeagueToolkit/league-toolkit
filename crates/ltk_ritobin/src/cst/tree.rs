@@ -92,6 +92,10 @@ macro_rules! format_to {
     };
 }
 impl Cst {
+    /// Parses a CST from ritobin source code.
+    ///
+    /// **NOTE:** Parsing errors will end up in [`Self::errors`] - make sure to check this if needed
+    /// (e.g before calling [`Self::build_bin`] later)
     pub fn parse(text: &str) -> Self {
         let tokens = tokenizer::lex(text);
         let mut p = Parser::new(text, tokens);
