@@ -109,9 +109,6 @@ impl<H: HashProvider> Builder<H> {
             PropertyValueEnum::Bool(b) => self.bool(**b),
             PropertyValueEnum::BitBool(b) => self.bool(**b),
 
-            PropertyValueEnum::None(_) => {
-                tree(Kind::Literal, vec![token(Tok::LCurly), token(Tok::RCurly)])
-            }
             PropertyValueEnum::U8(n) => self.number(n.to_string()),
             PropertyValueEnum::U16(n) => self.number(n.to_string()),
             PropertyValueEnum::U32(n) => self.number(n.to_string()),
@@ -161,10 +158,24 @@ impl<H: HashProvider> Builder<H> {
                     .collect();
                 self.block(items)
             }
+            PropertyValueEnum::Color(v) => {
+                let items = v
+                    .to_array()
+                    .iter()
+                    .map(|v| tree(Kind::ListItem, vec![self.number(v.to_string())]))
+                    .collect();
+                self.block(items)
+            }
             PropertyValueEnum::String(s) => tree(
                 Kind::Literal,
                 vec![token(Tok::Quote), self.string(&**s), token(Tok::Quote)],
             ),
+
+            // hash/hash-likes
+            PropertyValueEnum::Hash(v) => self.hex_lit(format!("0x{:x}", **v)),
+            PropertyValueEnum::WadChunkLink(v) => self.hex_lit(format!("0x{:x}", **v)),
+            PropertyValueEnum::ObjectLink(v) => self.hex_lit(format!("0x{:x}", **v)),
+
             PropertyValueEnum::Container(container)
             | PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(container)) => {
                 let mut children = vec![token(Tok::LCurly)];
@@ -176,9 +187,6 @@ impl<H: HashProvider> Builder<H> {
                 children.push(token(Tok::RCurly));
                 tree(Kind::TypeArgList, children)
             }
-            PropertyValueEnum::Color(_color) => todo!(),
-            PropertyValueEnum::Hash(_hash) => todo!(),
-            PropertyValueEnum::WadChunkLink(_wad_chunk_link) => todo!(),
             PropertyValueEnum::Embedded(values::Embedded(s)) | PropertyValueEnum::Struct(s) => {
                 let k = self.spanned_token(Tok::HexLit, format!("0x{:x}", s.class_hash));
                 let children = s
@@ -188,7 +196,7 @@ impl<H: HashProvider> Builder<H> {
                     .collect();
                 tree(Kind::Class, vec![k, self.block(children)])
             }
-            PropertyValueEnum::ObjectLink(_object_link) => todo!(),
+
             PropertyValueEnum::Optional(optional) => {
                 let children = match optional.clone().into_inner() {
                     Some(v) => vec![self.value_to_cst(&v)],
@@ -196,6 +204,10 @@ impl<H: HashProvider> Builder<H> {
                 };
                 self.block(children)
             }
+            PropertyValueEnum::None(_) => {
+                tree(Kind::Literal, vec![token(Tok::LCurly), token(Tok::RCurly)])
+            }
+
             PropertyValueEnum::Map(_map) => todo!(),
         }
     }
@@ -360,6 +372,7 @@ mod test {
                         .property(0x22, values::I32::new(-23))
                         .property(0x33, values::I16::new(-34))
                         .property(0x44, values::I8::new(45))
+                        .property(0x66, values::Hash::new(123123))
                         .property(0x99, values::F32::new(-45.45345))
                         .property(0x98, values::F32::new(199999.))
                         .build(),
@@ -368,7 +381,7 @@ mod test {
         );
     }
     #[test]
-    fn vectors_and_matrix() {
+    fn vectors_colors_and_matrices() {
         roundtrip(
             Bin::builder()
                 .object(
@@ -381,6 +394,15 @@ mod test {
                         )
                         .property(
                             0x4,
+                            values::Color::new(ltk_primitives::Color {
+                                r: 123,
+                                g: 255,
+                                b: 2,
+                                a: 5,
+                            }),
+                        )
+                        .property(
+                            0x5,
                             values::Matrix44::new(glam::Mat4::from_cols_array(&[
                                 0.1, 0.5, 0.7, 0.9, 10.0, 11.2, 13.8, 15.3, 19.52, -0.123, -55.11,
                                 -13.005, 23.0, 99.02, 101.1, 500.0,
