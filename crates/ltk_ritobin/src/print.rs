@@ -19,20 +19,6 @@ pub use config::*;
 mod printers;
 pub use printers::*;
 
-// pub fn print_bin(bin: &Bin, width: usize) -> Result<String, PrintError> {
-//     let mut str = String::new();
-//
-//     let (buf, cst) = bin_to_cst(bin);
-//
-//     let mut tmp = String::new();
-//     cst.print(&mut tmp, 0, &buf);
-//     println!("[print] cst:\n{tmp}");
-//
-//     Printer::new(&buf, &mut str, width).print(&cst)?;
-//
-//     Ok(str)
-// }
-
 pub trait Print {
     /// Print as ritobin code to the given writer (using default config, which prints hashes as hex).
     fn print_to_writer<W: fmt::Write>(&self, writer: &mut W) -> Result<usize, PrintError> {

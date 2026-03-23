@@ -1,18 +1,11 @@
 use std::fmt::{self, Write};
 
-use ltk_meta::{
-    property::{
-        values::{Embedded, Struct, UnorderedContainer},
-        PropertyValueEnum,
-    },
-    Bin, BinObject, BinProperty,
-};
+use ltk_meta::Bin;
 
 use crate::{
     cst::{self, Cst},
     hashes::HashProvider,
     print::{PrintConfig, PrintError},
-    types::kind_to_type_name,
 };
 
 pub struct CstPrinter<'a, W: Write, H: HashProvider> {

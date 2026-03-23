@@ -172,19 +172,19 @@ impl<H: HashProvider> Builder<H> {
                 children.push(token(Tok::RCurly));
                 tree(Kind::TypeArgList, children)
             }
-            PropertyValueEnum::Color(color) => todo!(),
-            PropertyValueEnum::Hash(hash) => todo!(),
-            PropertyValueEnum::WadChunkLink(wad_chunk_link) => todo!(),
+            PropertyValueEnum::Color(_color) => todo!(),
+            PropertyValueEnum::Hash(_hash) => todo!(),
+            PropertyValueEnum::WadChunkLink(_wad_chunk_link) => todo!(),
             PropertyValueEnum::Embedded(values::Embedded(s)) | PropertyValueEnum::Struct(s) => {
                 let k = self.spanned_token(Tok::HexLit, format!("0x{:x}", s.class_hash));
                 let children = s
                     .properties
                     .iter()
-                    .map(|(k, v)| self.property_to_cst(v))
+                    .map(|(_k, v)| self.property_to_cst(v))
                     .collect();
                 tree(Kind::Class, vec![k, self.block(children)])
             }
-            PropertyValueEnum::ObjectLink(object_link) => todo!(),
+            PropertyValueEnum::ObjectLink(_object_link) => todo!(),
             PropertyValueEnum::Optional(optional) => {
                 let children = match optional.clone().into_inner() {
                     Some(v) => vec![self.value_to_cst(&v)],
@@ -192,7 +192,7 @@ impl<H: HashProvider> Builder<H> {
                 };
                 self.block(children)
             }
-            PropertyValueEnum::Map(map) => todo!(),
+            PropertyValueEnum::Map(_map) => todo!(),
         }
     }
 

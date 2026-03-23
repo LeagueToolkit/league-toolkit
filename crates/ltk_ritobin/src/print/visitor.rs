@@ -327,8 +327,6 @@ impl<'a, W: Write, H: HashProvider> CstVisitor<'a, W, H> {
             Cmd::Dedent(n) => {
                 self.indent = self.indent.saturating_sub(n);
             }
-
-            _ => {}
         }
         Ok(())
     }
@@ -351,14 +349,8 @@ impl<'a, W: Write, H: HashProvider> CstVisitor<'a, W, H> {
             .copied()
             .unwrap_or(self.queue.len() + self.printed_commands);
 
-        if limit > self.printed_commands {
-            let count = limit - self.printed_commands;
-            // eprintln!("[printer] printing {count}...");
-        }
-
         while self.printed_commands < limit {
             let cmd = self.queue.pop_front().unwrap();
-            // eprintln!("- {cmd:?}");
             self.printed_commands += 1;
             self.print(cmd)?;
         }
@@ -490,7 +482,7 @@ impl<'a, W: Write, H: HashProvider> CstVisitor<'a, W, H> {
     fn visit_token_inner(
         &mut self,
         token: &crate::parse::Token,
-        context: &Cst,
+        _context: &Cst,
     ) -> Result<(), PrintError> {
         let txt = self.src[token.span].trim();
         let print_value = token.kind.print_value();

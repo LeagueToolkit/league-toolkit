@@ -1,15 +1,10 @@
-use std::{
-    fmt::{Debug, Display},
-    ops::{Deref, DerefMut},
-};
+use std::fmt::{Debug, Display};
 
 use glam::Vec4;
 use indexmap::IndexMap;
 use ltk_hash::fnv1a;
 use ltk_meta::{
-    property::{values, NoMeta},
-    traits::PropertyExt,
-    Bin, BinObject, PropertyKind, PropertyValueEnum,
+    property::values, traits::PropertyExt, Bin, BinObject, PropertyKind, PropertyValueEnum,
 };
 use xxhash_rust::xxh64::xxh64;
 
@@ -759,10 +754,6 @@ pub fn resolve_entry(
     Ok(IrEntry { key, value })
 }
 
-pub fn resolve_list(ctx: &mut Ctx, tree: &Cst) -> Result<(), Diagnostic> {
-    Ok(())
-}
-
 impl<'a> TypeChecker<'a> {
     pub fn collect_to_bin(mut self) -> (Bin, Vec<DiagnosticWithSpan>) {
         let objects = self
@@ -827,12 +818,12 @@ impl<'a> TypeChecker<'a> {
                                     .unwrap(),
                                 );
                             }
-                            Err(e) => {
+                            Err(_e) => {
                                 todo!("handle unexpected error");
                             }
                         }
                     }
-                    IrItem::Entry(IrEntry { key, value }) => {
+                    IrItem::Entry(IrEntry { key: _, value: _ }) => {
                         eprintln!("\x1b[41mlist item must be list item\x1b[0m");
                         return parent;
                     }
@@ -859,7 +850,7 @@ impl<'a> TypeChecker<'a> {
                     },
                 );
             }
-            PropertyValueEnum::ObjectLink(object_link_value) => todo!(),
+            PropertyValueEnum::ObjectLink(_object_link_value) => todo!(),
             PropertyValueEnum::Map(map_value) => {
                 let IrItem::Entry(IrEntry { key, value }) = child else {
                     eprintln!("map item must be entry");
@@ -883,7 +874,7 @@ impl<'a> TypeChecker<'a> {
                             .unwrap(),
                         );
                     }
-                    Err(e) => {
+                    Err(_e) => {
                         todo!("handle unexpected err");
                     }
                 }
