@@ -4,7 +4,6 @@ pub mod error;
 pub use error::*;
 
 pub mod parser;
-pub mod real;
 pub mod tokenizer;
 pub use tokenizer::{Token, TokenKind};
 
