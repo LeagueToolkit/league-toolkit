@@ -255,6 +255,7 @@ impl<'a> Parser<'a> {
         false
     }
 
+    #[allow(unused)]
     pub(crate) fn expect_fallable(&mut self, kind: TokenKind) -> Result<(), ()> {
         match self.expect(kind) {
             true => Ok(()),

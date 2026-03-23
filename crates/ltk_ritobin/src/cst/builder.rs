@@ -259,18 +259,6 @@ impl<H: HashProvider> Builder<H> {
         self.entry(k, Some(t), v)
     }
 
-    fn object_block(&mut self, obj: &BinObject) -> Child {
-        let mut children = vec![token(Tok::LCurly)];
-
-        for prop in obj.properties.values() {
-            children.push(self.property_to_cst(prop));
-        }
-
-        children.push(token(Tok::RCurly));
-
-        tree(Kind::Block, children)
-    }
-
     fn class(&self, class_name: Child, items: Vec<Child>) -> Child {
         tree(Kind::Class, vec![class_name, self.block(items)])
     }

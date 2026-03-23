@@ -1,4 +1,4 @@
-use std::{fs::File, io::BufReader, path::PathBuf, str::FromStr};
+use std::{path::PathBuf, str::FromStr};
 
 use ltk_ritobin::print::{CstPrinter, PrintConfig};
 
