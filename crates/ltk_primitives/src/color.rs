@@ -21,6 +21,13 @@ impl<T> Color<T> {
     pub const fn new(r: T, g: T, b: T, a: T) -> Self {
         Self { r, g, b, a }
     }
+
+    pub const fn to_array(&self) -> [T; 4]
+    where
+        T: Copy,
+    {
+        [self.r, self.g, self.b, self.a]
+    }
 }
 
 impl Color<u8> {
