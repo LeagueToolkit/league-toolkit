@@ -32,8 +32,8 @@ impl<'a, W: Write, H: HashProvider> CstPrinter<'a, W, H> {
         if let Some(e) = self.visitor.error {
             return Err(e);
         }
-        eprintln!("max q size: {}", self.visitor.queue_size_max);
-        Ok(self.visitor.printed_bytes)
+        eprintln!("max q size: {}", self.visitor.queue_size_max());
+        Ok(self.visitor.printed_bytes())
     }
 }
 
