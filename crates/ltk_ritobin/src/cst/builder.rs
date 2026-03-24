@@ -228,9 +228,7 @@ impl<H: HashProvider> Builder<H> {
                 };
                 self.block(children)
             }
-            PropertyValueEnum::None(_) => {
-                tree(Kind::Literal, vec![token(Tok::LCurly), token(Tok::RCurly)])
-            }
+            PropertyValueEnum::None(_) => tree(Kind::Literal, vec![token(Tok::Null)]),
 
             PropertyValueEnum::Map(map) => {
                 let children = map
@@ -393,6 +391,21 @@ mod test {
                 .build(),
         );
     }
+
+    #[test]
+    fn null() {
+        roundtrip(
+            Bin::builder()
+                .object(
+                    BinObject::builder(0xDEADBEEF, 0x12344321)
+                        .property(0x1, values::None::default())
+                        .build(),
+                )
+                .build(),
+        );
+        panic!();
+    }
+
     #[test]
     fn numerics() {
         roundtrip(
