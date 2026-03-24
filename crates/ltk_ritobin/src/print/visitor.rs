@@ -269,15 +269,17 @@ impl<'a, W: Write> CstVisitor<'a, W> {
             }
 
             Cmd::Line => {
-                self.out.write_char('\n')?;
-                for _ in 0..self.indent {
-                    self.out.write_char(' ')?;
+                if !self.block_line {
+                    self.out.write_char('\n')?;
+                    for _ in 0..self.indent {
+                        self.out.write_char(' ')?;
+                    }
+                    self.printed_bytes += self.indent + 1;
+                    self.col = self.indent;
+                    self.propagate_break();
+                    self.block_space = true;
+                    self.block_line = true;
                 }
-                self.printed_bytes += self.indent + 1;
-                self.col = self.indent;
-                self.propagate_break();
-                self.block_space = true;
-                self.block_line = true;
             }
 
             Cmd::SoftLine => match self.modes.last().unwrap() {
@@ -348,9 +350,14 @@ impl<'a, W: Write> CstVisitor<'a, W> {
             .copied()
             .unwrap_or(self.queue.len() + self.printed_commands);
 
+        // if self.printed_commands < limit {
+        //     println!("## SAFE FLUSH");
+        // }
+
         while self.printed_commands < limit {
             let cmd = self.queue.pop_front().unwrap();
             self.printed_commands += 1;
+            // eprintln!("- {cmd:?}");
             self.print(cmd)?;
         }
         Ok(())
@@ -453,7 +460,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                 if let Some(list) = self.list_stack.last() {
                     if list.len > 1 {
                         self.force_group(list.grp, Mode::Break);
-                        self.softline();
+                        // self.softline();
                     }
                 }
                 self.end_group();

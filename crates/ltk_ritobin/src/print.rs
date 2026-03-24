@@ -88,6 +88,10 @@ mod test {
         pretty_assertions::assert_eq!(str.trim(), is.trim());
     }
 
+    fn assert_pretty_rt(input: &str, size: usize) {
+        assert_pretty(input, input, size);
+    }
+
     #[test]
     fn simple_list() {
         assert_pretty(
@@ -102,8 +106,8 @@ mod test {
         assert_pretty(
             r#" vec2List  :  list [ vec2, ] = {  {3, 6} {1 10000} }"#,
             r#"vec2List: list[vec2] = {
-    { 3, 6 } 
-    { 1, 10000 } 
+    { 3, 6 }
+    { 1, 10000 }
 }"#,
             80,
         );
@@ -169,6 +173,21 @@ linked: list[string] = { "DATA/Characters/Viego/Viego.bin"
     }
 }"#,
             80,
+        );
+    }
+
+    #[test]
+    fn zaahen_01() {
+        assert_pretty_rt(
+            r#"bankUnits: list2[embed] = {
+    BankUnit {
+        events: list[string] = {
+            "PPlay_sfx_Zaahen_Dance3D_buffactivatePlay_sfx_Zaahen_Dance3D_buffactivatelay_sfx_Zaahen_Dance3D_buffactivate"
+        }
+    }
+    BankUnit { }
+}"#,
+            120,
         );
     }
 }
