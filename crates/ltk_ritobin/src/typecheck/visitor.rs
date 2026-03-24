@@ -4,9 +4,7 @@ use glam::Vec4;
 use indexmap::IndexMap;
 use ltk_hash::fnv1a;
 use ltk_meta::{
-    property::{values, NoMeta},
-    traits::PropertyExt,
-    Bin, BinObject, PropertyKind, PropertyValueEnum,
+    property::values, traits::PropertyExt, Bin, BinObject, PropertyKind, PropertyValueEnum,
 };
 use xxhash_rust::xxh64::xxh64;
 
