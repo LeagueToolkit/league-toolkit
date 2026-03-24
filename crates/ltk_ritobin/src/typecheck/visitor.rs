@@ -4,7 +4,9 @@ use glam::Vec4;
 use indexmap::IndexMap;
 use ltk_hash::fnv1a;
 use ltk_meta::{
-    property::values, traits::PropertyExt, Bin, BinObject, PropertyKind, PropertyValueEnum,
+    property::{values, NoMeta},
+    traits::PropertyExt,
+    Bin, BinObject, PropertyKind, PropertyValueEnum,
 };
 use xxhash_rust::xxh64::xxh64;
 
@@ -404,8 +406,10 @@ pub fn coerce_type<M: Debug>(
             }
         }),
         PropertyKind::WadChunkLink => Some(match value {
-            // FIXME: does the lexer give Hash when u64? if so we are cooked
             PropertyValueEnum::WadChunkLink(_) => return Some(value),
+            PropertyValueEnum::Hash(hash) => {
+                values::WadChunkLink::new_with_meta((*hash).into(), hash.meta).into()
+            }
             PropertyValueEnum::String(str) => {
                 values::WadChunkLink::new_with_meta(xxh64(str.as_bytes(), 0), str.meta).into()
             }
@@ -487,6 +491,21 @@ pub fn resolve_rito_type(ctx: &mut Ctx<'_>, tree: &Cst) -> Result<RitoType, Diag
     Ok(RitoType { base, subtypes })
 }
 
+fn resolve_hash(ctx: &Ctx, span: Span) -> Result<PropertyValueEnum<Span>, Diagnostic> {
+    // TODO: better errs here?
+    let src = ctx.text[span].strip_prefix("0x").ok_or(InvalidHash(span))?;
+
+    Ok(match u32::from_str_radix(src, 16) {
+        Ok(hash) => PropertyValueEnum::Hash(values::Hash::new_with_meta(hash, span)),
+        Err(_) => match u64::from_str_radix(src, 16) {
+            Ok(hash) => {
+                PropertyValueEnum::WadChunkLink(values::WadChunkLink::new_with_meta(hash, span))
+            }
+            Err(_) => return Err(InvalidHash(span)),
+        },
+    })
+}
+
 pub fn resolve_value(
     ctx: &mut Ctx,
     tree: &Cst,
@@ -522,16 +541,17 @@ pub fn resolve_value(
                 Token {
                     kind: TokenKind::HexLit,
                     span,
-                } => {
-                    // TODO: better err here?
-                    u32::from_str_radix(
-                        ctx.text[span]
-                            .strip_prefix("0x")
-                            .ok_or(InvalidHash(class.span))?,
-                        16,
-                    )
-                    .map_err(|_| InvalidHash(class.span))?
-                }
+                } => match resolve_hash(ctx, *span)? {
+                    PropertyValueEnum::Hash(hash) => *hash,
+                    value => {
+                        return Err(TypeMismatch {
+                            span: *value.meta(),
+                            expected: RitoType::simple(PropertyKind::Hash),
+                            expected_span: None,
+                            got: value.rito_type().into(),
+                        });
+                    }
+                },
                 _ => {
                     return Err(InvalidHash(class.span));
                 }
@@ -578,16 +598,7 @@ pub fn resolve_value(
                 cst::Child::Token(Token {
                     kind: TokenKind::HexLit,
                     span,
-                }) => {
-                    let txt = &ctx.text[span]
-                        .strip_prefix("0x")
-                        .ok_or(Diagnostic::InvalidHash(*span))?;
-                    values::Hash::new_with_meta(
-                        u32::from_str_radix(txt, 16).map_err(|_| Diagnostic::InvalidHash(*span))?,
-                        *span,
-                    )
-                    .into()
-                }
+                }) => resolve_hash(ctx, *span)?,
                 cst::Child::Token(Token {
                     kind: TokenKind::Number,
                     span,
@@ -660,42 +671,22 @@ pub fn resolve_entry(
 
     let key = c.expect_tree(Kind::EntryKey)?;
 
-    let (key, key_span) = match key.children.first().ok_or(InvalidHash(key.span))? {
+    let key = match key.children.first().ok_or(InvalidHash(key.span))? {
         Child::Token(Token {
             kind: TokenKind::Name,
             span,
-        }) => (
-            PropertyValueEnum::from(values::String::from(&ctx.text[span])),
-            *span,
-        ),
+        }) => PropertyValueEnum::from(values::String::new_with_meta(ctx.text[span].into(), *span)),
         Child::Token(Token {
             kind: TokenKind::String,
             span,
-        }) => (
-            PropertyValueEnum::from(values::String::from(
-                &ctx.text[Span::new(span.start + 1, span.end - 1)],
-            )),
+        }) => PropertyValueEnum::from(values::String::new_with_meta(
+            ctx.text[Span::new(span.start + 1, span.end - 1)].into(),
             *span,
-        ),
+        )),
         Child::Token(Token {
             kind: TokenKind::HexLit,
             span,
-        }) => {
-            // TODO: better err here?
-            (
-                PropertyValueEnum::Hash(
-                    u32::from_str_radix(
-                        ctx.text[span]
-                            .strip_prefix("0x")
-                            .ok_or(InvalidHash(*span))?,
-                        16,
-                    )
-                    .map_err(|_| InvalidHash(*span))?
-                    .into(),
-                ),
-                *span,
-            )
-        }
+        }) => resolve_hash(ctx, *span)?,
         _ => {
             return Err(InvalidHash(key.span).into());
         }
@@ -747,7 +738,7 @@ pub fn resolve_entry(
 
     let value = match (kind, resolved_val) {
         (None, Some(value)) => value,
-        (None, None) => return Err(MissingType(key_span).into()),
+        (None, None) => return Err(MissingType(*key.meta()).into()),
         (Some(kind), Some(ivalue)) => match ivalue.kind() == kind.base {
             true => ivalue,
             false => {
