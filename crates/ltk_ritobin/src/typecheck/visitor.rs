@@ -418,6 +418,26 @@ pub fn coerce_type<M: Debug>(
                 return None;
             }
         }),
+        PropertyKind::BitBool => Some(match value {
+            PropertyValueEnum::BitBool(_) => return Some(value),
+            PropertyValueEnum::Bool(bool) => {
+                values::BitBool::new_with_meta(*bool, bool.meta).into()
+            }
+            other => {
+                eprintln!("\x1b[41mcannot coerce {other:?} to {to:?}\x1b[0m");
+                return None;
+            }
+        }),
+        PropertyKind::Bool => Some(match value {
+            PropertyValueEnum::Bool(_) => return Some(value),
+            PropertyValueEnum::BitBool(bool) => {
+                values::Bool::new_with_meta(*bool, bool.meta).into()
+            }
+            other => {
+                eprintln!("\x1b[41mcannot coerce {other:?} to {to:?}\x1b[0m");
+                return None;
+            }
+        }),
         to if to == value.kind() => Some(value),
         _ => None,
     }
@@ -595,6 +615,16 @@ pub fn resolve_value(
                     *span,
                 )
                 .into(),
+
+                cst::Child::Token(Token {
+                    kind: TokenKind::True,
+                    span,
+                }) => values::Bool::new_with_meta(true, *span).into(),
+                cst::Child::Token(Token {
+                    kind: TokenKind::False,
+                    span,
+                }) => values::Bool::new_with_meta(false, *span).into(),
+
                 cst::Child::Token(Token {
                     kind: TokenKind::HexLit,
                     span,
