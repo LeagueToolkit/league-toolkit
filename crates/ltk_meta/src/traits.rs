@@ -1,7 +1,9 @@
 use std::io;
 
+use crate::PropertyValueEnum;
+
 use super::property::Kind;
-use byteorder::{ReadBytesExt, WriteBytesExt};
+use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 
 const HEADER_SIZE: usize = 5;
 
@@ -50,6 +52,22 @@ pub trait ReaderExt: io::Read {
     fn read_property_kind(&mut self, legacy: bool) -> Result<Kind, crate::Error> {
         Kind::unpack(self.read_u8()?, legacy)
     }
+
+    fn read_property<M: Default>(
+        &mut self,
+        legacy: bool,
+    ) -> Result<(u32, PropertyValueEnum<M>), crate::Error>
+    where
+        Self: io::Seek,
+    {
+        let name_hash = self.read_u32::<LE>()?;
+        let kind = self.read_property_kind(legacy)?;
+
+        Ok((
+            name_hash,
+            PropertyValueEnum::from_reader(self, kind, legacy)?,
+        ))
+    }
 }
 
 impl<R: io::Read + ?Sized> ReaderExt for R {}
@@ -67,6 +85,21 @@ pub trait WriteProperty: Sized {
 pub trait WriterExt: io::Write {
     fn write_property_kind(&mut self, kind: Kind) -> Result<(), io::Error> {
         self.write_u8(kind.into())
+    }
+
+    fn write_property<M>(
+        &mut self,
+        name_hash: u32,
+        value: &PropertyValueEnum<M>,
+    ) -> Result<(), io::Error>
+    where
+        M: Clone,
+        Self: io::Seek,
+    {
+        self.write_u32::<LE>(name_hash)?;
+        self.write_property_kind(value.kind())?;
+        value.to_writer(self)?;
+        Ok(())
     }
 }
 

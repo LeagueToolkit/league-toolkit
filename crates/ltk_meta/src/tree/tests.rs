@@ -6,18 +6,26 @@ use glam::{Mat4, Vec2, Vec3, Vec4};
 use indexmap::IndexMap;
 use ltk_primitives::Color;
 
-use crate::property::{values, NoMeta};
-use crate::property::{BinProperty, Kind, PropertyValueEnum};
+use crate::{
+    property::{values, NoMeta},
+    traits::WriterExt,
+};
+use crate::{
+    property::{Kind, PropertyValueEnum},
+    traits::ReaderExt,
+};
 use crate::{Bin, BinObject as Object};
 
 /// Helper to roundtrip a property value through write/read
-fn roundtrip_property(prop: &BinProperty) -> BinProperty {
+fn roundtrip_property(prop: &(u32, PropertyValueEnum)) -> (u32, PropertyValueEnum) {
     let mut buffer = Vec::new();
     let mut cursor = Cursor::new(&mut buffer);
-    prop.to_writer(&mut cursor).expect("write failed");
+    cursor
+        .write_property(prop.0, &prop.1)
+        .expect("write failed");
 
     cursor.set_position(0);
-    BinProperty::from_reader(&mut cursor, false).expect("read failed")
+    cursor.read_property(false).expect("read failed")
 }
 
 /// Helper to roundtrip a Bin through write/read
@@ -31,8 +39,8 @@ fn roundtrip_tree(tree: &Bin) -> Bin {
 }
 
 /// Helper to create a BinProperty with a given name hash and value
-fn make_prop(name_hash: u32, value: PropertyValueEnum) -> BinProperty {
-    BinProperty { name_hash, value }
+fn make_prop(name_hash: u32, value: PropertyValueEnum) -> (u32, PropertyValueEnum) {
+    (name_hash, value)
 }
 
 // =============================================================================
@@ -334,13 +342,7 @@ fn test_container_with_strings_roundtrip() {
 #[test]
 fn test_container_with_structs_roundtrip() {
     let mut properties = IndexMap::new();
-    properties.insert(
-        0xAAAA,
-        BinProperty {
-            name_hash: 0xAAAA,
-            value: PropertyValueEnum::I32(values::I32::new(42)),
-        },
-    );
+    properties.insert(0xAAAA, PropertyValueEnum::I32(values::I32::new(42)));
 
     let prop = make_prop(
         0x1234,
@@ -405,13 +407,7 @@ fn test_optional_some_string_roundtrip() {
 #[test]
 fn test_optional_some_struct_roundtrip() {
     let mut properties = IndexMap::new();
-    properties.insert(
-        0xAAAA,
-        BinProperty {
-            name_hash: 0xAAAA,
-            value: PropertyValueEnum::Bool(values::Bool::from(true)),
-        },
-    );
+    properties.insert(0xAAAA, PropertyValueEnum::Bool(values::Bool::from(true)));
 
     let prop = make_prop(
         0x1234,
@@ -465,10 +461,7 @@ fn test_map_hash_to_struct_roundtrip() {
     let mut struct_props = IndexMap::new();
     struct_props.insert(
         0x1111,
-        BinProperty {
-            name_hash: 0x1111,
-            value: PropertyValueEnum::F32(values::F32::new(std::f32::consts::PI)),
-        },
+        PropertyValueEnum::F32(values::F32::new(std::f32::consts::PI)),
     );
 
     let entries = vec![(
@@ -509,27 +502,12 @@ fn test_struct_empty_roundtrip() {
 #[test]
 fn test_struct_with_properties_roundtrip() {
     let mut properties = IndexMap::new();
-    properties.insert(
-        0x1111,
-        BinProperty {
-            name_hash: 0x1111,
-            value: PropertyValueEnum::I32(values::I32::new(42)),
-        },
-    );
+    properties.insert(0x1111, PropertyValueEnum::I32(values::I32::new(42)));
     properties.insert(
         0x2222,
-        BinProperty {
-            name_hash: 0x2222,
-            value: PropertyValueEnum::String(values::String::from("test")),
-        },
+        PropertyValueEnum::String(values::String::from("test")),
     );
-    properties.insert(
-        0x3333,
-        BinProperty {
-            name_hash: 0x3333,
-            value: PropertyValueEnum::Bool(values::Bool::new(true)),
-        },
-    );
+    properties.insert(0x3333, PropertyValueEnum::Bool(values::Bool::new(true)));
 
     let prop = make_prop(
         0x1234,
@@ -546,25 +524,16 @@ fn test_struct_with_properties_roundtrip() {
 #[test]
 fn test_struct_nested_roundtrip() {
     let mut inner_props = IndexMap::new();
-    inner_props.insert(
-        0xAAAA,
-        BinProperty {
-            name_hash: 0xAAAA,
-            value: PropertyValueEnum::F32(values::F32::new(1.5)),
-        },
-    );
+    inner_props.insert(0xAAAA, PropertyValueEnum::F32(values::F32::new(1.5)));
 
     let mut outer_props = IndexMap::new();
     outer_props.insert(
         0xBBBB,
-        BinProperty {
-            name_hash: 0xBBBB,
-            value: PropertyValueEnum::Struct(values::Struct {
-                class_hash: 0x1111,
-                properties: inner_props,
-                meta: NoMeta,
-            }),
-        },
+        PropertyValueEnum::Struct(values::Struct {
+            class_hash: 0x1111,
+            properties: inner_props,
+            meta: NoMeta,
+        }),
     );
 
     let prop = make_prop(
@@ -588,10 +557,7 @@ fn test_embedded_roundtrip() {
     let mut properties = IndexMap::new();
     properties.insert(
         0x1111,
-        BinProperty {
-            name_hash: 0x1111,
-            value: PropertyValueEnum::Vector3(values::Vector3::new(Vec3::new(1.0, 2.0, 3.0))),
-        },
+        PropertyValueEnum::Vector3(values::Vector3::new(Vec3::new(1.0, 2.0, 3.0))),
     );
 
     let prop = make_prop(
@@ -612,10 +578,10 @@ fn test_embedded_roundtrip() {
 
 #[test]
 fn test_bin_tree_object_empty_roundtrip() {
-    let obj = Object {
+    let obj = Object::<NoMeta> {
         path_hash: 0x1234,
         class_hash: 0x5678,
-        properties: IndexMap::new(),
+        properties: Default::default(),
     };
 
     let mut buffer = Vec::new();
@@ -630,22 +596,13 @@ fn test_bin_tree_object_empty_roundtrip() {
 #[test]
 fn test_bin_tree_object_with_properties_roundtrip() {
     let mut properties = IndexMap::new();
-    properties.insert(
-        0xAAAA,
-        BinProperty {
-            name_hash: 0xAAAA,
-            value: PropertyValueEnum::I32(values::I32::new(100)),
-        },
-    );
+    properties.insert(0xAAAA, PropertyValueEnum::I32(values::I32::new(100)));
     properties.insert(
         0xBBBB,
-        BinProperty {
-            name_hash: 0xBBBB,
-            value: PropertyValueEnum::String(values::String::from("object property")),
-        },
+        PropertyValueEnum::String(values::String::from("object property")),
     );
 
-    let obj = Object {
+    let obj = Object::<NoMeta> {
         path_hash: 0x1234,
         class_hash: 0x5678,
         properties,
@@ -684,15 +641,9 @@ fn test_bin_tree_with_dependencies_roundtrip() {
 #[test]
 fn test_bin_tree_with_objects_roundtrip() {
     let mut properties = IndexMap::new();
-    properties.insert(
-        0xAAAA,
-        BinProperty {
-            name_hash: 0xAAAA,
-            value: PropertyValueEnum::I32(values::I32::new(42)),
-        },
-    );
+    properties.insert(0xAAAA, PropertyValueEnum::I32(values::I32::new(42)));
 
-    let obj = Object {
+    let obj = Object::<NoMeta> {
         path_hash: 0x1234,
         class_hash: 0x5678,
         properties,
@@ -707,30 +658,18 @@ fn test_bin_tree_with_objects_roundtrip() {
 fn test_bin_tree_complex_roundtrip() {
     // Create a complex tree with multiple objects and various property types
     let mut obj1_props = IndexMap::new();
-    obj1_props.insert(
-        0x1111,
-        BinProperty {
-            name_hash: 0x1111,
-            value: PropertyValueEnum::Bool(values::Bool::new(true)),
-        },
-    );
+    obj1_props.insert(0x1111, PropertyValueEnum::Bool(values::Bool::new(true)));
     obj1_props.insert(
         0x2222,
-        BinProperty {
-            name_hash: 0x2222,
-            value: PropertyValueEnum::String(values::String::from("test string")),
-        },
+        PropertyValueEnum::String(values::String::from("test string")),
     );
     obj1_props.insert(
         0x3333,
-        BinProperty {
-            name_hash: 0x3333,
-            value: PropertyValueEnum::Container(values::Container::from(vec![
-                values::I32::new(1),
-                values::I32::new(2),
-                values::I32::new(3),
-            ])),
-        },
+        PropertyValueEnum::Container(values::Container::from(vec![
+            values::I32::new(1),
+            values::I32::new(2),
+            values::I32::new(3),
+        ])),
     );
 
     let obj1 = Object {
@@ -742,17 +681,11 @@ fn test_bin_tree_complex_roundtrip() {
     let mut obj2_props = IndexMap::new();
     obj2_props.insert(
         0x4444,
-        BinProperty {
-            name_hash: 0x4444,
-            value: PropertyValueEnum::Vector3(values::Vector3::new(Vec3::new(1.0, 2.0, 3.0))),
-        },
+        PropertyValueEnum::Vector3(values::Vector3::new(Vec3::new(1.0, 2.0, 3.0))),
     );
     obj2_props.insert(
         0x5555,
-        BinProperty {
-            name_hash: 0x5555,
-            value: PropertyValueEnum::Optional(values::F32::new(std::f32::consts::PI).into()),
-        },
+        PropertyValueEnum::Optional(values::F32::new(std::f32::consts::PI).into()),
     );
 
     let obj2 = Object {
@@ -826,38 +759,26 @@ fn test_property_kind_roundtrip() {
 fn test_deeply_nested_struct() {
     // Create a deeply nested struct to test recursion handling
     let mut deepest_props = IndexMap::new();
-    deepest_props.insert(
-        0x1111,
-        BinProperty {
-            name_hash: 0x1111,
-            value: PropertyValueEnum::I32(values::I32::new(42)),
-        },
-    );
+    deepest_props.insert(0x1111, PropertyValueEnum::I32(values::I32::new(42)));
 
     let mut level2_props = IndexMap::new();
     level2_props.insert(
         0x2222,
-        BinProperty {
-            name_hash: 0x2222,
-            value: PropertyValueEnum::Struct(values::Struct {
-                class_hash: 0xAAAA,
-                properties: deepest_props,
-                meta: NoMeta,
-            }),
-        },
+        PropertyValueEnum::Struct(values::Struct {
+            class_hash: 0xAAAA,
+            properties: deepest_props,
+            meta: NoMeta,
+        }),
     );
 
     let mut level1_props = IndexMap::new();
     level1_props.insert(
         0x3333,
-        BinProperty {
-            name_hash: 0x3333,
-            value: PropertyValueEnum::Struct(values::Struct {
-                class_hash: 0xBBBB,
-                properties: level2_props,
-                meta: NoMeta,
-            }),
-        },
+        PropertyValueEnum::Struct(values::Struct {
+            class_hash: 0xBBBB,
+            properties: level2_props,
+            meta: NoMeta,
+        }),
     );
 
     let prop = make_prop(
@@ -875,13 +796,7 @@ fn test_deeply_nested_struct() {
 #[test]
 fn test_container_with_embedded_roundtrip() {
     let mut embedded_props = IndexMap::new();
-    embedded_props.insert(
-        0x1111,
-        BinProperty {
-            name_hash: 0x1111,
-            value: PropertyValueEnum::U32(values::U32::new(999)),
-        },
-    );
+    embedded_props.insert(0x1111, PropertyValueEnum::U32(values::U32::new(999)));
 
     let prop = make_prop(
         0x1234,

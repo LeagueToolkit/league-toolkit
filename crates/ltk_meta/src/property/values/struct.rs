@@ -2,8 +2,10 @@ use std::io;
 
 use crate::{
     property::{Kind, NoMeta},
-    traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty},
-    BinProperty, Error,
+    traits::{
+        PropertyExt, PropertyValueExt, ReadProperty, ReaderExt, WriteProperty, WriterExt as _,
+    },
+    Error, PropertyValueEnum,
 };
 use byteorder::{ReadBytesExt as _, WriteBytesExt as _, LE};
 use indexmap::IndexMap;
@@ -17,7 +19,7 @@ use ltk_io_ext::{measure, window_at};
 #[derive(Clone, PartialEq, Debug, Default)]
 pub struct Struct<M = NoMeta> {
     pub class_hash: u32,
-    pub properties: IndexMap<u32, BinProperty<M>>,
+    pub properties: IndexMap<u32, PropertyValueEnum<M>>,
     pub meta: M,
 }
 
@@ -45,7 +47,13 @@ impl<M> PropertyExt for Struct<M> {
     fn size_no_header(&self) -> usize {
         match self.class_hash {
             0 => 4,
-            _ => 10 + self.properties.values().map(|p| p.size()).sum::<usize>(),
+            _ => {
+                10 + self
+                    .properties
+                    .values()
+                    .map(|p| 5 + p.size_no_header())
+                    .sum::<usize>()
+            }
         }
     }
 
@@ -77,8 +85,8 @@ impl<M: Default> ReadProperty for Struct<M> {
             let prop_count = reader.read_u16::<LE>()?;
             let mut properties = IndexMap::with_capacity(prop_count as _);
             for _ in 0..prop_count {
-                let prop = BinProperty::from_reader(reader, legacy)?;
-                properties.insert(prop.name_hash, prop);
+                let (name_hash, value) = reader.read_property::<M>(legacy)?;
+                properties.insert(name_hash, value);
             }
             Ok::<_, Error>(Self {
                 class_hash,
@@ -116,8 +124,10 @@ impl<M: Clone> WriteProperty for Struct<M> {
         let (size, _) = measure(writer, |writer| {
             writer.write_u16::<LE>(self.properties.len() as _)?;
 
-            for prop in self.properties.values() {
-                prop.to_writer(writer)?;
+            for (name_hash, value) in self.properties.iter() {
+                writer.write_u32::<LE>(*name_hash)?;
+                writer.write_property_kind(value.kind())?;
+                value.to_writer(writer)?;
             }
 
             Ok::<_, io::Error>(())
