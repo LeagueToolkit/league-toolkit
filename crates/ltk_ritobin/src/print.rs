@@ -190,4 +190,13 @@ linked: list[string] = { "DATA/Characters/Viego/Viego.bin"
             120,
         );
     }
+
+    #[test]
+    fn broken_type_arg() {
+        assert_pretty(
+            r#"thing4: list[u3 2] = { 0, 0, 0, 0, 0, 0, 0 }"#,
+            r#"thing4: list[u32] = { 0, 0, 0, 0, 0, 0, 0 }"#,
+            120,
+        );
+    }
 }
