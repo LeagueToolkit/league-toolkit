@@ -338,6 +338,7 @@ impl<H: HashProvider> Builder<H> {
 
 #[cfg(test)]
 mod test {
+    use glam::Vec2;
     use ltk_meta::{property::values, Bin, BinObject};
 
     use super::*;
@@ -380,19 +381,6 @@ mod test {
     }
 
     #[test]
-    fn string() {
-        roundtrip(
-            Bin::builder()
-                .object(
-                    BinObject::builder(0xDEADBEEF, 0x12344321)
-                        .property(0x44444444, values::String::from("hello"))
-                        .build(),
-                )
-                .build(),
-        );
-    }
-
-    #[test]
     fn null() {
         roundtrip(
             Bin::builder()
@@ -403,7 +391,6 @@ mod test {
                 )
                 .build(),
         );
-        panic!();
     }
 
     #[test]
@@ -462,13 +449,118 @@ mod test {
         );
     }
     #[test]
-    fn list() {
+    fn bool_bitbool() {
         roundtrip(
             Bin::builder()
                 .object(
                     BinObject::builder(0xDEADBEEF, 0x12344321)
-                        .property(0x1, values::String::from("hello"))
-                        .property(0x2, values::U64::new(9))
+                        .property(0x1, values::Bool::new(true))
+                        .property(0x2, values::Bool::new(false))
+                        .property(0x3, values::BitBool::new(true))
+                        .property(0x4, values::BitBool::new(false))
+                        .build(),
+                )
+                .build(),
+        );
+    }
+    #[test]
+    fn string() {
+        roundtrip(
+            Bin::builder()
+                .object(
+                    BinObject::builder(0xDEADBEEF, 0x12344321)
+                        .property(0x44444444, values::String::from("hello"))
+                        .build(),
+                )
+                .build(),
+        );
+    }
+    #[test]
+    fn hashes() {
+        roundtrip(
+            Bin::builder()
+                .object(
+                    BinObject::builder(0xDEADBEEF, 0x12344321)
+                        .property(0x1, values::Hash::new(123123))
+                        .property(0x2, values::Hash::new(u32::MAX))
+                        .property(0x3, values::ObjectLink::new(123123))
+                        .property(0x4, values::ObjectLink::new(u32::MAX))
+                        .property(0x5, values::WadChunkLink::new(123123))
+                        .property(0x6, values::WadChunkLink::new(u64::MAX))
+                        .build(),
+                )
+                .build(),
+        );
+    }
+
+    #[test]
+    fn struct_and_embedded() {
+        roundtrip(
+            Bin::builder()
+                .object(
+                    BinObject::builder(0xDEADBEEF, 0x12344321)
+                        .property(
+                            0x91,
+                            values::Struct {
+                                class_hash: 0x123,
+                                meta: Default::default(),
+                                properties: [
+                                    (
+                                        0x1,
+                                        BinProperty {
+                                            name_hash: 0x1,
+                                            value: values::U64::new(5).into(),
+                                        },
+                                    ),
+                                    (
+                                        0x2,
+                                        BinProperty {
+                                            name_hash: 0x2,
+                                            value: values::U64::new(10).into(),
+                                        },
+                                    ),
+                                ]
+                                .into_iter()
+                                .collect(),
+                            },
+                        )
+                        .property(
+                            0x92,
+                            values::Embedded(values::Struct {
+                                class_hash: 0x234,
+                                meta: Default::default(),
+                                properties: [
+                                    (
+                                        0x2,
+                                        BinProperty {
+                                            name_hash: 0x2,
+                                            value: values::U64::new(5).into(),
+                                        },
+                                    ),
+                                    (
+                                        0x3,
+                                        BinProperty {
+                                            name_hash: 0x3,
+                                            value: values::U64::new(10).into(),
+                                        },
+                                    ),
+                                ]
+                                .into_iter()
+                                .collect(),
+                            }),
+                        )
+                        .build(),
+                )
+                .build(),
+        );
+    }
+
+    #[test]
+    fn lists() {
+        roundtrip(
+            Bin::builder()
+                .object(
+                    BinObject::builder(0xDEADBEEF, 0x12344321)
                         .property(
                             0x9191919,
                             values::Container::new(vec![
@@ -476,6 +568,14 @@ mod test {
                                 values::U64::new(6),
                                 values::U64::new(7),
                             ]),
+                        )
+                        .property(
+                            0x9191918,
+                            values::UnorderedContainer(values::Container::new(vec![
+                                values::U32::new(5),
+                                values::U32::new(6),
+                                values::U32::new(7),
+                            ])),
                         )
                         .build(),
                 )
@@ -498,6 +598,30 @@ mod test {
                                     values::String::from("asdasd").into(),
                                     values::U64::new(1).into(),
                                 )],
+                            )
+                            .unwrap(),
+                        )
+                        .build(),
+                )
+                .build(),
+        );
+    }
+
+    #[test]
+    fn optional() {
+        roundtrip(
+            Bin::builder()
+                .object(
+                    BinObject::builder(0xDEADBEEF, 0x12344321)
+                        .property(
+                            0x1,
+                            values::Optional::new(PropertyKind::Vector2, None).unwrap(),
+                        )
+                        .property(
+                            0x2,
+                            values::Optional::new(
+                                PropertyKind::Vector2,
+                                Some(values::Vector2::new(Vec2::new(0.1, -5.0)).into()),
                             )
                             .unwrap(),
                         )
