@@ -854,13 +854,7 @@ impl<'a> TypeChecker<'a> {
                     return parent;
                 };
 
-                struct_val.properties.insert(
-                    *key,
-                    ltk_meta::BinProperty {
-                        name_hash: *key,
-                        value,
-                    },
-                );
+                struct_val.properties.insert(*key, value);
             }
             PropertyValueEnum::ObjectLink(_object_link_value) => todo!(),
             PropertyValueEnum::Map(map_value) => {

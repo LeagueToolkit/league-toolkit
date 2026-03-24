@@ -1,6 +1,6 @@
 use std::fmt::{LowerHex, Write};
 
-use ltk_meta::{property::values, Bin, BinObject, BinProperty, PropertyKind, PropertyValueEnum};
+use ltk_meta::{property::values, Bin, BinObject, PropertyKind, PropertyValueEnum};
 
 use crate::{
     cst::{Child, Cst, Kind},
@@ -216,7 +216,7 @@ impl<H: HashProvider> Builder<H> {
                 let children = s
                     .properties
                     .iter()
-                    .map(|(_k, v)| self.property_to_cst(v))
+                    .map(|(k, v)| self.property_to_cst(*k, v))
                     .collect();
                 tree(Kind::Class, vec![k, self.block(children)])
             }
@@ -279,10 +279,10 @@ impl<H: HashProvider> Builder<H> {
 
         tree(Kind::TypeExpr, children)
     }
-    fn property_to_cst<M: Clone>(&mut self, prop: &BinProperty<M>) -> Child {
-        let k = self.hash_field_lit(prop.name_hash);
-        let t = self.rito_type(prop.value.rito_type());
-        let v = self.value_to_cst(&prop.value);
+    fn property_to_cst<M: Clone>(&mut self, name_hash: u32, value: &PropertyValueEnum<M>) -> Child {
+        let k = self.hash_field_lit(name_hash);
+        let t = self.rito_type(value.rito_type());
+        let v = self.value_to_cst(value);
         self.entry(k, Some(t), v)
     }
 
@@ -299,8 +299,8 @@ impl<H: HashProvider> Builder<H> {
             .iter()
             .map(|(k, v)| {
                 let k = tree(Kind::EntryKey, vec![self.hash_field_lit(*k)]);
-                let t = self.rito_type(v.value.rito_type());
-                let v = self.value_to_cst(&v.value);
+                let t = self.rito_type(v.rito_type());
+                let v = self.value_to_cst(v);
                 self.entry(k, Some(t), v)
             })
             .collect();
@@ -339,7 +339,10 @@ impl<H: HashProvider> Builder<H> {
 #[cfg(test)]
 mod test {
     use glam::Vec2;
-    use ltk_meta::{property::values, Bin, BinObject};
+    use ltk_meta::{
+        property::{values, NoMeta},
+        Bin, BinObject,
+    };
 
     use super::*;
     use crate::print::CstPrinter;
@@ -385,7 +388,7 @@ mod test {
         roundtrip(
             Bin::builder()
                 .object(
-                    BinObject::builder(0xDEADBEEF, 0x12344321)
+                    BinObject::<NoMeta>::builder(0xDEADBEEF, 0x12344321)
                         .property(0x1, values::None::default())
                         .build(),
                 )
@@ -398,7 +401,7 @@ mod test {
         roundtrip(
             Bin::builder()
                 .object(
-                    BinObject::builder(0xDEADBEEF, 0x12344321)
+                    BinObject::<NoMeta>::builder(0xDEADBEEF, 0x12344321)
                         .property(0x1, values::U64::new(12))
                         .property(0x2, values::U32::new(23))
                         .property(0x3, values::U16::new(34))
@@ -420,7 +423,7 @@ mod test {
         roundtrip(
             Bin::builder()
                 .object(
-                    BinObject::builder(0xDEADBEEF, 0x12344321)
+                    BinObject::<NoMeta>::builder(0xDEADBEEF, 0x12344321)
                         .property(0x1, values::Vector2::new(glam::Vec2::new(0.1, -65.0)))
                         .property(0x2, values::Vector3::new(glam::Vec3::new(1000., -0.0, 2.)))
                         .property(
@@ -453,7 +456,7 @@ mod test {
         roundtrip(
             Bin::builder()
                 .object(
-                    BinObject::builder(0xDEADBEEF, 0x12344321)
+                    BinObject::<NoMeta>::builder(0xDEADBEEF, 0x12344321)
                         .property(0x1, values::Bool::new(true))
                         .property(0x2, values::Bool::new(false))
                         .property(0x3, values::BitBool::new(true))
@@ -468,7 +471,7 @@ mod test {
         roundtrip(
             Bin::builder()
                 .object(
-                    BinObject::builder(0xDEADBEEF, 0x12344321)
+                    BinObject::<NoMeta>::builder(0xDEADBEEF, 0x12344321)
                         .property(0x44444444, values::String::from("hello"))
                         .build(),
                 )
@@ -480,7 +483,7 @@ mod test {
         roundtrip(
             Bin::builder()
                 .object(
-                    BinObject::builder(0xDEADBEEF, 0x12344321)
+                    BinObject::<NoMeta>::builder(0xDEADBEEF, 0x12344321)
                         .property(0x1, values::Hash::new(123123))
                         .property(0x2, values::Hash::new(u32::MAX))
                         .property(0x3, values::ObjectLink::new(123123))
@@ -498,27 +501,15 @@ mod test {
         roundtrip(
             Bin::builder()
                 .object(
-                    BinObject::builder(0xDEADBEEF, 0x12344321)
+                    BinObject::<NoMeta>::builder(0xDEADBEEF, 0x12344321)
                         .property(
                             0x91,
                             values::Struct {
                                 class_hash: 0x123,
                                 meta: Default::default(),
                                 properties: [
-                                    (
-                                        0x1,
-                                        BinProperty {
-                                            name_hash: 0x1,
-                                            value: values::U64::new(5).into(),
-                                        },
-                                    ),
-                                    (
-                                        0x2,
-                                        BinProperty {
-                                            name_hash: 0x2,
-                                            value: values::U64::new(10).into(),
-                                        },
-                                    ),
+                                    (0x1, values::U64::new(5).into()),
+                                    (0x2, values::U64::new(10).into()),
                                 ]
                                 .into_iter()
                                 .collect(),
@@ -530,20 +521,8 @@ mod test {
                                 class_hash: 0x234,
                                 meta: Default::default(),
                                 properties: [
-                                    (
-                                        0x2,
-                                        BinProperty {
-                                            name_hash: 0x2,
-                                            value: values::U64::new(5).into(),
-                                        },
-                                    ),
-                                    (
-                                        0x3,
-                                        BinProperty {
-                                            name_hash: 0x3,
-                                            value: values::U64::new(10).into(),
-                                        },
-                                    ),
+                                    (0x2, values::U64::new(5).into()),
+                                    (0x3, values::U64::new(10).into()),
                                 ]
                                 .into_iter()
                                 .collect(),
@@ -560,7 +539,7 @@ mod test {
         roundtrip(
             Bin::builder()
                 .object(
-                    BinObject::builder(0xDEADBEEF, 0x12344321)
+                    BinObject::<NoMeta>::builder(0xDEADBEEF, 0x12344321)
                         .property(
                             0x9191919,
                             values::Container::new(vec![
@@ -588,7 +567,7 @@ mod test {
         roundtrip(
             Bin::builder()
                 .object(
-                    BinObject::builder(0xfeeb1e, 0x111)
+                    BinObject::<NoMeta>::builder(0xfeeb1e, 0x111)
                         .property(
                             0x1,
                             values::Map::new(
@@ -612,7 +591,7 @@ mod test {
         roundtrip(
             Bin::builder()
                 .object(
-                    BinObject::builder(0xDEADBEEF, 0x12344321)
+                    BinObject::<NoMeta>::builder(0xDEADBEEF, 0x12344321)
                         .property(
                             0x1,
                             values::Optional::new(PropertyKind::Vector2, None).unwrap(),
