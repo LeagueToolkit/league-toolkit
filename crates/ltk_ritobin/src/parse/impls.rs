@@ -117,7 +117,7 @@ pub fn entry_value(p: &mut Parser) -> bool {
             (UnterminatedString, _) => {
                 p.advance_with_error(ErrorKind::UnterminatedString, None);
             }
-            (String | Number | HexLit | True | False, _) => {
+            (String | Number | HexLit | True | False | Null, _) => {
                 p.scope(TreeKind::Literal, |p| p.advance());
             }
             (LCurly, _) => {
