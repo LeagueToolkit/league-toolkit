@@ -16,9 +16,10 @@ pub enum TokenKind {
 
   String, UnterminatedString,
 
-Comment,
+  Comment,
 
-  True, False,
+  // keywords
+  True, False, Null,
 
   Name, Number, HexLit,
 }
@@ -52,6 +53,7 @@ impl TokenKind {
             TokenKind::Comment => None,
             TokenKind::True => Some("true"),
             TokenKind::False => Some("false"),
+            TokenKind::Null => Some("null"),
             TokenKind::Name => None,
             TokenKind::Number => None,
             TokenKind::HexLit => None,
@@ -82,6 +84,7 @@ impl Display for TokenKind {
             TokenKind::UnterminatedString => "unterminated string literal",
             TokenKind::True => "'true'",
             TokenKind::False => "'false'",
+            TokenKind::Null => "'null'",
             TokenKind::Name => "keyword",
             TokenKind::Number => "number",
             TokenKind::HexLit => "hexadecimal literal",
@@ -106,7 +109,7 @@ pub fn lex(mut text: &str) -> Vec<Token> {
         ],
     );
 
-    let keywords = ("true false", [True, False]);
+    let keywords = ("true false null", [True, False, Null]);
 
     let source = text;
 
