@@ -166,6 +166,12 @@ pub enum Diagnostic {
         got: RitoTypeOrVirtual,
     },
 
+    UnexpectedContainerItem {
+        span: Span,
+        expected: RitoType,
+        expected_span: Option<Span>,
+    },
+
     ResolveLiteral,
     AmbiguousNumeric(Span),
 
@@ -208,6 +214,7 @@ impl Diagnostic {
             UnknownType(span)
             | SubtypeCountMismatch { span, .. }
             | UnexpectedSubtypes { span, .. }
+            | UnexpectedContainerItem { span, .. }
             | MissingType(span)
             | TypeMismatch { span, .. }
             | ShadowedEntry { shadower: span, .. }
@@ -930,6 +937,15 @@ impl<'a> TypeChecker<'a> {
                 .unwrap();
             }
             other => {
+                self.ctx.diagnostics.push(
+                    UnexpectedContainerItem {
+                        span: *other.meta(),
+                        expected: other.rito_type(),
+                        expected_span: None,
+                    }
+                    .unwrap(),
+                );
+
                 eprintln!("cant inject into {:?}", other.kind())
             }
         }
