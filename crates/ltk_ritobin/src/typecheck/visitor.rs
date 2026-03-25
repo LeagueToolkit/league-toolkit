@@ -643,6 +643,8 @@ pub fn resolve_value(
                         return Err(AmbiguousNumeric(*span));
                     };
 
+                    let txt = txt.replace('_', "");
+
                     match kind_hint {
                         K::U8 => P::U8(values::U8::new_with_meta(
                             txt.parse::<u8>().map_err(|_| Diagnostic::ResolveLiteral)?,
