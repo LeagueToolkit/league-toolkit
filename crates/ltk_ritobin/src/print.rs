@@ -291,4 +291,19 @@ linked: list[string] = { "DATA/Characters/Viego/Viego.bin"
             PrintConfig::default(),
         )
     }
+
+    #[ignore = "nice to have"]
+    #[test]
+    fn class_body_on_new_line() {
+        assert_pretty(
+            r#"ConformToPathRigPoseModifierData
+            {
+    mFrequency: f32 = 20
+}"#,
+            r#"ConformToPathRigPoseModifierData {
+    mFrequency: f32 = 20
+}"#,
+            PrintConfig::default(),
+        )
+    }
 }
