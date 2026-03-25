@@ -67,6 +67,12 @@ pub fn stmt(p: &mut Parser) -> MarkClosed {
         return p.close(m, TreeKind::Entry);
     }
 
+    if p.at(TokenKind::RCurly) {
+        p.scope(TreeKind::EntryTerminator, |_| {});
+        let g = p.close(m, TreeKind::Entry);
+        return g;
+    }
+
     p.scope(TreeKind::EntryTerminator, |p| {
         let mut one = false;
         if p.eof() {
