@@ -18,3 +18,6 @@ result
 
 bin
 Reference-Folder/
+
+# Windows Zone.Identifier ADS files
+*:Zone.Identifier
