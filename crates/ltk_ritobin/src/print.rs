@@ -275,4 +275,20 @@ linked: list[string] = { "DATA/Characters/Viego/Viego.bin"
             ),
         );
     }
+
+    #[test]
+    fn unterminated_string() {
+        assert_pretty_rt(
+            r#"ConformToPathRigPoseModifierData {
+    mStartingJointName: hash = "L_Clavicle
+    mEndingJointName: hash = "l_hand"
+    mDefaultMaskName: hash = 0x7136e1bc
+    mMaxBoneAngle: f32 = 115
+    mDampingValue: f32 = 8
+    mVelMultiplier: f32 = 0
+    mFrequency: f32 = 20
+}"#,
+            PrintConfig::default(),
+        )
+    }
 }
