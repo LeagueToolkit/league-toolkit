@@ -150,6 +150,9 @@ pub fn type_expr(p: &mut Parser) {
                     }
                 }
             });
+            while !p.at(TokenKind::RBrack) {
+                p.advance();
+            }
             p.expect(TokenKind::RBrack);
         }
     });
