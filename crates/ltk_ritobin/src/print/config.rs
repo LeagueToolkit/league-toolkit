@@ -1,5 +1,18 @@
 use crate::HashProvider;
 
+#[derive(Debug, Clone, Copy)]
+pub struct WrapConfig {
+    pub allow_inline_structs: bool,
+}
+
+impl Default for WrapConfig {
+    fn default() -> Self {
+        Self {
+            allow_inline_structs: false,
+        }
+    }
+}
+
 /// Configuration for the ritobin printer.
 #[derive(Debug, Clone)]
 pub struct PrintConfig<Hashes: HashProvider> {
@@ -7,6 +20,8 @@ pub struct PrintConfig<Hashes: HashProvider> {
     pub indent_size: usize,
     /// Maximum line width
     pub line_width: usize,
+
+    pub wrapping: WrapConfig,
 
     pub hashes: Hashes,
 }
@@ -16,6 +31,7 @@ impl Default for PrintConfig<()> {
         Self {
             indent_size: 4,
             line_width: 120,
+            wrapping: Default::default(),
             hashes: (),
         }
     }
@@ -26,6 +42,7 @@ impl<H: HashProvider> PrintConfig<H> {
         PrintConfig {
             indent_size: self.indent_size,
             line_width: self.line_width,
+            wrapping: self.wrapping,
             hashes,
         }
     }

@@ -62,10 +62,10 @@ impl Print for Bin {
 mod test {
     use crate::{
         cst::Cst,
-        print::{config::PrintConfig, CstPrinter},
+        print::{config::PrintConfig, CstPrinter, WrapConfig},
     };
 
-    fn assert_pretty(input: &str, is: &str, size: usize) {
+    fn assert_pretty(input: &str, is: &str, config: PrintConfig<()>) {
         let cst = Cst::parse(input);
         let mut str = String::new();
 
@@ -73,23 +73,15 @@ mod test {
         eprintln!("#### CST:\n{str}");
 
         let mut str = String::new();
-        CstPrinter::new(
-            input,
-            &mut str,
-            PrintConfig {
-                indent_size: 4,
-                line_width: size,
-                hashes: (),
-            },
-        )
-        .print(&cst)
-        .unwrap();
+        CstPrinter::new(input, &mut str, config)
+            .print(&cst)
+            .unwrap();
 
         pretty_assertions::assert_eq!(str.trim(), is.trim());
     }
 
-    fn assert_pretty_rt(input: &str, size: usize) {
-        assert_pretty(input, input, size);
+    fn assert_pretty_rt(input: &str, config: PrintConfig<()>) {
+        assert_pretty(input, input, config);
     }
 
     #[test]
@@ -97,7 +89,7 @@ mod test {
         assert_pretty(
             r#" b  :  list [ i8, ] = {  3, 6 1 }"#,
             r#"b: list[i8] = { 3, 6, 1 }"#,
-            80,
+            PrintConfig::default(),
         );
     }
 
@@ -109,7 +101,7 @@ mod test {
     { 3, 6 }
     { 1, 10000 }
 }"#,
-            80,
+            PrintConfig::default(),
         );
     }
 
@@ -126,7 +118,7 @@ mod test {
         b: string = "foo"
     }
 }"#,
-            80,
+            PrintConfig::default(),
         );
     }
 
@@ -139,7 +131,7 @@ mod test {
             r#"skinUpgradeData: embed = skinUpgradeData {
     mGearSkinUpgrades: list[link] = { 0x3b9c7079, 0x17566805 }
 }"#,
-            80,
+            PrintConfig::default(),
         );
     }
 
@@ -155,7 +147,7 @@ linked: list[string] = { "DATA/Characters/Viego/Viego.bin"
     "DATA/Characters/Viego/Viego.bin"
     "DATA/Viego_Skins_Skin0_Skins_Skin1_Skins_Skin10_Skins_Skin11_Skins_Skin12_Skins_Skin13_Skins_Skin14_Skins_Skin15_Skins_Skin16_Skins_Skin17_Skins_Skin18_Skins_Skin2_Skins_Skin3_Skins_Skin4_Skins_Skin43_Skins_Skin5_Skins_Skin6_Skins_Skin7_Skins_Skin8.bin"
 }"#,
-            80,
+            PrintConfig::default(),
         );
     }
 
@@ -172,7 +164,7 @@ linked: list[string] = { "DATA/Characters/Viego/Viego.bin"
         AugmentGroup: list2[link] = { 0x383e4602 }
     }
 }"#,
-            80,
+            PrintConfig::default(),
         );
     }
 
@@ -187,7 +179,7 @@ linked: list[string] = { "DATA/Characters/Viego/Viego.bin"
     }
     BankUnit { }
 }"#,
-            120,
+            PrintConfig::default(),
         );
     }
 
@@ -196,7 +188,51 @@ linked: list[string] = { "DATA/Characters/Viego/Viego.bin"
         assert_pretty(
             r#"thing4: list[u3 2] = { 0, 0, 0, 0, 0, 0, 0 }"#,
             r#"thing4: list[u32] = { 0, 0, 0, 0, 0, 0, 0 }"#,
-            120,
+            PrintConfig::default(),
+        );
+    }
+
+    #[test]
+    fn inline_single_field_struct() {
+        assert_pretty_rt(
+            r#"loadscreen: embed = CensoredImage { image: string = "val" }"#,
+            PrintConfig {
+                wrapping: WrapConfig {
+                    allow_inline_structs: true,
+                },
+                ..Default::default()
+            },
+        );
+    }
+    #[test]
+    fn inline_nested_single_field_struct() {
+        assert_pretty_rt(
+            r#"loadscreen: embed = CensoredImage {
+    image: embed = Image { src: string = "val" }
+}"#,
+            PrintConfig {
+                wrapping: WrapConfig {
+                    allow_inline_structs: true,
+                },
+                ..Default::default()
+            },
+        );
+    }
+
+    #[test]
+    fn dont_inline_nested_single_field_struct() {
+        assert_pretty_rt(
+            r#"loadscreen: embed = CensoredImage {
+    image: embed = Image {
+        src: string = "val"
+    }
+}"#,
+            PrintConfig {
+                wrapping: WrapConfig {
+                    allow_inline_structs: false,
+                },
+                ..Default::default()
+            },
         );
     }
 }

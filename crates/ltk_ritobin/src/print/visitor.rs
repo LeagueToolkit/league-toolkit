@@ -414,10 +414,22 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                     .children
                     .iter()
                     .filter(|n| {
-                        n.tree()
-                            .is_some_and(|t| matches!(t.kind, Kind::ListItem | Kind::ListItemBlock))
+                        n.tree().is_some_and(|t| {
+                            matches!(t.kind, Kind::ListItem | Kind::ListItemBlock | Kind::Entry)
+                        })
                     })
                     .count();
+
+                if self.config.wrapping.allow_inline_structs {
+                    if let Some(last) = self.list_stack.last() {
+                        if len > 1 {
+                            self.force_group(grp, Mode::Break);
+                        } else {
+                            self.force_group(last.grp, Mode::Break);
+                        }
+                    }
+                }
+
                 if len > 0 {
                     self.list_stack.push(ListContext {
                         len: len.try_into().unwrap(),
@@ -440,7 +452,10 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                 self.softline();
             }
             Kind::Entry => {
-                self.line();
+                match self.config.wrapping.allow_inline_structs {
+                    true => self.softline(),
+                    false => self.line(),
+                };
                 // self.flush().unwrap();
             }
             _ => {}
@@ -464,6 +479,18 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                     }
                 }
                 self.end_group();
+            }
+            Kind::Entry if self.config.wrapping.allow_inline_structs => {
+                if let Some(list) = self.list_stack.last() {
+                    if list.len > 1 {
+                        self.force_group(list.grp, Mode::Break);
+                        self.text_if(";", Mode::Flat);
+                        // self.softline();
+                    }
+                } else {
+                    // self.text_if(";", Mode::Flat);
+                    // self.softline();
+                }
             }
             Kind::ListItem | Kind::TypeArg => {
                 if let Some(ctx) = self.list_stack.last() {
