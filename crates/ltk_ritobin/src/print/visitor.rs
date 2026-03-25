@@ -189,7 +189,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
     /// break the first/oldest group if running size is too big (bottom of the stack)
     pub fn check_running_size(&mut self) {
         if let Some(size) = self.size_stack.last() {
-            if self.col + size > self.config.line_width {
+            if self.col + size > self.config.wrap.line_width {
                 self.break_first_group();
             }
         }
@@ -206,7 +206,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
             match cmd {
                 Cmd::Text(s) | Cmd::TextIf(s, Mode::Flat) => {
                     col += s.len();
-                    if col > self.config.line_width {
+                    if col > self.config.wrap.line_width {
                         return false;
                     }
                 }
@@ -420,7 +420,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                     })
                     .count();
 
-                if self.config.wrapping.allow_inline_structs {
+                if self.config.wrap.inline_structs {
                     if let Some(last) = self.list_stack.last() {
                         if len > 1 {
                             self.force_group(grp, Mode::Break);
@@ -452,7 +452,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                 self.softline();
             }
             Kind::Entry => {
-                match self.config.wrapping.allow_inline_structs {
+                match self.config.wrap.inline_structs {
                     true => self.softline(),
                     false => self.line(),
                 };
@@ -480,7 +480,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                 }
                 self.end_group();
             }
-            Kind::Entry if self.config.wrapping.allow_inline_structs => {
+            Kind::Entry if self.config.wrap.inline_structs => {
                 if let Some(list) = self.list_stack.last() {
                     if list.len > 1 {
                         self.force_group(list.grp, Mode::Break);

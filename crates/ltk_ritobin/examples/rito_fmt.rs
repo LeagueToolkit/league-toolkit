@@ -2,7 +2,7 @@ use std::{path::PathBuf, str::FromStr};
 
 use ltk_ritobin::{
     cst::Cst,
-    print::{CstPrinter, PrintConfig},
+    print::{CstPrinter, PrintConfig, WrapConfig},
 };
 
 fn main() {
@@ -30,10 +30,7 @@ fn main() {
     CstPrinter::new(
         &input,
         &mut str,
-        PrintConfig {
-            line_width: size,
-            ..Default::default()
-        },
+        PrintConfig::default().wrap(WrapConfig::default().line_width(size)),
     )
     .print(&cst)
     .unwrap();

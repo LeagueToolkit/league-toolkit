@@ -196,12 +196,7 @@ linked: list[string] = { "DATA/Characters/Viego/Viego.bin"
     fn inline_single_field_struct() {
         assert_pretty_rt(
             r#"loadscreen: embed = CensoredImage { image: string = "val" }"#,
-            PrintConfig {
-                wrapping: WrapConfig {
-                    allow_inline_structs: true,
-                },
-                ..Default::default()
-            },
+            PrintConfig::default().wrap(WrapConfig::default().inline_structs(true)),
         );
     }
     #[test]
@@ -210,12 +205,7 @@ linked: list[string] = { "DATA/Characters/Viego/Viego.bin"
             r#"loadscreen: embed = CensoredImage {
     image: embed = Image { src: string = "val" }
 }"#,
-            PrintConfig {
-                wrapping: WrapConfig {
-                    allow_inline_structs: true,
-                },
-                ..Default::default()
-            },
+            PrintConfig::default().wrap(WrapConfig::default().inline_structs(false)),
         );
     }
 
@@ -227,12 +217,7 @@ linked: list[string] = { "DATA/Characters/Viego/Viego.bin"
         src: string = "val"
     }
 }"#,
-            PrintConfig {
-                wrapping: WrapConfig {
-                    allow_inline_structs: false,
-                },
-                ..Default::default()
-            },
+            PrintConfig::default().wrap(WrapConfig::default().inline_structs(false)),
         );
     }
 }

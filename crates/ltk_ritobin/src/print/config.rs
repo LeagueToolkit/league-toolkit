@@ -2,13 +2,31 @@ use crate::HashProvider;
 
 #[derive(Debug, Clone, Copy)]
 pub struct WrapConfig {
-    pub allow_inline_structs: bool,
+    /// Maximum line width - will try to break blocks if the line exceeds this number.
+    pub line_width: usize,
+
+    /// Whether to allow the printing of structs/classes in one line
+    /// (still subject to line_width wrapping)
+    pub inline_structs: bool,
+}
+
+impl WrapConfig {
+    pub fn line_width(mut self, line_width: usize) -> Self {
+        self.line_width = line_width;
+        self
+    }
+
+    pub fn inline_structs(mut self, inline_structs: bool) -> Self {
+        self.inline_structs = inline_structs;
+        self
+    }
 }
 
 impl Default for WrapConfig {
     fn default() -> Self {
         Self {
-            allow_inline_structs: false,
+            line_width: 120,
+            inline_structs: false,
         }
     }
 }
@@ -18,10 +36,9 @@ impl Default for WrapConfig {
 pub struct PrintConfig<Hashes: HashProvider> {
     /// Number of spaces per indent level.
     pub indent_size: usize,
-    /// Maximum line width
-    pub line_width: usize,
 
-    pub wrapping: WrapConfig,
+    /// Config relating to how/when to wrap
+    pub wrap: WrapConfig,
 
     pub hashes: Hashes,
 }
@@ -30,19 +47,26 @@ impl Default for PrintConfig<()> {
     fn default() -> Self {
         Self {
             indent_size: 4,
-            line_width: 120,
-            wrapping: Default::default(),
+            wrap: Default::default(),
             hashes: (),
         }
     }
 }
 
 impl<H: HashProvider> PrintConfig<H> {
+    pub fn wrap(mut self, wrap: WrapConfig) -> Self {
+        self.wrap = wrap;
+        self
+    }
+    pub fn indent_size(mut self, indent_size: usize) -> Self {
+        self.indent_size = indent_size;
+        self
+    }
+
     pub fn with_hashes<H2: HashProvider>(self, hashes: H2) -> PrintConfig<H2> {
         PrintConfig {
             indent_size: self.indent_size,
-            line_width: self.line_width,
-            wrapping: self.wrapping,
+            wrap: self.wrap,
             hashes,
         }
     }
