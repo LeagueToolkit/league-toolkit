@@ -1,0 +1,17 @@
+[package]
+name = "ltk_troybin"
+version = "0.1.0"
+edition = "2021"
+description = "Troybin (INIBIN v1/v2) parser and writer for League Toolkit"
+license = "MIT OR Apache-2.0"
+readme = "../../README.md"
+
+[features]
+serde = ["dep:serde"]
+
+[dependencies]
+thiserror = { workspace = true }
+byteorder = { workspace = true }
+num_enum = { workspace = true }
+miette = { workspace = true }
+serde = { workspace = true, optional = true }
