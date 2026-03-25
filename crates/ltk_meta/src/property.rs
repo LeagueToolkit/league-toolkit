@@ -39,14 +39,15 @@ impl BinProperty {
             value: PropertyValueEnum::from_reader(reader, kind, legacy)?,
         })
     }
-    pub fn to_writer<W: io::Write + std::io::Seek + ?Sized>(
+    pub fn to_writer<W: io::Write + ?Sized>(
         &self,
         writer: &mut W,
+        scratch: &mut Vec<u8>,
     ) -> Result<(), io::Error> {
         writer.write_u32::<LE>(self.name_hash)?;
         writer.write_property_kind(self.value.kind())?;
 
-        self.value.to_writer(writer)?;
+        self.value.to_writer(writer, scratch)?;
         Ok(())
     }
     pub fn size(&self) -> usize {

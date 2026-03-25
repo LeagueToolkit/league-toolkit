@@ -138,10 +138,11 @@ impl<M: Default> ReadProperty for Optional<M> {
     }
 }
 impl<M> WriteProperty for Optional<M> {
-    fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
+    fn to_writer<R: std::io::Write + ?Sized>(
         &self,
         writer: &mut R,
         legacy: bool,
+        scratch: &mut Vec<u8>,
     ) -> Result<(), std::io::Error> {
         if legacy {
             unimplemented!("legacy optional write")
@@ -152,7 +153,7 @@ impl<M> WriteProperty for Optional<M> {
         match_property!(
             self,
             Some(inner) => {
-                inner.to_writer(writer, legacy)?;
+                inner.to_writer(writer, legacy, scratch)?;
             },
             _ => {}
         );

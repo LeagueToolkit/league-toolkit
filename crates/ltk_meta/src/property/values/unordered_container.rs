@@ -33,12 +33,13 @@ impl<M: Default> ReadProperty for UnorderedContainer<M> {
 }
 
 impl<M: Clone> WriteProperty for UnorderedContainer<M> {
-    fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
+    fn to_writer<R: std::io::Write + ?Sized>(
         &self,
         writer: &mut R,
         legacy: bool,
+        scratch: &mut Vec<u8>,
     ) -> Result<(), std::io::Error> {
-        self.0.to_writer(writer, legacy)
+        self.0.to_writer(writer, legacy, scratch)
     }
 }
 

@@ -19,7 +19,7 @@ impl Bin {
     ///
     /// # Arguments
     ///
-    /// * `writer` - A writer that implements io::Write and io::Seek.
+    /// * `writer` - A writer that implements io::Write.
     ///
     /// # Examples
     ///
@@ -32,7 +32,9 @@ impl Bin {
     /// tree.to_writer(&mut buffer)?;
     /// # Ok::<(), std::io::Error>(())
     /// ```
-    pub fn to_writer<W: io::Write + io::Seek + ?Sized>(&self, writer: &mut W) -> io::Result<()> {
+    pub fn to_writer<W: io::Write + ?Sized>(&self, writer: &mut W) -> io::Result<()> {
+        let mut scratch = Vec::new();
+
         match self.is_override {
             true => todo!("implement is_override Bin write"),
             false => {
@@ -52,7 +54,7 @@ impl Bin {
             writer.write_u32::<LE>(obj.class_hash)?;
         }
         for obj in self.objects.values() {
-            obj.to_writer(writer)?;
+            obj.to_writer(writer, &mut scratch)?;
         }
 
         if self.is_override {

@@ -1,5 +1,3 @@
-use std::io;
-
 use crate::{
     property::{values, Kind, NoMeta},
     traits::{PropertyExt, PropertyValueExt, ReadProperty, ReaderExt, WriteProperty, WriterExt},
@@ -8,7 +6,7 @@ use crate::{
 
 use crate::PropertyValueEnum;
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
-use ltk_io_ext::{measure, window_at};
+use ltk_io_ext::measure;
 
 #[macro_use]
 pub mod variants;
@@ -218,29 +216,33 @@ impl<M: Default> ReadProperty for Container<M> {
 
 impl<M: Clone> WriteProperty for Container<M> {
     // TODO: legacy writing
-    fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
+    fn to_writer<R: std::io::Write + ?Sized>(
         &self,
         writer: &mut R,
         legacy: bool,
+        scratch: &mut Vec<u8>,
     ) -> Result<(), std::io::Error> {
         if legacy {
             unimplemented!("legacy container writing");
         }
 
         writer.write_property_kind(self.item_kind())?;
-        let size_pos = writer.stream_position()?;
-        writer.write_u32::<LE>(0)?;
 
-        let (size, _) = measure(writer, |writer| {
-            let items = self.clone().into_items().collect::<Vec<_>>();
-            writer.write_u32::<LE>(items.len() as _)?;
-            for item in &items {
-                item.to_writer(writer)?;
-            }
-            Ok::<_, io::Error>(())
-        })?;
+        let mut staged = std::mem::take(scratch);
+        staged.clear();
 
-        window_at(writer, size_pos, |writer| writer.write_u32::<LE>(size as _))?;
+        let items = self.clone().into_items().collect::<Vec<_>>();
+        staged.write_u32::<LE>(items.len() as _)?;
+        for item in &items {
+            item.to_writer(&mut staged, scratch)?;
+        }
+
+        writer.write_u32::<LE>(staged.len() as u32)?;
+        writer.write_all(&staged)?;
+
+        if staged.capacity() > scratch.capacity() {
+            *scratch = staged;
+        }
 
         Ok(())
     }

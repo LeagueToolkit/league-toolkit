@@ -70,12 +70,13 @@ macro_rules! create_enum {
 
         }
         impl<M: Clone> PropertyValueEnum<M> {
-            pub fn to_writer<W: io::Write + io::Seek + ?Sized>(
+            pub fn to_writer<W: io::Write + ?Sized>(
                 &self,
                 writer: &mut W,
+                scratch: &mut Vec<u8>,
             ) -> Result<(), io::Error> {
                 match self {
-                    $(Self::$variant(inner) => inner.to_writer(writer, false)?,)*
+                    $(Self::$variant(inner) => inner.to_writer(writer, false, scratch)?,)*
                 };
                 Ok(())
             }

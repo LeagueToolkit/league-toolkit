@@ -6,7 +6,7 @@ pub use builder::Builder;
 use std::io;
 
 use indexmap::IndexMap;
-use ltk_io_ext::{measure, window_at};
+use ltk_io_ext::measure;
 
 use super::super::{BinProperty, Error, PropertyValueEnum};
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
@@ -128,21 +128,28 @@ impl BinObject {
     ///
     /// # Arguments
     ///
-    /// * `writer` - A writer that implements io::Write and io::Seek.
-    pub fn to_writer<W: io::Write + io::Seek + ?Sized>(&self, writer: &mut W) -> io::Result<()> {
-        let size_pos = writer.stream_position()?;
-        writer.write_u32::<LE>(0)?;
+    /// * `writer` - A writer that implements io::Write.
+    /// * `scratch` - Reusable staging buffer used to avoid seek-based size backpatching.
+    pub fn to_writer<W: io::Write + ?Sized>(
+        &self,
+        writer: &mut W,
+        scratch: &mut Vec<u8>,
+    ) -> io::Result<()> {
+        let mut staged = std::mem::take(scratch);
+        staged.clear();
 
-        let (size, _) = measure(writer, |writer| {
-            writer.write_u32::<LE>(self.path_hash)?;
-            writer.write_u16::<LE>(self.properties.len() as _)?;
-            for prop in self.properties.values() {
-                prop.to_writer(writer)?;
-            }
-            Ok::<_, io::Error>(())
-        })?;
+        staged.write_u32::<LE>(self.path_hash)?;
+        staged.write_u16::<LE>(self.properties.len() as _)?;
+        for prop in self.properties.values() {
+            prop.to_writer(&mut staged, scratch)?;
+        }
 
-        window_at(writer, size_pos, |writer| writer.write_u32::<LE>(size as _))?;
+        writer.write_u32::<LE>(staged.len() as u32)?;
+        writer.write_all(&staged)?;
+
+        if staged.capacity() > scratch.capacity() {
+            *scratch = staged;
+        }
         Ok(())
     }
 

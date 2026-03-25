@@ -6,7 +6,7 @@ use crate::{
     Error, PropertyValueEnum,
 };
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
-use ltk_io_ext::{measure, window_at};
+use ltk_io_ext::measure;
 
 // FIXME (alan): do with hash here what we do with Eq
 impl Hash for PropertyValueEnum {
@@ -164,10 +164,11 @@ impl<M: Default> ReadProperty for Map<M> {
     }
 }
 impl<M: Clone> WriteProperty for Map<M> {
-    fn to_writer<R: io::Write + io::Seek + ?Sized>(
+    fn to_writer<R: io::Write + ?Sized>(
         &self,
         writer: &mut R,
         legacy: bool,
+        scratch: &mut Vec<u8>,
     ) -> Result<(), io::Error> {
         if legacy {
             unimplemented!("legacy map writing")
@@ -178,21 +179,22 @@ impl<M: Clone> WriteProperty for Map<M> {
         writer.write_property_kind(self.key_kind)?;
         writer.write_property_kind(self.value_kind)?;
 
-        let size_pos = writer.stream_position()?;
-        writer.write_u32::<LE>(0)?;
+        let mut staged = std::mem::take(scratch);
+        staged.clear();
 
-        let (size, _) = measure(writer, |writer| {
-            writer.write_u32::<LE>(self.entries.len() as _)?;
+        staged.write_u32::<LE>(self.entries.len() as _)?;
 
-            for (k, v) in self.entries.iter() {
-                k.to_writer(writer)?;
-                v.to_writer(writer)?;
-            }
+        for (k, v) in self.entries.iter() {
+            k.to_writer(&mut staged, scratch)?;
+            v.to_writer(&mut staged, scratch)?;
+        }
 
-            Ok::<_, io::Error>(())
-        })?;
+        writer.write_u32::<LE>(staged.len() as u32)?;
+        writer.write_all(&staged)?;
 
-        window_at(writer, size_pos, |writer| writer.write_u32::<LE>(size as _))?;
+        if staged.capacity() > scratch.capacity() {
+            *scratch = staged;
+        }
 
         Ok(())
     }

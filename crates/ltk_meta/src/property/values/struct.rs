@@ -1,5 +1,3 @@
-use std::io;
-
 use crate::{
     property::{Kind, NoMeta},
     traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty},
@@ -7,7 +5,7 @@ use crate::{
 };
 use byteorder::{ReadBytesExt as _, WriteBytesExt as _, LE};
 use indexmap::IndexMap;
-use ltk_io_ext::{measure, window_at};
+use ltk_io_ext::measure;
 
 #[cfg_attr(
     feature = "serde",
@@ -71,10 +69,11 @@ impl<M: Default> ReadProperty for Struct<M> {
     }
 }
 impl<M> WriteProperty for Struct<M> {
-    fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
+    fn to_writer<R: std::io::Write + ?Sized>(
         &self,
         writer: &mut R,
         legacy: bool,
+        scratch: &mut Vec<u8>,
     ) -> Result<(), std::io::Error> {
         if legacy {
             unimplemented!("legacy struct writing");
@@ -86,20 +85,21 @@ impl<M> WriteProperty for Struct<M> {
             return Ok(());
         }
 
-        let size_pos = writer.stream_position()?;
-        writer.write_u32::<LE>(0)?;
+        let mut staged = std::mem::take(scratch);
+        staged.clear();
 
-        let (size, _) = measure(writer, |writer| {
-            writer.write_u16::<LE>(self.properties.len() as _)?;
+        staged.write_u16::<LE>(self.properties.len() as _)?;
 
-            for prop in self.properties.values() {
-                prop.to_writer(writer)?;
-            }
+        for prop in self.properties.values() {
+            prop.to_writer(&mut staged, scratch)?;
+        }
 
-            Ok::<_, io::Error>(())
-        })?;
+        writer.write_u32::<LE>(staged.len() as u32)?;
+        writer.write_all(&staged)?;
 
-        window_at(writer, size_pos, |writer| writer.write_u32::<LE>(size as _))?;
+        if staged.capacity() > scratch.capacity() {
+            *scratch = staged;
+        }
 
         Ok(())
     }

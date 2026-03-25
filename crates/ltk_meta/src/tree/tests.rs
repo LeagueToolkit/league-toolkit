@@ -14,7 +14,9 @@ use crate::{Bin, BinObject as Object};
 fn roundtrip_property(prop: &BinProperty) -> BinProperty {
     let mut buffer = Vec::new();
     let mut cursor = Cursor::new(&mut buffer);
-    prop.to_writer(&mut cursor).expect("write failed");
+    let mut scratch = Vec::new();
+    prop.to_writer(&mut cursor, &mut scratch)
+        .expect("write failed");
 
     cursor.set_position(0);
     BinProperty::from_reader(&mut cursor, false).expect("read failed")
@@ -620,7 +622,9 @@ fn test_bin_tree_object_empty_roundtrip() {
 
     let mut buffer = Vec::new();
     let mut cursor = Cursor::new(&mut buffer);
-    obj.to_writer(&mut cursor).expect("write failed");
+    let mut scratch = Vec::new();
+    obj.to_writer(&mut cursor, &mut scratch)
+        .expect("write failed");
 
     cursor.set_position(0);
     let result = Object::from_reader(&mut cursor, obj.class_hash, false).expect("read failed");
@@ -653,7 +657,9 @@ fn test_bin_tree_object_with_properties_roundtrip() {
 
     let mut buffer = Vec::new();
     let mut cursor = Cursor::new(&mut buffer);
-    obj.to_writer(&mut cursor).expect("write failed");
+    let mut scratch = Vec::new();
+    obj.to_writer(&mut cursor, &mut scratch)
+        .expect("write failed");
 
     cursor.set_position(0);
     let result = Object::from_reader(&mut cursor, obj.class_hash, false).expect("read failed");

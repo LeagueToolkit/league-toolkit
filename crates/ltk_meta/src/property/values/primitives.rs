@@ -50,10 +50,11 @@ macro_rules! impl_prim {
             }
         }
         impl<M> WriteProperty for $name<M> {
-            fn to_writer<W: std::io::Write + std::io::Seek + ?Sized>(
+            fn to_writer<W: std::io::Write + ?Sized>(
                 &self,
                 writer: &mut W,
                 _legacy: bool,
+                _scratch: &mut Vec<u8>,
             ) -> Result<(), std::io::Error> {
                 paste::paste!(writer.[<write_ $method>]::<$($endian,)*>(self.$($write_value)*))
             }

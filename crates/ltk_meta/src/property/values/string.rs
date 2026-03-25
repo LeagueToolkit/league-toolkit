@@ -50,10 +50,11 @@ impl<M: Default> ReadProperty for String<M> {
 }
 
 impl<M> WriteProperty for String<M> {
-    fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
+    fn to_writer<R: std::io::Write + ?Sized>(
         &self,
         writer: &mut R,
         _legacy: bool,
+        _scratch: &mut Vec<u8>,
     ) -> Result<(), std::io::Error> {
         writer.write_len_prefixed_string::<LE, _>(&self.value)
     }

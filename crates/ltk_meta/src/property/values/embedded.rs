@@ -32,11 +32,12 @@ impl<M: Default> ReadProperty for Embedded<M> {
     }
 }
 impl<M> WriteProperty for Embedded<M> {
-    fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
+    fn to_writer<R: std::io::Write + ?Sized>(
         &self,
         writer: &mut R,
         legacy: bool,
+        scratch: &mut Vec<u8>,
     ) -> Result<(), std::io::Error> {
-        Struct::<M>::to_writer(&self.0, writer, legacy)
+        Struct::<M>::to_writer(&self.0, writer, legacy, scratch)
     }
 }

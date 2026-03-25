@@ -30,10 +30,11 @@ impl<M: Default> ReadProperty for None<M> {
     }
 }
 impl<M> WriteProperty for None<M> {
-    fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
+    fn to_writer<R: std::io::Write + ?Sized>(
         &self,
         _writer: &mut R,
         _legacy: bool,
+        _scratch: &mut Vec<u8>,
     ) -> Result<(), std::io::Error> {
         Ok(())
     }

@@ -54,10 +54,11 @@ impl<R: io::Read + ?Sized> ReaderExt for R {}
 
 /// Methods for writing properties
 pub trait WriteProperty: Sized {
-    fn to_writer<R: io::Write + io::Seek + ?Sized>(
+    fn to_writer<R: io::Write + ?Sized>(
         &self,
         writer: &mut R,
         legacy: bool,
+        scratch: &mut Vec<u8>,
     ) -> Result<(), io::Error>;
 }
 
