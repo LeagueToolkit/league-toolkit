@@ -251,39 +251,36 @@ pub fn lex(mut text: &str) -> Vec<Token> {
         }
     }
 
+    fn take_num_segment(s: &str) -> Option<(&str, &str)> {
+        let rest = trim(s, |c| matches!(c, '0'..='9' | '_'))?;
+        let seg = &s[..s.len() - rest.len()];
+
+        if seg.is_empty() || seg.starts_with('_') || seg.ends_with('_') || seg.contains("__") {
+            return None;
+        }
+
+        Some((seg, rest))
+    }
+
     fn scan_number(mut s: &str) -> Option<&str> {
         if let Some(rest) = s.strip_prefix('-') {
             s = rest;
         }
 
-        let rest = trim(s, |c| matches!(c, '0'..='9' | '_'))?;
-        let int_part = &s[..s.len() - rest.len()];
-
-        if int_part.is_empty()
-            || int_part.starts_with('_')
-            || int_part.ends_with('_')
-            || int_part.contains("__")
-        {
-            return None;
-        }
-
-        s = rest;
-
+        // ".5"
         if let Some(after_dot) = s.strip_prefix('.') {
-            let rest = trim(after_dot, |c| matches!(c, '0'..='9' | '_'))?;
-            // let frac_part = &after_dot[..after_dot.len() - rest.len()];
-            //
-            // if frac_part.is_empty()
-            //     || frac_part.starts_with('_')
-            //     || frac_part.ends_with('_')
-            //     || frac_part.contains("__")
-            // {
-            //     return None;
-            // }
-
-            s = rest;
+            let (_frac, rest) = take_num_segment(after_dot)?;
+            return Some(rest);
         }
 
-        Some(s)
+        // "123" / "123.45"
+        let (_int, mut rest) = take_num_segment(s)?;
+
+        if let Some(after_dot) = rest.strip_prefix('.') {
+            let (_frac, new_rest) = take_num_segment(after_dot)?;
+            rest = new_rest;
+        }
+
+        Some(rest)
     }
 }
