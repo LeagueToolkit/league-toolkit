@@ -6,8 +6,12 @@ pub struct WrapConfig {
     pub line_width: usize,
 
     /// Whether to allow the printing of structs/classes in one line
-    /// (still subject to line_width wrapping)
+    /// (subject to [`Self::line_width`] wrapping)
     pub inline_structs: bool,
+
+    /// Whether to allow the printing of lists in one line
+    /// (subject to [`Self::line_width`] wrapping)
+    pub inline_lists: bool,
 }
 
 impl WrapConfig {
@@ -20,6 +24,11 @@ impl WrapConfig {
         self.inline_structs = inline_structs;
         self
     }
+
+    pub fn inline_lists(mut self, inline_lists: bool) -> Self {
+        self.inline_lists = inline_lists;
+        self
+    }
 }
 
 impl Default for WrapConfig {
@@ -27,6 +36,7 @@ impl Default for WrapConfig {
         Self {
             line_width: 120,
             inline_structs: false,
+            inline_lists: true,
         }
     }
 }

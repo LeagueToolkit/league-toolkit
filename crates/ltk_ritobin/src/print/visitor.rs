@@ -399,6 +399,11 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                     .iter()
                     .filter(|n| n.tree().is_some_and(|t| t.kind == Kind::ListItem))
                     .count();
+
+                if !self.config.wrap.inline_lists {
+                    self.force_group(grp, Mode::Break);
+                }
+
                 if len > 0 {
                     self.list_stack.push(ListContext {
                         len: len.try_into().unwrap(),
@@ -410,25 +415,33 @@ impl<'a, W: Write> CstVisitor<'a, W> {
             Kind::Block => {
                 // eprintln!("BLOCK: {:#?}", tree.children);
                 let grp = self.begin_group(None);
-                let len = tree
+                let list_len = tree
                     .children
                     .iter()
                     .filter(|n| {
-                        n.tree().is_some_and(|t| {
-                            matches!(t.kind, Kind::ListItem | Kind::ListItemBlock | Kind::Entry)
-                        })
+                        n.tree()
+                            .is_some_and(|t| matches!(t.kind, Kind::ListItem | Kind::ListItemBlock))
                     })
+                    .count();
+                let struct_len = tree
+                    .children
+                    .iter()
+                    .filter(|n| n.tree().is_some_and(|t| matches!(t.kind, Kind::Entry)))
                     .count();
 
                 if self.config.wrap.inline_structs {
                     if let Some(last) = self.list_stack.last() {
-                        if len > 1 {
+                        if struct_len > 1 {
                             self.force_group(grp, Mode::Break);
                         } else {
                             self.force_group(last.grp, Mode::Break);
                         }
                     }
                 }
+                if !self.config.wrap.inline_lists && list_len > 0 {
+                    self.force_group(grp, Mode::Break);
+                }
+                let len = struct_len + list_len;
 
                 if len > 0 {
                     self.list_stack.push(ListContext {

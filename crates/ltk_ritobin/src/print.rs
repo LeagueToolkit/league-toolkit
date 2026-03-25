@@ -205,7 +205,7 @@ linked: list[string] = { "DATA/Characters/Viego/Viego.bin"
             r#"loadscreen: embed = CensoredImage {
     image: embed = Image { src: string = "val" }
 }"#,
-            PrintConfig::default().wrap(WrapConfig::default().inline_structs(false)),
+            PrintConfig::default().wrap(WrapConfig::default().inline_structs(true)),
         );
     }
 
@@ -218,6 +218,61 @@ linked: list[string] = { "DATA/Characters/Viego/Viego.bin"
     }
 }"#,
             PrintConfig::default().wrap(WrapConfig::default().inline_structs(false)),
+        );
+    }
+
+    #[test]
+    fn dont_inline_simple_list_or_struct() {
+        assert_pretty_rt(
+            r#"loadscreen: embed = CensoredImage {
+    b: list[i8] = {
+        3
+        6
+        1
+    }
+    image: embed = Image {
+        src: string = "val"
+    }
+}"#,
+            PrintConfig::default().wrap(
+                WrapConfig::default()
+                    .inline_lists(false)
+                    .inline_structs(false),
+            ),
+        );
+    }
+    #[test]
+    fn dont_inline_simple_list_and_inline_struct() {
+        assert_pretty_rt(
+            r#"loadscreen: embed = CensoredImage {
+    b: list[i8] = {
+        3
+        6
+        1
+    }
+    image: embed = Image { src: string = "val" }
+}"#,
+            PrintConfig::default().wrap(
+                WrapConfig::default()
+                    .inline_lists(false)
+                    .inline_structs(true),
+            ),
+        );
+    }
+    #[test]
+    fn inline_simple_list_and_dont_inline_struct() {
+        assert_pretty_rt(
+            r#"loadscreen: embed = CensoredImage {
+    b: list[i8] = { 3, 6, 1 }
+    image: embed = Image {
+        src: string = "val"
+    }
+}"#,
+            PrintConfig::default().wrap(
+                WrapConfig::default()
+                    .inline_lists(true)
+                    .inline_structs(false),
+            ),
         );
     }
 }
