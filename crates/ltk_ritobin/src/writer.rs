@@ -5,7 +5,7 @@ use std::fmt::Write;
 use ltk_meta::{
     property::{
         values::{Embedded, Struct, UnorderedContainer},
-        PropertyValueEnum,
+        NoMeta, PropertyValueEnum,
     },
     Bin, BinObject,
 };
@@ -524,7 +524,7 @@ impl RitobinBuilder {
     ///
     /// The resulting tree will have version 3, which is always used when writing.
     pub fn build(self) -> Bin {
-        Bin::builder()
+        Bin::<NoMeta>::builder()
             .is_override(self.is_override)
             .dependencies(self.dependencies)
             .objects(self.objects)
