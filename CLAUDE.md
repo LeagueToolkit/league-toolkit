@@ -82,3 +82,11 @@ Shared dependency versions are declared in the root `Cargo.toml` under `[workspa
 ## Additional Context
 
 The `docs/LTK_GUIDE.md` file contains detailed crate-by-crate API documentation with usage examples, file format references, and hash algorithm details. Consult it for format-specific questions.
+
+## Active Technologies
+- Rust (workspace edition, same as other `ltk_*` crates) + `thiserror` (errors), `byteorder` (binary I/O), `ltk_io_ext` (reader/writer extensions), `ltk_hash` (SDBM hashing), `glam` (Vec2/Vec3/Vec4 for vector set types), `bitflags` (InibinFlags) (001-inibin-crate)
+- N/A (in-memory data structures, binary file I/O) (001-inibin-crate)
+- Rust (workspace edition, same as other `ltk_*` crates) + `thiserror` (errors), `byteorder` (binary I/O), `ltk_io_ext` (reader/writer extensions), `ltk_hash` (SDBM hashing), `glam` (Vec2/Vec3/Vec4 for vector set types), `bitflags` (InibinFlags), `phf`/`phf_codegen` (compile-time hash map for ltk_inibin_names) (001-inibin-crate)
+
+## Recent Changes
+- 001-inibin-crate: Added Rust (workspace edition, same as other `ltk_*` crates) + `thiserror` (errors), `byteorder` (binary I/O), `ltk_io_ext` (reader/writer extensions), `ltk_hash` (SDBM hashing), `glam` (Vec2/Vec3/Vec4 for vector set types), `bitflags` (InibinFlags)

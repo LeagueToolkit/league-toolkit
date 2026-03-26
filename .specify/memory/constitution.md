@@ -86,6 +86,24 @@
 - Dependency additions MUST be justified — avoid pulling in large
   dependency trees for trivial functionality.
 
+### VI. Code Style & Formatting
+
+- Separate distinct code contexts (imports, struct definitions, impl blocks,
+  helper functions, tests) with a single blank line.
+- Within a function, use blank lines to separate logical steps (setup,
+  processing, result). Do not insert blank lines between tightly coupled
+  sequential statements.
+- Group `use` statements by origin: std first, then external crates, then
+  internal crate modules, each group separated by a blank line.
+- Comments MUST only be added for code with complex or non-obvious behavior.
+  Do not document self-explanatory code, simple accessors, or trivial logic.
+- Section banners (e.g., `// ── Reading ──`) are allowed to visually separate
+  major logical regions within a file. Keep them consistent in style.
+- Prefer short, focused functions over long ones. If a function exceeds ~50
+  lines, consider whether it can be decomposed.
+- `rustfmt` is authoritative for all brace/indent/whitespace decisions —
+  do not fight the formatter.
+
 ## Error Handling & Safety
 
 - Each crate MUST define its own error type via `thiserror` and a
@@ -125,4 +143,4 @@
 - Runtime development guidance lives in `CLAUDE.md` at the repository
   root.
 
-**Version**: 2.0.0 | **Ratified**: 2026-03-07 | **Last Amended**: 2026-03-25
+**Version**: 2.1.0 | **Ratified**: 2026-03-07 | **Last Amended**: 2026-03-26

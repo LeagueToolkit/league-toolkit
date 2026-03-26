@@ -1,0 +1,19 @@
+[package]
+name = "ltk_inibin"
+version = "0.1.0"
+edition = "2021"
+description = "Inibin/Troybin parser for League Toolkit"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+
+[dependencies]
+thiserror = { workspace = true }
+byteorder = { workspace = true }
+bitflags = { workspace = true }
+glam = { workspace = true }
+indexmap = { workspace = true }
+ltk_io_ext = { version = "0.4.1", path = "../ltk_io_ext" }
+ltk_hash = { version = "0.2.5", path = "../ltk_hash/" }
+
+[dev-dependencies]
+approx = { workspace = true }
