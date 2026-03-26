@@ -198,6 +198,26 @@ cargo test
 cargo doc --open
 ```
 
+### AI-Assisted Development with Speckit
+
+This repository uses the **Speckit** workflow for developing new features and fixing bugs with AI agents (e.g., Claude Code). Speckit enforces a structured specification-plan-task pipeline so that all AI-generated work is auditable and reviewable before it lands in a PR.
+
+**Why?** AI agents can produce large, hard-to-review changesets. Speckit breaks work into discrete, reviewable artifacts — a spec, a design plan, and an ordered task list — so maintainers can catch issues early and PRs stay focused.
+
+**The workflow:**
+
+1. **`/speckit.specify`** — Create or update a feature specification from a natural language description
+2. **`/speckit.clarify`** — Identify underspecified areas and resolve ambiguities
+3. **`/speckit.plan`** — Generate a design plan with architectural decisions
+4. **`/speckit.tasks`** — Produce a dependency-ordered task list
+5. **`/speckit.analyze`** — Cross-check consistency across spec, plan, and tasks
+6. **`/speckit.implement`** — Execute the task list
+7. **`/speckit.taskstoissues`** — Convert tasks into GitHub issues for tracking
+
+All artifacts live in a `.specify/` directory scoped to the feature. The project's design principles are codified in [`.specify/memory/constitution.md`](.specify/memory/constitution.md).
+
+**Contributors using AI agents SHOULD follow this workflow** to ensure that proposed changes are well-specified and easy to review. PRs generated without a spec/plan trail may require additional review cycles.
+
 ### Project Structure
 
 ```
