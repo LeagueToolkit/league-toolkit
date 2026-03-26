@@ -87,10 +87,7 @@ fn read_bools<R: Read>(r: &mut R) -> Result<InibinSet, InibinError> {
 
 fn read_numbers<R: Read>(r: &mut R, flags: InibinFlags) -> Result<InibinSet, InibinError> {
     let num = r.read_u16::<LE>()? as usize;
-    let mut keys = Vec::with_capacity(num);
-    for _ in 0..num {
-        keys.push(r.read_u32::<LE>()?);
-    }
+    let keys = (0..num).map(|_| r.read_u32::<LE>()).collect::<Vec<_>>(); // untested
 
     let mut properties = IndexMap::with_capacity(num);
     for &key in &keys {
