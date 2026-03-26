@@ -50,7 +50,9 @@ All crates live under `crates/`. The dependency graph flows upward:
 
 **Math**: All vector/matrix types use `glam` (Vec2, Vec3, Vec4, Mat4, Quat).
 
-**Hashing**: WAD paths are XXHash64 (64-bit) of lowercased paths. Bin object/property names are FNV-1a (32-bit) hashes via `ltk_hash::fnv1a::hash_lower()`.
+**Hashing**: WAD paths are XXHash64 (64-bit) of lowercased paths. Bin object/property names are FNV-1a (32-bit) hashes via `ltk_hash::fnv1a::hash_lower()`. Inibin keys are SDBM hashes via `ltk_hash::sdbm::hash_inibin_key(section, property)`.
+
+**I/O utilities**: `ltk_io_ext` provides shared reader/writer extension traits (`ReaderExt`, `WriterExt`) with helpers like `read_str_until_nul()`, `read_padded_string()`, `read_sized_string_u16()`, etc. Format crates MUST use these instead of implementing their own — do not duplicate I/O helpers.
 
 ## Crate Layout Convention
 
@@ -82,3 +84,9 @@ Shared dependency versions are declared in the root `Cargo.toml` under `[workspa
 ## Additional Context
 
 The `docs/LTK_GUIDE.md` file contains detailed crate-by-crate API documentation with usage examples, file format references, and hash algorithm details. Consult it for format-specific questions.
+
+## Active Technologies
+- `ltk_inibin`: Rust + `thiserror`, `byteorder`, `ltk_io_ext`, `ltk_hash` (SDBM hashing), `glam` (Vec2/Vec3/Vec4), `bitflags` (ValueFlags), `indexmap` (ordered storage) (001-inibin-crate)
+
+## Recent Changes
+- 001-inibin-crate: Added `ltk_inibin` crate — inibin/troybin parser with all 14 value types, `ValueFlags` bitfield, unified `as_*()` accessors, `sdbm::hash_inibin_key()` convenience

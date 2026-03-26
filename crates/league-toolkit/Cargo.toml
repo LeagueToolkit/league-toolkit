@@ -13,6 +13,7 @@ readme = "../../README.md"
 default = [
     "anim",
     "file",
+    "inibin",
     "mesh",
     "meta",
     "primitives",
@@ -25,6 +26,7 @@ serde = ["ltk_wad/serde", "ltk_file/serde", "ltk_meta/serde"]
 
 anim = ["dep:ltk_anim"]
 file = ["dep:ltk_file"]
+inibin = ["dep:ltk_inibin"]
 mesh = ["dep:ltk_mesh"]
 meta = ["dep:ltk_meta"]
 primitives = ["dep:ltk_primitives"]
@@ -35,6 +37,7 @@ hash = ["dep:ltk_hash"]
 [dependencies]
 ltk_anim = { version = "0.3.2", path = "../ltk_anim", optional = true }
 ltk_file = { version = "0.2.8", path = "../ltk_file", optional = true }
+ltk_inibin = { version = "0.1.0", path = "../ltk_inibin", optional = true }
 ltk_mesh = { version = "0.4.1", path = "../ltk_mesh", optional = true }
 ltk_meta = { version = "0.4.0", path = "../ltk_meta", optional = true }
 ltk_primitives = { version = "0.3.2", path = "../ltk_primitives", optional = true }
