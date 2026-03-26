@@ -810,26 +810,33 @@ impl<'a> TypeChecker<'a> {
                     );
                     return None;
                 };
-                Some(map.into_entries().into_iter().filter_map(|(key, value)| {
-                    let PropertyValueEnum::Hash(path_hash) = coerce_type(key, PropertyKind::Hash)?
-                    else {
-                        return None;
-                    };
+                Some(
+                    map.into_entries()
+                        .into_iter()
+                        .filter_map(|(key, value)| {
+                            let PropertyValueEnum::Hash(path_hash) =
+                                coerce_type(key, PropertyKind::Hash)?
+                            else {
+                                return None;
+                            };
 
-                    if let PropertyValueEnum::Embedded(values::Embedded(struct_val)) = value {
-                        let struct_val = struct_val.no_meta();
-                        // eprintln!("struct_val: {struct_val:?}");
-                        Some(BinObject {
-                            path_hash: *path_hash,
-                            class_hash: struct_val.class_hash,
-                            properties: struct_val.properties.clone(),
+                            if let PropertyValueEnum::Embedded(values::Embedded(struct_val)) = value
+                            {
+                                let struct_val = struct_val.no_meta();
+                                // eprintln!("struct_val: {struct_val:?}");
+                                Some(BinObject {
+                                    path_hash: *path_hash,
+                                    class_hash: struct_val.class_hash,
+                                    properties: struct_val.properties.clone(),
+                                })
+                            } else {
+                                None
+                            }
                         })
-                    } else {
-                        None
-                    }
-                }))
+                        .collect::<Vec<_>>(),
+                )
             })
-            .expect("no 'entries' entry");
+            .unwrap_or_default();
 
         let tree = Bin::new(objects, Vec::<String>::new());
 
