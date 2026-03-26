@@ -199,7 +199,7 @@ impl InibinFile {
     /// Add a value to a specific storage-type bucket.
     /// Creates the set if it doesn't exist yet.
     /// Returns the previous value if the hash already existed in that set.
-    pub fn add_value(
+    pub fn insert_value(
         &mut self,
         hash: u32,
         value: InibinValue,
