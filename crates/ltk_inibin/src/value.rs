@@ -1,24 +1,24 @@
 use glam::{Vec2, Vec3, Vec4};
 
-use crate::value_kind::ValueKind;
+use crate::value_flags::ValueFlags;
 
 /// Typed value stored in an inibin set.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     I32(i32),
     F32(f32),
-    /// Packed float stored as raw byte. Use [`Value::u8_as_f32`] to get the decoded `f32` value (`byte * 0.1`, range 0.0–25.5).
+    /// Packed float stored as raw byte. Use [`Value::as_f32`] to get the decoded `f32` value (`byte * 0.1`, range 0.0–25.5).
     U8(u8),
     I16(i16),
     I8(u8),
     Bool(bool),
-    /// Packed float triple stored as raw bytes. Use [`Value::vec3_u8_as_f32`] to decode.
+    /// Packed float triple stored as raw bytes. Use [`Value::as_vec3`] to decode.
     Vec3U8([u8; 3]),
     Vec3F32(Vec3),
-    /// Packed float pair stored as raw bytes. Use [`Value::vec2_u8_as_f32`] to decode.
+    /// Packed float pair stored as raw bytes. Use [`Value::as_vec2`] to decode.
     Vec2U8([u8; 2]),
     Vec2F32(Vec2),
-    /// Packed float quad stored as raw bytes. Use [`Value::vec4_u8_as_f32`] to decode.
+    /// Packed float quad stored as raw bytes. Use [`Value::as_vec4`] to decode.
     Vec4U8([u8; 4]),
     Vec4F32(Vec4),
     String(String),
@@ -26,45 +26,50 @@ pub enum Value {
 }
 
 impl Value {
-    /// Returns the [`ValueKind`] variant this value belongs to.
-    pub fn flags(&self) -> ValueKind {
+    /// Returns the [`ValueFlags`] variant this value belongs to.
+    pub fn flags(&self) -> ValueFlags {
         match self {
-            Value::I32(_) => ValueKind::INT32_LIST,
-            Value::F32(_) => ValueKind::F32_LIST,
-            Value::U8(_) => ValueKind::U8_LIST,
-            Value::I16(_) => ValueKind::INT16_LIST,
-            Value::I8(_) => ValueKind::INT8_LIST,
-            Value::Bool(_) => ValueKind::BIT_LIST,
-            Value::Vec3U8(_) => ValueKind::VEC3_U8_LIST,
-            Value::Vec3F32(_) => ValueKind::VEC3_F32_LIST,
-            Value::Vec2U8(_) => ValueKind::VEC2_U8_LIST,
-            Value::Vec2F32(_) => ValueKind::VEC2_F32_LIST,
-            Value::Vec4U8(_) => ValueKind::VEC4_U8_LIST,
-            Value::Vec4F32(_) => ValueKind::VEC4_F32_LIST,
-            Value::String(_) => ValueKind::STRING_LIST,
-            Value::I64(_) => ValueKind::INT64_LIST,
+            Value::I32(_) => ValueFlags::INT32_LIST,
+            Value::F32(_) => ValueFlags::F32_LIST,
+            Value::U8(_) => ValueFlags::U8_LIST,
+            Value::I16(_) => ValueFlags::INT16_LIST,
+            Value::I8(_) => ValueFlags::INT8_LIST,
+            Value::Bool(_) => ValueFlags::BIT_LIST,
+            Value::Vec3U8(_) => ValueFlags::VEC3_U8_LIST,
+            Value::Vec3F32(_) => ValueFlags::VEC3_F32_LIST,
+            Value::Vec2U8(_) => ValueFlags::VEC2_U8_LIST,
+            Value::Vec2F32(_) => ValueFlags::VEC2_F32_LIST,
+            Value::Vec4U8(_) => ValueFlags::VEC4_U8_LIST,
+            Value::Vec4F32(_) => ValueFlags::VEC4_F32_LIST,
+            Value::String(_) => ValueFlags::STRING_LIST,
+            Value::I64(_) => ValueFlags::INT64_LIST,
         }
     }
 
-    /// Decode a [`U8`](Value::U8) packed float: `byte * 0.1` (range 0.0–25.5).
-    pub fn u8_as_f32(&self) -> Option<f32> {
+    /// Returns the value as `f32`, handling both [`F32`](Value::F32) and packed [`U8`](Value::U8) variants.
+    ///
+    /// For `U8`: returns `byte * 0.1` (range 0.0–25.5).
+    pub fn as_f32(&self) -> Option<f32> {
         match self {
+            Value::F32(v) => Some(*v),
             Value::U8(v) => Some(*v as f32 * 0.1),
             _ => None,
         }
     }
 
-    /// Decode a [`Vec2U8`](Value::Vec2U8) packed float pair.
-    pub fn vec2_u8_as_f32(&self) -> Option<Vec2> {
+    /// Returns the value as [`Vec2`], handling both [`Vec2F32`](Value::Vec2F32) and packed [`Vec2U8`](Value::Vec2U8) variants.
+    pub fn as_vec2(&self) -> Option<Vec2> {
         match self {
+            Value::Vec2F32(v) => Some(*v),
             Value::Vec2U8([x, y]) => Some(Vec2::new(*x as f32 * 0.1, *y as f32 * 0.1)),
             _ => None,
         }
     }
 
-    /// Decode a [`Vec3U8`](Value::Vec3U8) packed float triple.
-    pub fn vec3_u8_as_f32(&self) -> Option<Vec3> {
+    /// Returns the value as [`Vec3`], handling both [`Vec3F32`](Value::Vec3F32) and packed [`Vec3U8`](Value::Vec3U8) variants.
+    pub fn as_vec3(&self) -> Option<Vec3> {
         match self {
+            Value::Vec3F32(v) => Some(*v),
             Value::Vec3U8([x, y, z]) => {
                 Some(Vec3::new(*x as f32 * 0.1, *y as f32 * 0.1, *z as f32 * 0.1))
             }
@@ -72,9 +77,10 @@ impl Value {
         }
     }
 
-    /// Decode a [`Vec4U8`](Value::Vec4U8) packed float quad.
-    pub fn vec4_u8_as_f32(&self) -> Option<Vec4> {
+    /// Returns the value as [`Vec4`], handling both [`Vec4F32`](Value::Vec4F32) and packed [`Vec4U8`](Value::Vec4U8) variants.
+    pub fn as_vec4(&self) -> Option<Vec4> {
         match self {
+            Value::Vec4F32(v) => Some(*v),
             Value::Vec4U8([x, y, z, w]) => Some(Vec4::new(
                 *x as f32 * 0.1,
                 *y as f32 * 0.1,

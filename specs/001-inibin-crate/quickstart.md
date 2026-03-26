@@ -1,17 +1,17 @@
 # Quickstart: ltk_inibin
 
-**Phase**: 1 | **Date**: 2026-03-25 | **Updated**: 2026-03-25
+**Phase**: 1 | **Date**: 2026-03-25 | **Updated**: 2026-03-26
 
 ## Reading an inibin file
 
 ```rust
 use std::fs::File;
 use std::io::BufReader;
-use ltk_inibin::InibinFile;
+use ltk_inibin::Inibin;
 
 let file = File::open("data/characters/annie/annie.inibin")?;
 let mut reader = BufReader::new(file);
-let inibin = InibinFile::from_reader(&mut reader)?;
+let inibin = Inibin::from_reader(&mut reader)?;
 
 // Look up a value by hash key
 if let Some(value) = inibin.get(0xABCD1234) {
@@ -32,17 +32,17 @@ let value = inibin.get(key);
 ## Modifying values
 
 ```rust
-use ltk_inibin::{InibinFile, InibinValue};
+use ltk_inibin::{Inibin, Value};
 use ltk_hash::sdbm;
 
-let mut inibin = InibinFile::from_reader(&mut reader)?;
+let mut inibin = Inibin::from_reader(&mut reader)?;
 
 // Insert a new float value
 let key = sdbm::hash_lower_with_delimiter("DATA", "AttackRange", '*');
-inibin.insert(key, InibinValue::F32(550.0));
+inibin.insert(key, Value::F32(550.0));
 
 // Insert an Int64 value
-inibin.insert(0x1234, InibinValue::Int64(9999999999));
+inibin.insert(0x1234, Value::I64(9999999999));
 
 // Remove a value
 inibin.remove(key);
@@ -64,13 +64,13 @@ inibin.to_writer(&mut writer)?;
 ```rust
 use std::io::Cursor;
 
-let inibin = InibinFile::from_reader(&mut reader)?;
+let inibin = Inibin::from_reader(&mut reader)?;
 
 let mut buf = Vec::new();
 inibin.to_writer(&mut buf)?;
 
 let mut cursor = Cursor::new(&buf);
-let inibin2 = InibinFile::from_reader(&mut cursor)?;
+let inibin2 = Inibin::from_reader(&mut cursor)?;
 // inibin and inibin2 contain identical data
 ```
 
@@ -85,12 +85,16 @@ for (key, value) in inibin.iter() {
 ## Accessing a specific set bucket
 
 ```rust
-use ltk_inibin::InibinFlags;
+use ltk_inibin::ValueFlags;
 
-if let Some(float_set) = inibin.set(InibinFlags::F32_LIST) {
-    println!("Float set has {} entries", float_set.len());
-    for (key, value) in float_set.iter() {
-        println!("  0x{:08X} = {:?}", key, value);
+if let Some(float_section) = inibin.section(ValueFlags::F32_LIST) {
+    println!("Float section has {} entries", float_section.len());
+    // Use .keys(), .values(), or .iter()
+    for key in float_section.keys() {
+        println!("  key: 0x{:08X}", key);
+    }
+    for value in float_section.values() {
+        println!("  value: {:?}", value);
     }
 }
 ```

@@ -6,17 +6,17 @@ use indexmap::IndexMap;
 
 use crate::error::Result;
 use crate::value::Value;
-use crate::value_kind::ValueKind;
+use crate::value_flags::ValueFlags;
 
 /// A typed bucket of key-value pairs within an inibin file.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Section {
-    kind: ValueKind,
+    kind: ValueFlags,
     properties: IndexMap<u32, Value>,
 }
 
 impl Section {
-    pub(crate) fn new(kind: ValueKind) -> Self {
+    pub(crate) fn new(kind: ValueFlags) -> Self {
         Self {
             kind,
             properties: IndexMap::new(),
@@ -45,8 +45,16 @@ impl Section {
         self.properties.is_empty()
     }
 
-    pub fn kind(&self) -> ValueKind {
+    pub fn kind(&self) -> ValueFlags {
         self.kind
+    }
+
+    pub fn keys(&self) -> impl Iterator<Item = &u32> {
+        self.properties.keys()
+    }
+
+    pub fn values(&self) -> impl Iterator<Item = &Value> {
+        self.properties.values()
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (u32, &Value)> {
@@ -55,38 +63,38 @@ impl Section {
 
     // ── Reading ────────────────────────────────────────────────────
 
-    pub(crate) fn read_non_string<R: Read>(reader: &mut R, kind: ValueKind) -> Result<Self> {
+    pub(crate) fn read_non_string<R: Read>(reader: &mut R, kind: ValueFlags) -> Result<Self> {
         let value_count = reader.read_u16::<LE>()? as usize;
         let hashes = read_hashes(reader, value_count)?;
         let mut properties = IndexMap::with_capacity(value_count);
 
         match kind {
-            ValueKind::INT32_LIST => {
+            ValueFlags::INT32_LIST => {
                 for hash in hashes {
                     properties.insert(hash, Value::I32(reader.read_i32::<LE>()?));
                 }
             }
-            ValueKind::F32_LIST => {
+            ValueFlags::F32_LIST => {
                 for hash in hashes {
                     properties.insert(hash, Value::F32(reader.read_f32::<LE>()?));
                 }
             }
-            ValueKind::U8_LIST => {
+            ValueFlags::U8_LIST => {
                 for hash in hashes {
                     properties.insert(hash, Value::U8(reader.read_u8()?));
                 }
             }
-            ValueKind::INT16_LIST => {
+            ValueFlags::INT16_LIST => {
                 for hash in hashes {
                     properties.insert(hash, Value::I16(reader.read_i16::<LE>()?));
                 }
             }
-            ValueKind::INT8_LIST => {
+            ValueFlags::INT8_LIST => {
                 for hash in hashes {
                     properties.insert(hash, Value::I8(reader.read_u8()?));
                 }
             }
-            ValueKind::BIT_LIST => {
+            ValueFlags::BIT_LIST => {
                 // 8 booleans packed per byte, extracted LSB to MSB
                 let mut current_byte: u8 = 0;
                 for (i, hash) in hashes.into_iter().enumerate() {
@@ -97,7 +105,7 @@ impl Section {
                     properties.insert(hash, Value::Bool(bit));
                 }
             }
-            ValueKind::VEC3_U8_LIST => {
+            ValueFlags::VEC3_U8_LIST => {
                 for hash in hashes {
                     let x = reader.read_u8()?;
                     let y = reader.read_u8()?;
@@ -105,7 +113,7 @@ impl Section {
                     properties.insert(hash, Value::Vec3U8([x, y, z]));
                 }
             }
-            ValueKind::VEC3_F32_LIST => {
+            ValueFlags::VEC3_F32_LIST => {
                 for hash in hashes {
                     let x = reader.read_f32::<LE>()?;
                     let y = reader.read_f32::<LE>()?;
@@ -113,21 +121,21 @@ impl Section {
                     properties.insert(hash, Value::Vec3F32(Vec3::new(x, y, z)));
                 }
             }
-            ValueKind::VEC2_U8_LIST => {
+            ValueFlags::VEC2_U8_LIST => {
                 for hash in hashes {
                     let x = reader.read_u8()?;
                     let y = reader.read_u8()?;
                     properties.insert(hash, Value::Vec2U8([x, y]));
                 }
             }
-            ValueKind::VEC2_F32_LIST => {
+            ValueFlags::VEC2_F32_LIST => {
                 for hash in hashes {
                     let x = reader.read_f32::<LE>()?;
                     let y = reader.read_f32::<LE>()?;
                     properties.insert(hash, Value::Vec2F32(Vec2::new(x, y)));
                 }
             }
-            ValueKind::VEC4_U8_LIST => {
+            ValueFlags::VEC4_U8_LIST => {
                 for hash in hashes {
                     let x = reader.read_u8()?;
                     let y = reader.read_u8()?;
@@ -136,7 +144,7 @@ impl Section {
                     properties.insert(hash, Value::Vec4U8([x, y, z, w]));
                 }
             }
-            ValueKind::VEC4_F32_LIST => {
+            ValueFlags::VEC4_F32_LIST => {
                 for hash in hashes {
                     let x = reader.read_f32::<LE>()?;
                     let y = reader.read_f32::<LE>()?;
@@ -145,7 +153,7 @@ impl Section {
                     properties.insert(hash, Value::Vec4F32(Vec4::new(x, y, z, w)));
                 }
             }
-            ValueKind::INT64_LIST => {
+            ValueFlags::INT64_LIST => {
                 for hash in hashes {
                     properties.insert(hash, Value::I64(reader.read_i64::<LE>()?));
                 }
@@ -179,7 +187,7 @@ impl Section {
         }
 
         Ok(Self {
-            kind: ValueKind::STRING_LIST,
+            kind: ValueFlags::STRING_LIST,
             properties,
         })
     }
@@ -207,7 +215,7 @@ impl Section {
         }
 
         Ok(Self {
-            kind: ValueKind::STRING_LIST,
+            kind: ValueFlags::STRING_LIST,
             properties,
         })
     }
@@ -378,7 +386,7 @@ mod tests {
         data.extend_from_slice(&(-7i32).to_le_bytes());
 
         let mut cursor = Cursor::new(data);
-        let set = Section::read_non_string(&mut cursor, ValueKind::INT32_LIST).unwrap();
+        let set = Section::read_non_string(&mut cursor, ValueFlags::INT32_LIST).unwrap();
 
         assert_eq!(set.len(), 2);
         assert_eq!(set.get(0xAAAA0001), Some(&Value::I32(42)));
@@ -393,7 +401,7 @@ mod tests {
         data.extend_from_slice(&3.125f32.to_le_bytes());
 
         let mut cursor = Cursor::new(data);
-        let set = Section::read_non_string(&mut cursor, ValueKind::F32_LIST).unwrap();
+        let set = Section::read_non_string(&mut cursor, ValueFlags::F32_LIST).unwrap();
 
         assert_eq!(set.len(), 1);
         if let Some(Value::F32(v)) = set.get(0xBBBB0001) {
@@ -411,7 +419,7 @@ mod tests {
         data.push(100u8);
 
         let mut cursor = Cursor::new(data);
-        let set = Section::read_non_string(&mut cursor, ValueKind::U8_LIST).unwrap();
+        let set = Section::read_non_string(&mut cursor, ValueFlags::U8_LIST).unwrap();
 
         assert_eq!(set.get(0xCCCC0001), Some(&Value::U8(100)));
     }
@@ -424,7 +432,7 @@ mod tests {
         data.extend_from_slice(&(-123i16).to_le_bytes());
 
         let mut cursor = Cursor::new(data);
-        let set = Section::read_non_string(&mut cursor, ValueKind::INT16_LIST).unwrap();
+        let set = Section::read_non_string(&mut cursor, ValueFlags::INT16_LIST).unwrap();
 
         assert_eq!(set.get(0xDDDD0001), Some(&Value::I16(-123)));
     }
@@ -437,7 +445,7 @@ mod tests {
         data.push(200u8);
 
         let mut cursor = Cursor::new(data);
-        let set = Section::read_non_string(&mut cursor, ValueKind::INT8_LIST).unwrap();
+        let set = Section::read_non_string(&mut cursor, ValueFlags::INT8_LIST).unwrap();
 
         assert_eq!(set.get(0xEEEE0001), Some(&Value::I8(200)));
     }
@@ -452,7 +460,7 @@ mod tests {
         data.push(0b00000101u8); // bits: 1,0,1
 
         let mut cursor = Cursor::new(data);
-        let set = Section::read_non_string(&mut cursor, ValueKind::BIT_LIST).unwrap();
+        let set = Section::read_non_string(&mut cursor, ValueFlags::BIT_LIST).unwrap();
 
         assert_eq!(set.get(0x00000001), Some(&Value::Bool(true)));
         assert_eq!(set.get(0x00000002), Some(&Value::Bool(false)));
@@ -469,7 +477,7 @@ mod tests {
         data.extend_from_slice(&3.0f32.to_le_bytes());
 
         let mut cursor = Cursor::new(data);
-        let set = Section::read_non_string(&mut cursor, ValueKind::VEC3_F32_LIST).unwrap();
+        let set = Section::read_non_string(&mut cursor, ValueFlags::VEC3_F32_LIST).unwrap();
 
         assert_eq!(
             set.get(0x11110001),
@@ -486,7 +494,7 @@ mod tests {
         data.push(100u8);
 
         let mut cursor = Cursor::new(data);
-        let set = Section::read_non_string(&mut cursor, ValueKind::VEC2_U8_LIST).unwrap();
+        let set = Section::read_non_string(&mut cursor, ValueFlags::VEC2_U8_LIST).unwrap();
 
         assert_eq!(set.get(0x22220001), Some(&Value::Vec2U8([50, 100])));
     }
@@ -526,7 +534,7 @@ mod tests {
         data.extend_from_slice(&5.0f32.to_le_bytes());
 
         let mut cursor = Cursor::new(data);
-        let set = Section::read_non_string(&mut cursor, ValueKind::VEC2_F32_LIST).unwrap();
+        let set = Section::read_non_string(&mut cursor, ValueFlags::VEC2_F32_LIST).unwrap();
 
         assert_eq!(
             set.get(0x33330001),
@@ -545,7 +553,7 @@ mod tests {
         data.extend_from_slice(&4.0f32.to_le_bytes());
 
         let mut cursor = Cursor::new(data);
-        let set = Section::read_non_string(&mut cursor, ValueKind::VEC4_F32_LIST).unwrap();
+        let set = Section::read_non_string(&mut cursor, ValueFlags::VEC4_F32_LIST).unwrap();
 
         assert_eq!(
             set.get(0x44440001),
@@ -563,7 +571,7 @@ mod tests {
         data.push(30);
 
         let mut cursor = Cursor::new(data);
-        let set = Section::read_non_string(&mut cursor, ValueKind::VEC3_U8_LIST).unwrap();
+        let set = Section::read_non_string(&mut cursor, ValueFlags::VEC3_U8_LIST).unwrap();
 
         assert_eq!(set.get(0x55550001), Some(&Value::Vec3U8([10, 20, 30])));
     }
@@ -578,7 +586,7 @@ mod tests {
         data.extend_from_slice(&(-42i64).to_le_bytes());
 
         let mut cursor = Cursor::new(data);
-        let set = Section::read_non_string(&mut cursor, ValueKind::INT64_LIST).unwrap();
+        let set = Section::read_non_string(&mut cursor, ValueFlags::INT64_LIST).unwrap();
 
         assert_eq!(set.len(), 2);
         assert_eq!(set.get(0x77770001), Some(&Value::I64(9999999999)));
@@ -596,7 +604,7 @@ mod tests {
         data.push(40);
 
         let mut cursor = Cursor::new(data);
-        let set = Section::read_non_string(&mut cursor, ValueKind::VEC4_U8_LIST).unwrap();
+        let set = Section::read_non_string(&mut cursor, ValueFlags::VEC4_U8_LIST).unwrap();
 
         assert_eq!(set.get(0x66660001), Some(&Value::Vec4U8([10, 20, 30, 40])));
     }

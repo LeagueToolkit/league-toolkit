@@ -36,11 +36,11 @@ league-toolkit = { version = "0.2", features = ["inibin"] }
 ```rust,no_run
 use std::fs::File;
 use std::io::BufReader;
-use ltk_inibin::InibinFile;
+use ltk_inibin::Inibin;
 
 let file = File::open("data/characters/annie/annie.inibin").unwrap();
 let mut reader = BufReader::new(file);
-let inibin = InibinFile::from_reader(&mut reader).unwrap();
+let inibin = Inibin::from_reader(&mut reader).unwrap();
 
 // Look up a value by its u32 hash key
 if let Some(value) = inibin.get(0xABCD1234) {
@@ -62,21 +62,21 @@ let value = inibin.get(key);
 ### Modifying values
 
 ```rust
-use ltk_inibin::{InibinFile, InibinValue};
+use ltk_inibin::{Inibin, Value};
 
-let mut inibin = InibinFile::new();
+let mut inibin = Inibin::new();
 
 // Insert values of different types
-inibin.insert(0x0001, InibinValue::F32(550.0));
-inibin.insert(0x0002, InibinValue::Int32(42));
-inibin.insert(0x0003, InibinValue::String("hello".to_string()));
-inibin.insert(0x0004, InibinValue::Int64(9999999999));
+inibin.insert(0x0001, 550.0f32);
+inibin.insert(0x0002, 42i32);
+inibin.insert(0x0003, "hello");
+inibin.insert(0x0004, 9999999999i64);
 
 // Remove a value
 inibin.remove(0x0001);
 
 // Update: re-inserting with a different type migrates across buckets
-inibin.insert(0x0002, InibinValue::F32(3.14));
+inibin.insert(0x0002, 3.125f32);
 ```
 
 ### Writing an inibin file
@@ -84,9 +84,9 @@ inibin.insert(0x0002, InibinValue::F32(3.14));
 ```rust,no_run
 use std::fs::File;
 use std::io::BufWriter;
-use ltk_inibin::InibinFile;
+use ltk_inibin::Inibin;
 
-# let inibin = InibinFile::new();
+# let inibin = Inibin::new();
 let file = File::create("output.inibin").unwrap();
 let mut writer = BufWriter::new(file);
 inibin.to_writer(&mut writer).unwrap();
@@ -96,37 +96,41 @@ inibin.to_writer(&mut writer).unwrap();
 
 ```rust
 use std::io::Cursor;
-use ltk_inibin::{InibinFile, InibinValue};
+use ltk_inibin::{Inibin, Value};
 
-let mut file = InibinFile::new();
-file.insert(0x0001, InibinValue::Int32(42));
+let mut file = Inibin::new();
+file.insert(0x0001, 42i32);
 
 let mut buf = Vec::new();
 file.to_writer(&mut buf).unwrap();
 
 let mut cursor = Cursor::new(&buf);
-let file2 = InibinFile::from_reader(&mut cursor).unwrap();
+let file2 = Inibin::from_reader(&mut cursor).unwrap();
 
-assert_eq!(file2.get(0x0001), Some(&InibinValue::Int32(42)));
+assert_eq!(file2.get(0x0001), Some(&Value::I32(42)));
 ```
 
 ### Iterating values
 
 ```rust
-use ltk_inibin::{InibinFile, InibinValue, InibinFlags};
+use ltk_inibin::{Inibin, Value, ValueFlags};
 
-let mut inibin = InibinFile::new();
-inibin.insert(0x0001, InibinValue::Int32(1));
-inibin.insert(0x0002, InibinValue::F32(2.0));
+let mut inibin = Inibin::new();
+inibin.insert(0x0001, 1i32);
+inibin.insert(0x0002, 2.0f32);
 
 // Iterate all key-value pairs across all buckets
 for (key, value) in inibin.iter() {
     println!("0x{:08X} = {:?}", key, value);
 }
 
-// Access a specific set bucket
-if let Some(int_set) = inibin.set(InibinFlags::INT32_LIST) {
-    println!("Int32 set has {} entries", int_set.len());
+// Access a specific section
+if let Some(int_section) = inibin.section(ValueFlags::INT32_LIST) {
+    println!("Int32 section has {} entries", int_section.len());
+    // Use .keys(), .values(), or .iter()
+    for key in int_section.keys() {
+        println!("  key: 0x{:08X}", key);
+    }
 }
 ```
 
@@ -173,26 +177,30 @@ All 14 types and their corresponding flag bits:
 
 | Flag | Bit | Type | Rust Variant | Encoding |
 |------|-----|------|-------------|----------|
-| `INT32_LIST` | 0 | `i32` | `InibinValue::Int32` | 4 bytes LE |
-| `F32_LIST` | 1 | `f32` | `InibinValue::F32` | 4 bytes LE |
-| `U8_LIST` | 2 | `f32` | `InibinValue::U8` | 1 byte, `value * 0.1` (range 0.0-25.5) |
-| `INT16_LIST` | 3 | `i16` | `InibinValue::Int16` | 2 bytes LE |
-| `INT8_LIST` | 4 | `u8` | `InibinValue::Int8` | 1 byte |
-| `BIT_LIST` | 5 | `bool` | `InibinValue::Bool` | 8 booleans packed per byte |
-| `VEC3_U8_LIST` | 6 | `Vec3` | `InibinValue::Vec3U8` | 3 bytes, each `* 0.1` |
-| `VEC3_F32_LIST` | 7 | `Vec3` | `InibinValue::Vec3F32` | 3x `f32` LE |
-| `VEC2_U8_LIST` | 8 | `Vec2` | `InibinValue::Vec2U8` | 2 bytes, each `* 0.1` |
-| `VEC2_F32_LIST` | 9 | `Vec2` | `InibinValue::Vec2F32` | 2x `f32` LE |
-| `VEC4_U8_LIST` | 10 | `Vec4` | `InibinValue::Vec4U8` | 4 bytes, each `* 0.1` |
-| `VEC4_F32_LIST` | 11 | `Vec4` | `InibinValue::Vec4F32` | 4x `f32` LE |
-| `STRING_LIST` | 12 | `String` | `InibinValue::String` | Null-terminated ASCII with offset table |
-| `INT64_LIST` | 13 | `i64` | `InibinValue::Int64` | 8 bytes LE |
+| `INT32_LIST` | 0 | `i32` | `Value::I32` | 4 bytes LE |
+| `F32_LIST` | 1 | `f32` | `Value::F32` | 4 bytes LE |
+| `U8_LIST` | 2 | `u8` | `Value::U8` | 1 byte raw; `as_f32()` returns `byte * 0.1` (0.0-25.5) |
+| `INT16_LIST` | 3 | `i16` | `Value::I16` | 2 bytes LE |
+| `INT8_LIST` | 4 | `u8` | `Value::I8` | 1 byte |
+| `BIT_LIST` | 5 | `bool` | `Value::Bool` | 8 booleans packed per byte |
+| `VEC3_U8_LIST` | 6 | `[u8; 3]` | `Value::Vec3U8` | 3 bytes raw; `as_vec3()` decodes |
+| `VEC3_F32_LIST` | 7 | `Vec3` | `Value::Vec3F32` | 3x `f32` LE |
+| `VEC2_U8_LIST` | 8 | `[u8; 2]` | `Value::Vec2U8` | 2 bytes raw; `as_vec2()` decodes |
+| `VEC2_F32_LIST` | 9 | `Vec2` | `Value::Vec2F32` | 2x `f32` LE |
+| `VEC4_U8_LIST` | 10 | `[u8; 4]` | `Value::Vec4U8` | 4 bytes raw; `as_vec4()` decodes |
+| `VEC4_F32_LIST` | 11 | `Vec4` | `Value::Vec4F32` | 4x `f32` LE |
+| `STRING_LIST` | 12 | `String` | `Value::String` | Null-terminated ASCII with offset table |
+| `INT64_LIST` | 13 | `i64` | `Value::I64` | 8 bytes LE |
 
 ### U8 (Fixed-Point Float) Encoding
 
-The `U8` types (flags 2, 6, 8, 10) store floats as single bytes scaled by 0.1:
-- **Read**: `byte as f32 * 0.1` (range 0.0 to 25.5)
-- **Write**: `(value / 0.1).round() as u8` (validated to 0.0-25.5, returns `InibinError::U8FloatOverflow` if out of range)
+The `U8` types (flags 2, 6, 8, 10) store floats as raw bytes. Use the unified `as_*()` accessors to decode:
+- `Value::U8(byte)` → `as_f32()` returns `byte * 0.1` (range 0.0 to 25.5)
+- `Value::Vec2U8([a, b])` → `as_vec2()` returns `Vec2::new(a * 0.1, b * 0.1)`
+- `Value::Vec3U8([a, b, c])` → `as_vec3()` returns `Vec3::new(a * 0.1, b * 0.1, c * 0.1)`
+- `Value::Vec4U8([a, b, c, d])` → `as_vec4()` returns `Vec4::new(a * 0.1, b * 0.1, c * 0.1, d * 0.1)`
+
+These accessors also work on the non-packed variants (`F32`, `Vec2F32`, etc.), returning the value directly.
 
 ### BitList Encoding
 
@@ -202,14 +210,14 @@ Booleans are packed 8 per byte. For a set with `n` values, `ceil(n / 8)` bytes a
 
 ### Bucket-Based Storage
 
-Internally, `InibinFile` stores data in **buckets** — one `InibinSet` per active flag type. Each set holds a `HashMap<u32, InibinValue>` where keys are SDBM hashes.
+Internally, `Inibin` stores data in **sections** — one `Section` per active flag type. Each section holds an `IndexMap<u32, Value>` where keys are SDBM hashes.
 
 The public API is **key-based**: methods like `get`, `insert`, and `remove` search across all buckets transparently. When inserting a value, the library routes it to the correct bucket based on the value's type. If a key already exists in a different-type bucket, it is removed from the old bucket first.
 
 ### Error Handling
 
 ```rust
-pub enum InibinError {
+pub enum Error {
     UnsupportedVersion(u8),  // Version byte is not 1 or 2
     U8FloatOverflow(f32),    // Fixed-point float outside 0.0-25.5 on write
     Io(std::io::Error),      // Underlying I/O error

@@ -1,7 +1,7 @@
 use std::io::Cursor;
 
 use glam::{Vec2, Vec3, Vec4};
-use ltk_inibin::{Inibin, Value, ValueKind};
+use ltk_inibin::{Inibin, Value, ValueFlags};
 
 // U8 packed floats: value 100 decodes to 10.0 (byte * 0.1)
 
@@ -151,18 +151,74 @@ fn round_trip_bit_list_partial_byte() {
 }
 
 #[test]
-fn u8_as_f32_accessor() {
+fn as_f32_accessor() {
+    // Packed U8 variants
     let val = Value::U8(100);
-    approx::assert_relative_eq!(val.u8_as_f32().unwrap(), 10.0);
+    approx::assert_relative_eq!(val.as_f32().unwrap(), 10.0);
 
     let val = Value::U8(255);
-    approx::assert_relative_eq!(val.u8_as_f32().unwrap(), 25.5);
+    approx::assert_relative_eq!(val.as_f32().unwrap(), 25.5);
 
     let val = Value::U8(0);
-    approx::assert_relative_eq!(val.u8_as_f32().unwrap(), 0.0);
+    approx::assert_relative_eq!(val.as_f32().unwrap(), 0.0);
 
-    // Non-U8 variant returns None
-    assert_eq!(Value::I32(42).u8_as_f32(), None);
+    // Non-packed F32 variant
+    let val = Value::F32(3.125);
+    approx::assert_relative_eq!(val.as_f32().unwrap(), 3.125);
+
+    // Non-float variant returns None
+    assert_eq!(Value::I32(42).as_f32(), None);
+}
+
+#[test]
+fn as_vec2_accessor() {
+    // Packed U8 variant
+    let val = Value::Vec2U8([50, 100]);
+    let v = val.as_vec2().unwrap();
+    approx::assert_relative_eq!(v.x, 5.0);
+    approx::assert_relative_eq!(v.y, 10.0);
+
+    // Non-packed F32 variant
+    let val = Value::Vec2F32(Vec2::new(1.5, 2.5));
+    assert_eq!(val.as_vec2(), Some(Vec2::new(1.5, 2.5)));
+
+    // Non-vec2 variant returns None
+    assert_eq!(Value::I32(42).as_vec2(), None);
+}
+
+#[test]
+fn as_vec3_accessor() {
+    // Packed U8 variant
+    let val = Value::Vec3U8([10, 20, 30]);
+    let v = val.as_vec3().unwrap();
+    approx::assert_relative_eq!(v.x, 1.0);
+    approx::assert_relative_eq!(v.y, 2.0);
+    approx::assert_relative_eq!(v.z, 3.0);
+
+    // Non-packed F32 variant
+    let val = Value::Vec3F32(Vec3::new(1.5, 2.5, 3.5));
+    assert_eq!(val.as_vec3(), Some(Vec3::new(1.5, 2.5, 3.5)));
+
+    // Non-vec3 variant returns None
+    assert_eq!(Value::I32(42).as_vec3(), None);
+}
+
+#[test]
+fn as_vec4_accessor() {
+    // Packed U8 variant
+    let val = Value::Vec4U8([10, 20, 30, 40]);
+    let v = val.as_vec4().unwrap();
+    approx::assert_relative_eq!(v.x, 1.0);
+    approx::assert_relative_eq!(v.y, 2.0);
+    approx::assert_relative_eq!(v.z, 3.0);
+    approx::assert_relative_eq!(v.w, 4.0);
+
+    // Non-packed F32 variant
+    let val = Value::Vec4F32(Vec4::new(1.1, 2.2, 3.3, 4.4));
+    assert_eq!(val.as_vec4(), Some(Vec4::new(1.1, 2.2, 3.3, 4.4)));
+
+    // Non-vec4 variant returns None
+    assert_eq!(Value::I32(42).as_vec4(), None);
 }
 
 #[test]
@@ -172,11 +228,11 @@ fn test_set_access() {
     file.insert(0x0002, Value::I32(2));
     file.insert(0x0003, Value::F32(3.0));
 
-    let int_set = file.section(ValueKind::INT32_LIST).unwrap();
+    let int_set = file.section(ValueFlags::INT32_LIST).unwrap();
     assert_eq!(int_set.len(), 2);
-    assert_eq!(int_set.kind(), ValueKind::INT32_LIST);
+    assert_eq!(int_set.kind(), ValueFlags::INT32_LIST);
 
-    let float_set = file.section(ValueKind::F32_LIST).unwrap();
+    let float_set = file.section(ValueFlags::F32_LIST).unwrap();
     assert_eq!(float_set.len(), 1);
 }
 
@@ -212,7 +268,7 @@ fn test_int64_cross_bucket_migration() {
 
     // Verify it's not in Int32 bucket anymore
     assert!(file
-        .section(ValueKind::INT32_LIST)
+        .section(ValueFlags::INT32_LIST)
         .map(|s| s.get(0xABCD).is_none())
         .unwrap_or(true));
 

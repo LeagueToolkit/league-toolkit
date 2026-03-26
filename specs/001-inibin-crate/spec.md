@@ -23,6 +23,17 @@
 - Q: How should packed floats (U8 types) be stored internally? → A: Store raw `u8` byte, provide `as_f32()` accessor returning `byte * 0.1`. Lossless round-trip, validation implicit.
 - Q: Should the API use generics for ergonomics? → A: Yes — `From<T>` impls on `InibinValue` for construction + typed getter methods (`get_i32()`, `get_f32()`, etc.) on `Inibin` for extraction.
 
+### Session 2026-03-26 (PR #122 review)
+
+- Q: What should the value-type bitfield be named? → A: `ValueFlags` — concise and accurately conveys bitfield semantics.
+- Q: Should `InibinValue` provide unified `as_*()` accessors that handle both packed and non-packed variants? → A: Yes — `as_f32()` returns `f32` from both `Float32` and `U8` (packed) variants; same pattern for vec types.
+- Q: Should SDBM hash functions accept `AsRef<str>` instead of `&str`? → A: Yes — `AsRef<str>` for SDBM functions only; other `ltk_hash` functions unchanged for now.
+- Q: Should section/set types expose `.keys()` and `.values()` iterator methods? → A: Yes — expose `.keys()`, `.values()`, and `.iter()` on all collection types.
+
+### Session 2026-03-26 (DX)
+
+- Q: Should there be a convenience function that defaults the `*` delimiter for SDBM inibin key hashing? → A: Yes — `ltk_hash::sdbm::hash_inibin_key(section, property)` centralized in the hash crate, defaults `*` as delimiter.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Read Inibin Files (Priority: P1)
@@ -111,15 +122,19 @@ As a developer, I want to insert, remove, and update values in an inibin structu
 - **FR-011**: The library MUST return descriptive errors for unsupported versions, corrupted data, and invalid operations (e.g., FixedPointFloat overflow).
 - **FR-012**: The library MUST support round-trip integrity: parsing a file and writing it back should produce binary-identical output (for version 2 files).
 - **FR-013**: The library MUST support Int64 (flag 13, `i64`) values for both reading and writing, following the same pattern as other numeric set types.
-- ~~**FR-014**: `ltk_inibin_names` crate~~ — **Descoped** to a separate PR.
-- ~~**FR-015**: `ltk_inibin_names` lookup function~~ — **Descoped** to a separate PR.
+- **FR-014**: The SDBM hash functions in `ltk_hash::sdbm` MUST accept `AsRef<str>` for ergonomic use with `String`, `&str`, `Cow<str>`, etc.
+- **FR-014a**: `ltk_hash::sdbm` MUST provide a `hash_inibin_key(section, property)` convenience function that defaults the `*` delimiter, equivalent to `hash_lower_with_delimiter(section, property, '*')`.
+- **FR-015**: `InibinValue` MUST provide unified `as_f32()`, `as_vec2()`, `as_vec3()`, `as_vec4()` accessors that transparently convert from both packed (U8-based) and non-packed variants.
+- **FR-016**: All collection types (sets/sections) MUST expose `.keys()`, `.values()`, and `.iter()` iterator methods following idiomatic Rust map conventions.
+- ~~**FR-017**: `ltk_inibin_names` crate~~ — **Descoped** to a separate PR.
+- ~~**FR-018**: `ltk_inibin_names` lookup function~~ — **Descoped** to a separate PR.
 
 ### Key Entities
 
 - **InibinFile**: The top-level container representing a parsed inibin/troybin file. Holds a collection of value sets keyed by their type flag.
-- **InibinSet**: A typed collection of key-value pairs where keys are u32 hashes and values are of the type indicated by the set's flag (e.g., i32, f32, string, vector types).
-- **InibinFlags**: A bitfield enum representing the 14 possible value set types present in an inibin file (flags 0-13).
-- **InibinValue**: The typed value stored in a set entry (integer, float, u8 fixed-point float, boolean, string, i64, or vector variant).
+- **InibinSet**: A typed collection of key-value pairs where keys are u32 hashes and values are of the type indicated by the set's flag (e.g., i32, f32, string, vector types). Exposes `.keys()`, `.values()`, and `.iter()` iterator methods.
+- **ValueFlags** (formerly `InibinFlags`): A bitfield representing the 14 possible value set types present in an inibin file (flags 0-13).
+- **InibinValue**: The typed value stored in a set entry (integer, float, u8 fixed-point float, boolean, string, i64, or vector variant). Provides unified `as_*()` accessors (e.g., `as_f32()`, `as_vec2()`) that transparently handle both packed (U8-based) and non-packed variants.
 - ~~**InibinNames** (in `ltk_inibin_names`)~~ — **Descoped** to a separate PR.
 
 ## Success Criteria *(mandatory)*
@@ -132,7 +147,8 @@ As a developer, I want to insert, remove, and update values in an inibin structu
 - **SC-004**: Value lookup by hash key returns correct results for all set types.
 - **SC-005**: Invalid or corrupted input produces clear error messages rather than panics.
 - **SC-006**: The library integrates into the league-toolkit workspace and passes all CI checks (formatting, linting, tests).
-- ~~**SC-007**: `ltk_inibin_names` hash-to-name resolution~~ — **Descoped** to a separate PR.
+- **SC-007**: Unified `as_*()` accessors on `InibinValue` return correct values for both packed and non-packed storage variants.
+- ~~**SC-008**: `ltk_inibin_names` hash-to-name resolution~~ — **Descoped** to a separate PR.
 
 ## Assumptions
 

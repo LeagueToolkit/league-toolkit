@@ -1,6 +1,6 @@
 # Data Model: ltk_inibin
 
-**Phase**: 1 | **Date**: 2026-03-25 | **Updated**: 2026-03-25
+**Phase**: 1 | **Date**: 2026-03-25 | **Updated**: 2026-03-26
 
 ## Entities
 
@@ -9,9 +9,9 @@
 The top-level container for an inibin/troybin file.
 
 **Fields**:
-- `sets`: Map from `InibinFlags` (single flag value) to `InibinSet` — the bucket-based internal storage
+- `sections`: Map from `ValueFlags` (single flag value) to `Section` — the bucket-based internal storage
 
-**Relationships**: Contains zero or more `InibinSet` instances, keyed by flag type. At most 14 sets (one per flag bit).
+**Relationships**: Contains zero or more `Section` instances, keyed by flag type. At most 14 sections (one per flag bit).
 
 **Lifecycle**:
 - Created via `from_reader` (parsing) or direct construction
@@ -20,24 +20,26 @@ The top-level container for an inibin/troybin file.
 
 **Identity**: An InibinFile is a value type — no unique identity beyond its contents.
 
-### InibinSet
+### Section (formerly InibinSet)
 
 A typed collection of key-value pairs within a single bucket.
 
 **Fields**:
-- `set_type`: `InibinFlags` — identifies which value type this set holds
-- `properties`: Map from `u32` (hash key) to the typed value
+- `kind`: `ValueFlags` — identifies which value type this section holds
+- `properties`: `IndexMap<u32, Value>` — preserves insertion order
 
-**Relationships**: Owned by `InibinFile`. Each set holds values of exactly one type.
+**Relationships**: Owned by `Inibin`. Each section holds values of exactly one type.
+
+**Public iterators**: `.keys()`, `.values()`, `.iter()` — idiomatic map-like access.
 
 **Validation**:
-- Hash keys must be unique within a set
-- Values must match the set's type constraint
-- U8 (fixed-point float) values must be in range 0.0-25.5
+- Hash keys must be unique within a section
+- Values must match the section's type constraint
+- U8 (fixed-point float) values must be in range 0-255 (raw byte storage)
 
-### InibinFlags
+### ValueFlags (formerly InibinFlags)
 
-Bitfield enum (u16) representing value set types.
+Bitfield (u16) representing value set types.
 
 **Values** (14 bits):
 - Bit 0: `INT32_LIST`
@@ -57,27 +59,29 @@ Bitfield enum (u16) representing value set types.
 
 **Usage**: In the file header (v2), a combined flags value indicates which sets are present. Internally, each set is keyed by a single flag value.
 
-### InibinValue
+### Value (formerly InibinValue)
 
 Typed value enum representing all possible value types.
 
 **Variants**:
-- `Int32(i32)`
+- `I32(i32)`
 - `F32(f32)`
-- `U8(f32)` — stored as f32, validated to 0.0-25.5 range on write
-- `Int16(i16)`
-- `Int8(u8)`
+- `U8(u8)` — raw byte storage; `as_f32()` returns `byte * 0.1`
+- `I16(i16)`
+- `I8(u8)`
 - `Bool(bool)`
-- `Vec3U8(Vec3)`
+- `Vec3U8([u8; 3])` — raw bytes; `as_vec3()` returns packed floats
 - `Vec3F32(Vec3)`
-- `Vec2U8(Vec2)`
+- `Vec2U8([u8; 2])` — raw bytes; `as_vec2()` returns packed floats
 - `Vec2F32(Vec2)`
-- `Vec4U8(Vec4)`
+- `Vec4U8([u8; 4])` — raw bytes; `as_vec4()` returns packed floats
 - `Vec4F32(Vec4)`
 - `String(String)`
-- `Int64(i64)`
+- `I64(i64)`
 
-**Mapping**: Each variant corresponds to exactly one `InibinFlags` value. The public API uses this enum for type-safe value access. The library determines which bucket to route to based on the variant.
+**Unified accessors**: `as_f32()`, `as_vec2()`, `as_vec3()`, `as_vec4()` handle both packed (U8-based) and non-packed variants transparently.
+
+**Mapping**: Each variant corresponds to exactly one `ValueFlags` value. The public API uses this enum for type-safe value access. The library determines which bucket to route to based on the variant.
 
 ### InibinNames (in `ltk_inibin_names`)
 

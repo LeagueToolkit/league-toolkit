@@ -1,6 +1,6 @@
 bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-    pub struct ValueKind: u16 {
+    pub struct ValueFlags: u16 {
         const INT32_LIST    = 1 << 0;
         const F32_LIST      = 1 << 1;
         const U8_LIST       = 1 << 2;
@@ -19,18 +19,18 @@ bitflags::bitflags! {
 }
 
 /// Non-string kinds in bit order. STRING_LIST is always read/written last.
-pub(crate) const NON_STRING_KINDS: [ValueKind; 13] = [
-    ValueKind::INT32_LIST,
-    ValueKind::F32_LIST,
-    ValueKind::U8_LIST,
-    ValueKind::INT16_LIST,
-    ValueKind::INT8_LIST,
-    ValueKind::BIT_LIST,
-    ValueKind::VEC3_U8_LIST,
-    ValueKind::VEC3_F32_LIST,
-    ValueKind::VEC2_U8_LIST,
-    ValueKind::VEC2_F32_LIST,
-    ValueKind::VEC4_U8_LIST,
-    ValueKind::VEC4_F32_LIST,
-    ValueKind::INT64_LIST,
+pub(crate) const NON_STRING_KINDS: [ValueFlags; 13] = [
+    ValueFlags::INT32_LIST,
+    ValueFlags::F32_LIST,
+    ValueFlags::U8_LIST,
+    ValueFlags::INT16_LIST,
+    ValueFlags::INT8_LIST,
+    ValueFlags::BIT_LIST,
+    ValueFlags::VEC3_U8_LIST,
+    ValueFlags::VEC3_F32_LIST,
+    ValueFlags::VEC2_U8_LIST,
+    ValueFlags::VEC2_F32_LIST,
+    ValueFlags::VEC4_U8_LIST,
+    ValueFlags::VEC4_F32_LIST,
+    ValueFlags::INT64_LIST,
 ];

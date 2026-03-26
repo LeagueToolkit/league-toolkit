@@ -1,6 +1,6 @@
 # Research: ltk_inibin
 
-**Phase**: 0 | **Date**: 2026-03-25 | **Updated**: 2026-03-25
+**Phase**: 0 | **Date**: 2026-03-25 | **Updated**: 2026-03-26
 
 ## R-001: Inibin Binary Format
 
@@ -82,7 +82,33 @@ The reference C# uses `Sdbm.HashLowerWithDelimiter(section, property, '*')` whic
 | STRING_LIST | `String` | null-terminated ASCII | null-terminated + offset table |
 | INT64_LIST | `i64` | read_i64::<LE> | write_i64::<LE> |
 
-**Alternatives considered**: Storing fixed-point as raw bytes — rejected because users expect float access; conversion happens at parse/write boundary.
+**Alternatives considered**: Storing fixed-point as raw bytes — accepted in implementation (stores raw `u8`), but with unified `as_*()` accessors that handle conversion transparently.
+
+**Update (2026-03-26, PR #122 review)**: The actual implementation stores U8 variants as raw `u8` bytes (not `f32`). Unified `as_f32()`, `as_vec2()`, `as_vec3()`, `as_vec4()` accessors handle conversion from both packed (U8) and non-packed (F32) variants transparently. This provides lossless round-trip while still offering ergonomic float access.
+
+## R-009: ValueKind → ValueFlags Rename (PR #122 review)
+
+**Decision**: Rename `ValueKind` to `ValueFlags` throughout `ltk_inibin`.
+**Rationale**: The type is a `bitflags!` bitfield, not an enum of kinds. `ValueFlags` accurately describes its nature (reviewer feedback from `alanpq`).
+**Impact**: Rename in `value_kind.rs` → `value_flags.rs`, update all references in `section.rs`, `file.rs`, `lib.rs`.
+
+## R-010: SDBM Hash Functions Accept `AsRef<str>` (PR #122 review)
+
+**Decision**: Change SDBM hash function signatures from `&str` to `impl AsRef<str>`.
+**Rationale**: Ergonomic — allows passing `String`, `&str`, `Cow<str>` without `.as_str()` calls. Only applied to SDBM functions; other `ltk_hash` functions unchanged to limit scope.
+**Alternatives considered**: Update all `ltk_hash` functions — deferred to separate PR.
+
+## R-011: Unified `as_*()` Accessors on Value (PR #122 review)
+
+**Decision**: Replace separate `u8_as_f32()`, `vec2_u8_as_f32()`, etc. with unified `as_f32()`, `as_vec2()`, `as_vec3()`, `as_vec4()`.
+**Rationale**: Consumers shouldn't need to know the storage representation. `as_f32()` handles both `F32(v)` → `Some(v)` and `U8(b)` → `Some(b as f32 * 0.1)`.
+**Alternatives considered**: Keep separate per-storage accessors — rejected; adds unnecessary cognitive load.
+
+## R-012: `.keys()` / `.values()` on Section (PR #122 review)
+
+**Decision**: Add `.keys()` and `.values()` methods to `Section` (`.iter()` already exists).
+**Rationale**: Idiomatic Rust for map-like containers. Matches `HashMap`/`IndexMap` conventions. Delegates to `IndexMap::keys()` and `IndexMap::values()`.
+**Alternatives considered**: `.iter()` only — rejected per reviewer feedback.
 
 ## R-004: Endianness
 

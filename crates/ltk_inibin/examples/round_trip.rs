@@ -1,5 +1,10 @@
 //! Round-trip an inibin file: read -> write -> read, then verify equality.
 //!
+//! Demonstrates:
+//! - Full round-trip workflow (parse → serialize → re-parse → compare)
+//! - Writing to an in-memory buffer with `to_writer`
+//! - Comparing two `Inibin` instances entry-by-entry
+//!
 //! Usage: cargo run -p ltk_inibin --example round_trip -- <path>
 
 use std::{fs::File, io::BufReader};
@@ -46,6 +51,14 @@ fn main() {
                 println!("  MISSING  0x{key:08X}: {value:?}");
                 mismatches += 1;
             }
+        }
+    }
+
+    // Check for entries in roundtripped that are not in original
+    for (key, _) in roundtripped.iter() {
+        if original.get(key).is_none() {
+            println!("  EXTRA    0x{key:08X}");
+            mismatches += 1;
         }
     }
 

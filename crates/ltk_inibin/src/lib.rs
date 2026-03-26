@@ -17,10 +17,10 @@ mod error;
 mod file;
 mod section;
 mod value;
-mod value_kind;
+mod value_flags;
 
 pub use error::{Error, Result};
 pub use file::Inibin;
 pub use section::Section;
 pub use value::{FromValue, Value};
-pub use value_kind::ValueKind;
+pub use value_flags::ValueFlags;

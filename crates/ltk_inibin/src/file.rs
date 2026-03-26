@@ -6,12 +6,12 @@ use indexmap::IndexMap;
 use crate::error::{Error, Result};
 use crate::section::Section;
 use crate::value::{FromValue, Value};
-use crate::value_kind::{ValueKind, NON_STRING_KINDS};
+use crate::value_flags::{ValueFlags, NON_STRING_KINDS};
 
 /// Top-level inibin/troybin file container.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Inibin {
-    pub(crate) sections: IndexMap<ValueKind, Section>,
+    pub(crate) sections: IndexMap<ValueFlags, Section>,
 }
 
 impl Inibin {
@@ -34,7 +34,7 @@ impl Inibin {
 
     fn read_v2<R: Read + Seek>(reader: &mut R) -> Result<Self> {
         let string_data_length = reader.read_u16::<LE>()?;
-        let flags = ValueKind::from_bits_truncate(reader.read_u16::<LE>()?);
+        let flags = ValueFlags::from_bits_truncate(reader.read_u16::<LE>()?);
         let mut sections = IndexMap::new();
 
         for &flag in &NON_STRING_KINDS {
@@ -45,7 +45,7 @@ impl Inibin {
         }
 
         // StringList is always read last; validate string_data_length from the header
-        if flags.contains(ValueKind::STRING_LIST) {
+        if flags.contains(ValueFlags::STRING_LIST) {
             let count_pos = reader.stream_position()?;
             let value_count = reader.read_u16::<LE>()? as u64;
             reader.seek(std::io::SeekFrom::Start(count_pos))?;
@@ -61,7 +61,7 @@ impl Inibin {
                 });
             }
 
-            sections.insert(ValueKind::STRING_LIST, set);
+            sections.insert(ValueFlags::STRING_LIST, set);
         }
 
         Ok(Self { sections })
@@ -84,21 +84,21 @@ impl Inibin {
         let set = Section::read_string_list_v1(reader, hashes, string_data_offset)?;
 
         let mut sections = IndexMap::new();
-        sections.insert(ValueKind::STRING_LIST, set);
+        sections.insert(ValueFlags::STRING_LIST, set);
 
         Ok(Self { sections })
     }
 
     /// Write as version 2 inibin format.
     pub fn to_writer<W: Write>(&self, writer: &mut W) -> Result<()> {
-        let mut flags = ValueKind::empty();
+        let mut flags = ValueFlags::empty();
         for &flag in self.sections.keys() {
             flags |= flag;
         }
 
         let string_data_length = self
             .sections
-            .get(&ValueKind::STRING_LIST)
+            .get(&ValueFlags::STRING_LIST)
             .map(|s| s.string_data_length())
             .unwrap_or(0);
 
@@ -110,7 +110,7 @@ impl Inibin {
         // Non-string sets in flag order
         for &flag in &NON_STRING_KINDS {
             if let Some(set) = self.sections.get(&flag) {
-                if flag == ValueKind::BIT_LIST {
+                if flag == ValueFlags::BIT_LIST {
                     set.write_bit_list(writer)?;
                 } else {
                     set.write_non_string(writer)?;
@@ -119,7 +119,7 @@ impl Inibin {
         }
 
         // StringList last
-        if let Some(set) = self.sections.get(&ValueKind::STRING_LIST) {
+        if let Some(set) = self.sections.get(&ValueFlags::STRING_LIST) {
             let string_data = set.write_string_list(writer)?;
             writer.write_all(&string_data)?;
         }
@@ -225,11 +225,11 @@ impl Inibin {
         self.sections.values().flat_map(|set| set.iter())
     }
 
-    pub fn section(&self, flags: ValueKind) -> Option<&Section> {
+    pub fn section(&self, flags: ValueFlags) -> Option<&Section> {
         self.sections.get(&flags)
     }
 
-    pub fn section_mut(&mut self, flags: ValueKind) -> Option<&mut Section> {
+    pub fn section_mut(&mut self, flags: ValueFlags) -> Option<&mut Section> {
         self.sections.get_mut(&flags)
     }
 }
@@ -271,7 +271,7 @@ mod tests {
         let mut data = Vec::new();
         data.push(2);
         data.extend_from_slice(&0u16.to_le_bytes());
-        data.extend_from_slice(&(ValueKind::INT32_LIST.bits()).to_le_bytes());
+        data.extend_from_slice(&(ValueFlags::INT32_LIST.bits()).to_le_bytes());
         data.extend_from_slice(&1u16.to_le_bytes());
         data.extend_from_slice(&0x12345678u32.to_le_bytes());
         data.extend_from_slice(&99i32.to_le_bytes());
@@ -287,7 +287,7 @@ mod tests {
         let mut data = Vec::new();
         data.push(2);
         data.extend_from_slice(&6u16.to_le_bytes());
-        data.extend_from_slice(&(ValueKind::STRING_LIST.bits()).to_le_bytes());
+        data.extend_from_slice(&(ValueFlags::STRING_LIST.bits()).to_le_bytes());
         data.extend_from_slice(&1u16.to_le_bytes());
         data.extend_from_slice(&0xAABBCCDDu32.to_le_bytes());
         data.extend_from_slice(&0u16.to_le_bytes());
@@ -341,13 +341,13 @@ mod tests {
     fn test_insert_cross_bucket_migration() {
         let mut file = Inibin::new();
         file.insert(0xABCD, Value::I32(42));
-        assert!(file.section(ValueKind::INT32_LIST).is_some());
+        assert!(file.section(ValueFlags::INT32_LIST).is_some());
 
         file.insert(0xABCD, Value::F32(3.125));
 
         assert_eq!(file.get(0xABCD), Some(&Value::F32(3.125)));
         assert!(file
-            .section(ValueKind::INT32_LIST)
+            .section(ValueFlags::INT32_LIST)
             .map(|s| s.get(0xABCD).is_none())
             .unwrap_or(true));
     }
