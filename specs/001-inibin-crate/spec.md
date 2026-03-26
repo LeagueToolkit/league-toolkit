@@ -33,6 +33,7 @@
 ### Session 2026-03-26 (DX)
 
 - Q: Should there be a convenience function that defaults the `*` delimiter for SDBM inibin key hashing? → A: Yes — `ltk_hash::sdbm::hash_inibin_key(section, property)` centralized in the hash crate, defaults `*` as delimiter.
+- Q: Should `ltk_inibin` use the existing `read_str_until_nul` from `ltk_io_ext::ReaderExt` instead of a custom `read_null_terminated_string`? → A: Yes — reuse the workspace's shared I/O extension to avoid duplication. Document reuse of `ltk_io_ext` utilities in CLAUDE.md.
 
 ## User Scenarios & Testing *(mandatory)*
 

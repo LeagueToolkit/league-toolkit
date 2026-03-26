@@ -3,6 +3,7 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use byteorder::{LittleEndian as LE, ReadBytesExt, WriteBytesExt};
 use glam::{Vec2, Vec3, Vec4};
 use indexmap::IndexMap;
+use ltk_io_ext::ReaderExt;
 
 use crate::error::Result;
 use crate::value::Value;
@@ -181,7 +182,7 @@ impl Section {
         for (i, hash) in hashes.into_iter().enumerate() {
             let saved_pos = reader.stream_position()?;
             reader.seek(SeekFrom::Start(string_data_offset + offsets[i] as u64))?;
-            let s = read_null_terminated_string(reader)?;
+            let s = reader.read_str_until_nul()?;
             reader.seek(SeekFrom::Start(saved_pos))?;
             properties.insert(hash, Value::String(s));
         }
@@ -209,7 +210,7 @@ impl Section {
         for (i, hash) in hashes.into_iter().enumerate() {
             let saved_pos = reader.stream_position()?;
             reader.seek(SeekFrom::Start(string_data_offset + offsets[i] as u64))?;
-            let s = read_null_terminated_string(reader)?;
+            let s = reader.read_str_until_nul()?;
             reader.seek(SeekFrom::Start(saved_pos))?;
             properties.insert(hash, Value::String(s));
         }
@@ -356,18 +357,6 @@ fn read_hashes<R: Read>(reader: &mut R, count: usize) -> Result<Vec<u32>> {
         hashes.push(reader.read_u32::<LE>()?);
     }
     Ok(hashes)
-}
-
-fn read_null_terminated_string<R: Read>(reader: &mut R) -> Result<String> {
-    let mut bytes = Vec::new();
-    loop {
-        let byte = reader.read_u8()?;
-        if byte == 0 {
-            break;
-        }
-        bytes.push(byte);
-    }
-    Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
 #[cfg(test)]

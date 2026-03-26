@@ -122,11 +122,7 @@ fn main() {
             println!("  0x{key:08X} = {f:.2} ({kind})");
             count += 1;
             if count >= 20 {
-                let remaining = inibin
-                    .iter()
-                    .filter(|(_, v)| v.as_f32().is_some())
-                    .count()
-                    - 20;
+                let remaining = inibin.iter().filter(|(_, v)| v.as_f32().is_some()).count() - 20;
                 if remaining > 0 {
                     println!("  ... and {remaining} more");
                 }

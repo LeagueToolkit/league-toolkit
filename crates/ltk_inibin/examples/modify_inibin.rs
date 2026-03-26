@@ -81,10 +81,7 @@ fn main() {
 
     // ── Section-level inspection ────────────────────────────────
     if let Some(float_section) = inibin.section(ValueFlags::F32_LIST) {
-        println!(
-            "\nFloat32 section: {} entries",
-            float_section.len()
-        );
+        println!("\nFloat32 section: {} entries", float_section.len());
         for (key, value) in float_section.iter().take(5) {
             println!("  0x{key:08X} = {value:?}");
         }

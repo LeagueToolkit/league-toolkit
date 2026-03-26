@@ -73,10 +73,7 @@ fn main() {
     println!("  i64:    {:?}", inibin.get_as::<i64>(0x0006));
 
     // get_or returns a default on missing key or type mismatch
-    println!(
-        "  missing with default: {}",
-        inibin.get_or(0x9999, 0i32)
-    );
+    println!("  missing with default: {}", inibin.get_or(0x9999, 0i32));
 
     // ── Unified as_*() accessors for packed/non-packed floats ───
     println!();

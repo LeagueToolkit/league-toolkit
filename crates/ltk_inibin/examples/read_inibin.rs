@@ -84,7 +84,10 @@ fn print_value(value: &Value) {
         Value::Bool(v) => print!("{v}"),
         Value::Vec3U8(v) => {
             let decoded = value.as_vec3().unwrap();
-            print!("{v:?} (decoded: [{:.1}, {:.1}, {:.1}])", decoded.x, decoded.y, decoded.z);
+            print!(
+                "{v:?} (decoded: [{:.1}, {:.1}, {:.1}])",
+                decoded.x, decoded.y, decoded.z
+            );
         }
         Value::Vec3F32(v) => print!("[{}, {}, {}]", v.x, v.y, v.z),
         Value::Vec2U8(v) => {
