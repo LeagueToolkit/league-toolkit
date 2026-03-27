@@ -231,6 +231,11 @@ impl WadChunkBuilder {
         self
     }
 
+    pub fn with_hash(mut self, hash: u64) -> Self {
+        self.path = hash;
+        self
+    }
+
     pub fn with_force_compression(mut self, compression: WadChunkCompression) -> Self {
         self.force_compression = Some(compression);
         self
