@@ -235,12 +235,9 @@ impl WadChunkBuilder {
         self
     }
 
-    /// Set the chunk path hash directly, bypassing xxhash64 computation.
+    /// Set the chunk path hash directly.
     ///
-    /// Use this when the original path string is unavailable (e.g. custom files
-    /// not present in the hash database) and the raw `path_hash` from an existing
-    /// WAD chunk must be preserved as-is.
-    /// Do not combine with [`with_path`](Self::with_path) — the last call wins.
+    /// If you have the actual path instead of the hash, see [`with_path`](Self::with_path)
     pub fn with_hash(mut self, hash: u64) -> Self {
         self.path = hash;
         self
