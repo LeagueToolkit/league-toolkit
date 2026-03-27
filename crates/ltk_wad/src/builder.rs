@@ -226,11 +226,21 @@ pub struct WadChunkBuilder {
 }
 
 impl WadChunkBuilder {
+    /// Set the chunk path by string. The path is lowercased and hashed with xxhash64.
+    ///
+    /// Use this when you have the original file path string.
+    /// Do not combine with [`with_hash`](Self::with_hash) — the last call wins.
     pub fn with_path(mut self, path: impl AsRef<str>) -> Self {
         self.path = xxh64::xxh64(path.as_ref().to_lowercase().as_bytes(), 0);
         self
     }
 
+    /// Set the chunk path hash directly, bypassing xxhash64 computation.
+    ///
+    /// Use this when the original path string is unavailable (e.g. custom files
+    /// not present in the hash database) and the raw `path_hash` from an existing
+    /// WAD chunk must be preserved as-is.
+    /// Do not combine with [`with_path`](Self::with_path) — the last call wins.
     pub fn with_hash(mut self, hash: u64) -> Self {
         self.path = hash;
         self
