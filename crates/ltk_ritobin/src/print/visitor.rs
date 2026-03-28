@@ -95,87 +95,96 @@ impl<'a, W: Write> CstVisitor<'a, W> {
         }
     }
 
-    fn push(&mut self, cmd: Cmd<'a>) {
+    fn push(&mut self, cmd: Cmd<'a>) -> fmt::Result {
         // eprintln!("+ {cmd:?}");
         self.queue.push_back(cmd);
         self.queue_size_max = self.queue_size_max.max(self.queue.len());
         if self.queue.len() > MAX_QUEUE {
             eprintln!("[!!] hit hard queue limit - force breaking to save memory");
-            self.break_first_group();
+            self.break_first_group()?;
         }
+        Ok(())
     }
 
-    pub fn text(&mut self, txt: &'a str) {
+    pub fn text(&mut self, txt: &'a str) -> fmt::Result {
         for size in &mut self.size_stack {
             *size += txt.len();
         }
-        self.check_running_size();
-        self.push(Cmd::Text(txt));
+        self.check_running_size()?;
+        self.push(Cmd::Text(txt))?;
+        Ok(())
     }
 
-    pub fn text_if(&mut self, txt: &'a str, mode: Mode) {
-        self.push(Cmd::TextIf(txt, mode));
+    pub fn text_if(&mut self, txt: &'a str, mode: Mode) -> fmt::Result {
+        self.push(Cmd::TextIf(txt, mode))?;
+        Ok(())
     }
 
-    pub fn space(&mut self) {
+    pub fn space(&mut self) -> fmt::Result {
         if self.queue.back().is_some_and(|c| c.is_whitespace()) {
             // eprintln!("# skipping Space! ({:?})", self.queue.back());
-            return;
+            return Ok(());
         }
-        self.push(Cmd::Space);
+        self.push(Cmd::Space)?;
+        Ok(())
     }
 
-    pub fn line(&mut self) {
+    pub fn line(&mut self) -> fmt::Result {
         if self.queue.is_empty() && self.printed_commands == 0 {
-            return;
+            return Ok(());
         }
         if self.queue.back().is_some_and(|c| c.is_whitespace()) {
             // eprintln!("# replacing ({:?}) w/ Line", self.queue.back());
             self.queue.pop_back();
         }
-        self.push(Cmd::Line);
+        self.push(Cmd::Line)?;
+        Ok(())
     }
-    pub fn softline(&mut self) {
+    pub fn softline(&mut self) -> fmt::Result {
         if self.queue.is_empty() && self.printed_commands == 0 {
-            return;
+            return Ok(());
         }
         if self.queue.back().is_some_and(|c| c.is_whitespace()) {
             // eprintln!("# replacing ({:?}) w/ SoftLine", self.queue.back());
             self.queue.pop_back();
         }
-        self.push(Cmd::SoftLine);
+        self.push(Cmd::SoftLine)?;
+        Ok(())
     }
 
-    pub fn begin_group(&mut self, mode: Option<Mode>) -> GroupId {
+    pub fn begin_group(&mut self, mode: Option<Mode>) -> Result<GroupId, fmt::Error> {
         let idx = self.queue.len() + self.printed_commands;
 
-        self.push(Cmd::Begin(mode));
+        self.push(Cmd::Begin(mode))?;
 
         self.group_stack.push(idx);
         self.size_stack.push(0);
 
-        GroupId(idx)
+        Ok(GroupId(idx))
     }
 
-    pub fn end_group(&mut self) {
-        self.push(Cmd::End);
+    pub fn end_group(&mut self) -> fmt::Result {
+        self.push(Cmd::End)?;
 
         self.group_stack.pop();
         self.size_stack.pop();
 
-        self.print_safe().unwrap();
+        self.print_safe()?;
+        Ok(())
     }
 
-    pub fn indent(&mut self, n: usize) {
-        self.push(Cmd::Indent(n));
+    pub fn indent(&mut self, n: usize) -> fmt::Result {
+        self.push(Cmd::Indent(n))?;
+        Ok(())
     }
 
-    pub fn dedent(&mut self, n: usize) {
-        self.push(Cmd::Dedent(n));
+    pub fn dedent(&mut self, n: usize) -> fmt::Result {
+        self.push(Cmd::Dedent(n))?;
+        Ok(())
     }
 
     /// break the first/oldest group if running size is too big (bottom of the stack)
-    pub fn break_first_group(&mut self) {
+    pub fn break_first_group(&mut self) -> fmt::Result {
         if let Some(&idx) = self.group_stack.first() {
             // eprintln!("[printer] breaking first group");
             self.force_group(GroupId(idx), Mode::Break);
@@ -183,16 +192,18 @@ impl<'a, W: Write> CstVisitor<'a, W> {
             self.group_stack.remove(0);
             self.size_stack.remove(0);
         }
-        self.print_safe().unwrap();
+        self.print_safe()?;
+        Ok(())
     }
 
     /// break the first/oldest group if running size is too big (bottom of the stack)
-    pub fn check_running_size(&mut self) {
+    pub fn check_running_size(&mut self) -> fmt::Result {
         if let Some(size) = self.size_stack.last() {
             if self.col + size > self.config.wrap.line_width {
-                self.break_first_group();
+                self.break_first_group()?;
             }
         }
+        Ok(())
     }
 
     fn fits(&self) -> bool {
@@ -240,6 +251,10 @@ impl<'a, W: Write> CstVisitor<'a, W> {
         grp_mode.replace(mode);
     }
 
+    fn last_mode(&self) -> &Mode {
+        self.modes.last().unwrap(/* Safety: we start with one mode, and don't pop them */)
+    }
+
     fn print(&mut self, cmd: Cmd) -> fmt::Result {
         match cmd {
             Cmd::Text(s) => {
@@ -250,7 +265,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                 self.block_line = false;
             }
             Cmd::TextIf(s, mode) => {
-                if *self.modes.last().unwrap() == mode {
+                if *self.last_mode() == mode {
                     self.out.write_str(s)?;
                     self.printed_bytes += s.len();
                     self.col += s.len();
@@ -282,7 +297,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                 }
             }
 
-            Cmd::SoftLine => match self.modes.last().unwrap() {
+            Cmd::SoftLine => match self.last_mode() {
                 Mode::Flat => {
                     if !self.block_space {
                         // eprintln!("  - not skipping -> space!");
@@ -376,7 +391,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
     fn enter_tree_inner(&mut self, tree: &Cst) -> Result<(), PrintError> {
         match tree.kind {
             Kind::TypeArgList => {
-                let grp = self.begin_group(Some(Mode::Flat));
+                let grp = self.begin_group(Some(Mode::Flat))?;
                 // eprintln!("{:#?}", tree.children);
                 self.list_stack.push(ListContext {
                     len: tree
@@ -391,8 +406,8 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                 });
             }
             Kind::ListItemBlock => {
-                self.softline();
-                let grp = self.begin_group(None);
+                self.softline()?;
+                let grp = self.begin_group(None)?;
 
                 let len = tree
                     .children
@@ -414,7 +429,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
             }
             Kind::Block => {
                 // eprintln!("BLOCK: {:#?}", tree.children);
-                let grp = self.begin_group(None);
+                let grp = self.begin_group(None)?;
                 let list_len = tree
                     .children
                     .iter()
@@ -462,12 +477,12 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                         self.force_group(list.grp, Mode::Break);
                     }
                 }
-                self.softline();
+                self.softline()?;
             }
             Kind::Entry => {
                 match self.config.wrap.inline_structs {
-                    true => self.softline(),
-                    false => self.line(),
+                    true => self.softline()?,
+                    false => self.line()?,
                 };
                 // self.flush().unwrap();
             }
@@ -480,7 +495,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
         match tree.kind {
             Kind::TypeArgList => {
                 self.list_stack.pop();
-                self.end_group();
+                self.end_group()?;
             }
             Kind::ListItemBlock | Kind::Block => {
                 self.list_stack.pop();
@@ -491,13 +506,13 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                         // self.softline();
                     }
                 }
-                self.end_group();
+                self.end_group()?;
             }
             Kind::Entry if self.config.wrap.inline_structs => {
                 if let Some(list) = self.list_stack.last() {
                     if list.len > 1 {
                         self.force_group(list.grp, Mode::Break);
-                        self.text_if(";", Mode::Flat);
+                        self.text_if(";", Mode::Flat)?;
                         // self.softline();
                     }
                 } else {
@@ -510,14 +525,14 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                     let last_item = ctx.idx + 1 == ctx.len;
 
                     if !last_item {
-                        self.text_if(",", Mode::Flat);
-                        self.space();
+                        self.text_if(",", Mode::Flat)?;
+                        self.space()?;
                         if tree.kind == Kind::ListItem {
-                            self.softline();
+                            self.softline()?;
                         }
                     }
 
-                    self.list_stack.last_mut().unwrap(/* guaranteed by if let */).idx += 1;
+                    self.list_stack.last_mut().unwrap(/* Safety: guaranteed by if let */).idx += 1;
                 }
             }
             _ => {}
@@ -540,17 +555,17 @@ impl<'a, W: Write> CstVisitor<'a, W> {
         // eprintln!("->{:?}", token.kind);
         match token.kind {
             TokenKind::LCurly => {
-                self.space();
-                self.text("{");
-                self.indent(4);
-                self.space();
+                self.space()?;
+                self.text("{")?;
+                self.indent(4)?;
+                self.space()?;
                 // self.softline();
             }
 
             TokenKind::RCurly => {
-                self.dedent(4);
-                self.softline();
-                self.text("}");
+                self.dedent(4)?;
+                self.softline()?;
+                self.text("}")?;
             }
 
             TokenKind::Comma => {
@@ -558,37 +573,37 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                 // self.softline();
             }
             TokenKind::Colon => {
-                self.text(":");
-                self.space();
+                self.text(":")?;
+                self.space()?;
             }
 
             TokenKind::Eq => {
-                self.space();
-                self.text("=");
-                self.space();
+                self.space()?;
+                self.text("=")?;
+                self.space()?;
             }
 
             TokenKind::LBrack => {
-                self.text("[");
+                self.text("[")?;
             }
             TokenKind::RBrack => {
-                self.text("]");
+                self.text("]")?;
             }
             TokenKind::Quote => {
-                self.text("\"");
+                self.text("\"")?;
             }
             TokenKind::False => {
-                self.text("false");
+                self.text("false")?;
             }
             TokenKind::True => {
-                self.text("true");
+                self.text("true")?;
             }
 
             _ => {
                 if let Some(print) = print_value {
-                    self.text(print);
+                    self.text(print)?;
                 } else {
-                    self.text(txt);
+                    self.text(txt)?;
                 }
             }
         }
