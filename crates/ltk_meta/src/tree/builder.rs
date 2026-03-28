@@ -6,9 +6,9 @@ use crate::Bin;
 /// # Examples
 ///
 /// ```
-/// use ltk_meta::{Bin, BinObject};
+/// use ltk_meta::{Bin, BinObject, property::NoMeta};
 ///
-/// let tree = Bin::builder()
+/// let tree = Bin::<NoMeta>::builder()
 ///     .is_override(false)
 ///     .dependency("base.bin")
 ///     .dependencies(["extra1.bin", "extra2.bin"])

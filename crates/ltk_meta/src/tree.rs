@@ -24,13 +24,13 @@ use crate::property::NoMeta;
 /// Use [`Bin::new`] for simple cases or [`Bin::builder`] for more control:
 ///
 /// ```
-/// use ltk_meta::{Bin, BinObject};
+/// use ltk_meta::{Bin, BinObject, property::NoMeta};
 ///
 /// // Simple construction
-/// let tree = Bin::new([], std::iter::empty::<&str>());
+/// let tree = Bin::<NoMeta>::new([], std::iter::empty::<&str>());
 ///
 /// // Builder pattern
-/// let tree = Bin::builder()
+/// let tree = Bin::<NoMeta>::builder()
 ///     .dependency("base.bin")
 ///     .build();
 /// ```
@@ -81,9 +81,9 @@ impl<M> Bin<M> {
     /// # Examples
     ///
     /// ```
-    /// use ltk_meta::{Bin, BinObject};
+    /// use ltk_meta::{Bin, BinObject, property::NoMeta};
     ///
-    /// let tree = Bin::new(
+    /// let tree = Bin::<NoMeta>::new(
     ///     [BinObject::new(0x1234, 0x5678)],
     ///     ["dependency.bin"],
     /// );
@@ -109,9 +109,9 @@ impl<M> Bin<M> {
     /// # Examples
     ///
     /// ```
-    /// use ltk_meta::{Bin, BinObject};
+    /// use ltk_meta::{Bin, BinObject, property::NoMeta};
     ///
-    /// let tree = Bin::builder()
+    /// let tree = Bin::<NoMeta>::builder()
     ///     .dependency("common.bin")
     ///     .object(BinObject::new(0x1234, 0x5678))
     ///     .build();

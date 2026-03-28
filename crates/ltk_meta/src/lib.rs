@@ -42,7 +42,7 @@ let tree = Bin::builder()
 
 // Or using the simple constructor
 let tree = Bin::new(
-    [BinObject::new(0x1234, 0x5678)],
+    [BinObject::<NoMeta>::new(0x1234, 0x5678)],
     ["dependency.bin"],
 );
 ```
