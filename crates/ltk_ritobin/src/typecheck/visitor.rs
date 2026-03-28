@@ -1045,7 +1045,7 @@ fn populate_vec_or_color(
     };
 
     use PropertyValueEnum as V;
-    let mut span = Span::new(0, 0); // FIXME: get a span in here stat
+    let mut span = *target.value().meta(); // TODO: is this the right span to start with?
     let expected;
     match target.value_mut() {
         V::Vector2(values::Vector2 { value: vec, .. }) => {
