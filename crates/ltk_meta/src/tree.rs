@@ -116,8 +116,11 @@ impl<M> Bin<M> {
     ///     .object(BinObject::new(0x1234, 0x5678))
     ///     .build();
     /// ```
-    pub fn builder() -> builder::Builder {
-        builder::Builder::new()
+    pub fn builder() -> builder::Builder<M>
+    where
+        M: Default,
+    {
+        builder::Builder::<M>::new()
     }
 
     /// Returns the number of objects in the tree.
