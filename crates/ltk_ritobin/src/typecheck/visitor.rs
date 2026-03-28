@@ -931,7 +931,6 @@ impl<'a> TypeChecker<'a> {
 
                 struct_val.properties.insert(*key, value);
             }
-            PropertyValueEnum::ObjectLink(_object_link_value) => todo!(),
             PropertyValueEnum::Map(map_value) => {
                 let IrItem::Entry(IrEntry { key, value }) = child else {
                     eprintln!("map item must be entry");
