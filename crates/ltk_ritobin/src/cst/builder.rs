@@ -310,7 +310,7 @@ impl<H: HashProvider> Builder<H> {
     }
 
     fn bin_to_cst(&mut self, bin: &Bin) -> Cst {
-        let mut entries = Vec::new();
+        let mut entries = vec![];
 
         for obj in bin.objects.values() {
             entries.push(self.bin_object_to_cst(obj));
@@ -318,7 +318,7 @@ impl<H: HashProvider> Builder<H> {
 
         let entries_key = self.spanned_token(Tok::Name, "entries");
         let entries_type = self.rito_type(RitoType {
-            base: ltk_meta::PropertyKind::Map,
+            base: PropertyKind::Map,
             subtypes: [Some(PropertyKind::Hash), Some(PropertyKind::Embedded)],
         });
         let entries = self.entry(
@@ -327,10 +327,32 @@ impl<H: HashProvider> Builder<H> {
             tree(Kind::EntryValue, vec![self.block(entries)]),
         );
 
+        let linked_key = self.spanned_token(Tok::Name, "linked");
+        let linked_type = self.rito_type(RitoType {
+            base: PropertyKind::Container,
+            subtypes: [Some(PropertyKind::String), None],
+        });
+        let linked = bin
+            .dependencies
+            .iter()
+            .map(|dep| {
+                tree(
+                    Kind::ListItem,
+                    vec![tree(Kind::Literal, vec![self.string(format!("\"{dep}\""))])],
+                )
+            })
+            .collect();
+
+        let linked = self.entry(
+            tree(Kind::EntryKey, vec![linked_key]),
+            Some(linked_type),
+            tree(Kind::EntryValue, vec![self.block(linked)]),
+        );
+
         Cst {
             kind: Kind::File,
             span: Span::default(),
-            children: vec![entries],
+            children: vec![linked, entries],
             errors: vec![],
         }
     }

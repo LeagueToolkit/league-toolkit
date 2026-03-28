@@ -158,6 +158,10 @@ pub enum Diagnostic {
         span: Span,
         got: RitoType,
     },
+    InvalidDependenciesEntry {
+        span: Span,
+        got: RitoType,
+    },
 
     TypeMismatch {
         span: Span,
@@ -222,6 +226,7 @@ impl Diagnostic {
             | AmbiguousNumeric(span)
             | NotEnoughItems { span, .. }
             | TooManyItems { span, .. }
+            | InvalidDependenciesEntry { span, .. }
             | InvalidEntriesMap { span, .. } => Some(span),
         }
     }
@@ -796,6 +801,41 @@ pub fn resolve_entry(
 
 impl<'a> TypeChecker<'a> {
     pub fn collect_to_bin(mut self) -> (Bin, Vec<DiagnosticWithSpan>) {
+        let dependencies = self.root.swap_remove("linked").and_then(|v| {
+            let PropertyValueEnum::Container(list) = v else {
+                self.ctx.diagnostics.push(
+                    InvalidDependenciesEntry {
+                        span: *v.meta(),
+                        got: RitoType::simple(v.kind()),
+                    }
+                    .unwrap(),
+                );
+                return None;
+            };
+
+            Some(
+                list.into_items()
+                    .filter_map(|value| {
+                        let span = *value.meta();
+                        let PropertyValueEnum::String(dependency) =
+                            coerce_type(value, PropertyKind::String)?
+                        else {
+                            self.ctx.diagnostics.push(
+                                UnexpectedContainerItem {
+                                    span,
+                                    expected: RitoType::simple(PropertyKind::String),
+                                    expected_span: None,
+                                }
+                                .unwrap(),
+                            );
+                            return None;
+                        };
+                        Some(dependency.value)
+                    })
+                    .collect::<Vec<_>>(),
+            )
+        });
+
         let objects = self
             .root
             .swap_remove("entries")
@@ -838,7 +878,7 @@ impl<'a> TypeChecker<'a> {
             })
             .unwrap_or_default();
 
-        let tree = Bin::new(objects, Vec::<String>::new());
+        let tree = Bin::new(objects, dependencies.unwrap_or_default());
 
         (tree, self.ctx.diagnostics)
     }
