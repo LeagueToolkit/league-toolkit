@@ -47,12 +47,12 @@ impl<H: HashProvider> Builder<H> {
         self.bin_to_cst(bin)
     }
 
-    /// Get a reference to the underlying text buffer all Cst's built by this builder reference in
+    /// Get a reference to the underlying text buffer all [`Cst`]'s built by this builder reference in
     /// their spans.
     pub fn text_buffer(&self) -> &str {
         &self.buf
     }
-    /// Get the underlying text buffer all Cst's built by this builder reference in
+    /// Get the underlying text buffer all [`Cst`]'s built by this builder reference in
     /// their spans.
     pub fn into_text_buffer(self) -> String {
         self.buf
@@ -310,6 +310,7 @@ impl<H: HashProvider> Builder<H> {
     }
 
     fn bin_to_cst(&mut self, bin: &Bin) -> Cst {
+        let comment = self.spanned_token(Tok::Comment, "#PROP_text");
         let mut entries = vec![];
 
         for obj in bin.objects.values() {
@@ -352,7 +353,7 @@ impl<H: HashProvider> Builder<H> {
         Cst {
             kind: Kind::File,
             span: Span::default(),
-            children: vec![linked, entries],
+            children: vec![tree(Kind::Comment, vec![comment]), linked, entries],
             errors: vec![],
         }
     }
