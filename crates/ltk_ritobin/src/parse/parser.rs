@@ -7,6 +7,7 @@ use crate::parse::{
     Span,
 };
 
+#[derive(Debug)]
 pub enum Event {
     Open { kind: TreeKind },
     Close,
@@ -14,9 +15,12 @@ pub enum Event {
     Advance,
 }
 
+#[derive(Clone, Copy)]
 pub struct MarkOpened {
     index: usize,
 }
+
+#[derive(Clone, Copy)]
 pub struct MarkClosed {
     index: usize,
 }
@@ -30,7 +34,7 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(text: &'a str, tokens: Vec<Token>) -> Parser {
+    pub fn new(text: &'a str, tokens: Vec<Token>) -> Parser<'a> {
         Parser {
             text,
             tokens,
@@ -50,7 +54,7 @@ impl<'a> Parser<'a> {
         let mut stack = Vec::new();
         let mut last_span = Span::default();
         let mut just_opened = false;
-        for event in events {
+        for (i, event) in events.into_iter().enumerate() {
             match event {
                 Event::Open { kind } => {
                     just_opened = true;
@@ -128,13 +132,29 @@ impl<'a> Parser<'a> {
     }
 
     pub(crate) fn open(&mut self) -> MarkOpened {
-        let mark = MarkOpened {
-            index: self.events.len(),
-        };
-        self.events.push(Event::Open {
-            kind: TreeKind::ErrorTree,
-        });
-        mark
+        fn open(p: &mut Parser<'_>) -> MarkOpened {
+            let mark = MarkOpened {
+                index: p.events.len(),
+            };
+            p.events.push(Event::Open {
+                kind: TreeKind::ErrorTree,
+            });
+            mark
+        }
+
+        let m = open(self);
+        if self.events.len() == 1 {
+            return m;
+        }
+        let mut had_comments = false;
+        while self.eat(TokenKind::Comment) {
+            had_comments = true;
+        }
+        if had_comments {
+            self.close(m, TreeKind::Comment);
+            return open(self);
+        }
+        m
     }
 
     pub(crate) fn scope<F, R>(&mut self, kind: TreeKind, mut f: F) -> (R, MarkClosed)

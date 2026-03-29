@@ -21,6 +21,10 @@ pub fn file(p: &mut Parser) {
 pub fn stmt_or_list_item(p: &mut Parser) -> (MarkClosed, TreeKind) {
     let res;
     match (p.nth(0), p.nth(1), p.nth(2)) {
+        (Comment, _, _) => {
+            let (_, m) = p.scope(TreeKind::Comment, |p| while p.eat(TokenKind::Comment) {});
+            res = (m, TreeKind::Comment);
+        }
         (Name | HexLit, LCurly, _) => {
             let m = p.open();
             p.advance();

@@ -18,7 +18,41 @@ use crate::cst;
 
 #[cfg(test)]
 mod test {
-    use crate::{cst::Cst, print::CstPrinter, typecheck::visitor::TypeChecker};
+    use crate::{
+        cst::{Cst, FlatErrors},
+        print::CstPrinter,
+        typecheck::visitor::TypeChecker,
+    };
+
+    fn assert_success(text: &str) {
+        let cst = Cst::parse(text);
+
+        let mut buf = String::new();
+        cst.print(&mut buf, 0, text);
+
+        println!("{buf}");
+
+        assert!(cst.errors.is_empty(), "Top-level errors: {:#?}", cst.errors);
+        let errors = FlatErrors::walk(&cst);
+        assert!(errors.is_empty(), "Error trees: {:#?}", errors);
+    }
+
+    #[test]
+    fn comments() {
+        assert_success(
+            r#"
+#PROP_text
+type: string = "my_str"
+# version: u32 = 3
+linked: list[string] = { }
+entries: map[hash, embed] = {
+    "foo" = Bar {
+        # asdasd
+    }
+}
+        "#,
+        );
+    }
 
     use super::*;
     #[test]
