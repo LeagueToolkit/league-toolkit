@@ -554,6 +554,10 @@ impl<'a, W: Write> CstVisitor<'a, W> {
 
         // eprintln!("->{:?}", token.kind);
         match token.kind {
+            TokenKind::Comment => {
+                self.line()?;
+                self.text(txt)?;
+            }
             TokenKind::LCurly => {
                 self.space()?;
                 self.text("{")?;
