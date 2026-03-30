@@ -6,19 +6,20 @@
 //! # Example
 //!
 //! ```rust
-//! use ltk_ritobin::{Cst, Print as _};
+//! use ltk_ritobin::{Cst, Print as _, cst::FlatErrors};
 //!
 //! // Parse ritobin text
 //! let text = r#"
 //! #PROP_text
 //! type: string = "my_str"
 //! version: u32 = 3
-//! linked: list[string] = [ ]
+//! linked: list[string] = { }
 //! entries: map[hash, embed] = { }
 //! "#;
 //!
 //! let cst = Cst::parse(text);
 //! assert!(cst.errors.is_empty());
+//! assert!(FlatErrors::walk(&cst).is_empty());
 //!
 //! let (bin, bin_errors) = cst.build_bin(text);
 //! assert!(bin_errors.is_empty());
@@ -32,7 +33,7 @@
 //! # Error Reporting
 //!
 //! For resilient parsing, errors can appear embedded as nodes into the concrete syntax tree (cst), or as a list in the [`Cst`] struct. This
-//! allows for more versatile behaviour for things like pretty-printing technically invalid trees,
+//! allows for more versatile behaviour with things like pretty-printing technically invalid trees,
 //! since parsing will always result in a cst.
 //!
 //! The same handling of errors is done in the type-checker (when building a [`ltk_meta::Bin`]), to
