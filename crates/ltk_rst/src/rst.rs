@@ -148,7 +148,12 @@ impl RstFile {
             entries.insert(hash, text);
         }
 
-        Ok(Self { version, config, mode, entries })
+        Ok(Self {
+            version,
+            config,
+            mode,
+            entries,
+        })
     }
 
     /// Serialises this [`RstFile`] to any [`Write`] sink.
