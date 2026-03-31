@@ -48,7 +48,7 @@ macro_rules! create_enum {
         )]
         #[cfg_attr(feature = "serde", serde(tag = "kind", content = "value"))]
         #[derive(Clone, Debug, PartialEq)]
-        /// The value part of a [`super::BinProperty`]. Holds the type of the value, and the value itself.
+        /// The value of a property inside a [`crate::BinObject`]. Holds the type of the value, and the value itself.
         pub enum PropertyValueEnum<M = NoMeta> {
             $( $variant (self::$variant<M>), )*
         }

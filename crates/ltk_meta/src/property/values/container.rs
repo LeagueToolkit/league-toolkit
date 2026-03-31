@@ -11,7 +11,7 @@ use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 use ltk_io_ext::{measure, window_at};
 
 #[macro_use]
-pub mod variants;
+mod variants;
 
 mod iter;
 pub use iter::*;
@@ -176,7 +176,7 @@ macro_rules! define_container_enum {
                     })*
                 }
             }
-            /// Iterator over each item as a dyn [`PropertyValueDyn`].
+            /// Iterator over each item as a dyn [`crate::traits::PropertyValueDyn`].
             #[inline(always)]
             #[must_use]
             pub fn items_dyn(&self) -> ItemsDyn<'_, M> {

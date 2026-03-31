@@ -1,4 +1,4 @@
-//! Value types for [`super::BinProperty`].
+//! Value types for [`super::PropertyValueEnum`].
 
 #[macro_use]
 mod container;
