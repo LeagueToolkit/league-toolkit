@@ -8,7 +8,7 @@ use std::fs::File;
 use std::io::{BufReader, Cursor};
 use std::path::Path;
 
-use ltk_rst::{RstError, RstFile, RstVersion, compute_hash, RstHashType};
+use ltk_rst::{compute_hash, RstError, RstFile, RstHashType, RstVersion};
 
 const TEST_FILES_ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../test-files/data/menu");
 
@@ -18,9 +18,9 @@ fn open(relative: &str) -> Option<BufReader<File>> {
         println!("skipping missing file: {}", path.display());
         return None;
     }
-    Some(BufReader::new(
-        File::open(&path).unwrap_or_else(|e| panic!("failed to open {}: {e}", path.display())),
-    ))
+    Some(BufReader::new(File::open(&path).unwrap_or_else(|e| {
+        panic!("failed to open {}: {e}", path.display())
+    })))
 }
 
 // ---------------------------------------------------------------------------
@@ -32,10 +32,9 @@ fn open(relative: &str) -> Option<BufReader<File>> {
 #[test]
 fn parse_all_bootstrap_locales() {
     let locales = [
-        "ar_ae", "cs_cz", "de_de", "el_gr", "en_au", "en_gb", "en_ph", "en_sg", "en_us",
-        "es_ar", "es_es", "es_mx", "fr_fr", "hu_hu", "id_id", "it_it", "ja_jp", "ko_kr",
-        "pl_pl", "pt_br", "ro_ro", "ru_ru", "th_th", "tr_tr", "vi_vn", "zh_cn", "zh_my",
-        "zh_tw",
+        "ar_ae", "cs_cz", "de_de", "el_gr", "en_au", "en_gb", "en_ph", "en_sg", "en_us", "es_ar",
+        "es_es", "es_mx", "fr_fr", "hu_hu", "id_id", "it_it", "ja_jp", "ko_kr", "pl_pl", "pt_br",
+        "ro_ro", "ru_ru", "th_th", "tr_tr", "vi_vn", "zh_cn", "zh_my", "zh_tw",
     ];
 
     for locale in locales {
@@ -46,17 +45,16 @@ fn parse_all_bootstrap_locales() {
         let rst = RstFile::from_reader(&mut reader)
             .unwrap_or_else(|e| panic!("failed to parse {locale}/bootstrap.stringtable: {e}"));
 
-        assert_eq!(
-            rst.version,
-            RstVersion::V5,
-            "{locale}: expected version 5"
-        );
+        assert_eq!(rst.version, RstVersion::V5, "{locale}: expected version 5");
         assert!(
             !rst.entries.is_empty(),
             "{locale}: expected at least one entry"
         );
 
-        println!("{locale}/bootstrap.stringtable: {} entries", rst.entries.len());
+        println!(
+            "{locale}/bootstrap.stringtable: {} entries",
+            rst.entries.len()
+        );
     }
 }
 
@@ -158,7 +156,7 @@ fn compute_hash_is_case_insensitive() {
 }
 
 /// The Simple (v4/v5) mask is 39 bits; the Complex (v2/v3) mask is 40 bits.
-/// A hash computed for Simple must fit within 39 bits.
+/// Each hash must fit within its own mask.
 #[test]
 fn compute_hash_respects_bit_width() {
     let simple_mask = (1u64 << 39) - 1;
@@ -167,11 +165,6 @@ fn compute_hash_respects_bit_width() {
     let simple_hash = compute_hash("some_key", RstHashType::Simple);
     let complex_hash = compute_hash("some_key", RstHashType::Complex);
 
-    assert_eq!(simple_hash & simple_mask, simple_hash);
-    assert_eq!(complex_hash & complex_mask, complex_hash);
-    // Simple hash must be fully contained in the smaller mask too... unless the
-    // 40th bit happens to be set. The property we actually guarantee is that
-    // each result fits within its own mask.
     assert_eq!(simple_hash & simple_mask, simple_hash);
     assert_eq!(complex_hash & complex_mask, complex_hash);
 }
@@ -193,7 +186,6 @@ fn invalid_magic_returns_error() {
 
 #[test]
 fn unsupported_version_returns_error() {
-    // Valid magic, then version byte 0x01 which is not a known version.
     let bad = b"RST\x01";
     let mut cursor = Cursor::new(bad);
     let err = RstFile::from_reader(&mut cursor).unwrap_err();
@@ -229,14 +221,12 @@ fn insert_str_round_trips() {
 }
 
 /// Entries with identical string values must share a single copy in the
-/// serialised byte stream.  We verify this by checking the output is smaller
-/// than it would be if every entry stored its own copy.
+/// serialised byte stream.
 #[test]
 fn to_writer_deduplicates_strings() {
     let mut rst = RstFile::new(RstVersion::V5);
     let shared_value = "Shared string value";
 
-    // Insert 10 different keys all pointing to the same value.
     for i in 0u64..10 {
         rst.insert(i, shared_value);
     }
@@ -244,11 +234,13 @@ fn to_writer_deduplicates_strings() {
     let mut buf = Vec::new();
     rst.to_writer(&mut buf).expect("serialise failed");
 
-    // If deduplication works the string appears only once in the data section.
     let occurrences = buf
         .windows(shared_value.len())
         .filter(|w| *w == shared_value.as_bytes())
         .count();
 
-    assert_eq!(occurrences, 1, "string should appear exactly once in output");
+    assert_eq!(
+        occurrences, 1,
+        "string should appear exactly once in output"
+    );
 }
