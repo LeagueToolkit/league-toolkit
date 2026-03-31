@@ -36,7 +36,7 @@ pub struct Parser<'a> {
     pub events: Vec<Event>,
 }
 
-/// How [`Cst`] nodes in the tree should propagate their errors.
+/// How [`Cst`] nodes in the tree should propagate their errors. See [`Cst::parse_with_config`]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub enum ErrorPropagation {
     /// No propagation, errors will remain in their respective nodes

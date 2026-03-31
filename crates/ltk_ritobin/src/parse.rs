@@ -1,4 +1,11 @@
-//! Parser for ritobin text format with CST output for better error reporting.
+//! Ritobin parser, tokenizer & other relevant types.
+//!
+//! To actually parse text, see [`crate::Cst::parse`].
+//!
+//! Parsing is purely syntactic: it builds the CST without performing any semantic
+//! analysis such as type resolution or validation beyond what is needed to form a valid CST.
+//!
+//! See [`crate::Cst::build_bin`] & [`crate::typecheck`] for further typechecking/bin construction.
 
 mod error;
 pub use error::*;

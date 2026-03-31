@@ -4,21 +4,30 @@ use crate::parse::tokenizer::Token;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Visit {
+    /// Stop walking immediately
     Stop,
-    /// Skip the current tree
+    /// Skips all remaining tokens in the current tree
     Skip,
+    /// Continue walking
     Continue,
 }
+
 #[allow(unused_variables)]
+/// [Visitor pattern](https://rust-unofficial.github.io/patterns/patterns/behavioural/visitor.html) for easily walking [`Cst`]s
 pub trait Visitor {
+    /// Called on first discovery of a [`Cst`], before any children of that node.
     #[must_use]
     fn enter_tree(&mut self, tree: &Cst) -> Visit {
         Visit::Continue
     }
+
+    /// Called after all children of a [`Cst`] have finished walking.
     #[must_use]
     fn exit_tree(&mut self, tree: &Cst) -> Visit {
         Visit::Continue
     }
+
+    /// Called on every token walked, with the node the token was found in provided as context.
     #[must_use]
     fn visit_token(&mut self, token: &Token, context: &Cst) -> Visit {
         Visit::Continue
@@ -35,6 +44,7 @@ pub trait VisitorExt: Sized + Visitor {
 impl<T: Sized + Visitor> VisitorExt for T {}
 
 impl Cst {
+    /// Walk a [`Visitor`] implementor along this tree.
     pub fn walk<V: Visitor>(&self, visitor: &mut V) {
         self.walk_inner(visitor);
     }

@@ -1,5 +1,7 @@
 use std::fmt::Display;
 
+use ltk_meta::Bin;
+
 use crate::{
     parse::{
         self, impls,
@@ -48,34 +50,49 @@ impl Display for Kind {
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
+/// The ritobin concrete syntax tree / a node in the syntax tree
+///
+/// See [`crate::cst`] for more information.
 pub struct Cst {
+    /// The span of this node in the source text
     pub span: Span,
+    /// The type of this node
     pub kind: Kind,
+
     pub children: Vec<Child>,
+
+    /// Parse errors - whether this contains the errors for its children depends on what
+    /// [`ErrorPropagation`] the parser was using.
     #[cfg_attr(feature = "serde", serde(skip_deserializing))]
     pub errors: Vec<parse::Error>,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
+/// A [`Cst`] child node - either a [`Token`] or a [`Cst`]
 pub enum Child {
     Token(Token),
     Tree(Cst),
 }
 
 impl Child {
+    /// Get a reference to this node as a [`Token`], if it is one.
     pub fn token(&self) -> Option<&Token> {
         match self {
             Child::Token(token) => Some(token),
             Child::Tree(_) => None,
         }
     }
+
+    /// Get a reference to this node as a [`Cst`], if it is one.
     pub fn tree(&self) -> Option<&Cst> {
         match self {
             Child::Token(_) => None,
             Child::Tree(cst) => Some(cst),
         }
     }
+
+    /// The span of this node
     pub fn span(&self) -> Span {
         match self {
             Child::Token(token) => token.span,
@@ -108,12 +125,16 @@ impl Cst {
         p.build_tree(error_propagation)
     }
 
-    pub fn build_bin(&self, text: &str) -> (ltk_meta::Bin, Vec<DiagnosticWithSpan>) {
+    /// Construct a best-effort [`Bin`] from this tree, returning any errors. If there are any
+    /// errors returned, the [`Bin`] may only be partially constructed.
+    pub fn build_bin(&self, text: &str) -> (Bin, Vec<DiagnosticWithSpan>) {
         let mut checker = crate::typecheck::visitor::TypeChecker::new(text);
         self.walk(&mut checker);
         checker.collect_to_bin()
     }
 
+    /// Print this tree to a string for debugging purposes. This does **NOT** output ritobin, see [`crate::Print`] for
+    /// actual ritobin pretty-printing.
     pub fn print(&self, buf: &mut String, level: usize, source: &str) {
         // let parent_indent = "│ ".repeat(level.saturating_sub(1));
         let parent_indent = "    ".repeat(level.saturating_sub(1));
