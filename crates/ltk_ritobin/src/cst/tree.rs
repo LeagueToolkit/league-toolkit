@@ -4,7 +4,7 @@ use crate::{
     parse::{
         self, impls,
         tokenizer::{self, Token},
-        Parser, Span,
+        ErrorPropagation, Parser, Span,
     },
     typecheck::visitor::DiagnosticWithSpan,
 };
@@ -97,10 +97,15 @@ impl Cst {
     /// **NOTE:** Parsing errors will end up in [`Self::errors`] - make sure to check this if needed
     /// (e.g before calling [`Self::build_bin`] later)
     pub fn parse(text: &str) -> Self {
+        Self::parse_with_config(text, ErrorPropagation::Move)
+    }
+
+    /// Parses a CST from ritobin source code, with definable error propagation behaviour.
+    pub fn parse_with_config(text: &str, error_propagation: ErrorPropagation) -> Self {
         let tokens = tokenizer::lex(text);
         let mut p = Parser::new(text, tokens);
         impls::file(&mut p);
-        p.build_tree()
+        p.build_tree(error_propagation)
     }
 
     pub fn build_bin(&self, text: &str) -> (ltk_meta::Bin, Vec<DiagnosticWithSpan>) {

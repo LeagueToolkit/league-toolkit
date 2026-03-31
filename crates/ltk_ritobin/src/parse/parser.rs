@@ -25,12 +25,28 @@ pub struct MarkClosed {
     index: usize,
 }
 
+/// The ritobin parser.
+/// You should **NOT** use this directly unless you know what you're doing - see
+/// [`Cst::parse`]
 pub struct Parser<'a> {
     pub text: &'a str,
     pub tokens: Vec<Token>,
     pos: usize,
     fuel: Cell<u32>,
     pub events: Vec<Event>,
+}
+
+/// How [`Cst`] nodes in the tree should propagate their errors.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+pub enum ErrorPropagation {
+    /// No propagation, errors will remain in their respective nodes
+    None,
+    #[default]
+    /// Child nodes will move their errors to their parent. This is the default, since it
+    /// conveniently accumulates all parse errors to the root node.
+    Move,
+    /// Child nodes will copy their errors to their parent.
+    Clone,
 }
 
 impl<'a> Parser<'a> {
@@ -44,7 +60,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn build_tree(self) -> Cst {
+    pub fn build_tree(self, error_propagation: ErrorPropagation) -> Cst {
         let last_token = self.tokens.last().copied();
 
         let mut tokens = self.tokens.into_iter().peekable();
@@ -54,7 +70,7 @@ impl<'a> Parser<'a> {
         let mut stack = Vec::new();
         let mut last_span = Span::default();
         let mut just_opened = false;
-        for (i, event) in events.into_iter().enumerate() {
+        for event in events.into_iter() {
             match event {
                 Event::Open { kind } => {
                     just_opened = true;
@@ -73,6 +89,11 @@ impl<'a> Parser<'a> {
                         tree.span.end = tree.span.start;
                     }
                     last.span.end = tree.span.end.max(last.span.end); // update our parent tree's span
+                    match error_propagation {
+                        ErrorPropagation::None => {}
+                        ErrorPropagation::Move => last.errors.append(&mut tree.errors),
+                        ErrorPropagation::Clone => last.errors.extend_from_slice(&tree.errors),
+                    }
                     last.children.push(Child::Tree(tree));
                 }
                 Event::Advance => {
