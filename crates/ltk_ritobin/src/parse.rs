@@ -18,13 +18,9 @@ use crate::cst;
 
 #[cfg(test)]
 mod test {
-    use crate::{
-        cst::{Cst, FlatErrors},
-        print::CstPrinter,
-        typecheck::visitor::TypeChecker,
-    };
+    use crate::{cst::Cst, print::CstPrinter, typecheck::visitor::TypeChecker};
 
-    fn assert_success(text: &str) {
+    fn assert_success(text: &str) -> Cst {
         let cst = Cst::parse(text);
 
         let mut buf = String::new();
@@ -32,9 +28,19 @@ mod test {
 
         println!("{buf}");
 
-        assert!(cst.errors.is_empty(), "Top-level errors: {:#?}", cst.errors);
-        let errors = FlatErrors::walk(&cst);
-        assert!(errors.is_empty(), "Error trees: {:#?}", errors);
+        assert!(cst.errors.is_empty(), "Parse errors: {:#?}", cst.errors);
+        cst
+    }
+
+    fn assert_fail(text: &str) -> Cst {
+        let cst = Cst::parse(text);
+
+        let mut buf = String::new();
+        cst.print(&mut buf, 0, text);
+
+        println!("{buf}");
+        assert!(!cst.errors.is_empty(), "Parsed successfully",);
+        cst
     }
 
     #[test]
@@ -54,26 +60,47 @@ entries: map[hash, embed] = {
         );
     }
 
-    use super::*;
+    #[ignore = "Nice to have"]
+    #[test]
+    fn naked_class() {
+        let text = r#"
+        entries: map[hash, embed] = {
+            "thing" = ClassThing { ooo }
+        }
+        "#;
+        let cst = assert_success(text);
+
+        let (_bin, errors) = cst.build_bin(text);
+        assert!(
+            !errors.is_empty(),
+            "There should be an error for the naked 'ooo' in the class block"
+        );
+    }
+
     #[test]
     fn smoke_test() {
         let text = r#"
+#PROP_text
 entries: map[hash, embed] = {
     "foo" = Foo {
         guy: u32 = "asdasd"
     }
 }
+
 "#;
         let cst = Cst::parse(text);
-        let errors = cst::FlatErrors::walk(&cst);
 
         let mut str = String::new();
         cst.print(&mut str, 0, text);
         eprintln!("text len: {}", text.len());
         eprintln!("{str}\n====== errors: ======\n");
+
+        let errors = &cst.errors;
         for err in errors {
             eprintln!("{:?}: {:#?}", &text[err.span], err.kind);
         }
+
+        assert!(errors.is_empty());
 
         let mut checker = TypeChecker::new(text);
         cst.walk(&mut checker);
