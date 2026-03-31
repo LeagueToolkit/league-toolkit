@@ -1,3 +1,4 @@
+//! Visitor pattern for walking CSTs
 use super::{tree::Child, Cst};
 use crate::parse::tokenizer::Token;
 

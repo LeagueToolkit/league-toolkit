@@ -1,3 +1,4 @@
+//! The CST & its builder/visitor pattern
 mod tree;
 pub use tree::Kind as TreeKind;
 pub use tree::*;

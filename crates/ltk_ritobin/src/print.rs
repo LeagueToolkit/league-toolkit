@@ -1,3 +1,4 @@
+//! Pretty printers for CSTs and Bins
 #[derive(Debug, thiserror::Error)]
 pub enum PrintError {
     #[error(transparent)]
