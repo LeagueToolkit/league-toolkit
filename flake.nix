@@ -63,8 +63,8 @@
           pkgs.cargo-insta
           pkgs.cargo-hack
           pkgs.cargo-nextest
-          pkgs.cargo-expand
-          pkgs.cargo-public-api
+          cargo-expand'.${pkgs.system}
+          cargo-public-api'.${pkgs.system}
           pkgs.bacon
           # pkgs.pkg-config
           # pkgs.openssl
