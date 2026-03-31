@@ -11,7 +11,13 @@ mod string;
 mod r#struct;
 mod unordered_container;
 
-pub use container::*;
+pub mod iter {
+    pub mod container {
+        pub use super::super::container::iter::*;
+    }
+}
+
+pub use container::Container;
 pub use embedded::*;
 pub use map::*;
 pub use none::*;

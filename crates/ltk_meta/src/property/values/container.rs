@@ -13,8 +13,8 @@ use ltk_io_ext::{measure, window_at};
 #[macro_use]
 mod variants;
 
-mod iter;
-pub use iter::*;
+pub mod iter;
+use iter::*;
 
 macro_rules! define_container_enum {
     ( [$( $variant:ident, )*] ) => {
