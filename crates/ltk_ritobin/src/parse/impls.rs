@@ -113,7 +113,7 @@ pub fn stmt(p: &mut Parser) -> MarkClosed {
 pub fn entry_value(p: &mut Parser) -> bool {
     p.scope(TreeKind::EntryValue, |p| {
         match (p.nth(0), p.nth(1)) {
-            (Name, _) | (HexLit, LCurly) => {
+            (Name, LCurly) | (HexLit, LCurly) => {
                 // p.scope(TreeKind::ListItem, |p| {
                 p.scope(TreeKind::Class, |p| {
                     p.advance();
