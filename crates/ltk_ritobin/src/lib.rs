@@ -47,7 +47,7 @@
 //!
 //! ```
 
-#[allow(unused)] // for doc link above
+#[allow(unused, reason = "for module level doc link")]
 use ltk_meta::Bin;
 
 pub mod cst;

@@ -39,6 +39,7 @@ mod test {
         cst
     }
 
+    #[allow(unused, reason = "tests will use this")]
     fn assert_fail(text: &str) -> Cst {
         let cst = Cst::parse(text);
 
