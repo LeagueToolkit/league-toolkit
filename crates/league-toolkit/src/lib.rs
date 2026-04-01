@@ -21,3 +21,6 @@ pub use ltk_wad as wad;
 
 #[cfg(feature = "hash")]
 pub use ltk_hash as hash;
+
+#[cfg(feature = "rst")]
+pub use ltk_rst as rst;
