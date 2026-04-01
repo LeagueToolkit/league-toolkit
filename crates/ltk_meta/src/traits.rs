@@ -1,13 +1,13 @@
 use std::io;
 
-use super::property::{values::*, Kind, PropertyValueEnum};
-use byteorder::{ReadBytesExt, WriteBytesExt};
-use enum_dispatch::enum_dispatch;
+use crate::PropertyValueEnum;
+
+use super::property::Kind;
+use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 
 const HEADER_SIZE: usize = 5;
 
 /// General methods for property values
-#[enum_dispatch]
 pub trait PropertyExt {
     /// Get the size of the property value, including the kind header if specified
     fn size(&self, include_header: bool) -> usize {
@@ -18,6 +18,10 @@ pub trait PropertyExt {
             }
     }
     fn size_no_header(&self) -> usize;
+
+    type Meta;
+    fn meta(&self) -> &Self::Meta;
+    fn meta_mut(&mut self) -> &mut Self::Meta;
 }
 
 pub trait PropertyValueExt {
@@ -48,6 +52,22 @@ pub trait ReaderExt: io::Read {
     fn read_property_kind(&mut self, legacy: bool) -> Result<Kind, crate::Error> {
         Kind::unpack(self.read_u8()?, legacy)
     }
+
+    fn read_property<M: Default>(
+        &mut self,
+        legacy: bool,
+    ) -> Result<(u32, PropertyValueEnum<M>), crate::Error>
+    where
+        Self: io::Seek,
+    {
+        let name_hash = self.read_u32::<LE>()?;
+        let kind = self.read_property_kind(legacy)?;
+
+        Ok((
+            name_hash,
+            PropertyValueEnum::from_reader(self, kind, legacy)?,
+        ))
+    }
 }
 
 impl<R: io::Read + ?Sized> ReaderExt for R {}
@@ -65,6 +85,21 @@ pub trait WriteProperty: Sized {
 pub trait WriterExt: io::Write {
     fn write_property_kind(&mut self, kind: Kind) -> Result<(), io::Error> {
         self.write_u8(kind.into())
+    }
+
+    fn write_property<M>(
+        &mut self,
+        name_hash: u32,
+        value: &PropertyValueEnum<M>,
+    ) -> Result<(), io::Error>
+    where
+        M: Clone,
+        Self: io::Seek,
+    {
+        self.write_u32::<LE>(name_hash)?;
+        self.write_property_kind(value.kind())?;
+        value.to_writer(self)?;
+        Ok(())
     }
 }
 

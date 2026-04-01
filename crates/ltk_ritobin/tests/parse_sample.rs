@@ -270,7 +270,7 @@ entries: map[hash,embed] = {
     let file = parse(input).expect("Failed to parse matrix input");
     let tree = file.to_bin_tree();
     let obj = tree.objects.values().next().expect("Expected one object");
-    let parsed_mat = match &obj.properties.values().next().unwrap().value {
+    let parsed_mat = match &obj.properties.values().next().unwrap() {
         PropertyValueEnum::Matrix44(v) => v.value,
         other => panic!("Expected Matrix44, got {:?}", other),
     };
@@ -288,7 +288,7 @@ entries: map[hash,embed] = {
         .values()
         .next()
         .expect("Expected one object after round-trip");
-    let roundtrip_mat = match &obj2.properties.values().next().unwrap().value {
+    let roundtrip_mat = match &obj2.properties.values().next().unwrap() {
         PropertyValueEnum::Matrix44(v) => v.value,
         other => panic!("Expected Matrix44 after round-trip, got {:?}", other),
     };

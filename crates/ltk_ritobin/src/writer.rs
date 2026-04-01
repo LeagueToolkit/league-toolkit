@@ -5,9 +5,9 @@ use std::fmt::Write;
 use ltk_meta::{
     property::{
         values::{Embedded, Struct, UnorderedContainer},
-        PropertyValueEnum,
+        NoMeta, PropertyValueEnum,
     },
-    Bin, BinObject, BinProperty,
+    Bin, BinObject,
 };
 
 use crate::{
@@ -323,8 +323,8 @@ impl<'a, H: HashProvider> TextWriter<'a, H> {
             } else {
                 self.write_raw("{\n");
                 self.indent();
-                for prop in v.properties.values() {
-                    self.write_property(prop)?;
+                for (name_hash, value) in v.properties.iter() {
+                    self.write_property(*name_hash, value)?;
                 }
                 self.dedent();
                 self.pad();
@@ -334,13 +334,17 @@ impl<'a, H: HashProvider> TextWriter<'a, H> {
         Ok(())
     }
 
-    fn write_property(&mut self, prop: &BinProperty) -> Result<(), WriteError> {
+    fn write_property(
+        &mut self,
+        name_hash: u32,
+        value: &PropertyValueEnum,
+    ) -> Result<(), WriteError> {
         self.pad();
-        self.write_field_hash(prop.name_hash)?;
+        self.write_field_hash(name_hash)?;
         self.write_raw(": ");
-        self.write_type(&prop.value);
+        self.write_type(value);
         self.write_raw(" = ");
-        self.write_value(&prop.value)?;
+        self.write_value(value)?;
         self.write_raw("\n");
         Ok(())
     }
@@ -395,8 +399,8 @@ impl<'a, H: HashProvider> TextWriter<'a, H> {
         } else {
             self.write_raw("{\n");
             self.indent();
-            for prop in obj.properties.values() {
-                self.write_property(prop)?;
+            for (name_hash, value) in &obj.properties {
+                self.write_property(*name_hash, value)?;
             }
             self.dedent();
             self.pad();
@@ -520,7 +524,7 @@ impl RitobinBuilder {
     ///
     /// The resulting tree will have version 3, which is always used when writing.
     pub fn build(self) -> Bin {
-        Bin::builder()
+        Bin::<NoMeta>::builder()
             .is_override(self.is_override)
             .dependencies(self.dependencies)
             .objects(self.objects)
@@ -593,13 +597,7 @@ mod tests {
         // Create a simple tree with a hash value
         let mut properties = IndexMap::new();
         let name_hash = ltk_hash::fnv1a::hash_lower("testField");
-        properties.insert(
-            name_hash,
-            BinProperty {
-                name_hash,
-                value: PropertyValueEnum::String(String::from("hello")),
-            },
-        );
+        properties.insert(name_hash, PropertyValueEnum::String(String::from("hello")));
 
         let path_hash = ltk_hash::fnv1a::hash_lower("Test/Path");
         let class_hash = ltk_hash::fnv1a::hash_lower("TestClass");

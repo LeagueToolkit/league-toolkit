@@ -1,8 +1,6 @@
-use enum_dispatch::enum_dispatch;
-
 use crate::{
     property::{Kind, NoMeta},
-    traits::{ReadProperty as _, WriteProperty as _},
+    traits::{PropertyExt, ReadProperty as _, WriteProperty as _},
     Error,
 };
 use std::io;
@@ -50,10 +48,9 @@ macro_rules! create_enum {
         )]
         #[cfg_attr(feature = "serde", serde(tag = "kind", content = "value"))]
         #[derive(Clone, Debug, PartialEq)]
-        #[enum_dispatch(PropertyExt)]
-        /// The value part of a [`super::BinProperty`]. Holds the type of the value, and the value itself.
+        /// The value of a property inside a [`crate::BinObject`]. Holds the type of the value, and the value itself.
         pub enum PropertyValueEnum<M = NoMeta> {
-            $( $variant (pub self::$variant<M>), )*
+            $( $variant (self::$variant<M>), )*
         }
 
 
@@ -81,13 +78,56 @@ macro_rules! create_enum {
             }
         }
         impl<M> PropertyValueEnum<M> {
+            #[inline(always)]
             #[must_use]
             pub fn kind(&self) -> Kind {
                 match self {
                     $(Self::$variant(_) => Kind::$variant,)*
                 }
             }
+
+            #[inline(always)]
+            #[must_use]
+            pub fn no_meta(self) -> PropertyValueEnum<NoMeta> {
+                 match self {
+                     $(Self::$variant(i) => PropertyValueEnum::$variant(i.no_meta()),)*
+                 }
+            }
+
         }
+
+        impl<M> PropertyExt for PropertyValueEnum<M> {
+            type Meta = M;
+            fn meta(&self) -> &Self::Meta {
+                 match self {
+                     $(Self::$variant(i) => i.meta(),)*
+                 }
+            }
+            fn meta_mut(&mut self) -> &mut Self::Meta {
+                 match self {
+                     $(Self::$variant(i) => i.meta_mut(),)*
+                 }
+            }
+
+            fn size(&self, include_header: bool) -> usize {
+                 match self {
+                     $(Self::$variant(i) => i.size(include_header),)*
+                 }
+            }
+            fn size_no_header(&self) -> usize {
+                 match self {
+                     $(Self::$variant(i) => i.size_no_header(),)*
+                 }
+            }
+        }
+
+        $(
+            impl<M> From<values::$variant<M>> for PropertyValueEnum<M> {
+                fn from(other: values::$variant<M>) -> Self {
+                    Self::$variant(other)
+                }
+            }
+        )*
     };
 }
 

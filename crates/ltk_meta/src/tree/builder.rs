@@ -6,9 +6,9 @@ use crate::Bin;
 /// # Examples
 ///
 /// ```
-/// use ltk_meta::{Bin, BinObject};
+/// use ltk_meta::{Bin, BinObject, property::NoMeta};
 ///
-/// let tree = Bin::builder()
+/// let tree = Bin::<NoMeta>::builder()
 ///     .is_override(false)
 ///     .dependency("base.bin")
 ///     .dependencies(["extra1.bin", "extra2.bin"])
@@ -16,15 +16,18 @@ use crate::Bin;
 ///     .build();
 /// ```
 #[derive(Debug, Default, Clone)]
-pub struct Builder {
+pub struct Builder<M> {
     is_override: bool,
-    objects: Vec<BinObject>,
+    objects: Vec<BinObject<M>>,
     dependencies: Vec<String>,
 }
 
-impl Builder {
+impl<M> Builder<M> {
     /// See: [`Bin::builder`]
-    pub fn new() -> Self {
+    pub fn new() -> Self
+    where
+        M: Default,
+    {
         Self::default()
     }
 
@@ -49,13 +52,13 @@ impl Builder {
     }
 
     /// Adds a single object.
-    pub fn object(mut self, obj: BinObject) -> Self {
+    pub fn object(mut self, obj: BinObject<M>) -> Self {
         self.objects.push(obj);
         self
     }
 
     /// Adds multiple objects.
-    pub fn objects(mut self, objs: impl IntoIterator<Item = BinObject>) -> Self {
+    pub fn objects(mut self, objs: impl IntoIterator<Item = BinObject<M>>) -> Self {
         self.objects.extend(objs);
         self
     }
@@ -63,7 +66,7 @@ impl Builder {
     /// Build the final [`Bin`].
     ///
     /// The resulting tree will have version 3, which is always used when writing.
-    pub fn build(self) -> Bin {
+    pub fn build(self) -> Bin<M> {
         Bin {
             version: 3,
             is_override: self.is_override,

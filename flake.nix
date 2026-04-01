@@ -58,14 +58,16 @@
         ];
         buildInputs = [
           rustToolchain.${pkgs.system}
-          rust-analyzer-unwrapped
-          cargo
-          cargo-insta
-          cargo-hack
-          cargo-expand
-          bacon
-          # pkg-config
-          # openssl
+          pkgs.rust-analyzer-unwrapped
+          pkgs.cargo
+          pkgs.cargo-insta
+          pkgs.cargo-hack
+          pkgs.cargo-nextest
+          pkgs.cargo-expand
+          pkgs.cargo-public-api
+          pkgs.bacon
+          # pkgs.pkg-config
+          # pkgs.openssl
         ];
         RUST_SRC_PATH = rustPlatform.rustLibSrc;
       });

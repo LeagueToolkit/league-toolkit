@@ -1,18 +1,18 @@
 use indexmap::IndexMap;
 
-use crate::{BinObject, BinProperty, PropertyValueEnum};
+use crate::{property::NoMeta, BinObject, PropertyValueEnum};
 
 /// A builder for constructing [`BinObject`] instances.
 ///
 /// See: [`BinObject::builder`]
 #[derive(Debug, Clone)]
-pub struct Builder {
+pub struct Builder<M = NoMeta> {
     path_hash: u32,
     class_hash: u32,
-    properties: IndexMap<u32, BinProperty>,
+    properties: IndexMap<u32, PropertyValueEnum<M>>,
 }
 
-impl Builder {
+impl<M> Builder<M> {
     /// See: [`BinObject::builder`]
     pub fn new(path_hash: u32, class_hash: u32) -> Self {
         Self {
@@ -32,37 +32,23 @@ impl Builder {
         self
     }
 
-    /// Add a [`BinProperty`]
-    pub fn bin_property(mut self, prop: BinProperty) -> Self {
-        self.properties.insert(prop.name_hash, prop);
-        self
-    }
-
     /// Adds a property with the given name hash and value.
-    ///
-    /// This is a convenience method that accepts any type that can be converted
-    /// into a [`PropertyValueEnum`].
-    pub fn property(mut self, name_hash: u32, value: impl Into<PropertyValueEnum>) -> Self {
-        self.properties.insert(
-            name_hash,
-            BinProperty {
-                name_hash,
-                value: value.into(),
-            },
-        );
+    pub fn property(mut self, name_hash: u32, value: impl Into<PropertyValueEnum<M>>) -> Self {
+        self.properties.insert(name_hash, value.into());
         self
     }
 
-    /// Adds multiple properties from [`BinProperty`] instances.
-    pub fn bin_properties(mut self, props: impl IntoIterator<Item = BinProperty>) -> Self {
-        for prop in props {
-            self.properties.insert(prop.name_hash, prop);
-        }
+    /// Adds multiple properties from an iterator of name hashes & [`PropertyValueEnum`]s.
+    pub fn properties(
+        mut self,
+        props: impl IntoIterator<Item = (u32, PropertyValueEnum<M>)>,
+    ) -> Self {
+        self.properties.extend(props);
         self
     }
 
     /// Builds the final [`BinObject`].
-    pub fn build(self) -> BinObject {
+    pub fn build(self) -> BinObject<M> {
         BinObject {
             path_hash: self.path_hash,
             class_hash: self.class_hash,

@@ -8,7 +8,7 @@ use indexmap::IndexMap;
 use ltk_hash::fnv1a::hash_lower;
 use ltk_meta::{
     property::{values, NoMeta, PropertyValueEnum},
-    Bin, BinObject, BinProperty, PropertyKind,
+    Bin, BinObject, PropertyKind,
 };
 use ltk_primitives::Color;
 use nom::{
@@ -561,7 +561,7 @@ fn parse_optional_value(input: Span, inner_kind: PropertyKind) -> ParseResult<va
 }
 
 /// Parse struct/embed fields.
-fn parse_struct_fields(input: Span) -> ParseResult<IndexMap<u32, BinProperty>> {
+fn parse_struct_fields(input: Span) -> ParseResult<IndexMap<u32, PropertyValueEnum>> {
     let (input, _) = preceded(ws, char('{'))(input)?;
     let (input, _) = ws(input)?;
 
@@ -577,8 +577,8 @@ fn parse_struct_fields(input: Span) -> ParseResult<IndexMap<u32, BinProperty>> {
         }
 
         // Parse field: name: type = value
-        let (r, field) = parse_field(r)?;
-        properties.insert(field.name_hash, field);
+        let (r, (name_hash, value)) = parse_field(r)?;
+        properties.insert(name_hash, value);
 
         let (r, _) = ws(r)?;
         let (r, _) = opt(char(','))(r)?;
@@ -587,7 +587,7 @@ fn parse_struct_fields(input: Span) -> ParseResult<IndexMap<u32, BinProperty>> {
 }
 
 /// Parse a single field: name: type = value
-fn parse_field(input: Span) -> ParseResult<BinProperty> {
+fn parse_field(input: Span) -> ParseResult<(u32, PropertyValueEnum)> {
     let (input, _) = ws(input)?;
     let (input, name_span) = word(input)?;
     let name_str = *name_span.fragment();
@@ -604,7 +604,7 @@ fn parse_field(input: Span) -> ParseResult<BinProperty> {
     let (input, _) = preceded(ws, char('='))(input)?;
     let (input, value) = parse_value_for_type(input, &ty)?;
 
-    Ok((input, BinProperty { name_hash, value }))
+    Ok((input, (name_hash, value)))
 }
 
 /// Parse a pointer value (null or name { fields }).
@@ -827,7 +827,7 @@ fn parse_value_for_type<'a>(
 // ============================================================================
 
 /// Parse a top-level entry: key: type = value
-fn parse_entry(input: Span) -> ParseResult<(String, BinProperty)> {
+fn parse_entry(input: Span) -> ParseResult<(String, (u32, PropertyValueEnum))> {
     let (input, _) = ws(input)?;
     let (input, key) = identifier(input)?;
     let (input, _) = preceded(ws, char(':'))(input)?;
@@ -837,10 +837,7 @@ fn parse_entry(input: Span) -> ParseResult<(String, BinProperty)> {
 
     let name_hash = hash_lower(key.fragment());
 
-    Ok((
-        input,
-        (key.fragment().to_string(), BinProperty { name_hash, value }),
-    ))
+    Ok((input, (key.fragment().to_string(), (name_hash, value))))
 }
 
 /// Parse the entire ritobin file.
@@ -867,7 +864,7 @@ fn parse_ritobin(input: Span) -> ParseResult<RitobinFile> {
 /// A ritobin file representation (intermediate format before conversion to BinTree).
 #[derive(Debug, Clone, Default)]
 pub struct RitobinFile {
-    pub entries: IndexMap<String, BinProperty>,
+    pub entries: IndexMap<String, (u32, PropertyValueEnum)>,
 }
 
 impl RitobinFile {
@@ -880,7 +877,7 @@ impl RitobinFile {
     /// Get the "type" field value as a string.
     pub fn file_type(&self) -> Option<&str> {
         self.entries.get("type").and_then(|p| {
-            if let PropertyValueEnum::String(s) = &p.value {
+            if let PropertyValueEnum::String(s) = &p.1 {
                 Some(s.value.as_str())
             } else {
                 None
@@ -891,7 +888,7 @@ impl RitobinFile {
     /// Get the "version" field as u32.
     pub fn version(&self) -> Option<u32> {
         self.entries.get("version").and_then(|p| {
-            if let PropertyValueEnum::U32(v) = &p.value {
+            if let PropertyValueEnum::U32(v) = &p.1 {
                 Some(**v)
             } else {
                 None
@@ -904,8 +901,7 @@ impl RitobinFile {
         self.entries
             .get("linked")
             .and_then(|p| {
-                if let PropertyValueEnum::Container(values::Container::String { items, .. }) =
-                    &p.value
+                if let PropertyValueEnum::Container(values::Container::String { items, .. }) = &p.1
                 {
                     Some(items.iter().cloned().map(|i| i.value).collect())
                 } else {
@@ -920,7 +916,7 @@ impl RitobinFile {
         self.entries
             .get("entries")
             .and_then(|p| {
-                if let PropertyValueEnum::Map(map) = &p.value {
+                if let PropertyValueEnum::Map(map) = &p.1 {
                     Some(
                         map.entries()
                             .iter()
@@ -1025,7 +1021,7 @@ pos: vec3 = { 1.0, 2.5, -3.0 }
 "#;
         let file = parse(input).unwrap();
         let prop = file.entries.get("pos").unwrap();
-        if let PropertyValueEnum::Vector3(v) = &prop.value {
+        if let PropertyValueEnum::Vector3(v) = &prop.1 {
             assert_eq!(v.x, 1.0);
             assert_eq!(v.y, 2.5);
             assert_eq!(v.z, -3.0);
@@ -1044,7 +1040,7 @@ data: embed = TestClass {
 "#;
         let file = parse(input).unwrap();
         let prop = file.entries.get("data").unwrap();
-        if let PropertyValueEnum::Embedded(values::Embedded(s)) = &prop.value {
+        if let PropertyValueEnum::Embedded(values::Embedded(s)) = &prop.1 {
             assert_eq!(s.class_hash, hash_lower("TestClass"));
             assert_eq!(s.properties.len(), 2);
         } else {

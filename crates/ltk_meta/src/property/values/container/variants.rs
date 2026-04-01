@@ -23,42 +23,42 @@ macro_rules! container_variants {
     };
 }
 
-macro_rules! match_property {
-    ($value:expr, $on:ident, $inner:pat => $body:expr, $def:pat => $def_body: expr) => {
-        container_variants!(match_property_arms, ($value, $on, $inner => $body, $def => $def_body))
-    };
-    ($value:expr, $on:ident, $inner:pat => $body:expr) => {
-        container_variants!(match_property_arms, ($value, $on, $inner => $body))
-    };
-
-    ($value:expr, $inner:pat => $body:expr, $def:pat => $def_body: expr) => {
-        container_variants!(match_property_arms, ($value, Self, $inner => $body, $def => $def_body))
-    };
-    ($value:expr, $inner:pat => $body:expr) => {
-        container_variants!(match_property_arms, ($value, Self, $inner => $body))
-    };
-}
-
-macro_rules! match_property_arms {
-    (($value:expr, $on:ident, $inner:pat => $body:expr, $def:pat => $def_body: expr)
-     [$( $variant:ident, )*]) => {
-        match $value {
-            $(
-                $on::$variant($inner) => $body,
-            )*
-            $def => $def_body
-        }
-    };
-
-    (($value:expr, $on:ident, $inner:pat => $body:expr)
-     [$( $variant:ident, )*]) => {
-        match $value {
-            $(
-                $on::$variant($inner) => $body,
-            )*
-        }
-    };
-}
+// macro_rules! match_property {
+//     ($value:expr, $on:ident, $inner:pat => $body:expr, $def:pat => $def_body: expr) => {
+//         container_variants!(match_property_arms, ($value, $on, $inner => $body, $def => $def_body))
+//     };
+//     ($value:expr, $on:ident, $inner:pat => $body:expr) => {
+//         container_variants!(match_property_arms, ($value, $on, $inner => $body))
+//     };
+//
+//     ($value:expr, $inner:pat => $body:expr, $def:pat => $def_body: expr) => {
+//         container_variants!(match_property_arms, ($value, Self, $inner => $body, $def => $def_body))
+//     };
+//     ($value:expr, $inner:pat => $body:expr) => {
+//         container_variants!(match_property_arms, ($value, Self, $inner => $body))
+//     };
+// }
+//
+// macro_rules! match_property_arms {
+//     (($value:expr, $on:ident, $inner:pat => $body:expr, $def:pat => $def_body: expr)
+//      [$( $variant:ident, )*]) => {
+//         match $value {
+//             $(
+//                 $on::$variant($inner) => $body,
+//             )*
+//             $def => $def_body
+//         }
+//     };
+//
+//     (($value:expr, $on:ident, $inner:pat => $body:expr)
+//      [$( $variant:ident, )*]) => {
+//         match $value {
+//             $(
+//                 $on::$variant($inner) => $body,
+//             )*
+//         }
+//     };
+// }
 
 // macro_rules! match_enum_inner {
 //     (($value:expr, $on:ident, ||, $body:expr)

@@ -11,10 +11,10 @@ use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 use ltk_io_ext::{measure, window_at};
 
 #[macro_use]
-pub mod variants;
+mod variants;
 
-mod iter;
-pub use iter::*;
+pub mod iter;
+use iter::*;
 
 macro_rules! define_container_enum {
     ( [$( $variant:ident, )*] ) => {
@@ -39,6 +39,22 @@ macro_rules! define_container_enum {
                 match &self {
                     $(Self::$variant{items,..} => {
                         9 + items.iter().map(|p| p.size_no_header()).sum::<usize>()
+                    })*
+                }
+            }
+
+            type Meta = M;
+            fn meta(&self) -> &Self::Meta {
+                match &self {
+                    $(Self::$variant{meta,..} => {
+                        meta
+                    })*
+                }
+            }
+            fn meta_mut(&mut self) -> &mut Self::Meta {
+                match self {
+                    $(Self::$variant{meta,..} => {
+                        meta
                     })*
                 }
             }
@@ -108,6 +124,48 @@ macro_rules! define_container_enum {
         }
 
         impl<M> Container<M> {
+            #[inline(always)]
+            pub fn empty(item_kind: Kind) -> Result<Self, Error>
+            where
+                M: Default
+            {
+                match item_kind {
+                    $(Kind::$variant => Ok(Self::$variant {
+                        items: vec![],
+                        meta: M::default(),
+                    }),)*
+                    kind => Err(Error::InvalidNesting(kind)),
+
+                }
+            }
+
+            #[inline(always)]
+            #[must_use]
+            pub fn no_meta(self) -> Container<NoMeta> {
+                match self {
+                    $(Self::$variant{items,..} => {
+                        Container::$variant {
+                            items: items.into_iter().map(|i| i.no_meta()).collect(),
+                            meta: NoMeta
+                        }
+                    })*
+                }
+            }
+
+            pub fn push(&mut self, value: PropertyValueEnum<M>) -> Result<(), Error>{
+                let got = value.kind();
+                let expected = self.item_kind();
+                match (self, value) {
+                    $((Self::$variant{items,..}, PropertyValueEnum::$variant(item)) => {
+                        items.push(item);
+                        Ok(())
+                    })*
+                    _ => {
+                        Err(Error::MismatchedContainerTypes { got, expected })
+                    }
+                }
+            }
+
             /// Iterator that returns each item as a [`PropertyValueEnum`] for convenience.
             #[inline(always)]
             #[must_use]
@@ -118,7 +176,7 @@ macro_rules! define_container_enum {
                     })*
                 }
             }
-            /// Iterator over each item as a dyn [`PropertyValueDyn`].
+            /// Iterator over each item as a dyn [`crate::traits::PropertyValueDyn`].
             #[inline(always)]
             #[must_use]
             pub fn items_dyn(&self) -> ItemsDyn<'_, M> {
@@ -149,7 +207,7 @@ impl<M> Container<M> {
         Self::from(items)
     }
 
-    pub fn empty<T>() -> Self
+    pub fn empty_const<T>() -> Self
     where
         Self: From<Vec<T>>,
     {
