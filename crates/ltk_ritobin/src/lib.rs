@@ -11,11 +11,11 @@
 //! // Parse ritobin text
 //! let text = r#"
 //! #PROP_text
-//! type: string = "my_str"
+//! type: string = "PROP"
 //! version: u32 = 3
 //! linked: list[string] = { }
 //! entries: map[hash, embed] = { }
-//! "#;
+//! "#.trim();
 //!
 //! let cst = Cst::parse(text);
 //! assert!(cst.errors.is_empty());
@@ -43,7 +43,7 @@
 //!
 //! let text = "test: u32 = 4!!2";
 //! let cst = Cst::parse(text);
-//! assert_eq!(cst.errors.len(), 0); // the unexpected "!!!" in the value
+//! assert_eq!(cst.errors.len(), 1); // the unexpected "!!!" in the value
 //!
 //! ```
 
