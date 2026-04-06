@@ -42,8 +42,12 @@
 //! use ltk_ritobin::{Cst};
 //!
 //! let text = "test: u32 = 4!!2";
+//!
+//! // by default uses ErrorPropagation::Move,
+//! // so all errors will end up in the root
 //! let cst = Cst::parse(text);
-//! assert_eq!(cst.errors.len(), 1); // the unexpected "!!!" in the value
+//!
+//! assert_eq!(cst.errors.len(), 1); // the unexpected "!!" in the value
 //!
 //! ```
 
