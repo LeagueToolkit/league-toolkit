@@ -246,7 +246,7 @@ impl<H: HashProvider> Builder<H> {
         }
     }
 
-    fn entry(&self, key: Child, kind: Option<Child>, value: Child) -> Child {
+    fn entry_tree(&self, key: Child, kind: Option<Child>, value: Child) -> Child {
         tree(
             Kind::Entry,
             match kind {
@@ -283,7 +283,7 @@ impl<H: HashProvider> Builder<H> {
         let k = self.hash_field_lit(name_hash);
         let t = self.rito_type(value.rito_type());
         let v = self.value_to_cst(value);
-        self.entry(k, Some(t), v)
+        self.entry_tree(k, Some(t), v)
     }
 
     fn class(&self, class_name: Child, items: Vec<Child>) -> Child {
@@ -301,38 +301,33 @@ impl<H: HashProvider> Builder<H> {
                 let k = tree(Kind::EntryKey, vec![self.hash_field_lit(*k)]);
                 let t = self.rito_type(v.rito_type());
                 let v = self.value_to_cst(v);
-                self.entry(k, Some(t), v)
+                self.entry_tree(k, Some(t), v)
             })
             .collect();
 
         let value = self.class(class_hash, class_values);
-        self.entry(k, None, value)
+        self.entry_tree(k, None, value)
+    }
+
+    fn entry(&mut self, key: impl AsRef<str>, kind: RitoType, value: Child) -> Child {
+        let key = self.spanned_token(Tok::Comment, key);
+        let kind = self.rito_type(kind);
+        self.entry_tree(
+            tree(Kind::EntryKey, vec![key]),
+            Some(kind),
+            tree(Kind::EntryValue, vec![value]),
+        )
     }
 
     fn bin_to_cst(&mut self, bin: &Bin) -> Cst {
         let comment = self.spanned_token(Tok::Comment, "#PROP_text");
-        let mut entries = vec![];
 
-        for obj in bin.objects.values() {
-            entries.push(self.bin_object_to_cst(obj));
-        }
+        let type_entry = self.string("\"PROP\"");
+        let type_entry = self.entry("type", RitoType::simple(PropertyKind::String), type_entry);
 
-        let entries_key = self.spanned_token(Tok::Name, "entries");
-        let entries_type = self.rito_type(RitoType {
-            base: PropertyKind::Map,
-            subtypes: [Some(PropertyKind::Hash), Some(PropertyKind::Embedded)],
-        });
-        let entries = self.entry(
-            tree(Kind::EntryKey, vec![entries_key]),
-            Some(entries_type),
-            tree(Kind::EntryValue, vec![self.block(entries)]),
-        );
+        let version = self.number("3");
+        let version = self.entry("version", RitoType::simple(PropertyKind::U32), version);
 
-        let linked_key = self.spanned_token(Tok::Name, "linked");
-        let linked_type = self.rito_type(RitoType {
-            base: PropertyKind::Container,
-            subtypes: [Some(PropertyKind::String), None],
-        });
         let linked = bin
             .dependencies
             .iter()
@@ -345,15 +340,33 @@ impl<H: HashProvider> Builder<H> {
             .collect();
 
         let linked = self.entry(
-            tree(Kind::EntryKey, vec![linked_key]),
-            Some(linked_type),
-            tree(Kind::EntryValue, vec![self.block(linked)]),
+            "linked",
+            RitoType::container(PropertyKind::String),
+            self.block(linked),
+        );
+
+        let entries = bin
+            .objects
+            .values()
+            .map(|obj| self.bin_object_to_cst(obj))
+            .collect();
+
+        let entries = self.entry(
+            "entries",
+            RitoType::map(PropertyKind::Hash, PropertyKind::Embedded),
+            self.block(entries),
         );
 
         Cst {
             kind: Kind::File,
             span: Span::default(),
-            children: vec![tree(Kind::Comment, vec![comment]), linked, entries],
+            children: vec![
+                tree(Kind::Comment, vec![comment]),
+                type_entry,
+                version,
+                linked,
+                entries,
+            ],
             errors: vec![],
         }
     }

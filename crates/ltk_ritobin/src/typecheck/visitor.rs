@@ -324,6 +324,20 @@ impl RitoType {
         }
     }
 
+    pub fn container(value: PropertyKind) -> Self {
+        Self {
+            base: PropertyKind::Container,
+            subtypes: [Some(value), None],
+        }
+    }
+
+    pub fn map(key: PropertyKind, value: PropertyKind) -> Self {
+        Self {
+            base: PropertyKind::Map,
+            subtypes: [Some(key), Some(value)],
+        }
+    }
+
     fn subtype(&self, idx: usize) -> PropertyKind {
         self.subtypes[idx].unwrap_or_default()
     }
