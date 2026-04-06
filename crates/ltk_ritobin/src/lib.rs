@@ -5,53 +5,64 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
-//! use ltk_ritobin::{parse, write};
+//! ```rust
+//! use ltk_ritobin::{Cst, Print as _};
 //!
 //! // Parse ritobin text
 //! let text = r#"
 //! #PROP_text
 //! type: string = "PROP"
 //! version: u32 = 3
-//! "#;
+//! linked: list[string] = { }
+//! entries: map[hash, embed] = { }
+//! "#.trim();
 //!
-//! let file = parse(text).unwrap();
-//! let tree = file.to_bin_tree();
+//! let cst = Cst::parse(text);
+//! assert!(cst.errors.is_empty());
+//!
+//! let (bin, bin_errors) = cst.build_bin(text);
+//! assert!(bin_errors.is_empty());
 //!
 //! // Write back to text
-//! let output = write(&tree).unwrap();
+//! let output = bin.print().unwrap();
+//!
+//! assert_eq!(text, output);
 //! ```
 //!
 //! # Error Reporting
 //!
-//! Parse errors include span information compatible with [`miette`] for rich
-//! error reporting with source highlighting:
+//! For resilient parsing, errors exist as nodes into the concrete syntax tree (cst), which propagate into the [`Cst`] nodes' `errors` field (depending on [`parse::ErrorPropagation`]. This
+//! allows for more versatile behaviour with things like pretty-printing technically invalid trees,
+//! since parsing will always result in a cst.
 //!
-//! ```rust,ignore
-//! use ltk_ritobin::parse;
-//! use miette::Report;
+//! The same handling of errors is done in the type-checker (when building a [`ltk_meta::Bin`]), to
+//! always provide a best effort construction.
 //!
-//! let text = "test: badtype = 42";
-//! match parse(text) {
-//!     Ok(file) => { /* ... */ }
-//!     Err(e) => {
-//!         // Print with miette formatting
-//!         eprintln!("{:?}", Report::new(e));
-//!     }
-//! }
+//! ```rust
+//! use ltk_ritobin::{Cst};
+//!
+//! let text = "test: u32 = 4!!2";
+//!
+//! // by default uses ErrorPropagation::Move,
+//! // so all errors will end up in the root
+//! let cst = Cst::parse(text);
+//!
+//! assert_eq!(cst.errors.len(), 1); // the unexpected "!!" in the value
+//!
 //! ```
 
-// Nom-style parsers use elided lifetimes extensively
-#![allow(mismatched_lifetime_syntaxes)]
+#[allow(unused, reason = "for module level doc link")]
+use ltk_meta::Bin;
 
-pub mod error;
+pub mod cst;
 pub mod hashes;
-pub mod parser;
+pub mod parse;
+pub mod print;
+pub mod typecheck;
 pub mod types;
-pub mod writer;
 
-pub use error::*;
 pub use hashes::*;
-pub use parser::{parse, parse_to_bin_tree, RitobinFile};
 pub use types::*;
-pub use writer::*;
+
+pub use cst::Cst;
+pub use print::Print;

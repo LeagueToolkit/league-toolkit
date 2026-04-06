@@ -1,0 +1,23 @@
+entries: map[hash, embed] = {
+    "Characters/Zaahen/Skins/Skin0" = SkinCharacterDataProperties {
+        bankUnits: list2[embed] = {
+            BankUnit {
+                name: string = "Zaahen_Base_SFX"
+                bankPath: list[string] = {
+                    "ASSETS/Sounds/Wwise2016/SFX/Characters/Zaahen/Skins/Base/Zaahen_Base_SFX_audio.bnk"
+                    "ASSETS/Sounds/Wwise2016/SFX/Characters/Zaahen/Skins/Base/Zaahen_Base_SFX_events.bnk"
+                }
+                events: list[string] = {
+                    "Play_sfx_Zaahen_Dance3D_buffactivate"
+                    "Play_sfx_Zaahen_Dance3D_loop"
+                    "Stop_sfx_Zaahen_ZaahenW_OnMissileLaunch"
+                }
+            }
+            BankUnit {
+                name: string = "Zaahen_Base_SFX"
+                bankPath: list[string] = { }
+                events: list[string] = { }
+            }
+        }
+    }
+}

@@ -1,0 +1,319 @@
+---
+source: crates/ltk_ritobin/tests/parse_sample.rs
+expression: debug
+---
+File - (0..1310): "#PROP_text\ntype: string = \"PROP\"\nversion: u32 = 3\nlinked: list[string] = {\n    \"DATA/Characters/Test/Animations/Skin0.bin\"\n    \"DATA/Characters/Test/Test.bin\"\n}\nentries: map[hash,embed] = {\n    \"Characters/Test/Skins/Skin0\" = SkinCharacterDataProperties {\n        skinClassification: u32 = 1\n        championSkinName: string = \"TestBase\"\n        metaDataTags: string = \"gender:male\"\n        loadscreen: embed = CensoredImage {\n            image: string = \"ASSETS/Characters/Test/Skins/Base/TestLoadScreen.tex\"\n        }\n        skinAudioProperties: embed = skinAudioProperties {\n            tagEventList: list[string] = {\n                \"Test\"\n            }\n            bankUnits: list2[embed] = {\n                BankUnit {\n                    name: string = \"Test_Base_SFX\"\n                    bankPath: list[string] = {\n                        \"ASSETS/Sounds/Test/audio.bnk\"\n                        \"ASSETS/Sounds/Test/events.bnk\"\n                    }\n                    events: list[string] = {\n                        \"Play_sfx_Test_Attack\"\n                        \"Play_sfx_Test_Death\"\n                    }\n                }\n            }\n        }\n        iconCircle: option[string] = {\n            \"ASSETS/Characters/Test/Icons/Circle.tex\"\n        }\n        iconSquare: option[string] = {}\n    }\n}\n"
+    Comment - (0..10): "#PROP_text"
+      "#PROP_text" (Comment)
+    Entry - (10..33): "\ntype: string = \"PROP\"\n"
+        EntryKey - (11..15): "type"
+          "type" (Name)
+      ":" (Colon)
+        TypeExpr - (17..23): "string"
+          "string" (Name)
+      "=" (Eq)
+        EntryValue - (25..32): " \"PROP\""
+            Literal - (26..32): "\"PROP\""
+              "\"PROP\"" (String)
+        EntryTerminator - (32..33): "\n"
+          "\n" (Newline)
+    Entry - (33..50): "version: u32 = 3\n"
+        EntryKey - (33..40): "version"
+          "version" (Name)
+      ":" (Colon)
+        TypeExpr - (42..45): "u32"
+          "u32" (Name)
+      "=" (Eq)
+        EntryValue - (47..49): " 3"
+            Literal - (48..49): "3"
+              "3" (Number)
+        EntryTerminator - (49..50): "\n"
+          "\n" (Newline)
+    Entry - (50..161): "linked: list[string] = {\n    \"DATA/Characters/Test/Animations/Skin0.bin\"\n    \"DATA/Characters/Test/Test.bin\"\n}\n"
+        EntryKey - (50..56): "linked"
+          "linked" (Name)
+      ":" (Colon)
+        TypeExpr - (58..70): "list[string]"
+          "list" (Name)
+          "[" (LBrack)
+            TypeArgList - (63..69): "string"
+                TypeArg - (63..69): "string"
+                  "string" (Name)
+          "]" (RBrack)
+      "=" (Eq)
+        EntryValue - (72..160): " {\n    \"DATA/Characters/Test/Animations/Skin0.bin\"\n    \"DATA/Characters/Test/Test.bin\"\n}"
+            Block - (73..160): "{\n    \"DATA/Characters/Test/Animations/Skin0.bin\"\n    \"DATA/Characters/Test/Test.bin\"\n}"
+              "{" (LCurly)
+                ListItem - (74..122): "\n    \"DATA/Characters/Test/Animations/Skin0.bin\""
+                    Literal - (79..122): "\"DATA/Characters/Test/Animations/Skin0.bin\""
+                      "\"DATA/Characters/Test/Animations/Skin0.bin\"" (String)
+              "\n    " (Newline)
+                ListItem - (127..158): "\"DATA/Characters/Test/Test.bin\""
+                    Literal - (127..158): "\"DATA/Characters/Test/Test.bin\""
+                      "\"DATA/Characters/Test/Test.bin\"" (String)
+              "\n" (Newline)
+              "}" (RCurly)
+        EntryTerminator - (160..161): "\n"
+          "\n" (Newline)
+    Entry - (161..1310): "entries: map[hash,embed] = {\n    \"Characters/Test/Skins/Skin0\" = SkinCharacterDataProperties {\n        skinClassification: u32 = 1\n        championSkinName: string = \"TestBase\"\n        metaDataTags: string = \"gender:male\"\n        loadscreen: embed = CensoredImage {\n            image: string = \"ASSETS/Characters/Test/Skins/Base/TestLoadScreen.tex\"\n        }\n        skinAudioProperties: embed = skinAudioProperties {\n            tagEventList: list[string] = {\n                \"Test\"\n            }\n            bankUnits: list2[embed] = {\n                BankUnit {\n                    name: string = \"Test_Base_SFX\"\n                    bankPath: list[string] = {\n                        \"ASSETS/Sounds/Test/audio.bnk\"\n                        \"ASSETS/Sounds/Test/events.bnk\"\n                    }\n                    events: list[string] = {\n                        \"Play_sfx_Test_Attack\"\n                        \"Play_sfx_Test_Death\"\n                    }\n                }\n            }\n        }\n        iconCircle: option[string] = {\n            \"ASSETS/Characters/Test/Icons/Circle.tex\"\n        }\n        iconSquare: option[string] = {}\n    }\n}\n"
+        EntryKey - (161..168): "entries"
+          "entries" (Name)
+      ":" (Colon)
+        TypeExpr - (170..185): "map[hash,embed]"
+          "map" (Name)
+          "[" (LBrack)
+            TypeArgList - (174..184): "hash,embed"
+                TypeArg - (174..178): "hash"
+                  "hash" (Name)
+              "," (Comma)
+                TypeArg - (179..184): "embed"
+                  "embed" (Name)
+          "]" (RBrack)
+      "=" (Eq)
+        EntryValue - (187..1309): " {\n    \"Characters/Test/Skins/Skin0\" = SkinCharacterDataProperties {\n        skinClassification: u32 = 1\n        championSkinName: string = \"TestBase\"\n        metaDataTags: string = \"gender:male\"\n        loadscreen: embed = CensoredImage {\n            image: string = \"ASSETS/Characters/Test/Skins/Base/TestLoadScreen.tex\"\n        }\n        skinAudioProperties: embed = skinAudioProperties {\n            tagEventList: list[string] = {\n                \"Test\"\n            }\n            bankUnits: list2[embed] = {\n                BankUnit {\n                    name: string = \"Test_Base_SFX\"\n                    bankPath: list[string] = {\n                        \"ASSETS/Sounds/Test/audio.bnk\"\n                        \"ASSETS/Sounds/Test/events.bnk\"\n                    }\n                    events: list[string] = {\n                        \"Play_sfx_Test_Attack\"\n                        \"Play_sfx_Test_Death\"\n                    }\n                }\n            }\n        }\n        iconCircle: option[string] = {\n            \"ASSETS/Characters/Test/Icons/Circle.tex\"\n        }\n        iconSquare: option[string] = {}\n    }\n}"
+            Block - (188..1309): "{\n    \"Characters/Test/Skins/Skin0\" = SkinCharacterDataProperties {\n        skinClassification: u32 = 1\n        championSkinName: string = \"TestBase\"\n        metaDataTags: string = \"gender:male\"\n        loadscreen: embed = CensoredImage {\n            image: string = \"ASSETS/Characters/Test/Skins/Base/TestLoadScreen.tex\"\n        }\n        skinAudioProperties: embed = skinAudioProperties {\n            tagEventList: list[string] = {\n                \"Test\"\n            }\n            bankUnits: list2[embed] = {\n                BankUnit {\n                    name: string = \"Test_Base_SFX\"\n                    bankPath: list[string] = {\n                        \"ASSETS/Sounds/Test/audio.bnk\"\n                        \"ASSETS/Sounds/Test/events.bnk\"\n                    }\n                    events: list[string] = {\n                        \"Play_sfx_Test_Attack\"\n                        \"Play_sfx_Test_Death\"\n                    }\n                }\n            }\n        }\n        iconCircle: option[string] = {\n            \"ASSETS/Characters/Test/Icons/Circle.tex\"\n        }\n        iconSquare: option[string] = {}\n    }\n}"
+              "{" (LCurly)
+                Entry - (189..1308): "\n    \"Characters/Test/Skins/Skin0\" = SkinCharacterDataProperties {\n        skinClassification: u32 = 1\n        championSkinName: string = \"TestBase\"\n        metaDataTags: string = \"gender:male\"\n        loadscreen: embed = CensoredImage {\n            image: string = \"ASSETS/Characters/Test/Skins/Base/TestLoadScreen.tex\"\n        }\n        skinAudioProperties: embed = skinAudioProperties {\n            tagEventList: list[string] = {\n                \"Test\"\n            }\n            bankUnits: list2[embed] = {\n                BankUnit {\n                    name: string = \"Test_Base_SFX\"\n                    bankPath: list[string] = {\n                        \"ASSETS/Sounds/Test/audio.bnk\"\n                        \"ASSETS/Sounds/Test/events.bnk\"\n                    }\n                    events: list[string] = {\n                        \"Play_sfx_Test_Attack\"\n                        \"Play_sfx_Test_Death\"\n                    }\n                }\n            }\n        }\n        iconCircle: option[string] = {\n            \"ASSETS/Characters/Test/Icons/Circle.tex\"\n        }\n        iconSquare: option[string] = {}\n    }\n"
+                    EntryKey - (194..223): "\"Characters/Test/Skins/Skin0\""
+                      "\"Characters/Test/Skins/Skin0\"" (String)
+                  "=" (Eq)
+                    EntryValue - (225..1307): " SkinCharacterDataProperties {\n        skinClassification: u32 = 1\n        championSkinName: string = \"TestBase\"\n        metaDataTags: string = \"gender:male\"\n        loadscreen: embed = CensoredImage {\n            image: string = \"ASSETS/Characters/Test/Skins/Base/TestLoadScreen.tex\"\n        }\n        skinAudioProperties: embed = skinAudioProperties {\n            tagEventList: list[string] = {\n                \"Test\"\n            }\n            bankUnits: list2[embed] = {\n                BankUnit {\n                    name: string = \"Test_Base_SFX\"\n                    bankPath: list[string] = {\n                        \"ASSETS/Sounds/Test/audio.bnk\"\n                        \"ASSETS/Sounds/Test/events.bnk\"\n                    }\n                    events: list[string] = {\n                        \"Play_sfx_Test_Attack\"\n                        \"Play_sfx_Test_Death\"\n                    }\n                }\n            }\n        }\n        iconCircle: option[string] = {\n            \"ASSETS/Characters/Test/Icons/Circle.tex\"\n        }\n        iconSquare: option[string] = {}\n    }"
+                        Class - (226..1307): "SkinCharacterDataProperties {\n        skinClassification: u32 = 1\n        championSkinName: string = \"TestBase\"\n        metaDataTags: string = \"gender:male\"\n        loadscreen: embed = CensoredImage {\n            image: string = \"ASSETS/Characters/Test/Skins/Base/TestLoadScreen.tex\"\n        }\n        skinAudioProperties: embed = skinAudioProperties {\n            tagEventList: list[string] = {\n                \"Test\"\n            }\n            bankUnits: list2[embed] = {\n                BankUnit {\n                    name: string = \"Test_Base_SFX\"\n                    bankPath: list[string] = {\n                        \"ASSETS/Sounds/Test/audio.bnk\"\n                        \"ASSETS/Sounds/Test/events.bnk\"\n                    }\n                    events: list[string] = {\n                        \"Play_sfx_Test_Attack\"\n                        \"Play_sfx_Test_Death\"\n                    }\n                }\n            }\n        }\n        iconCircle: option[string] = {\n            \"ASSETS/Characters/Test/Icons/Circle.tex\"\n        }\n        iconSquare: option[string] = {}\n    }"
+                          "SkinCharacterDataProperties" (Name)
+                            Block - (254..1307): "{\n        skinClassification: u32 = 1\n        championSkinName: string = \"TestBase\"\n        metaDataTags: string = \"gender:male\"\n        loadscreen: embed = CensoredImage {\n            image: string = \"ASSETS/Characters/Test/Skins/Base/TestLoadScreen.tex\"\n        }\n        skinAudioProperties: embed = skinAudioProperties {\n            tagEventList: list[string] = {\n                \"Test\"\n            }\n            bankUnits: list2[embed] = {\n                BankUnit {\n                    name: string = \"Test_Base_SFX\"\n                    bankPath: list[string] = {\n                        \"ASSETS/Sounds/Test/audio.bnk\"\n                        \"ASSETS/Sounds/Test/events.bnk\"\n                    }\n                    events: list[string] = {\n                        \"Play_sfx_Test_Attack\"\n                        \"Play_sfx_Test_Death\"\n                    }\n                }\n            }\n        }\n        iconCircle: option[string] = {\n            \"ASSETS/Characters/Test/Icons/Circle.tex\"\n        }\n        iconSquare: option[string] = {}\n    }"
+                              "{" (LCurly)
+                                Entry - (255..300): "\n        skinClassification: u32 = 1\n        "
+                                    EntryKey - (264..282): "skinClassification"
+                                      "skinClassification" (Name)
+                                  ":" (Colon)
+                                    TypeExpr - (284..287): "u32"
+                                      "u32" (Name)
+                                  "=" (Eq)
+                                    EntryValue - (289..291): " 1"
+                                        Literal - (290..291): "1"
+                                          "1" (Number)
+                                    EntryTerminator - (291..300): "\n        "
+                                      "\n        " (Newline)
+                                Entry - (300..346): "championSkinName: string = \"TestBase\"\n        "
+                                    EntryKey - (300..316): "championSkinName"
+                                      "championSkinName" (Name)
+                                  ":" (Colon)
+                                    TypeExpr - (318..324): "string"
+                                      "string" (Name)
+                                  "=" (Eq)
+                                    EntryValue - (326..337): " \"TestBase\""
+                                        Literal - (327..337): "\"TestBase\""
+                                          "\"TestBase\"" (String)
+                                    EntryTerminator - (337..346): "\n        "
+                                      "\n        " (Newline)
+                                Entry - (346..391): "metaDataTags: string = \"gender:male\"\n        "
+                                    EntryKey - (346..358): "metaDataTags"
+                                      "metaDataTags" (Name)
+                                  ":" (Colon)
+                                    TypeExpr - (360..366): "string"
+                                      "string" (Name)
+                                  "=" (Eq)
+                                    EntryValue - (368..382): " \"gender:male\""
+                                        Literal - (369..382): "\"gender:male\""
+                                          "\"gender:male\"" (String)
+                                    EntryTerminator - (382..391): "\n        "
+                                      "\n        " (Newline)
+                                Entry - (391..528): "loadscreen: embed = CensoredImage {\n            image: string = \"ASSETS/Characters/Test/Skins/Base/TestLoadScreen.tex\"\n        }\n        "
+                                    EntryKey - (391..401): "loadscreen"
+                                      "loadscreen" (Name)
+                                  ":" (Colon)
+                                    TypeExpr - (403..408): "embed"
+                                      "embed" (Name)
+                                  "=" (Eq)
+                                    EntryValue - (410..519): " CensoredImage {\n            image: string = \"ASSETS/Characters/Test/Skins/Base/TestLoadScreen.tex\"\n        }"
+                                        Class - (411..519): "CensoredImage {\n            image: string = \"ASSETS/Characters/Test/Skins/Base/TestLoadScreen.tex\"\n        }"
+                                          "CensoredImage" (Name)
+                                            Block - (425..519): "{\n            image: string = \"ASSETS/Characters/Test/Skins/Base/TestLoadScreen.tex\"\n        }"
+                                              "{" (LCurly)
+                                                Entry - (426..518): "\n            image: string = \"ASSETS/Characters/Test/Skins/Base/TestLoadScreen.tex\"\n        "
+                                                    EntryKey - (439..444): "image"
+                                                      "image" (Name)
+                                                  ":" (Colon)
+                                                    TypeExpr - (446..452): "string"
+                                                      "string" (Name)
+                                                  "=" (Eq)
+                                                    EntryValue - (454..509): " \"ASSETS/Characters/Test/Skins/Base/TestLoadScreen.tex\""
+                                                        Literal - (455..509): "\"ASSETS/Characters/Test/Skins/Base/TestLoadScreen.tex\""
+                                                          "\"ASSETS/Characters/Test/Skins/Base/TestLoadScreen.tex\"" (String)
+                                                    EntryTerminator - (509..518): "\n        "
+                                                      "\n        " (Newline)
+                                              "}" (RCurly)
+                                    EntryTerminator - (519..528): "\n        "
+                                      "\n        " (Newline)
+                                Entry - (528..1167): "skinAudioProperties: embed = skinAudioProperties {\n            tagEventList: list[string] = {\n                \"Test\"\n            }\n            bankUnits: list2[embed] = {\n                BankUnit {\n                    name: string = \"Test_Base_SFX\"\n                    bankPath: list[string] = {\n                        \"ASSETS/Sounds/Test/audio.bnk\"\n                        \"ASSETS/Sounds/Test/events.bnk\"\n                    }\n                    events: list[string] = {\n                        \"Play_sfx_Test_Attack\"\n                        \"Play_sfx_Test_Death\"\n                    }\n                }\n            }\n        }\n        "
+                                    EntryKey - (528..547): "skinAudioProperties"
+                                      "skinAudioProperties" (Name)
+                                  ":" (Colon)
+                                    TypeExpr - (549..554): "embed"
+                                      "embed" (Name)
+                                  "=" (Eq)
+                                    EntryValue - (556..1158): " skinAudioProperties {\n            tagEventList: list[string] = {\n                \"Test\"\n            }\n            bankUnits: list2[embed] = {\n                BankUnit {\n                    name: string = \"Test_Base_SFX\"\n                    bankPath: list[string] = {\n                        \"ASSETS/Sounds/Test/audio.bnk\"\n                        \"ASSETS/Sounds/Test/events.bnk\"\n                    }\n                    events: list[string] = {\n                        \"Play_sfx_Test_Attack\"\n                        \"Play_sfx_Test_Death\"\n                    }\n                }\n            }\n        }"
+                                        Class - (557..1158): "skinAudioProperties {\n            tagEventList: list[string] = {\n                \"Test\"\n            }\n            bankUnits: list2[embed] = {\n                BankUnit {\n                    name: string = \"Test_Base_SFX\"\n                    bankPath: list[string] = {\n                        \"ASSETS/Sounds/Test/audio.bnk\"\n                        \"ASSETS/Sounds/Test/events.bnk\"\n                    }\n                    events: list[string] = {\n                        \"Play_sfx_Test_Attack\"\n                        \"Play_sfx_Test_Death\"\n                    }\n                }\n            }\n        }"
+                                          "skinAudioProperties" (Name)
+                                            Block - (577..1158): "{\n            tagEventList: list[string] = {\n                \"Test\"\n            }\n            bankUnits: list2[embed] = {\n                BankUnit {\n                    name: string = \"Test_Base_SFX\"\n                    bankPath: list[string] = {\n                        \"ASSETS/Sounds/Test/audio.bnk\"\n                        \"ASSETS/Sounds/Test/events.bnk\"\n                    }\n                    events: list[string] = {\n                        \"Play_sfx_Test_Attack\"\n                        \"Play_sfx_Test_Death\"\n                    }\n                }\n            }\n        }"
+                                              "{" (LCurly)
+                                                Entry - (578..671): "\n            tagEventList: list[string] = {\n                \"Test\"\n            }\n            "
+                                                    EntryKey - (591..603): "tagEventList"
+                                                      "tagEventList" (Name)
+                                                  ":" (Colon)
+                                                    TypeExpr - (605..617): "list[string]"
+                                                      "list" (Name)
+                                                      "[" (LBrack)
+                                                        TypeArgList - (610..616): "string"
+                                                            TypeArg - (610..616): "string"
+                                                              "string" (Name)
+                                                      "]" (RBrack)
+                                                  "=" (Eq)
+                                                    EntryValue - (619..658): " {\n                \"Test\"\n            }"
+                                                        Block - (620..658): "{\n                \"Test\"\n            }"
+                                                          "{" (LCurly)
+                                                            ListItem - (621..644): "\n                \"Test\""
+                                                                Literal - (638..644): "\"Test\""
+                                                                  "\"Test\"" (String)
+                                                          "\n            " (Newline)
+                                                          "}" (RCurly)
+                                                    EntryTerminator - (658..671): "\n            "
+                                                      "\n            " (Newline)
+                                                Entry - (671..1157): "bankUnits: list2[embed] = {\n                BankUnit {\n                    name: string = \"Test_Base_SFX\"\n                    bankPath: list[string] = {\n                        \"ASSETS/Sounds/Test/audio.bnk\"\n                        \"ASSETS/Sounds/Test/events.bnk\"\n                    }\n                    events: list[string] = {\n                        \"Play_sfx_Test_Attack\"\n                        \"Play_sfx_Test_Death\"\n                    }\n                }\n            }\n        "
+                                                    EntryKey - (671..680): "bankUnits"
+                                                      "bankUnits" (Name)
+                                                  ":" (Colon)
+                                                    TypeExpr - (682..694): "list2[embed]"
+                                                      "list2" (Name)
+                                                      "[" (LBrack)
+                                                        TypeArgList - (688..693): "embed"
+                                                            TypeArg - (688..693): "embed"
+                                                              "embed" (Name)
+                                                      "]" (RBrack)
+                                                  "=" (Eq)
+                                                    EntryValue - (696..1148): " {\n                BankUnit {\n                    name: string = \"Test_Base_SFX\"\n                    bankPath: list[string] = {\n                        \"ASSETS/Sounds/Test/audio.bnk\"\n                        \"ASSETS/Sounds/Test/events.bnk\"\n                    }\n                    events: list[string] = {\n                        \"Play_sfx_Test_Attack\"\n                        \"Play_sfx_Test_Death\"\n                    }\n                }\n            }"
+                                                        Block - (697..1148): "{\n                BankUnit {\n                    name: string = \"Test_Base_SFX\"\n                    bankPath: list[string] = {\n                        \"ASSETS/Sounds/Test/audio.bnk\"\n                        \"ASSETS/Sounds/Test/events.bnk\"\n                    }\n                    events: list[string] = {\n                        \"Play_sfx_Test_Attack\"\n                        \"Play_sfx_Test_Death\"\n                    }\n                }\n            }"
+                                                          "{" (LCurly)
+                                                            ListItem - (698..1147): "\n                BankUnit {\n                    name: string = \"Test_Base_SFX\"\n                    bankPath: list[string] = {\n                        \"ASSETS/Sounds/Test/audio.bnk\"\n                        \"ASSETS/Sounds/Test/events.bnk\"\n                    }\n                    events: list[string] = {\n                        \"Play_sfx_Test_Attack\"\n                        \"Play_sfx_Test_Death\"\n                    }\n                }\n            "
+                                                                Class - (715..1134): "BankUnit {\n                    name: string = \"Test_Base_SFX\"\n                    bankPath: list[string] = {\n                        \"ASSETS/Sounds/Test/audio.bnk\"\n                        \"ASSETS/Sounds/Test/events.bnk\"\n                    }\n                    events: list[string] = {\n                        \"Play_sfx_Test_Attack\"\n                        \"Play_sfx_Test_Death\"\n                    }\n                }"
+                                                                  "BankUnit" (Name)
+                                                                    Block - (724..1134): "{\n                    name: string = \"Test_Base_SFX\"\n                    bankPath: list[string] = {\n                        \"ASSETS/Sounds/Test/audio.bnk\"\n                        \"ASSETS/Sounds/Test/events.bnk\"\n                    }\n                    events: list[string] = {\n                        \"Play_sfx_Test_Attack\"\n                        \"Play_sfx_Test_Death\"\n                    }\n                }"
+                                                                      "{" (LCurly)
+                                                                        Entry - (725..797): "\n                    name: string = \"Test_Base_SFX\"\n                    "
+                                                                            EntryKey - (746..750): "name"
+                                                                              "name" (Name)
+                                                                          ":" (Colon)
+                                                                            TypeExpr - (752..758): "string"
+                                                                              "string" (Name)
+                                                                          "=" (Eq)
+                                                                            EntryValue - (760..776): " \"Test_Base_SFX\""
+                                                                                Literal - (761..776): "\"Test_Base_SFX\""
+                                                                                  "\"Test_Base_SFX\"" (String)
+                                                                            EntryTerminator - (776..797): "\n                    "
+                                                                              "\n                    " (Newline)
+                                                                        Entry - (797..977): "bankPath: list[string] = {\n                        \"ASSETS/Sounds/Test/audio.bnk\"\n                        \"ASSETS/Sounds/Test/events.bnk\"\n                    }\n                    "
+                                                                            EntryKey - (797..805): "bankPath"
+                                                                              "bankPath" (Name)
+                                                                          ":" (Colon)
+                                                                            TypeExpr - (807..819): "list[string]"
+                                                                              "list" (Name)
+                                                                              "[" (LBrack)
+                                                                                TypeArgList - (812..818): "string"
+                                                                                    TypeArg - (812..818): "string"
+                                                                                      "string" (Name)
+                                                                              "]" (RBrack)
+                                                                          "=" (Eq)
+                                                                            EntryValue - (821..956): " {\n                        \"ASSETS/Sounds/Test/audio.bnk\"\n                        \"ASSETS/Sounds/Test/events.bnk\"\n                    }"
+                                                                                Block - (822..956): "{\n                        \"ASSETS/Sounds/Test/audio.bnk\"\n                        \"ASSETS/Sounds/Test/events.bnk\"\n                    }"
+                                                                                  "{" (LCurly)
+                                                                                    ListItem - (823..878): "\n                        \"ASSETS/Sounds/Test/audio.bnk\""
+                                                                                        Literal - (848..878): "\"ASSETS/Sounds/Test/audio.bnk\""
+                                                                                          "\"ASSETS/Sounds/Test/audio.bnk\"" (String)
+                                                                                  "\n                        " (Newline)
+                                                                                    ListItem - (903..934): "\"ASSETS/Sounds/Test/events.bnk\""
+                                                                                        Literal - (903..934): "\"ASSETS/Sounds/Test/events.bnk\""
+                                                                                          "\"ASSETS/Sounds/Test/events.bnk\"" (String)
+                                                                                  "\n                    " (Newline)
+                                                                                  "}" (RCurly)
+                                                                            EntryTerminator - (956..977): "\n                    "
+                                                                              "\n                    " (Newline)
+                                                                        Entry - (977..1133): "events: list[string] = {\n                        \"Play_sfx_Test_Attack\"\n                        \"Play_sfx_Test_Death\"\n                    }\n                "
+                                                                            EntryKey - (977..983): "events"
+                                                                              "events" (Name)
+                                                                          ":" (Colon)
+                                                                            TypeExpr - (985..997): "list[string]"
+                                                                              "list" (Name)
+                                                                              "[" (LBrack)
+                                                                                TypeArgList - (990..996): "string"
+                                                                                    TypeArg - (990..996): "string"
+                                                                                      "string" (Name)
+                                                                              "]" (RBrack)
+                                                                          "=" (Eq)
+                                                                            EntryValue - (999..1116): " {\n                        \"Play_sfx_Test_Attack\"\n                        \"Play_sfx_Test_Death\"\n                    }"
+                                                                                Block - (1000..1116): "{\n                        \"Play_sfx_Test_Attack\"\n                        \"Play_sfx_Test_Death\"\n                    }"
+                                                                                  "{" (LCurly)
+                                                                                    ListItem - (1001..1048): "\n                        \"Play_sfx_Test_Attack\""
+                                                                                        Literal - (1026..1048): "\"Play_sfx_Test_Attack\""
+                                                                                          "\"Play_sfx_Test_Attack\"" (String)
+                                                                                  "\n                        " (Newline)
+                                                                                    ListItem - (1073..1094): "\"Play_sfx_Test_Death\""
+                                                                                        Literal - (1073..1094): "\"Play_sfx_Test_Death\""
+                                                                                          "\"Play_sfx_Test_Death\"" (String)
+                                                                                  "\n                    " (Newline)
+                                                                                  "}" (RCurly)
+                                                                            EntryTerminator - (1116..1133): "\n                "
+                                                                              "\n                " (Newline)
+                                                                      "}" (RCurly)
+                                                              "\n            " (Newline)
+                                                          "}" (RCurly)
+                                                    EntryTerminator - (1148..1157): "\n        "
+                                                      "\n        " (Newline)
+                                              "}" (RCurly)
+                                    EntryTerminator - (1158..1167): "\n        "
+                                      "\n        " (Newline)
+                                Entry - (1167..1270): "iconCircle: option[string] = {\n            \"ASSETS/Characters/Test/Icons/Circle.tex\"\n        }\n        "
+                                    EntryKey - (1167..1177): "iconCircle"
+                                      "iconCircle" (Name)
+                                  ":" (Colon)
+                                    TypeExpr - (1179..1193): "option[string]"
+                                      "option" (Name)
+                                      "[" (LBrack)
+                                        TypeArgList - (1186..1192): "string"
+                                            TypeArg - (1186..1192): "string"
+                                              "string" (Name)
+                                      "]" (RBrack)
+                                  "=" (Eq)
+                                    EntryValue - (1195..1261): " {\n            \"ASSETS/Characters/Test/Icons/Circle.tex\"\n        }"
+                                        Block - (1196..1261): "{\n            \"ASSETS/Characters/Test/Icons/Circle.tex\"\n        }"
+                                          "{" (LCurly)
+                                            ListItem - (1197..1251): "\n            \"ASSETS/Characters/Test/Icons/Circle.tex\""
+                                                Literal - (1210..1251): "\"ASSETS/Characters/Test/Icons/Circle.tex\""
+                                                  "\"ASSETS/Characters/Test/Icons/Circle.tex\"" (String)
+                                          "\n        " (Newline)
+                                          "}" (RCurly)
+                                    EntryTerminator - (1261..1270): "\n        "
+                                      "\n        " (Newline)
+                                Entry - (1270..1306): "iconSquare: option[string] = {}\n    "
+                                    EntryKey - (1270..1280): "iconSquare"
+                                      "iconSquare" (Name)
+                                  ":" (Colon)
+                                    TypeExpr - (1282..1296): "option[string]"
+                                      "option" (Name)
+                                      "[" (LBrack)
+                                        TypeArgList - (1289..1295): "string"
+                                            TypeArg - (1289..1295): "string"
+                                              "string" (Name)
+                                      "]" (RBrack)
+                                  "=" (Eq)
+                                    EntryValue - (1298..1301): " {}"
+                                        Block - (1299..1301): "{}"
+                                          "{" (LCurly)
+                                          "}" (RCurly)
+                                    EntryTerminator - (1301..1306): "\n    "
+                                      "\n    " (Newline)
+                              "}" (RCurly)
+                    EntryTerminator - (1307..1308): "\n"
+                      "\n" (Newline)
+              "}" (RCurly)
+        EntryTerminator - (1309..1310): "\n"
+          "\n" (Newline)

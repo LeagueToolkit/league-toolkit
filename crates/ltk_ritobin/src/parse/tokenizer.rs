@@ -1,0 +1,286 @@
+use std::fmt::Display;
+
+use crate::parse::Span;
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[rustfmt::skip]
+pub enum TokenKind {
+  Unknown, Eof, Newline,
+
+  LParen, RParen, LCurly, RCurly,
+  LBrack, RBrack,
+  Eq, Comma, Colon, SemiColon,
+  Star, Slash,
+  Quote,
+
+  String, UnterminatedString,
+
+  Comment,
+
+  // keywords
+  True, False, Null,
+
+  Name, Number, HexLit,
+}
+
+impl TokenKind {
+    /// Whether we are a string/unterminated string
+    pub fn is_string(&self) -> bool {
+        matches!(self, Self::String | Self::UnterminatedString)
+    }
+
+    pub fn print_value(&self) -> Option<&'static str> {
+        match self {
+            TokenKind::Unknown => None,
+            TokenKind::Eof => None,
+            TokenKind::Newline => None,
+            TokenKind::LParen => Some("("),
+            TokenKind::RParen => Some(")"),
+            TokenKind::LCurly => Some("{"),
+            TokenKind::RCurly => Some("}"),
+            TokenKind::LBrack => Some("["),
+            TokenKind::RBrack => Some("]"),
+            TokenKind::Eq => Some("="),
+            TokenKind::Comma => Some(","),
+            TokenKind::Colon => Some(":"),
+            TokenKind::SemiColon => Some(";"),
+            TokenKind::Star => Some("*"),
+            TokenKind::Slash => Some("/"),
+            TokenKind::Quote => Some("\""),
+            TokenKind::String => None,
+            TokenKind::UnterminatedString => None,
+            TokenKind::Comment => None,
+            TokenKind::True => Some("true"),
+            TokenKind::False => Some("false"),
+            TokenKind::Null => Some("null"),
+            TokenKind::Name => None,
+            TokenKind::Number => None,
+            TokenKind::HexLit => None,
+        }
+    }
+}
+
+impl Display for TokenKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            TokenKind::Unknown => "unknown text",
+            TokenKind::Eof => "end of file",
+            TokenKind::Newline => "new line",
+            TokenKind::LParen => "'('",
+            TokenKind::RParen => "')'",
+            TokenKind::LCurly => "'{'",
+            TokenKind::RCurly => "'}'",
+            TokenKind::LBrack => "'['",
+            TokenKind::RBrack => "']'",
+            TokenKind::Eq => "'='",
+            TokenKind::Comma => "','",
+            TokenKind::Colon => "':'",
+            TokenKind::SemiColon => "';'",
+            TokenKind::Star => "'*'",
+            TokenKind::Slash => "'/'",
+            TokenKind::Quote => "'\"'",
+            TokenKind::String => "string literal",
+            TokenKind::UnterminatedString => "unterminated string literal",
+            TokenKind::True => "'true'",
+            TokenKind::False => "'false'",
+            TokenKind::Null => "'null'",
+            TokenKind::Name => "keyword",
+            TokenKind::Number => "number",
+            TokenKind::HexLit => "hexadecimal literal",
+            TokenKind::Comment => "comment",
+        })
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Copy, Debug)]
+pub struct Token {
+    pub kind: TokenKind,
+    pub span: Span,
+}
+pub fn lex(mut text: &str) -> Vec<Token> {
+    use TokenKind::*;
+    let punctuation = (
+        "( ) { } [ ] = , : ; * /",
+        [
+            LParen, RParen, LCurly, RCurly, LBrack, RBrack, Eq, Comma, Colon, SemiColon, Star,
+            Slash,
+        ],
+    );
+
+    let keywords = ("true false null", [True, False, Null]);
+
+    let source = text;
+
+    let mut result: Vec<Token> = Vec::new();
+    while !text.is_empty() {
+        if let Some(rest) = trim(text, |it| it.is_ascii_whitespace()) {
+            let eaten = &source[source.len() - text.len()..source.len() - rest.len()];
+            if let Some(last_token) = result.last() {
+                if matches!(
+                    last_token.kind,
+                    TokenKind::Name
+                        | TokenKind::HexLit
+                        | TokenKind::True
+                        | TokenKind::False
+                        | TokenKind::Number
+                        | TokenKind::RCurly
+                        | TokenKind::String
+                        | TokenKind::Eq
+                ) && eaten.find(['\n', '\r']).is_some()
+                {
+                    let start = source.len() - text.len();
+                    let end = source.len() - rest.len();
+                    let span = Span::new(start as _, end as _);
+                    result.push(Token {
+                        span,
+                        kind: TokenKind::Newline,
+                    });
+                }
+            }
+
+            text = rest;
+            continue;
+        }
+        let text_orig = text;
+        let mut kind = 'kind: {
+            for (i, symbol) in punctuation.0.split_ascii_whitespace().enumerate() {
+                if let Some(rest) = text.strip_prefix(symbol) {
+                    text = rest;
+                    break 'kind punctuation.1[i];
+                }
+            }
+
+            if let Some(rest) = text.strip_prefix('#') {
+                text = rest;
+                if let Some(rest) = trim(text, |t| !matches!(t, '\n' | '\r')) {
+                    text = rest;
+                }
+                break 'kind Comment;
+            }
+
+            if let Some(rest) = text.strip_prefix("0x") {
+                text = rest;
+                if let Some(rest) = trim(text, |it: char| it.is_ascii_hexdigit()) {
+                    text = rest;
+                }
+                break 'kind HexLit;
+            }
+
+            if let Some(rest) = scan_number(text) {
+                text = rest;
+                break 'kind Number;
+            }
+
+            if let Some(rest) = text.strip_prefix(['\'', '"']) {
+                let eaten = &source[source.len() - text.len()..source.len() - rest.len()]
+                    .chars()
+                    .next()
+                    .unwrap();
+                text = rest;
+                let mut skip = false;
+                loop {
+                    let Some(c) = text.chars().next() else {
+                        break 'kind UnterminatedString;
+                    };
+
+                    text = &text[c.len_utf8()..];
+                    match c {
+                        '\\' => {
+                            skip = true;
+                        }
+                        c if c == *eaten => match skip {
+                            true => {
+                                skip = false;
+                            }
+                            false => {
+                                break 'kind String;
+                            }
+                        },
+                        '\n' | '\r' => break 'kind UnterminatedString,
+                        _ => {
+                            skip = false;
+                        }
+                    }
+                }
+            }
+            if let Some(rest) = trim(text, name_char) {
+                text = rest;
+                break 'kind Name;
+            }
+
+            let error_index = text
+                .find(|it: char| it.is_ascii_whitespace())
+                .unwrap_or(text.len());
+            text = &text[error_index..];
+            Unknown
+        };
+        assert!(text.len() < text_orig.len());
+        let token_text = &text_orig[..text_orig.len() - text.len()];
+
+        let start = source.len() - text_orig.len();
+        let end = source.len() - text.len();
+
+        let span = Span {
+            start: start as u32,
+            end: end as u32,
+        };
+        if kind == Name {
+            for (i, symbol) in keywords.0.split_ascii_whitespace().enumerate() {
+                if token_text == symbol {
+                    kind = keywords.1[i];
+                    break;
+                }
+            }
+        }
+        result.push(Token { kind, span });
+    }
+    return result;
+
+    fn name_char(c: char) -> bool {
+        matches!(c, '_' | 'a'..='z' | 'A'..='Z' | '0'..='9')
+    }
+
+    fn trim(text: &str, predicate: impl std::ops::Fn(char) -> bool) -> Option<&str> {
+        let index = text.find(|it: char| !predicate(it)).unwrap_or(text.len());
+        if index == 0 {
+            None
+        } else {
+            Some(&text[index..])
+        }
+    }
+
+    fn take_num_segment(s: &str) -> Option<(&str, &str)> {
+        let rest = trim(s, |c| matches!(c, '0'..='9' | '_'))?;
+        let seg = &s[..s.len() - rest.len()];
+
+        if seg.is_empty() || seg.starts_with('_') || seg.ends_with('_') || seg.contains("__") {
+            return None;
+        }
+
+        Some((seg, rest))
+    }
+
+    fn scan_number(mut s: &str) -> Option<&str> {
+        if let Some(rest) = s.strip_prefix('-') {
+            s = rest;
+        }
+
+        // ".5"
+        if let Some(after_dot) = s.strip_prefix('.') {
+            let (_frac, rest) = take_num_segment(after_dot)?;
+            return Some(rest);
+        }
+
+        // "123" / "123.45"
+        let (_int, mut rest) = take_num_segment(s)?;
+
+        if let Some(after_dot) = rest.strip_prefix('.') {
+            let (_frac, new_rest) = take_num_segment(after_dot)?;
+            rest = new_rest;
+        }
+
+        Some(rest)
+    }
+}
