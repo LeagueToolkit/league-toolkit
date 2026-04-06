@@ -12,6 +12,7 @@ serde = ["dep:serde"]
 [dependencies]
 thiserror = { workspace = true }
 byteorder = { workspace = true }
-xxhash-rust = { workspace = true }
+ltk_hash = { version = "0.2.6", path = "../ltk_hash" }
+ltk_io_ext = { version = "0.4.2", path = "../ltk_io_ext" }
 
 serde = { workspace = true, optional = true }

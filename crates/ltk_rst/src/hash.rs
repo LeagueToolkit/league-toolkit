@@ -1,4 +1,4 @@
-use xxhash_rust::xxh64::xxh64;
+use ltk_hash::xxhash::xxhash64;
 
 use crate::version::RstHashType;
 
@@ -10,7 +10,7 @@ use crate::version::RstHashType;
 /// - [`RstHashType::Simple`]  → lower 39 bits
 pub fn compute_hash(key: &str, hash_type: RstHashType) -> u64 {
     let lowered = key.to_lowercase();
-    let raw = xxh64(lowered.as_bytes(), 0);
+    let raw = xxhash64(lowered.as_bytes(), 0);
     raw & hash_type.hash_mask()
 }
 

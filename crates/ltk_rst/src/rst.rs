@@ -1,14 +1,15 @@
 use std::collections::HashMap;
-use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
 
 use byteorder::{ReadBytesExt as _, WriteBytesExt as _, LE};
+use ltk_io_ext::ReaderExt as _;
 
 use crate::error::RstError;
 use crate::hash::{compute_hash, pack_entry, unpack_entry};
 use crate::version::{RstMode, RstVersion};
 
 /// Magic bytes at the start of every RST file: `"RST"`.
-pub const MAGIC: [u8; 3] = [0x52, 0x53, 0x54];
+pub const MAGIC: &[u8; 3] = b"RST";
 
 /// A parsed RST (Riot String Table) file.
 ///
@@ -47,14 +48,8 @@ pub const MAGIC: [u8; 3] = [0x52, 0x53, 0x54];
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RstFile {
-    /// File version.
+    /// File version (encodes config and mode alongside version-specific data).
     pub version: RstVersion,
-
-    /// Optional font-config string. Only present (and written) in v2 files.
-    pub config: Option<String>,
-
-    /// Deprecated mode byte. Present in v2–v4; always [`RstMode::None`] for v5+.
-    pub mode: RstMode,
 
     /// Hash → string mapping.
     pub entries: HashMap<u64, String>,
@@ -65,8 +60,6 @@ impl RstFile {
     pub fn new(version: RstVersion) -> Self {
         Self {
             version,
-            config: None,
-            mode: RstMode::None,
             entries: HashMap::new(),
         }
     }
@@ -98,26 +91,24 @@ impl RstFile {
     pub fn from_reader(reader: &mut (impl Read + Seek)) -> Result<Self, RstError> {
         let mut magic = [0u8; 3];
         reader.read_exact(&mut magic)?;
-        if magic != MAGIC {
+        if magic != *MAGIC {
             return Err(RstError::InvalidMagic { actual: magic });
         }
 
-        let version = RstVersion::try_from_u8(reader.read_u8()?)?;
+        let version_byte = reader.read_u8()?;
+        let mut version = RstVersion::try_from_u8(version_byte)?;
         let hash_type = version.hash_type();
 
-        let config = if version == RstVersion::V2 {
+        // Read config for V2
+        if let RstVersion::V2 { ref mut config, .. } = version {
             let has_config = reader.read_u8()? != 0;
             if has_config {
                 let len = reader.read_i32::<LE>()? as usize;
                 let mut buf = vec![0u8; len];
                 reader.read_exact(&mut buf)?;
-                Some(String::from_utf8_lossy(&buf).into_owned())
-            } else {
-                None
+                *config = Some(String::from_utf8_lossy(&buf).into_owned());
             }
-        } else {
-            None
-        };
+        }
 
         let count = reader.read_i32::<LE>()? as usize;
         let mut pairs: Vec<(u64, u64)> = Vec::with_capacity(count);
@@ -126,11 +117,18 @@ impl RstFile {
             pairs.push(unpack_entry(raw, hash_type));
         }
 
-        let mode = if version.has_mode_byte() {
-            RstMode::from_u8(reader.read_u8()?)
-        } else {
-            RstMode::None
-        };
+        // Read mode byte for versions that have it
+        if version.has_mode_byte() {
+            let mode = RstMode::from_u8(reader.read_u8()?);
+            match &mut version {
+                RstVersion::V2 {
+                    mode: ref mut m, ..
+                } => *m = mode,
+                RstVersion::V3 { mode: ref mut m } => *m = mode,
+                RstVersion::V4 { mode: ref mut m } => *m = mode,
+                _ => {}
+            }
+        }
 
         let data_start = reader.stream_position()?;
         let mut offset_cache: HashMap<u64, String> = HashMap::with_capacity(count);
@@ -141,47 +139,45 @@ impl RstFile {
                 cached.clone()
             } else {
                 reader.seek(SeekFrom::Start(data_start + offset))?;
-                let text = read_null_terminated(reader)?;
+                let text = reader.read_str_until_nul()?;
                 offset_cache.insert(offset, text.clone());
                 text
             };
             entries.insert(hash, text);
         }
 
-        Ok(Self {
-            version,
-            config,
-            mode,
-            entries,
-        })
+        Ok(Self { version, entries })
     }
 
     /// Serialises this [`RstFile`] to any [`Write`] sink.
     pub fn to_writer(&self, writer: &mut impl Write) -> Result<(), RstError> {
         let hash_type = self.version.hash_type();
 
-        let mut header: Vec<u8> = Vec::new();
+        // Write magic + version byte
+        writer.write_all(MAGIC)?;
+        writer.write_u8(self.version.to_u8())?;
 
-        header.extend_from_slice(&MAGIC);
-        header.write_u8(self.version as u8)?;
-
-        if self.version == RstVersion::V2 {
-            match &self.config {
+        // Write config for V2
+        if let RstVersion::V2 { ref config, .. } = self.version {
+            match config {
                 Some(cfg) if !cfg.is_empty() => {
-                    header.write_u8(1)?;
-                    header.write_i32::<LE>(cfg.len() as i32)?;
-                    header.extend_from_slice(cfg.as_bytes());
+                    writer.write_u8(1)?;
+                    writer.write_i32::<LE>(cfg.len() as i32)?;
+                    writer.write_all(cfg.as_bytes())?;
                 }
                 _ => {
-                    header.write_u8(0)?;
+                    writer.write_u8(0)?;
                 }
             }
         }
 
-        header.write_i32::<LE>(self.entries.len() as i32)?;
+        // Write entry count
+        writer.write_i32::<LE>(self.entries.len() as i32)?;
 
+        // Build string data blob with deduplication, and collect packed entries
         let mut data: Vec<u8> = Vec::new();
         let mut text_to_offset: HashMap<&str, u64> = HashMap::with_capacity(self.entries.len());
+        let mut packed_entries: Vec<u64> = Vec::with_capacity(self.entries.len());
 
         for (hash, text) in &self.entries {
             let offset = if let Some(&off) = text_to_offset.get(text.as_str()) {
@@ -195,28 +191,22 @@ impl RstFile {
             };
 
             let packed = pack_entry(*hash, offset, hash_type);
-            header.write_u64::<LE>(packed)?;
+            packed_entries.push(packed);
         }
 
+        // Write packed hash-table entries
+        for packed in &packed_entries {
+            writer.write_u64::<LE>(*packed)?;
+        }
+
+        // Write mode byte if applicable
         if self.version.has_mode_byte() {
-            header.write_u8(self.mode as u8)?;
+            writer.write_u8(self.version.mode() as u8)?;
         }
 
-        writer.write_all(&header)?;
+        // Write string data
         writer.write_all(&data)?;
 
         Ok(())
     }
-}
-
-fn read_null_terminated(reader: &mut impl Read) -> Result<String, io::Error> {
-    let mut buf: Vec<u8> = Vec::new();
-    loop {
-        let b = reader.read_u8()?;
-        if b == 0x00 {
-            break;
-        }
-        buf.push(b);
-    }
-    Ok(String::from_utf8_lossy(&buf).into_owned())
 }
