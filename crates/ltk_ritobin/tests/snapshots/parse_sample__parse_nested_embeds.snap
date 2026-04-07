@@ -1,0 +1,86 @@
+---
+source: crates/ltk_ritobin/tests/parse_sample.rs
+expression: "tree(r#\"\ndata: embed = OuterClass {\n    name: string = \"outer\"\n    inner: embed = InnerClass {\n        value: u32 = 42\n        nested: embed = DeepClass {\n            deep_value: f32 = 1.5\n        }\n    }\n}\n\"#,)"
+---
+File - (0..199): "\ndata: embed = OuterClass {\n    name: string = \"outer\"\n    inner: embed = InnerClass {\n        value: u32 = 42\n        nested: embed = DeepClass {\n            deep_value: f32 = 1.5\n        }\n    }\n}\n"
+    Entry - (0..199): "\ndata: embed = OuterClass {\n    name: string = \"outer\"\n    inner: embed = InnerClass {\n        value: u32 = 42\n        nested: embed = DeepClass {\n            deep_value: f32 = 1.5\n        }\n    }\n}\n"
+        EntryKey - (1..5): "data"
+          "data" (Name)
+      ":" (Colon)
+        TypeExpr - (7..12): "embed"
+          "embed" (Name)
+      "=" (Eq)
+        EntryValue - (14..198): " OuterClass {\n    name: string = \"outer\"\n    inner: embed = InnerClass {\n        value: u32 = 42\n        nested: embed = DeepClass {\n            deep_value: f32 = 1.5\n        }\n    }\n}"
+            Class - (15..198): "OuterClass {\n    name: string = \"outer\"\n    inner: embed = InnerClass {\n        value: u32 = 42\n        nested: embed = DeepClass {\n            deep_value: f32 = 1.5\n        }\n    }\n}"
+              "OuterClass" (Name)
+                Block - (26..198): "{\n    name: string = \"outer\"\n    inner: embed = InnerClass {\n        value: u32 = 42\n        nested: embed = DeepClass {\n            deep_value: f32 = 1.5\n        }\n    }\n}"
+                  "{" (LCurly)
+                    Entry - (27..59): "\n    name: string = \"outer\"\n    "
+                        EntryKey - (32..36): "name"
+                          "name" (Name)
+                      ":" (Colon)
+                        TypeExpr - (38..44): "string"
+                          "string" (Name)
+                      "=" (Eq)
+                        EntryValue - (46..54): " \"outer\""
+                            Literal - (47..54): "\"outer\""
+                              "\"outer\"" (String)
+                        EntryTerminator - (54..59): "\n    "
+                          "\n    " (Newline)
+                    Entry - (59..197): "inner: embed = InnerClass {\n        value: u32 = 42\n        nested: embed = DeepClass {\n            deep_value: f32 = 1.5\n        }\n    }\n"
+                        EntryKey - (59..64): "inner"
+                          "inner" (Name)
+                      ":" (Colon)
+                        TypeExpr - (66..71): "embed"
+                          "embed" (Name)
+                      "=" (Eq)
+                        EntryValue - (73..196): " InnerClass {\n        value: u32 = 42\n        nested: embed = DeepClass {\n            deep_value: f32 = 1.5\n        }\n    }"
+                            Class - (74..196): "InnerClass {\n        value: u32 = 42\n        nested: embed = DeepClass {\n            deep_value: f32 = 1.5\n        }\n    }"
+                              "InnerClass" (Name)
+                                Block - (85..196): "{\n        value: u32 = 42\n        nested: embed = DeepClass {\n            deep_value: f32 = 1.5\n        }\n    }"
+                                  "{" (LCurly)
+                                    Entry - (86..119): "\n        value: u32 = 42\n        "
+                                        EntryKey - (95..100): "value"
+                                          "value" (Name)
+                                      ":" (Colon)
+                                        TypeExpr - (102..105): "u32"
+                                          "u32" (Name)
+                                      "=" (Eq)
+                                        EntryValue - (107..110): " 42"
+                                            Literal - (108..110): "42"
+                                              "42" (Number)
+                                        EntryTerminator - (110..119): "\n        "
+                                          "\n        " (Newline)
+                                    Entry - (119..195): "nested: embed = DeepClass {\n            deep_value: f32 = 1.5\n        }\n    "
+                                        EntryKey - (119..125): "nested"
+                                          "nested" (Name)
+                                      ":" (Colon)
+                                        TypeExpr - (127..132): "embed"
+                                          "embed" (Name)
+                                      "=" (Eq)
+                                        EntryValue - (134..190): " DeepClass {\n            deep_value: f32 = 1.5\n        }"
+                                            Class - (135..190): "DeepClass {\n            deep_value: f32 = 1.5\n        }"
+                                              "DeepClass" (Name)
+                                                Block - (145..190): "{\n            deep_value: f32 = 1.5\n        }"
+                                                  "{" (LCurly)
+                                                    Entry - (146..189): "\n            deep_value: f32 = 1.5\n        "
+                                                        EntryKey - (159..169): "deep_value"
+                                                          "deep_value" (Name)
+                                                      ":" (Colon)
+                                                        TypeExpr - (171..174): "f32"
+                                                          "f32" (Name)
+                                                      "=" (Eq)
+                                                        EntryValue - (176..180): " 1.5"
+                                                            Literal - (177..180): "1.5"
+                                                              "1.5" (Number)
+                                                        EntryTerminator - (180..189): "\n        "
+                                                          "\n        " (Newline)
+                                                  "}" (RCurly)
+                                        EntryTerminator - (190..195): "\n    "
+                                          "\n    " (Newline)
+                                  "}" (RCurly)
+                        EntryTerminator - (196..197): "\n"
+                          "\n" (Newline)
+                  "}" (RCurly)
+        EntryTerminator - (198..199): "\n"
+          "\n" (Newline)

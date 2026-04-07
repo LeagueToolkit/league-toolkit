@@ -1,0 +1,200 @@
+use crate::parse::{
+    cst::Kind as TreeKind,
+    error::ErrorKind,
+    parser::{MarkClosed, MarkOpened, Parser},
+    tokenizer::TokenKind,
+};
+
+use TokenKind::*;
+
+pub fn file(p: &mut Parser) {
+    let m = p.open();
+    while !p.eof() {
+        if p.at(Comment) {
+            p.scope(TreeKind::Comment, |p| p.advance());
+        }
+        stmt_or_list_item(p);
+    }
+    p.close(m, TreeKind::File);
+}
+
+pub fn stmt_or_list_item(p: &mut Parser) -> (MarkClosed, TreeKind) {
+    let res;
+    match (p.nth(0), p.nth(1), p.nth(2)) {
+        (Comment, _, _) => {
+            let (_, m) = p.scope(TreeKind::Comment, |p| while p.eat(TokenKind::Comment) {});
+            res = (m, TreeKind::Comment);
+        }
+        (Name | HexLit, LCurly, _) => {
+            let m = p.open();
+            p.advance();
+            let block = block(p);
+            p.close(block, TreeKind::Block);
+            res = (p.close(m, TreeKind::Class), TreeKind::Class);
+        }
+        (Name | String | HexLit, Colon | Eq, _) => {
+            res = (stmt(p), TreeKind::Entry);
+        }
+        (LCurly, _, _) => {
+            let m = block(p);
+            res = (p.close(m, TreeKind::ListItemBlock), TreeKind::ListItemBlock);
+            p.eat(Comma);
+        }
+        (Name | HexLit | String | Number | True | False, _, _) => {
+            let m = p.open();
+            p.scope(TreeKind::Literal, |p| p.advance());
+            res = (p.close(m, TreeKind::ListItem), TreeKind::ListItem);
+            p.eat(Comma);
+        }
+        _ => {
+            res = (stmt(p), TreeKind::Entry);
+        }
+    }
+
+    while p.eat(Newline) {}
+
+    res
+}
+
+pub fn stmt(p: &mut Parser) -> MarkClosed {
+    let m = p.open();
+
+    p.scope(TreeKind::EntryKey, |p| {
+        p.expect_any(&[Name, String, HexLit])
+    });
+    if p.eat_any(&[Colon, Eq, Newline]) == Some(Colon) {
+        type_expr(p);
+        p.expect(TokenKind::Eq);
+    }
+
+    if !entry_value(p) {
+        return p.close(m, TreeKind::Entry);
+    }
+
+    if p.at(TokenKind::RCurly) {
+        p.scope(TreeKind::EntryTerminator, |_| {});
+        let g = p.close(m, TreeKind::Entry);
+        return g;
+    }
+
+    p.scope(TreeKind::EntryTerminator, |p| {
+        let mut one = false;
+        if p.eof() {
+            return;
+        }
+        while p
+            .eat_any(&[TokenKind::SemiColon, TokenKind::Newline])
+            .is_some()
+        {
+            one = true;
+        }
+
+        if !one {
+            // if something was between us and our statement terminator,
+            // we eat it all and then try again
+            p.scope(TreeKind::ErrorTree, |p| {
+                while !matches!(
+                    p.nth(0),
+                    TokenKind::SemiColon | TokenKind::Newline | TokenKind::Eof
+                ) {
+                    p.advance();
+                }
+                p.report(ErrorKind::UnexpectedTree);
+            });
+            while p
+                .eat_any(&[TokenKind::SemiColon, TokenKind::Newline])
+                .is_some()
+            {}
+        }
+    });
+    p.close(m, TreeKind::Entry)
+}
+
+pub fn entry_value(p: &mut Parser) -> bool {
+    p.scope(TreeKind::EntryValue, |p| {
+        match (p.nth(0), p.nth(1)) {
+            (Name, LCurly) | (HexLit, LCurly) => {
+                // p.scope(TreeKind::ListItem, |p| {
+                p.scope(TreeKind::Class, |p| {
+                    p.advance();
+                    if p.at(LCurly) {
+                        let block = block(p);
+                        p.close(block, TreeKind::Block);
+                    }
+                });
+                // });
+            }
+            (UnterminatedString, _) => {
+                p.scope(TreeKind::Literal, |p| {
+                    p.advance_with_error(ErrorKind::UnterminatedString, None)
+                });
+                return false;
+            }
+            (String | Number | HexLit | True | False | Null, _) => {
+                p.scope(TreeKind::Literal, |p| p.advance());
+            }
+            (LCurly, _) => {
+                let block = block(p);
+                p.close(block, TreeKind::Block);
+            }
+            (Newline, _) => {
+                p.advance_with_error(ErrorKind::Unexpected { token: Newline }, None);
+                while p.eat(Newline) {}
+                return false;
+            }
+            (token @ TokenKind::Eof, _) => p.report(ErrorKind::Unexpected { token }),
+            (token, _) => p.advance_with_error(ErrorKind::Unexpected { token }, None),
+        }
+        true
+    })
+    .0
+}
+
+pub fn type_expr(p: &mut Parser) {
+    p.scope(TreeKind::TypeExpr, |p| {
+        p.expect(TokenKind::Name);
+        if p.eat(TokenKind::LBrack) {
+            p.scope(TreeKind::TypeArgList, |p| {
+                while !p.at(TokenKind::RBrack) && !p.eof() {
+                    if p.at(TokenKind::Name) {
+                        expr_type_arg(p);
+                    } else {
+                        break;
+                    }
+                }
+            });
+            while !p.at(TokenKind::RBrack) {
+                p.advance();
+            }
+            p.expect(TokenKind::RBrack);
+        }
+    });
+}
+
+pub fn expr_type_arg(p: &mut Parser) {
+    assert!(p.at(Name));
+    let m = p.open();
+
+    p.expect(Name);
+    p.close(m, TreeKind::TypeArg);
+
+    if !p.at(RBrack) {
+        p.expect(Comma);
+    }
+}
+
+#[must_use]
+pub fn block(p: &mut Parser) -> MarkOpened {
+    assert!(p.at(LCurly));
+    let m = p.open();
+    p.expect(LCurly);
+    while !p.at(RCurly) && !p.eof() {
+        let (mark, kind) = stmt_or_list_item(p);
+        if kind == TreeKind::Class {
+            let m = p.open_before(mark);
+            p.close(m, TreeKind::ListItem);
+        }
+    }
+    p.expect(RCurly);
+    m
+}

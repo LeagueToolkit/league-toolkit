@@ -3,70 +3,82 @@
 use ltk_meta::PropertyKind;
 use std::str::FromStr;
 
-/// Maps a ritobin type name string to a [`ltk_meta::PropertyKind`].
-pub fn type_name_to_kind(name: &str) -> Option<PropertyKind> {
-    match name {
-        "none" => Some(PropertyKind::None),
-        "bool" => Some(PropertyKind::Bool),
-        "i8" => Some(PropertyKind::I8),
-        "u8" => Some(PropertyKind::U8),
-        "i16" => Some(PropertyKind::I16),
-        "u16" => Some(PropertyKind::U16),
-        "i32" => Some(PropertyKind::I32),
-        "u32" => Some(PropertyKind::U32),
-        "i64" => Some(PropertyKind::I64),
-        "u64" => Some(PropertyKind::U64),
-        "f32" => Some(PropertyKind::F32),
-        "vec2" => Some(PropertyKind::Vector2),
-        "vec3" => Some(PropertyKind::Vector3),
-        "vec4" => Some(PropertyKind::Vector4),
-        "mtx44" => Some(PropertyKind::Matrix44),
-        "rgba" => Some(PropertyKind::Color),
-        "string" => Some(PropertyKind::String),
-        "hash" => Some(PropertyKind::Hash),
-        "file" => Some(PropertyKind::WadChunkLink),
-        "list" => Some(PropertyKind::Container),
-        "list2" => Some(PropertyKind::UnorderedContainer),
-        "pointer" => Some(PropertyKind::Struct),
-        "embed" => Some(PropertyKind::Embedded),
-        "link" => Some(PropertyKind::ObjectLink),
-        "option" => Some(PropertyKind::Optional),
-        "map" => Some(PropertyKind::Map),
-        "flag" => Some(PropertyKind::BitBool),
-        _ => None,
-    }
+/// Extension trait for mapping ritobin type names to/from [`PropertyKind`]'s
+pub trait RitobinName {
+    /// Maps a ritobin type name string to a [`ltk_meta::PropertyKind`].
+    /// **NOTE:** Case sensitive.
+    fn from_rito_name(name: &str) -> Option<Self>
+    where
+        Self: Sized;
+
+    /// Maps a [`ltk_meta::PropertyKind`] to its ritobin type name string.
+    fn to_rito_name(&self) -> &'static str;
 }
 
-/// Maps a [`ltk_meta::PropertyKind`] to its ritobin type name string.
-pub fn kind_to_type_name(kind: PropertyKind) -> &'static str {
-    match kind {
-        PropertyKind::None => "none",
-        PropertyKind::Bool => "bool",
-        PropertyKind::I8 => "i8",
-        PropertyKind::U8 => "u8",
-        PropertyKind::I16 => "i16",
-        PropertyKind::U16 => "u16",
-        PropertyKind::I32 => "i32",
-        PropertyKind::U32 => "u32",
-        PropertyKind::I64 => "i64",
-        PropertyKind::U64 => "u64",
-        PropertyKind::F32 => "f32",
-        PropertyKind::Vector2 => "vec2",
-        PropertyKind::Vector3 => "vec3",
-        PropertyKind::Vector4 => "vec4",
-        PropertyKind::Matrix44 => "mtx44",
-        PropertyKind::Color => "rgba",
-        PropertyKind::String => "string",
-        PropertyKind::Hash => "hash",
-        PropertyKind::WadChunkLink => "file",
-        PropertyKind::Container => "list",
-        PropertyKind::UnorderedContainer => "list2",
-        PropertyKind::Struct => "pointer",
-        PropertyKind::Embedded => "embed",
-        PropertyKind::ObjectLink => "link",
-        PropertyKind::Optional => "option",
-        PropertyKind::Map => "map",
-        PropertyKind::BitBool => "flag",
+impl RitobinName for PropertyKind {
+    fn from_rito_name(name: &str) -> Option<Self> {
+        match name {
+            "none" => Some(Self::None),
+            "bool" => Some(Self::Bool),
+            "i8" => Some(Self::I8),
+            "u8" => Some(Self::U8),
+            "i16" => Some(Self::I16),
+            "u16" => Some(Self::U16),
+            "i32" => Some(Self::I32),
+            "u32" => Some(Self::U32),
+            "i64" => Some(Self::I64),
+            "u64" => Some(Self::U64),
+            "f32" => Some(Self::F32),
+            "vec2" => Some(Self::Vector2),
+            "vec3" => Some(Self::Vector3),
+            "vec4" => Some(Self::Vector4),
+            "mtx44" => Some(Self::Matrix44),
+            "rgba" => Some(Self::Color),
+            "string" => Some(Self::String),
+            "hash" => Some(Self::Hash),
+            "file" => Some(Self::WadChunkLink),
+            "list" => Some(Self::Container),
+            "list2" => Some(Self::UnorderedContainer),
+            "pointer" => Some(Self::Struct),
+            "embed" => Some(Self::Embedded),
+            "link" => Some(Self::ObjectLink),
+            "option" => Some(Self::Optional),
+            "map" => Some(Self::Map),
+            "flag" => Some(Self::BitBool),
+            _ => None,
+        }
+    }
+
+    fn to_rito_name(&self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Bool => "bool",
+            Self::I8 => "i8",
+            Self::U8 => "u8",
+            Self::I16 => "i16",
+            Self::U16 => "u16",
+            Self::I32 => "i32",
+            Self::U32 => "u32",
+            Self::I64 => "i64",
+            Self::U64 => "u64",
+            Self::F32 => "f32",
+            Self::Vector2 => "vec2",
+            Self::Vector3 => "vec3",
+            Self::Vector4 => "vec4",
+            Self::Matrix44 => "mtx44",
+            Self::Color => "rgba",
+            Self::String => "string",
+            Self::Hash => "hash",
+            Self::WadChunkLink => "file",
+            Self::Container => "list",
+            Self::UnorderedContainer => "list2",
+            Self::Struct => "pointer",
+            Self::Embedded => "embed",
+            Self::ObjectLink => "link",
+            Self::Optional => "option",
+            Self::Map => "map",
+            Self::BitBool => "flag",
+        }
     }
 }
 
@@ -108,6 +120,8 @@ impl FromStr for RitobinType {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        type_name_to_kind(s).map(RitobinType::simple).ok_or(())
+        PropertyKind::from_rito_name(s)
+            .map(RitobinType::simple)
+            .ok_or(())
     }
 }

@@ -1,0 +1,516 @@
+#PROP_text
+type: string = "PROP"
+version: u32 = 3
+linked: list[string] = { }
+entries: map[hash, embed] = {
+    "Characters/AzirUltSoldier/Skins/Skin14/Particles/AzirUltSoldier_Skin14_Idle_Effect_VFX" = VfxSystemDefinitionData {
+        complexEmitterDefinitionData: list[pointer] = {
+            VfxEmitterDefinitionData {
+                rate: embed = ValueFloat {
+                    constantValue: f32 = 1
+                }
+                particleLifetime: embed = ValueFloat {
+                    constantValue: f32 = -1
+                }
+                lifetime: option[f32] = { 1 }
+                isSingleParticle: flag = true
+                emitterName: string = "Temp_Mesh"
+                bindWeight: embed = ValueFloat {
+                    constantValue: f32 = 1
+                }
+                EmitterPosition: embed = ValueVector3 {
+                    constantValue: vec3 = { 0, 0, 20 }
+                }
+                primitive: pointer = VfxPrimitiveMesh {
+                    mMesh: embed = VfxMeshDefinitionData {
+                        mSimpleMeshName: string = "ASSETS/Characters/Azir/Skins/Skin14/Particles/Polygon_Idle_Soldier_FX.scb"
+                    }
+                }
+                blendMode: u8 = 1
+                Color: embed = ValueColor {
+                    constantValue: vec4 = { 0.11, 0.08, 0.87, 0.4 }
+                }
+                alphaRef: u8 = 0
+                disableBackfaceCull: bool = true
+                isUniformScale: flag = true
+                birthRotation0: embed = ValueVector3 {
+                    constantValue: vec3 = { 90, 0, 0 }
+                }
+                birthScale0: embed = ValueVector3 {
+                    constantValue: vec3 = { 1, 5, 5 }
+                }
+                texture: string = "ASSETS/Characters/Azir/Skins/Skin14/Particles/Polygon_texture_Idle_Soldior_Ult_02.tex"
+                birthUvRotateRate: embed = ValueFloat {
+                    constantValue: f32 = 50
+                }
+                particleUVRotateRate: embed = IntegratedValueFloat {
+                    dynamics: pointer = VfxAnimatedFloatVariableData {
+                        times: list[f32] = { 0 }
+                        values: list[f32] = { 0 }
+                    }
+                }
+            }
+            VfxEmitterDefinitionData {
+                rate: embed = ValueFloat {
+                    constantValue: f32 = 1
+                }
+                particleLifetime: embed = ValueFloat {
+                    constantValue: f32 = -1
+                }
+                lifetime: option[f32] = { 1 }
+                isSingleParticle: flag = true
+                emitterName: string = "Temp_Mesh2"
+                bindWeight: embed = ValueFloat {
+                    constantValue: f32 = 1
+                }
+                EmitterPosition: embed = ValueVector3 {
+                    constantValue: vec3 = { 0, -5, 40 }
+                }
+                primitive: pointer = VfxPrimitiveMesh {
+                    mMesh: embed = VfxMeshDefinitionData {
+                        mSimpleMeshName: string = "ASSETS/Characters/Azir/Skins/Skin14/Particles/Polygon_Idle_Soldior_Ult.scb"
+                    }
+                }
+                blendMode: u8 = 4
+                Color: embed = ValueColor {
+                    constantValue: vec4 = { 0.35, 0.64, 1, 0.8 }
+                }
+                pass: i16 = 2
+                alphaRef: u8 = 0
+                disableBackfaceCull: bool = true
+                isUniformScale: flag = true
+                birthRotation0: embed = ValueVector3 {
+                    constantValue: vec3 = { 90, 0, 0 }
+                }
+                birthScale0: embed = ValueVector3 {
+                    constantValue: vec3 = { 0.6, 5, 5 }
+                }
+                texture: string = "ASSETS/Characters/Azir/Skins/Skin14/Particles/Decal_Banners_FlipBooks.tex"
+                frameRate: f32 = 1.5
+                numFrames: u16 = 4
+                texDiv: vec2 = { 2, 2 }
+            }
+            VfxEmitterDefinitionData {
+                rate: embed = ValueFloat {
+                    constantValue: f32 = 1
+                }
+                particleLifetime: embed = ValueFloat {
+                    constantValue: f32 = -1
+                }
+                lifetime: option[f32] = { 1 }
+                isSingleParticle: flag = true
+                emitterName: string = "Temp_Mesh3"
+                bindWeight: embed = ValueFloat {
+                    constantValue: f32 = 1
+                }
+                EmitterPosition: embed = ValueVector3 {
+                    constantValue: vec3 = { 0, 0, 20 }
+                }
+                primitive: pointer = VfxPrimitiveMesh {
+                    mMesh: embed = VfxMeshDefinitionData {
+                        mSimpleMeshName: string = "ASSETS/Characters/Azir/Skins/Skin14/Particles/Polygon_Idle_Soldier_FX.scb"
+                    }
+                }
+                blendMode: u8 = 1
+                Color: embed = ValueColor {
+                    constantValue: vec4 = { 0.18, 0.23, 0.84, 0.5 }
+                }
+                pass: i16 = -1
+                alphaRef: u8 = 0
+                disableBackfaceCull: bool = true
+                isUniformScale: flag = true
+                birthRotation0: embed = ValueVector3 {
+                    constantValue: vec3 = { 90, 0, 0 }
+                }
+                birthScale0: embed = ValueVector3 {
+                    constantValue: vec3 = { 1, 5, 5 }
+                }
+                texture: string = "ASSETS/Characters/Azir/Skins/Skin14/Particles/Polygon_texture_Idle_Soldior_Ult.tex"
+                birthUvRotateRate: embed = ValueFloat {
+                    constantValue: f32 = 90
+                }
+            }
+            VfxEmitterDefinitionData {
+                rate: embed = ValueFloat {
+                    constantValue: f32 = 1
+                }
+                particleLifetime: embed = ValueFloat {
+                    constantValue: f32 = -1
+                }
+                lifetime: option[f32] = { 1 }
+                isSingleParticle: flag = true
+                emitterName: string = "Temp_Mesh4"
+                bindWeight: embed = ValueFloat {
+                    constantValue: f32 = 1
+                }
+                EmitterPosition: embed = ValueVector3 {
+                    constantValue: vec3 = { 0, 0, 20 }
+                }
+                primitive: pointer = VfxPrimitiveMesh {
+                    mMesh: embed = VfxMeshDefinitionData {
+                        mSimpleMeshName: string = "ASSETS/Characters/Azir/Skins/Skin14/Particles/Polygon_Idle_Soldier_FX.scb"
+                    }
+                }
+                blendMode: u8 = 4
+                Color: embed = ValueColor {
+                    constantValue: vec4 = { 0.17, 1, 0.97, 0.8 }
+                }
+                pass: i16 = 1
+                alphaRef: u8 = 0
+                disableBackfaceCull: bool = true
+                isUniformScale: flag = true
+                birthRotation0: embed = ValueVector3 {
+                    constantValue: vec3 = { 90, 0, 0 }
+                }
+                birthScale0: embed = ValueVector3 {
+                    constantValue: vec3 = { 1, 5, 5 }
+                }
+                texture: string = "ASSETS/Characters/Azir/Skins/Skin14/Particles/Polygon_texture_Idle_Soldior_Ult_02.tex"
+                birthUvRotateRate: embed = ValueFloat {
+                    constantValue: f32 = 50
+                }
+                particleUVRotateRate: embed = IntegratedValueFloat {
+                    dynamics: pointer = VfxAnimatedFloatVariableData {
+                        times: list[f32] = { 0 }
+                        values: list[f32] = { 0 }
+                    }
+                }
+                textureMult: pointer = VfxTextureMultDefinitionData {
+                    textureMult: string = "ASSETS/Characters/Azir/Skins/Skin14/Particles/Azir_Skin14_EBeam2.tex"
+                    uvScaleMult: embed = ValueVector2 {
+                        constantValue: vec2 = { 0.3, 1 }
+                    }
+                    birthUvRotateRateMult: embed = ValueFloat {
+                        constantValue: f32 = 100
+                    }
+                }
+            }
+            VfxEmitterDefinitionData {
+                rate: embed = ValueFloat {
+                    constantValue: f32 = 1
+                }
+                particleLifetime: embed = ValueFloat {
+                    constantValue: f32 = -1
+                }
+                lifetime: option[f32] = { 1 }
+                isSingleParticle: flag = true
+                emitterName: string = "Temp_Mesh5"
+                bindWeight: embed = ValueFloat {
+                    constantValue: f32 = 1
+                }
+                EmitterPosition: embed = ValueVector3 {
+                    constantValue: vec3 = { 0, 0, 30 }
+                }
+                primitive: pointer = VfxPrimitiveMesh {
+                    mMesh: embed = VfxMeshDefinitionData {
+                        mSimpleMeshName: string = "ASSETS/Characters/Azir/Skins/Skin14/Particles/Polygon_Idle_Soldier_FX.scb"
+                    }
+                }
+                blendMode: u8 = 1
+                Color: embed = ValueColor {
+                    constantValue: vec4 = { 0.33, 0.43, 1, 0.6 }
+                }
+                pass: i16 = 1
+                alphaRef: u8 = 0
+                disableBackfaceCull: bool = true
+                isUniformScale: flag = true
+                birthRotation0: embed = ValueVector3 {
+                    constantValue: vec3 = { 90, 0, 0 }
+                }
+                birthScale0: embed = ValueVector3 {
+                    constantValue: vec3 = { 1.2, 5, 5 }
+                }
+                texture: string = "ASSETS/Characters/Azir/Skins/Skin14/Particles/Aura_Self.tex"
+                frameRate: f32 = 1.5
+                numFrames: u16 = 4
+            }
+            VfxEmitterDefinitionData {
+                rate: embed = ValueFloat {
+                    constantValue: f32 = 1
+                }
+                particleLifetime: embed = ValueFloat {
+                    constantValue: f32 = 15
+                }
+                lifetime: option[f32] = { 1 }
+                isSingleParticle: flag = true
+                emitterName: string = "body"
+                bindWeight: embed = ValueFloat {
+                    constantValue: f32 = 1
+                }
+                EmitterPosition: embed = ValueVector3 {
+                    constantValue: vec3 = { 0, 15, -30 }
+                }
+                primitive: pointer = VfxPrimitiveArbitraryQuad { }
+                blendMode: u8 = 4
+                birthColor: embed = ValueColor {
+                    constantValue: vec4 = { 0.38, 0.62, 1, 0.6 }
+                }
+                Color: embed = ValueColor {
+                    dynamics: pointer = VfxAnimatedColorVariableData {
+                        times: list[f32] = { 0, 0.2, 1 }
+                        values: list[vec4] = {
+                            { 1, 1, 1, 1 }
+                            { 1, 1, 1, 1 }
+                            { 1, 1, 1, 0 }
+                        }
+                    }
+                }
+                pass: i16 = 210
+                meshRenderFlags: u8 = 0
+                depthBiasFactors: vec2 = { 0, -50 }
+                particleIsLocalOrientation: flag = true
+                birthRotation0: embed = ValueVector3 {
+                    constantValue: vec3 = { 90, 20, 0 }
+                }
+                birthScale0: embed = ValueVector3 {
+                    constantValue: vec3 = { 120, 30, 60 }
+                }
+                texture: string = "ASSETS/Shared/Particles/Base_Flare_Cas.tex"
+                textureMult: pointer = VfxTextureMultDefinitionData {
+                    textureMult: string = "ASSETS/Characters/Azir/Skins/Skin14/Particles/Azir_Skin14_Code.tex"
+                    uvScaleMult: embed = ValueVector2 {
+                        constantValue: vec2 = { 2, 2 }
+                    }
+                    birthUvScrollRateMult: embed = ValueVector2 {
+                        constantValue: vec2 = { -0.1, 0 }
+                    }
+                }
+            }
+            VfxEmitterDefinitionData {
+                rate: embed = ValueFloat {
+                    constantValue: f32 = 1
+                }
+                particleLifetime: embed = ValueFloat {
+                    constantValue: f32 = 15
+                }
+                lifetime: option[f32] = { 1 }
+                isSingleParticle: flag = true
+                emitterName: string = "body1"
+                bindWeight: embed = ValueFloat {
+                    constantValue: f32 = 1
+                }
+                EmitterPosition: embed = ValueVector3 {
+                    constantValue: vec3 = { 0, 15, -30 }
+                }
+                primitive: pointer = VfxPrimitiveArbitraryQuad { }
+                blendMode: u8 = 4
+                birthColor: embed = ValueColor {
+                    constantValue: vec4 = { 0.7569, 0.6039, 0.4275, 1 }
+                }
+                Color: embed = ValueColor {
+                    constantValue: vec4 = { 1, 1, 1, 0.4 }
+                    dynamics: pointer = VfxAnimatedColorVariableData {
+                        times: list[f32] = { 0, 0.2, 1 }
+                        values: list[vec4] = {
+                            { 1, 1, 1, 0.4 }
+                            { 1, 1, 1, 0.4 }
+                            { 1, 1, 1, 0 }
+                        }
+                    }
+                }
+                pass: i16 = 215
+                meshRenderFlags: u8 = 0
+                depthBiasFactors: vec2 = { 0, -30 }
+                particleIsLocalOrientation: flag = true
+                birthRotation0: embed = ValueVector3 {
+                    constantValue: vec3 = { 90, 20, 0 }
+                }
+                birthScale0: embed = ValueVector3 {
+                    constantValue: vec3 = { 130, 30, 60 }
+                }
+                texture: string = "ASSETS/Shared/Particles/Akshan_Skin10_Sparker01.tex"
+                textureMult: pointer = VfxTextureMultDefinitionData {
+                    uvScaleMult: embed = ValueVector2 {
+                        constantValue: vec2 = { 2, 2 }
+                    }
+                    birthUvScrollRateMult: embed = ValueVector2 {
+                        constantValue: vec2 = { 0, 0.05 }
+                    }
+                }
+            }
+            VfxEmitterDefinitionData {
+                rate: embed = ValueFloat {
+                    constantValue: f32 = 1
+                }
+                particleLifetime: embed = ValueFloat {
+                    constantValue: f32 = 15
+                }
+                lifetime: option[f32] = { 15 }
+                isSingleParticle: flag = true
+                emitterName: string = "Basic"
+                bindWeight: embed = ValueFloat {
+                    constantValue: f32 = 1
+                }
+                SpawnShape: pointer = 0xee39916f {
+                    emitOffset: vec3 = { 0, 15, -30 }
+                }
+                EmitterPosition: embed = ValueVector3 {
+                    dynamics: pointer = VfxAnimatedVector3fVariableData {
+                        probabilityTables: list[pointer] = {
+                            VfxProbabilityTableData { }
+                            VfxProbabilityTableData { }
+                            VfxProbabilityTableData { }
+                        }
+                        times: list[f32] = { 0 }
+                        values: list[vec3] = { { 0, 0, 0 } }
+                    }
+                }
+                primitive: pointer = VfxPrimitiveArbitraryQuad { }
+                blendMode: u8 = 4
+                Color: embed = ValueColor {
+                    constantValue: vec4 = { 0.15, 0.23, 1, 0.6 }
+                    dynamics: pointer = VfxAnimatedColorVariableData {
+                        times: list[f32] = {
+                            0
+                            0.0893
+                            0.1209
+                            0.1363
+                            0.262
+                            0.2706
+                            0.3148
+                            0.3604
+                            0.3608
+                            0.405
+                            0.5
+                            0.6622
+                            0.7687
+                            0.8109
+                            0.8608
+                            0.9021
+                            1
+                        }
+                        values: list[vec4] = {
+                            { 0.15, 0.23, 1, 0 }
+                            { 0.15, 0.23, 1, 0.1071 }
+                            { 0.15, 0.23, 1, 0.6 }
+                            { 0.15, 0.23, 1, 0.15 }
+                            { 0.15, 0.23, 1, 0.6 }
+                            { 0.15, 0.23, 1, 0.0353 }
+                            { 0.15, 0.23, 1, 0.0882 }
+                            { 0.15, 0.23, 1, 0.3176 }
+                            { 0.15, 0.23, 1, 0.6 }
+                            { 0.15, 0.23, 1, 0.2029 }
+                            { 0.15, 0.23, 1, 0.6 }
+                            { 0.15, 0.23, 1, 0.4054 }
+                            { 0.15, 0.23, 1, 0.5054 }
+                            { 0.15, 0.23, 1, 0.1043 }
+                            { 0.15, 0.23, 1, 0.3587 }
+                            { 0.15, 0.23, 1, 0.0457 }
+                            { 0.15, 0.23, 1, 0 }
+                        }
+                    }
+                }
+                pass: i16 = 5
+                alphaRef: u8 = 0
+                depthBiasFactors: vec2 = { -1, -30 }
+                particleIsLocalOrientation: flag = true
+                isUniformScale: flag = true
+                birthRotation0: embed = ValueVector3 {
+                    constantValue: vec3 = { 90, 0, 90 }
+                }
+                birthScale0: embed = ValueVector3 {
+                    constantValue: vec3 = { 50, 70, 0 }
+                }
+                texture: string = "ASSETS/Characters/Azir/Skins/Skin14/Particles/Aura_Self.tex"
+                textureMult: pointer = VfxTextureMultDefinitionData {
+                    textureMult: string = "ASSETS/Characters/Azir/Skins/Skin14/Particles/Azir_Skin14_Sacn_Lines.tex"
+                    uvScaleMult: embed = ValueVector2 {
+                        constantValue: vec2 = { 1, 0.7 }
+                    }
+                    birthUvScrollRateMult: embed = ValueVector2 {
+                        constantValue: vec2 = { 0, -0.2 }
+                    }
+                    birthUVOffsetMult: embed = ValueVector2 {
+                        constantValue: vec2 = { 1, 1 }
+                        dynamics: pointer = VfxAnimatedVector2fVariableData {
+                            probabilityTables: list[pointer] = {
+                                VfxProbabilityTableData {
+                                    keyTimes: list[f32] = { 0, 1 }
+                                    keyValues: list[f32] = { 0, 1 }
+                                }
+                                VfxProbabilityTableData {
+                                    keyTimes: list[f32] = { 0, 1 }
+                                    keyValues: list[f32] = { 0, 1 }
+                                }
+                            }
+                            times: list[f32] = { 0 }
+                            values: list[vec2] = { { 1, 1 } }
+                        }
+                    }
+                }
+            }
+        }
+        visibilityRadius: f32 = 5000
+        particleName: string = "AzirUltSoldier_Skin14_Idle_Effect_VFX"
+        particlePath: string = "Characters/AzirUltSoldier/Skins/Skin14/Particles/AzirUltSoldier_Skin14_Idle_Effect_VFX"
+        flags: u16 = 198
+    }
+    "Characters/AzirUltSoldier/Skins/Skin14/Particles/AzirUltSoldier_Skin14_P_Idle" = VfxSystemDefinitionData {
+        complexEmitterDefinitionData: list[pointer] = {
+            VfxEmitterDefinitionData {
+                timeBeforeFirstEmission: f32 = 0.1
+                rate: embed = ValueFloat {
+                    constantValue: f32 = 1
+                }
+                particleLifetime: embed = ValueFloat {
+                    constantValue: f32 = -1
+                }
+                particleLinger: option[f32] = { 0.4 }
+                isSingleParticle: flag = true
+                emitterName: string = "Temp_Avatar"
+                disabled: bool = true
+                bindWeight: embed = ValueFloat {
+                    constantValue: f32 = 1
+                }
+                primitive: pointer = VfxPrimitiveAttachedMesh {
+                    mMesh: embed = VfxMeshDefinitionData {
+                        mSubmeshesToDraw: list[hash] = { 0xbe6dcac2 }
+                        mSubmeshesToDrawAlways: list[hash] = { 0xbe6dcac2 }
+                        mLockMeshToAttachment: bool = true
+                    }
+                }
+                particleColorTexture: string = "ASSETS/Shared/Particles/color-rampdown_2.TFT_Set15.tex"
+                Color: embed = ValueColor {
+                    constantValue: vec4 = { 0.07, 0.35, 1, 0.5 }
+                }
+                meshRenderFlags: u8 = 0
+                alphaRef: u8 = 0
+                depthBiasFactors: vec2 = { -1, -1 }
+                disableBackfaceCull: bool = true
+                particleIsLocalOrientation: flag = true
+                isUniformScale: flag = true
+                birthRotation0: embed = ValueVector3 {
+                    constantValue: vec3 = { 0, 180, 90 }
+                }
+                texture: string = "ASSETS/Characters/Azir/Skins/Skin14/Particles/Mask_Idle_Soldier.tex"
+                textureMult: pointer = VfxTextureMultDefinitionData {
+                    textureMult: string = "ASSETS/Characters/Azir/Skins/Skin14/Particles/FN_Universal_Praxis_Red_001.tex"
+                    UvRotationMult: embed = ValueFloat {
+                        constantValue: f32 = 180
+                    }
+                    uvScaleMult: embed = ValueVector2 {
+                        constantValue: vec2 = { 1, 5 }
+                    }
+                    birthUvScrollRateMult: embed = ValueVector2 {
+                        constantValue: vec2 = { 0, -1 }
+                        dynamics: pointer = VfxAnimatedVector2fVariableData {
+                            probabilityTables: list[pointer] = {
+                                VfxProbabilityTableData { }
+                                VfxProbabilityTableData {
+                                    keyTimes: list[f32] = { 0, 1 }
+                                    keyValues: list[f32] = { 0, 1 }
+                                }
+                            }
+                            times: list[f32] = { 0 }
+                            values: list[vec2] = { { 0, -1 } }
+                        }
+                    }
+                }
+            }
+        }
+        visibilityRadius: f32 = 5000
+        particleName: string = "AzirUltSoldier_Skin14_P_Idle"
+        particlePath: string = "Characters/AzirUltSoldier/Skins/Skin14/Particles/AzirUltSoldier_Skin14_P_Idle"
+        flags: u16 = 198
+    }
+}

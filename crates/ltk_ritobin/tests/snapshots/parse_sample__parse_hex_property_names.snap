@@ -1,0 +1,62 @@
+---
+source: crates/ltk_ritobin/tests/parse_sample.rs
+expression: "tree(r#\"\nentries: map[hash,embed] = {\n    \"Test/Path\" = TestClass {\n        0xcb13aff1: f32 = -40\n        normalName: string = \"test\"\n    }\n}\n\"#,)"
+---
+File - (0..134): "\nentries: map[hash,embed] = {\n    \"Test/Path\" = TestClass {\n        0xcb13aff1: f32 = -40\n        normalName: string = \"test\"\n    }\n}\n"
+    Entry - (0..134): "\nentries: map[hash,embed] = {\n    \"Test/Path\" = TestClass {\n        0xcb13aff1: f32 = -40\n        normalName: string = \"test\"\n    }\n}\n"
+        EntryKey - (1..8): "entries"
+          "entries" (Name)
+      ":" (Colon)
+        TypeExpr - (10..25): "map[hash,embed]"
+          "map" (Name)
+          "[" (LBrack)
+            TypeArgList - (14..24): "hash,embed"
+                TypeArg - (14..18): "hash"
+                  "hash" (Name)
+              "," (Comma)
+                TypeArg - (19..24): "embed"
+                  "embed" (Name)
+          "]" (RBrack)
+      "=" (Eq)
+        EntryValue - (27..133): " {\n    \"Test/Path\" = TestClass {\n        0xcb13aff1: f32 = -40\n        normalName: string = \"test\"\n    }\n}"
+            Block - (28..133): "{\n    \"Test/Path\" = TestClass {\n        0xcb13aff1: f32 = -40\n        normalName: string = \"test\"\n    }\n}"
+              "{" (LCurly)
+                Entry - (29..132): "\n    \"Test/Path\" = TestClass {\n        0xcb13aff1: f32 = -40\n        normalName: string = \"test\"\n    }\n"
+                    EntryKey - (34..45): "\"Test/Path\""
+                      "\"Test/Path\"" (String)
+                  "=" (Eq)
+                    EntryValue - (47..131): " TestClass {\n        0xcb13aff1: f32 = -40\n        normalName: string = \"test\"\n    }"
+                        Class - (48..131): "TestClass {\n        0xcb13aff1: f32 = -40\n        normalName: string = \"test\"\n    }"
+                          "TestClass" (Name)
+                            Block - (58..131): "{\n        0xcb13aff1: f32 = -40\n        normalName: string = \"test\"\n    }"
+                              "{" (LCurly)
+                                Entry - (59..98): "\n        0xcb13aff1: f32 = -40\n        "
+                                    EntryKey - (68..78): "0xcb13aff1"
+                                      "0xcb13aff1" (HexLit)
+                                  ":" (Colon)
+                                    TypeExpr - (80..83): "f32"
+                                      "f32" (Name)
+                                  "=" (Eq)
+                                    EntryValue - (85..89): " -40"
+                                        Literal - (86..89): "-40"
+                                          "-40" (Number)
+                                    EntryTerminator - (89..98): "\n        "
+                                      "\n        " (Newline)
+                                Entry - (98..130): "normalName: string = \"test\"\n    "
+                                    EntryKey - (98..108): "normalName"
+                                      "normalName" (Name)
+                                  ":" (Colon)
+                                    TypeExpr - (110..116): "string"
+                                      "string" (Name)
+                                  "=" (Eq)
+                                    EntryValue - (118..125): " \"test\""
+                                        Literal - (119..125): "\"test\""
+                                          "\"test\"" (String)
+                                    EntryTerminator - (125..130): "\n    "
+                                      "\n    " (Newline)
+                              "}" (RCurly)
+                    EntryTerminator - (131..132): "\n"
+                      "\n" (Newline)
+              "}" (RCurly)
+        EntryTerminator - (133..134): "\n"
+          "\n" (Newline)

@@ -1,0 +1,9 @@
+ConformToPathRigPoseModifierData {
+    mStartingJointName: hash = "L_Clavicle"
+    mEndingJointName: hash = "l_hand"
+    mDefaultMaskName: hash = "0x7136e1bc"
+    mMaxBoneAngle: f32 = 115
+    mDampingValue: f32 = 123123
+    mVelMultiplier: f32 = 0
+    mFrequency: f32 = .5
+}
