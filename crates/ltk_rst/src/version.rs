@@ -77,4 +77,3 @@ impl RstHashType {
         self as u8
     }
 }
-

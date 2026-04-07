@@ -23,8 +23,6 @@ fn open(relative: &str) -> Option<BufReader<File>> {
     })))
 }
 
-
-
 /// Parses every locale's bootstrap.stringtable to ensure the reader handles
 /// all regional encodings (CJK, Arabic, Cyrillic, …) without error.
 #[test]
@@ -83,8 +81,8 @@ fn parse_bootstrap_known_entries() {
         return;
     };
 
-    let table =
-        Stringtable::from_rst_reader(&mut reader).expect("failed to parse en_us/bootstrap.stringtable");
+    let table = Stringtable::from_rst_reader(&mut reader)
+        .expect("failed to parse en_us/bootstrap.stringtable");
 
     assert_eq!(table.entries.len(), 201);
 
@@ -92,8 +90,6 @@ fn parse_bootstrap_known_entries() {
     assert_eq!(table.get(0x000000008818cc3c), Some("Ignore"));
     assert_eq!(table.get(0x0000004732dbee5e), Some("Cancel"));
 }
-
-
 
 /// Parses en_us/bootstrap.stringtable, serialises it back to bytes, parses
 /// those bytes again, and asserts the two parsed representations are equal.
@@ -103,8 +99,8 @@ fn round_trip_bootstrap() {
         return;
     };
 
-    let original =
-        Stringtable::from_rst_reader(&mut reader).expect("failed to parse en_us/bootstrap.stringtable");
+    let original = Stringtable::from_rst_reader(&mut reader)
+        .expect("failed to parse en_us/bootstrap.stringtable");
 
     let mut buf = Vec::new();
     original
@@ -128,8 +124,6 @@ fn round_trip_bootstrap() {
         );
     }
 }
-
-
 
 /// compute_hash lowercases before hashing, so both cases must produce the same
 /// result.
@@ -157,8 +151,6 @@ fn compute_hash_respects_bit_width() {
     assert_eq!(complex_hash & complex_mask, complex_hash);
 }
 
-
-
 #[test]
 fn invalid_magic_returns_error() {
     let bad = b"\x00\x00\x00\x05";
@@ -180,8 +172,6 @@ fn unsupported_version_returns_error() {
         "expected UnsupportedVersion(0x01), got {err:?}"
     );
 }
-
-
 
 /// Verifies that insert_str hashes the key and stores the value, and that the
 /// resulting file can be written and re-read with no data loss.
