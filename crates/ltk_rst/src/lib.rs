@@ -8,12 +8,12 @@
 //!
 //! ```no_run
 //! use std::fs::File;
-//! use ltk_rst::RstFile;
+//! use ltk_rst::Stringtable;
 //!
 //! let mut file = File::open("fontconfig_en_us.stringtable")?;
-//! let rst = RstFile::from_reader(&mut file)?;
+//! let table = Stringtable::from_rst_reader(&mut file)?;
 //!
-//! for (hash, text) in &rst.entries {
+//! for (hash, text) in &table.entries {
 //!     println!("{hash:#018x} = {text}");
 //! }
 //! # Ok::<(), Box<dyn std::error::Error>>(())
@@ -23,13 +23,13 @@
 //!
 //! ```no_run
 //! use std::fs::File;
-//! use ltk_rst::{RstFile, RstVersion};
+//! use ltk_rst::Stringtable;
 //!
-//! let mut rst = RstFile::new(RstVersion::V5);
-//! rst.insert_str("game_client_quit", "Quit");
+//! let mut table = Stringtable::new();
+//! table.insert_str("game_client_quit", "Quit");
 //!
 //! let mut out = File::create("out.stringtable")?;
-//! rst.to_writer(&mut out)?;
+//! table.to_rst_writer(&mut out)?;
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!

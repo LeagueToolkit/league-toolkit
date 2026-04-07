@@ -6,27 +6,28 @@ use ltk_io_ext::ReaderExt as _;
 
 use crate::error::RstError;
 use crate::hash::{compute_hash, pack_entry, unpack_entry};
-use crate::version::{RstMode, RstVersion};
+use crate::version::RstVersion;
 
 /// Magic bytes at the start of every RST file: `"RST"`.
 pub const MAGIC: &[u8; 3] = b"RST";
 
-/// A parsed RST (Riot String Table) file.
+/// A parsed string table.
 ///
-/// RST files are League of Legends localisation tables that map XXHash64-based
-/// keys to UTF-8 strings.  The hash table entries pack both the string hash and
-/// the offset of its null-terminated UTF-8 data into a single `u64`.
+/// String tables are League of Legends localisation tables that map
+/// XXHash64-based keys to UTF-8 strings.  The hash table entries pack both
+/// the string hash and the offset of its null-terminated UTF-8 data into a
+/// single `u64`.
 ///
 /// # Reading
 ///
 /// ```no_run
 /// use std::fs::File;
-/// use ltk_rst::RstFile;
+/// use ltk_rst::Stringtable;
 ///
 /// let mut file = File::open("fontconfig_en_us.stringtable")?;
-/// let rst = RstFile::from_reader(&mut file)?;
+/// let table = Stringtable::from_rst_reader(&mut file)?;
 ///
-/// if let Some(text) = rst.get(0x1234_5678_9abc_def0) {
+/// if let Some(text) = table.get(0x1234_5678_9abc_def0) {
 ///     println!("{text}");
 /// }
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -36,32 +37,43 @@ pub const MAGIC: &[u8; 3] = b"RST";
 ///
 /// ```no_run
 /// use std::fs::File;
-/// use ltk_rst::{RstFile, RstVersion};
+/// use ltk_rst::Stringtable;
 ///
-/// let mut rst = RstFile::new(RstVersion::V5);
-/// rst.insert_str("game_client_quit", "Quit");
+/// let mut table = Stringtable::new();
+/// table.insert_str("game_client_quit", "Quit");
 ///
 /// let mut out = File::create("out.stringtable")?;
-/// rst.to_writer(&mut out)?;
+/// table.to_rst_writer(&mut out)?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RstFile {
-    /// File version (encodes config and mode alongside version-specific data).
-    pub version: RstVersion,
-
+pub struct Stringtable {
     /// Hash → string mapping.
     pub entries: HashMap<u64, String>,
 }
 
-impl RstFile {
-    /// Creates an empty [`RstFile`] for the given version.
-    pub fn new(version: RstVersion) -> Self {
+impl Stringtable {
+    /// Creates an empty [`Stringtable`].
+    pub fn new() -> Self {
         Self {
-            version,
             entries: HashMap::new(),
         }
+    }
+
+    /// Returns the number of entries in the table.
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    /// Returns `true` if the table contains no entries.
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    /// Returns an iterator over the entries in the table.
+    pub fn iter(&self) -> impl Iterator<Item = (&u64, &String)> {
+        self.entries.iter()
     }
 
     /// Returns the string associated with `hash`, if any.
@@ -71,42 +83,40 @@ impl RstFile {
 
     /// Inserts an entry by pre-computed hash.
     ///
-    /// The hash must already be masked to the bit-width of the file's
+    /// The hash must already be masked to the bit-width of the desired
     /// [`RstHashType`] — use [`compute_hash`] to produce it.
     pub fn insert(&mut self, hash: u64, value: impl Into<String>) {
         self.entries.insert(hash, value.into());
     }
 
-    /// Hashes `key` for this file's version and inserts the entry.
+    /// Hashes `key` using the latest version's hash type and inserts the entry.
     pub fn insert_str(&mut self, key: &str, value: impl Into<String>) {
-        let hash = compute_hash(key, self.version.hash_type());
+        let hash = compute_hash(key, RstVersion::V5.hash_type());
         self.insert(hash, value);
     }
 
-    /// Parses an [`RstFile`] from any [`Read`] + [`Seek`] source.
+    /// Parses a [`Stringtable`] from any [`Read`] + [`Seek`] source containing
+    /// RST data.
     ///
     /// Seeking is required because string data offsets stored in the hash
     /// table are relative to the start of the string section, which is only
     /// known after the entire hash table has been read.
-    pub fn from_reader(reader: &mut (impl Read + Seek)) -> Result<Self, RstError> {
+    pub fn from_rst_reader(reader: &mut (impl Read + Seek)) -> Result<Self, RstError> {
         let mut magic = [0u8; 3];
         reader.read_exact(&mut magic)?;
         if magic != *MAGIC {
             return Err(RstError::InvalidMagic { actual: magic });
         }
 
-        let version_byte = reader.read_u8()?;
-        let mut version = RstVersion::try_from_u8(version_byte)?;
+        let version = RstVersion::try_from_u8(reader.read_u8()?)?;
         let hash_type = version.hash_type();
 
-        // Read config for V2
-        if let RstVersion::V2 { ref mut config, .. } = version {
+        // V2 has an optional font-config string (read and discard).
+        if version == RstVersion::V2 {
             let has_config = reader.read_u8()? != 0;
             if has_config {
-                let len = reader.read_i32::<LE>()? as usize;
-                let mut buf = vec![0u8; len];
-                reader.read_exact(&mut buf)?;
-                *config = Some(String::from_utf8_lossy(&buf).into_owned());
+                let len = reader.read_i32::<LE>()?;
+                reader.seek(SeekFrom::Current(len as i64))?;
             }
         }
 
@@ -117,17 +127,9 @@ impl RstFile {
             pairs.push(unpack_entry(raw, hash_type));
         }
 
-        // Read mode byte for versions that have it
+        // V2–V4 have a mode byte (read and discard).
         if version.has_mode_byte() {
-            let mode = RstMode::from_u8(reader.read_u8()?);
-            match &mut version {
-                RstVersion::V2 {
-                    mode: ref mut m, ..
-                } => *m = mode,
-                RstVersion::V3 { mode: ref mut m } => *m = mode,
-                RstVersion::V4 { mode: ref mut m } => *m = mode,
-                _ => {}
-            }
+            let _ = reader.read_u8()?;
         }
 
         let data_start = reader.stream_position()?;
@@ -146,32 +148,17 @@ impl RstFile {
             entries.insert(hash, text);
         }
 
-        Ok(Self { version, entries })
+        Ok(Self { entries })
     }
 
-    /// Serialises this [`RstFile`] to any [`Write`] sink.
-    pub fn to_writer(&self, writer: &mut impl Write) -> Result<(), RstError> {
-        let hash_type = self.version.hash_type();
+    /// Serialises this [`Stringtable`] to any [`Write`] sink as RST V5.
+    pub fn to_rst_writer(&self, writer: &mut impl Write) -> Result<(), RstError> {
+        use ltk_io_ext::WriterExt as _;
+        let hash_type = RstVersion::V5.hash_type();
 
-        // Write magic + version byte
         writer.write_all(MAGIC)?;
-        writer.write_u8(self.version.to_u8())?;
+        writer.write_u8(RstVersion::V5.to_u8())?;
 
-        // Write config for V2
-        if let RstVersion::V2 { ref config, .. } = self.version {
-            match config {
-                Some(cfg) if !cfg.is_empty() => {
-                    writer.write_u8(1)?;
-                    writer.write_i32::<LE>(cfg.len() as i32)?;
-                    writer.write_all(cfg.as_bytes())?;
-                }
-                _ => {
-                    writer.write_u8(0)?;
-                }
-            }
-        }
-
-        // Write entry count
         writer.write_i32::<LE>(self.entries.len() as i32)?;
 
         // Build string data blob with deduplication, and collect packed entries
@@ -184,8 +171,7 @@ impl RstFile {
                 off
             } else {
                 let off = data.len() as u64;
-                data.extend_from_slice(text.as_bytes());
-                data.push(0x00);
+                data.write_terminated_string(text)?;
                 text_to_offset.insert(text.as_str(), off);
                 off
             };
@@ -194,19 +180,18 @@ impl RstFile {
             packed_entries.push(packed);
         }
 
-        // Write packed hash-table entries
         for packed in &packed_entries {
             writer.write_u64::<LE>(*packed)?;
         }
 
-        // Write mode byte if applicable
-        if self.version.has_mode_byte() {
-            writer.write_u8(self.version.mode() as u8)?;
-        }
-
-        // Write string data
         writer.write_all(&data)?;
 
         Ok(())
+    }
+}
+
+impl Default for Stringtable {
+    fn default() -> Self {
+        Self::new()
     }
 }

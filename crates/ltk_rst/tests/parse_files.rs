@@ -8,7 +8,7 @@ use std::fs::File;
 use std::io::{BufReader, Cursor};
 use std::path::Path;
 
-use ltk_rst::{compute_hash, RstError, RstFile, RstHashType, RstVersion};
+use ltk_rst::{compute_hash, RstError, RstHashType, Stringtable};
 
 const TEST_FILES_ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../test-files/data/menu");
 
@@ -23,9 +23,7 @@ fn open(relative: &str) -> Option<BufReader<File>> {
     })))
 }
 
-// ---------------------------------------------------------------------------
-// Parse tests
-// ---------------------------------------------------------------------------
+
 
 /// Parses every locale's bootstrap.stringtable to ensure the reader handles
 /// all regional encodings (CJK, Arabic, Cyrillic, …) without error.
@@ -42,18 +40,17 @@ fn parse_all_bootstrap_locales() {
             continue;
         };
 
-        let rst = RstFile::from_reader(&mut reader)
+        let table = Stringtable::from_rst_reader(&mut reader)
             .unwrap_or_else(|e| panic!("failed to parse {locale}/bootstrap.stringtable: {e}"));
 
-        assert_eq!(rst.version, RstVersion::V5, "{locale}: expected version 5");
         assert!(
-            !rst.entries.is_empty(),
+            !table.entries.is_empty(),
             "{locale}: expected at least one entry"
         );
 
         println!(
             "{locale}/bootstrap.stringtable: {} entries",
-            rst.entries.len()
+            table.entries.len()
         );
     }
 }
@@ -66,17 +63,16 @@ fn parse_lol_and_tft_stringtables() {
             continue;
         };
 
-        let rst = RstFile::from_reader(&mut reader)
+        let table = Stringtable::from_rst_reader(&mut reader)
             .unwrap_or_else(|e| panic!("failed to parse en_us/{name}.stringtable: {e}"));
 
-        assert_eq!(rst.version, RstVersion::V5);
         assert_eq!(
-            rst.entries.len(),
+            table.entries.len(),
             expected_count,
             "{name}.stringtable entry count mismatch"
         );
 
-        println!("en_us/{name}.stringtable: {} entries", rst.entries.len());
+        println!("en_us/{name}.stringtable: {} entries", table.entries.len());
     }
 }
 
@@ -87,19 +83,17 @@ fn parse_bootstrap_known_entries() {
         return;
     };
 
-    let rst =
-        RstFile::from_reader(&mut reader).expect("failed to parse en_us/bootstrap.stringtable");
+    let table =
+        Stringtable::from_rst_reader(&mut reader).expect("failed to parse en_us/bootstrap.stringtable");
 
-    assert_eq!(rst.entries.len(), 201);
+    assert_eq!(table.entries.len(), 201);
 
     // Known stable entries confirmed from the file.
-    assert_eq!(rst.get(0x000000008818cc3c), Some("Ignore"));
-    assert_eq!(rst.get(0x0000004732dbee5e), Some("Cancel"));
+    assert_eq!(table.get(0x000000008818cc3c), Some("Ignore"));
+    assert_eq!(table.get(0x0000004732dbee5e), Some("Cancel"));
 }
 
-// ---------------------------------------------------------------------------
-// Round-trip tests
-// ---------------------------------------------------------------------------
+
 
 /// Parses en_us/bootstrap.stringtable, serialises it back to bytes, parses
 /// those bytes again, and asserts the two parsed representations are equal.
@@ -110,21 +104,17 @@ fn round_trip_bootstrap() {
     };
 
     let original =
-        RstFile::from_reader(&mut reader).expect("failed to parse en_us/bootstrap.stringtable");
+        Stringtable::from_rst_reader(&mut reader).expect("failed to parse en_us/bootstrap.stringtable");
 
     let mut buf = Vec::new();
     original
-        .to_writer(&mut buf)
+        .to_rst_writer(&mut buf)
         .expect("failed to serialise bootstrap.stringtable");
 
     let mut cursor = Cursor::new(&buf);
     let reloaded =
-        RstFile::from_reader(&mut cursor).expect("failed to re-parse serialised bootstrap");
+        Stringtable::from_rst_reader(&mut cursor).expect("failed to re-parse serialised bootstrap");
 
-    assert_eq!(
-        original.version, reloaded.version,
-        "version mismatch after round-trip"
-    );
     assert_eq!(
         original.entries.len(),
         reloaded.entries.len(),
@@ -139,9 +129,7 @@ fn round_trip_bootstrap() {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Hash tests
-// ---------------------------------------------------------------------------
+
 
 /// compute_hash lowercases before hashing, so both cases must produce the same
 /// result.
@@ -169,15 +157,13 @@ fn compute_hash_respects_bit_width() {
     assert_eq!(complex_hash & complex_mask, complex_hash);
 }
 
-// ---------------------------------------------------------------------------
-// Error tests
-// ---------------------------------------------------------------------------
+
 
 #[test]
 fn invalid_magic_returns_error() {
     let bad = b"\x00\x00\x00\x05";
     let mut cursor = Cursor::new(bad);
-    let err = RstFile::from_reader(&mut cursor).unwrap_err();
+    let err = Stringtable::from_rst_reader(&mut cursor).unwrap_err();
     assert!(
         matches!(err, RstError::InvalidMagic { .. }),
         "expected InvalidMagic, got {err:?}"
@@ -188,30 +174,28 @@ fn invalid_magic_returns_error() {
 fn unsupported_version_returns_error() {
     let bad = b"RST\x01";
     let mut cursor = Cursor::new(bad);
-    let err = RstFile::from_reader(&mut cursor).unwrap_err();
+    let err = Stringtable::from_rst_reader(&mut cursor).unwrap_err();
     assert!(
         matches!(err, RstError::UnsupportedVersion { version: 0x01 }),
         "expected UnsupportedVersion(0x01), got {err:?}"
     );
 }
 
-// ---------------------------------------------------------------------------
-// Builder / insertion tests
-// ---------------------------------------------------------------------------
+
 
 /// Verifies that insert_str hashes the key and stores the value, and that the
 /// resulting file can be written and re-read with no data loss.
 #[test]
 fn insert_str_round_trips() {
-    let mut rst = RstFile::new(RstVersion::V5);
-    rst.insert_str("game_client_quit", "Quit");
-    rst.insert_str("game_client_play", "Play");
+    let mut table = Stringtable::new();
+    table.insert_str("game_client_quit", "Quit");
+    table.insert_str("game_client_play", "Play");
 
     let mut buf = Vec::new();
-    rst.to_writer(&mut buf).expect("serialise failed");
+    table.to_rst_writer(&mut buf).expect("serialise failed");
 
     let mut cursor = Cursor::new(&buf);
-    let loaded = RstFile::from_reader(&mut cursor).expect("re-parse failed");
+    let loaded = Stringtable::from_rst_reader(&mut cursor).expect("re-parse failed");
 
     let quit_hash = compute_hash("game_client_quit", RstHashType::Simple);
     let play_hash = compute_hash("game_client_play", RstHashType::Simple);
@@ -224,15 +208,15 @@ fn insert_str_round_trips() {
 /// serialised byte stream.
 #[test]
 fn to_writer_deduplicates_strings() {
-    let mut rst = RstFile::new(RstVersion::V5);
+    let mut table = Stringtable::new();
     let shared_value = "Shared string value";
 
     for i in 0u64..10 {
-        rst.insert(i, shared_value);
+        table.insert(i, shared_value);
     }
 
     let mut buf = Vec::new();
-    rst.to_writer(&mut buf).expect("serialise failed");
+    table.to_rst_writer(&mut buf).expect("serialise failed");
 
     let occurrences = buf
         .windows(shared_value.len())
