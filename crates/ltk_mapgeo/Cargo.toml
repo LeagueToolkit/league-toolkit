@@ -1,6 +1,6 @@
 [package]
 name = "ltk_mapgeo"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 description = "Map Geometry (.mapgeo) parsing for League Toolkit"
 license = "MIT OR Apache-2.0"
@@ -15,8 +15,8 @@ bitflags = { workspace = true }
 thiserror = { workspace = true }
 glam = { workspace = true }
 
-ltk_io_ext = { version = "0.4.3", path = "../ltk_io_ext" }
-ltk_primitives = { version = "0.3.4", path = "../ltk_primitives" }
-ltk_mesh = { version = "0.4.3", path = "../ltk_mesh" }
+ltk_io_ext = { version = "0.4.4", path = "../ltk_io_ext" }
+ltk_primitives = { version = "0.3.5", path = "../ltk_primitives" }
+ltk_mesh = { version = "0.4.4", path = "../ltk_mesh" }
 
 [dev-dependencies]

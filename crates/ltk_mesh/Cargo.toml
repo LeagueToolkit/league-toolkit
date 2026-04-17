@@ -1,6 +1,6 @@
 [package]
 name = "ltk_mesh"
-version = "0.4.3"
+version = "0.4.4"
 edition = "2021"
 description = "Mesh parsing and structures for League Toolkit"
 license = "MIT OR Apache-2.0"
@@ -18,5 +18,5 @@ lazy_static = { workspace = true }
 
 glam = { workspace = true }
 
-ltk_io_ext = { version = "0.4.3", path = "../ltk_io_ext" }
-ltk_primitives = { version = "0.3.4", path = "../ltk_primitives" }
+ltk_io_ext = { version = "0.4.4", path = "../ltk_io_ext" }
+ltk_primitives = { version = "0.3.5", path = "../ltk_primitives" }
