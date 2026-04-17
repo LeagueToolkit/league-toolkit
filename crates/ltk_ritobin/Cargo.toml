@@ -6,6 +6,9 @@ description = "Ritobin text format parser and writer for League Toolkit"
 license = "MIT OR Apache-2.0"
 readme = "../../README.md"
 
+[lints]
+workspace = true
+
 [features]
 default = []
 serde = ["dep:serde", "ltk_meta/serde"]

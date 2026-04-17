@@ -6,6 +6,9 @@ description = "I/O extensions used by League Toolkit"
 license = "MIT OR Apache-2.0"
 readme = "../../README.md"
 
+[lints]
+workspace = true
+
 [dependencies]
 thiserror = "1.0.60"
 ltk_primitives = { version = "0.3.4", path = "../ltk_primitives" }

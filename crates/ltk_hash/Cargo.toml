@@ -6,4 +6,7 @@ description = "Hashes implementation used by League Toolkit"
 license = "MIT OR Apache-2.0"
 readme = "../../README.md"
 
+[lints]
+workspace = true
+
 [dependencies]

@@ -6,6 +6,9 @@ description = "Mesh parsing and structures for League Toolkit"
 license = "MIT OR Apache-2.0"
 readme = "../../README.md"
 
+[lints]
+workspace = true
+
 [dependencies]
 byteorder = { workspace = true }
 bitflags = { workspace = true }

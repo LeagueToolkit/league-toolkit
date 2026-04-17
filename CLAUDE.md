@@ -12,7 +12,7 @@ League Toolkit is a Rust workspace for parsing, editing, and writing League of L
 cargo build --verbose          # Build all crates
 cargo test --verbose           # Run all tests
 cargo fmt -- --check           # Check formatting
-cargo clippy --all-targets -- -D warnings  # Lint (CI denies all warnings)
+cargo clippy --all-targets     # Lint (severity controlled by [workspace.lints] in root Cargo.toml)
 ```
 
 Run a single crate's tests:

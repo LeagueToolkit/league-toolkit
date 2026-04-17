@@ -6,6 +6,9 @@ description = "Texture decoding/encoding utilities for League Toolkit"
 license = "MIT OR Apache-2.0"
 readme = "../../README.md"
 
+[lints]
+workspace = true
+
 [dependencies]
 bitflags = { workspace = true }
 byteorder = { workspace = true }

@@ -7,6 +7,8 @@ description = "Toolkit library for serializing and editing various League of Leg
 license = "MIT OR Apache-2.0"
 readme = "../../README.md"
 
+[lints]
+workspace = true
 
 # wad, file, meta have serde
 [features]
