@@ -1,0 +1,18 @@
+[package]
+name = "ltk_rst"
+version = "0.1.0"
+edition = "2021"
+description = "RST (Riot String Table) reading/writing for League Toolkit"
+license = "MIT OR Apache-2.0"
+readme = "../../README.md"
+
+[features]
+serde = ["dep:serde"]
+
+[dependencies]
+thiserror = { workspace = true }
+byteorder = { workspace = true }
+ltk_hash = { version = "0.2.6", path = "../ltk_hash" }
+ltk_io_ext = { version = "0.4.2", path = "../ltk_io_ext" }
+
+serde = { workspace = true, optional = true }
