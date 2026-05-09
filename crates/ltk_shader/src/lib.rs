@@ -1,6 +1,9 @@
 pub mod defines;
+pub mod error;
 pub mod loader;
 pub mod toc;
+
+pub use error::{Result, ShaderError};
 
 use byteorder::{ReadBytesExt, LE};
 use std::io::{self, Read};
