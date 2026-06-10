@@ -556,8 +556,19 @@ impl<'a, W: Write> CstVisitor<'a, W> {
         match token.kind {
             TokenKind::Comment => {
                 match ctx.kind {
-                    Kind::EntryTerminator | Kind::ListItem => self.space()?,
-                    _ => self.line()?,
+                    Kind::EntryTerminator => self.space()?,
+                    Kind::ListItem => {
+                        if let Some(list) = self.list_stack.last() {
+                            self.force_group(list.grp, Mode::Break);
+                        }
+                        self.space()?;
+                    }
+                    _ => {
+                        if let Some(list) = self.list_stack.last() {
+                            self.force_group(list.grp, Mode::Break);
+                        }
+                        self.line()?
+                    }
                 }
                 self.text(txt)?;
             }
