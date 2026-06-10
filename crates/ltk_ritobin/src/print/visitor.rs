@@ -238,17 +238,17 @@ impl<'a, W: Write> CstVisitor<'a, W> {
         true
     }
 
-    pub fn force_group(&mut self, group: GroupId, mode: Mode) {
+    pub fn force_group(&mut self, group: GroupId, mode: Mode) -> Option<Mode> {
         if group.0 < self.printed_commands {
             // eprintln!("[!!] trying to mutate already printed group! {group:?}");
-            return;
+            return None;
             // panic!("trying to mutate already printed group!");
         }
         let cmd = self.queue.get_mut(group.0 - self.printed_commands).unwrap();
         let Cmd::Begin(grp_mode) = cmd else {
             unreachable!("grp pointing at non begin cmd {cmd:?}");
         };
-        grp_mode.replace(mode);
+        grp_mode.replace(mode)
     }
 
     fn last_mode(&self) -> &Mode {
