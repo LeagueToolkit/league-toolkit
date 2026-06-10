@@ -543,7 +543,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
     fn visit_token_inner(
         &mut self,
         token: &crate::parse::Token,
-        _context: &Cst,
+        ctx: &Cst,
     ) -> Result<(), PrintError> {
         let txt = self.src[token.span].trim();
         let print_value = token.kind.print_value();
@@ -555,7 +555,11 @@ impl<'a, W: Write> CstVisitor<'a, W> {
         // eprintln!("->{:?}", token.kind);
         match token.kind {
             TokenKind::Comment => {
-                self.line()?;
+                if ctx.kind != Kind::EntryTerminator {
+                    self.line()?;
+                } else {
+                    self.space()?;
+                }
                 self.text(txt)?;
             }
             TokenKind::LCurly => {

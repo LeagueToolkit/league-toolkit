@@ -86,6 +86,17 @@ mod test {
     }
 
     #[test]
+    fn stmt_inline_comment() {
+        assert_pretty(
+            r#" b  :  list [ i8, ] = {  3, 6 1 }#   inline
+    #not inline"#,
+            r#"b: list[i8] = { 3, 6, 1 } #   inline
+#not inline"#,
+            PrintConfig::default(),
+        );
+    }
+
+    #[test]
     fn simple_list() {
         assert_pretty(
             r#" b  :  list [ i8, ] = {  3, 6 1 }"#,
