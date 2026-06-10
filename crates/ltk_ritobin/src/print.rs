@@ -97,6 +97,18 @@ mod test {
     }
 
     #[test]
+    fn list_comments() {
+        assert_pretty_rt(
+            r#"linked: list[string] = {
+    "aasdjaskhdkajshdkjahskdjh aksjhd akjshd kajhs dkjh  kajshdakjshd "
+    "basjd askjdh aksjhd akjsh dkjahsd jkahsd kajsh dkajsh d" # ad
+    # asd
+}"#,
+            PrintConfig::default(),
+        );
+    }
+
+    #[test]
     fn simple_list() {
         assert_pretty(
             r#" b  :  list [ i8, ] = {  3, 6 1 }"#,

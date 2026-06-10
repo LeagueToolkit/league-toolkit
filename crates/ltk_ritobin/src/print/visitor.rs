@@ -555,10 +555,9 @@ impl<'a, W: Write> CstVisitor<'a, W> {
         // eprintln!("->{:?}", token.kind);
         match token.kind {
             TokenKind::Comment => {
-                if ctx.kind != Kind::EntryTerminator {
-                    self.line()?;
-                } else {
-                    self.space()?;
+                match ctx.kind {
+                    Kind::EntryTerminator | Kind::ListItem => self.space()?,
+                    _ => self.line()?,
                 }
                 self.text(txt)?;
             }
