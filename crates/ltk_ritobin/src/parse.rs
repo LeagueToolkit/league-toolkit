@@ -56,16 +56,22 @@ mod test {
         assert_success(
             r#"
 #PROP_text
-type: string = "my_str"
+type: string = "my_str" # inline comment
 # version: u32 = 3
 linked: list[string] = { }
 entries: map[hash, embed] = {
     "foo" = Bar {
+        a = 5 # 23
         # asdasd
     }
 }
         "#,
         );
+    }
+
+    #[test]
+    fn inline_comment_into_eof() {
+        assert_success(r#"mVelMultiplier: f32 = 0 # asd"#);
     }
 
     #[ignore = "Nice to have"]

@@ -128,6 +128,7 @@ pub fn lex(mut text: &str) -> Vec<Token> {
                         | TokenKind::RCurly
                         | TokenKind::String
                         | TokenKind::Eq
+                        | TokenKind::Comment
                 ) && eaten.find(['\n', '\r']).is_some()
                 {
                     let start = source.len() - text.len();

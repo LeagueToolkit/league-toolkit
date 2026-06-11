@@ -10,9 +10,6 @@ use TokenKind::*;
 pub fn file(p: &mut Parser) {
     let m = p.open();
     while !p.eof() {
-        if p.at(Comment) {
-            p.scope(TreeKind::Comment, |p| p.advance());
-        }
         stmt_or_list_item(p);
     }
     p.close(m, TreeKind::File);
@@ -22,7 +19,10 @@ pub fn stmt_or_list_item(p: &mut Parser) -> (MarkClosed, TreeKind) {
     let res;
     match (p.nth(0), p.nth(1), p.nth(2)) {
         (Comment, _, _) => {
-            let (_, m) = p.scope(TreeKind::Comment, |p| while p.eat(TokenKind::Comment) {});
+            let (_, m) = p.scope(TreeKind::Comment, |p| {
+                p.eat(TokenKind::Comment);
+                while p.eat(TokenKind::Newline) {}
+            });
             res = (m, TreeKind::Comment);
         }
         (Name | HexLit, LCurly, _) => {
@@ -43,6 +43,7 @@ pub fn stmt_or_list_item(p: &mut Parser) -> (MarkClosed, TreeKind) {
         (Name | HexLit | String | Number | True | False, _, _) => {
             let m = p.open();
             p.scope(TreeKind::Literal, |p| p.advance());
+            p.eat(Comment);
             res = (p.close(m, TreeKind::ListItem), TreeKind::ListItem);
             p.eat(Comma);
         }
@@ -79,9 +80,12 @@ pub fn stmt(p: &mut Parser) -> MarkClosed {
 
     p.scope(TreeKind::EntryTerminator, |p| {
         let mut one = false;
+
+        p.eat(TokenKind::Comment);
         if p.eof() {
             return;
         }
+
         while p
             .eat_any(&[TokenKind::SemiColon, TokenKind::Newline])
             .is_some()

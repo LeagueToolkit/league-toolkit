@@ -86,6 +86,43 @@ mod test {
     }
 
     #[test]
+    fn stmt_inline_comment() {
+        assert_pretty(
+            r#" b  :  list [ i8, ] = {  3, 6 1 }#   inline
+    #not inline"#,
+            r#"b: list[i8] = { 3, 6, 1 } #   inline
+#not inline"#,
+            PrintConfig::default(),
+        );
+    }
+
+    #[test]
+    fn list_comments() {
+        assert_pretty_rt(
+            r#"linked: list[string] = {
+    "aasdjaskhdkajshdkjahskdjh aksjhd akjshd kajhs dkjh  kajshdakjshd "
+    "basjd askjdh aksjhd akjsh dkjahsd jkahsd kajsh dkajsh d" # ad
+    # asd
+}"#,
+            PrintConfig::default(),
+        );
+    }
+
+    #[test]
+    fn dont_inline_lists_with_comments() {
+        assert_pretty(
+            r#"linked: list[string] = { "a", "b" # asd 
+}"#,
+            r#"linked: list[string] = {
+    "a"
+    "b" # asd
+}
+"#,
+            PrintConfig::default(),
+        );
+    }
+
+    #[test]
     fn simple_list() {
         assert_pretty(
             r#" b  :  list [ i8, ] = {  3, 6 1 }"#,

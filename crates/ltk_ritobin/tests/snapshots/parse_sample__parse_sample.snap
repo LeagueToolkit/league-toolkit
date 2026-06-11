@@ -3,9 +3,10 @@ source: crates/ltk_ritobin/tests/parse_sample.rs
 expression: tree(SAMPLE_RITOBIN)
 ---
 File - (0..1310): "#PROP_text\ntype: string = \"PROP\"\nversion: u32 = 3\nlinked: list[string] = {\n    \"DATA/Characters/Test/Animations/Skin0.bin\"\n    \"DATA/Characters/Test/Test.bin\"\n}\nentries: map[hash,embed] = {\n    \"Characters/Test/Skins/Skin0\" = SkinCharacterDataProperties {\n        skinClassification: u32 = 1\n        championSkinName: string = \"TestBase\"\n        metaDataTags: string = \"gender:male\"\n        loadscreen: embed = CensoredImage {\n            image: string = \"ASSETS/Characters/Test/Skins/Base/TestLoadScreen.tex\"\n        }\n        skinAudioProperties: embed = skinAudioProperties {\n            tagEventList: list[string] = {\n                \"Test\"\n            }\n            bankUnits: list2[embed] = {\n                BankUnit {\n                    name: string = \"Test_Base_SFX\"\n                    bankPath: list[string] = {\n                        \"ASSETS/Sounds/Test/audio.bnk\"\n                        \"ASSETS/Sounds/Test/events.bnk\"\n                    }\n                    events: list[string] = {\n                        \"Play_sfx_Test_Attack\"\n                        \"Play_sfx_Test_Death\"\n                    }\n                }\n            }\n        }\n        iconCircle: option[string] = {\n            \"ASSETS/Characters/Test/Icons/Circle.tex\"\n        }\n        iconSquare: option[string] = {}\n    }\n}\n"
-    Comment - (0..10): "#PROP_text"
+    Comment - (0..11): "#PROP_text\n"
       "#PROP_text" (Comment)
-    Entry - (10..33): "\ntype: string = \"PROP\"\n"
+      "\n" (Newline)
+    Entry - (11..33): "type: string = \"PROP\"\n"
         EntryKey - (11..15): "type"
           "type" (Name)
       ":" (Colon)
