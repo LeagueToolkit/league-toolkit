@@ -6,8 +6,14 @@ description = "Hashes implementation used by League Toolkit"
 license = "MIT OR Apache-2.0"
 readme = "../../README.md"
 
+[features]
+serde = ["dep:serde"]
+
 [lints]
 workspace = true
 
 [dependencies]
-xxhash-rust = { workspace = true }
+xxhash-rust.workspace = true
+byteorder.workspace = true
+
+serde = { workspace = true, optional = true }
