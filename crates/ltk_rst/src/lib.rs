@@ -36,9 +36,9 @@
 //! # Hashing keys manually
 //!
 //! ```
-//! use ltk_rst::{RstHashType, compute_hash};
+//! use ltk_rst::{RstHashType, RstHash};
 //!
-//! let hash = compute_hash("game_client_quit", RstHashType::Simple);
+//! let hash = RstHash::new("game_client_quit", RstHashType::Simple);
 //! println!("{hash:#018x}");
 //! ```
 
