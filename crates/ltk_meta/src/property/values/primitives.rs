@@ -2,13 +2,20 @@ use crate::{
     property::{Kind, NoMeta},
     traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty},
 };
+use ltk_hash::{BinHash, ReadBytesExt as _, WadHash, WriteBytesExt as _};
 use ltk_io_ext::{ReaderExt, WriterExt};
 
 macro_rules! impl_prim {
     ($name:tt, $rust:tt, [$($derive:tt),*], $method:ident $(::<$endian:ident>)?) => {
         impl_prim!($name, $rust, [$( $derive ),*], $method $(::< $endian >)?, value);
     };
+    ($name:tt, $rust:tt, ($new_arg:ty), [$($derive:tt),*], $method:ident $(::<$endian:ident>)?) => {
+        impl_prim!($name, $rust, ($new_arg), [$( $derive ),*], $method $(::< $endian >)?, value);
+    };
     ($name:tt, $rust:tt, [$($derive:tt),*], $method:ident $(::<$endian:ident>)?, $($write_value:tt)*) => {
+        impl_prim!($name, $rust, ($rust), [$( $derive ),*], $method $(::< $endian >)?, $($write_value)*);
+    };
+    ($name:tt, $rust:tt, ($new_arg:ty), [$($derive:tt),*], $method:ident $(::<$endian:ident>)?, $($write_value:tt)*) => {
         #[derive(Clone, Debug, PartialEq, Default, $($derive),*)]
         #[cfg_attr(
             feature = "serde",
@@ -23,14 +30,14 @@ macro_rules! impl_prim {
         impl<M> $name<M> {
             #[inline(always)]
             #[must_use]
-            pub fn new(value: $rust) -> Self where M: Default {
-                Self::new_with_meta(value, M::default())
+            pub fn new(value: $new_arg) -> Self where M: Default {
+                Self::new_with_meta(value.into(), M::default())
             }
 
             #[inline(always)]
             #[must_use]
-            pub fn new_with_meta(value: $rust, meta: M) -> Self {
-                Self { value, meta }
+            pub fn new_with_meta(value: $new_arg, meta: M) -> Self {
+                Self { value: value.into(), meta }
             }
 
             #[inline(always)]
@@ -143,6 +150,24 @@ impl_prim!(Matrix44, Mat4, [], mat4_row_major::<LE>);
 
 type ColorU8 = ColorPrim<u8>;
 impl_prim!(Color, ColorU8, [], color_u8, value.as_ref());
-impl_prim!(Hash, u32, [Eq, Hash], u32::<LE>);
-impl_prim!(WadChunkLink, u64, [Eq, Hash], u64::<LE>);
-impl_prim!(ObjectLink, u32, [Eq, Hash], u32::<LE>);
+impl_prim!(
+    Hash,
+    BinHash,
+    (impl Into<BinHash>),
+    [Eq, Hash],
+    bin_hash::<LE>
+);
+impl_prim!(
+    WadChunkLink,
+    WadHash,
+    (impl Into<WadHash>),
+    [Eq, Hash],
+    wad_hash::<LE>
+);
+impl_prim!(
+    ObjectLink,
+    BinHash,
+    (impl Into<BinHash>),
+    [Eq, Hash],
+    bin_hash::<LE>
+);

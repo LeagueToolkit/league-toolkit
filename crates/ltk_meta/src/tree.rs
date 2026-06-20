@@ -2,6 +2,7 @@ mod builder;
 pub use builder::Builder;
 
 mod object;
+use ltk_hash::BinHash;
 pub use object::{BinObject, Builder as ObjectBuilder};
 
 mod read;
@@ -49,7 +50,7 @@ pub struct Bin<M = NoMeta> {
     pub version: u32,
 
     /// The objects in this bin tree, keyed by their path hash.
-    pub objects: IndexMap<u32, BinObject<M>>,
+    pub objects: IndexMap<BinHash, BinObject<M>>,
 
     /// List of other property bins this file depends on.
     ///
@@ -137,19 +138,19 @@ impl<M> Bin<M> {
 
     /// Returns a reference to the object with the given path hash, if it exists.
     #[inline]
-    pub fn get_object(&self, path_hash: u32) -> Option<&BinObject<M>> {
+    pub fn get_object(&self, path_hash: BinHash) -> Option<&BinObject<M>> {
         self.objects.get(&path_hash)
     }
 
     /// Returns a mutable reference to the object with the given path hash, if it exists.
     #[inline]
-    pub fn get_object_mut(&mut self, path_hash: u32) -> Option<&mut BinObject<M>> {
+    pub fn get_object_mut(&mut self, path_hash: BinHash) -> Option<&mut BinObject<M>> {
         self.objects.get_mut(&path_hash)
     }
 
     /// Returns `true` if the tree contains an object with the given path hash.
     #[inline]
-    pub fn contains_object(&self, path_hash: u32) -> bool {
+    pub fn contains_object(&self, path_hash: BinHash) -> bool {
         self.objects.contains_key(&path_hash)
     }
 
@@ -162,8 +163,8 @@ impl<M> Bin<M> {
     }
 
     /// Removes and returns the object with the given path hash, if it exists.
-    pub fn remove_object(&mut self, path_hash: u32) -> Option<BinObject<M>> {
-        self.objects.shift_remove(&path_hash)
+    pub fn remove_object(&mut self, path_hash: impl Into<BinHash>) -> Option<BinObject<M>> {
+        self.objects.shift_remove(&path_hash.into())
     }
 
     /// Adds a dependency to the tree.
@@ -173,20 +174,20 @@ impl<M> Bin<M> {
 
     /// Returns an iterator over the objects in the tree.
     #[inline]
-    pub fn iter(&self) -> impl Iterator<Item = (&u32, &BinObject<M>)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&BinHash, &BinObject<M>)> {
         self.objects.iter()
     }
 
     /// Returns a mutable iterator over the objects in the tree.
     #[inline]
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&u32, &mut BinObject<M>)> {
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&BinHash, &mut BinObject<M>)> {
         self.objects.iter_mut()
     }
 }
 
 impl<'a, M> IntoIterator for &'a Bin<M> {
-    type Item = (&'a u32, &'a BinObject<M>);
-    type IntoIter = indexmap::map::Iter<'a, u32, BinObject<M>>;
+    type Item = (&'a BinHash, &'a BinObject<M>);
+    type IntoIter = indexmap::map::Iter<'a, BinHash, BinObject<M>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.objects.iter()
@@ -194,8 +195,8 @@ impl<'a, M> IntoIterator for &'a Bin<M> {
 }
 
 impl<'a, M> IntoIterator for &'a mut Bin<M> {
-    type Item = (&'a u32, &'a mut BinObject<M>);
-    type IntoIter = indexmap::map::IterMut<'a, u32, BinObject<M>>;
+    type Item = (&'a BinHash, &'a mut BinObject<M>);
+    type IntoIter = indexmap::map::IterMut<'a, BinHash, BinObject<M>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.objects.iter_mut()
@@ -203,8 +204,8 @@ impl<'a, M> IntoIterator for &'a mut Bin<M> {
 }
 
 impl<M> IntoIterator for Bin<M> {
-    type Item = (u32, BinObject<M>);
-    type IntoIter = indexmap::map::IntoIter<u32, BinObject<M>>;
+    type Item = (BinHash, BinObject<M>);
+    type IntoIter = indexmap::map::IntoIter<BinHash, BinObject<M>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.objects.into_iter()

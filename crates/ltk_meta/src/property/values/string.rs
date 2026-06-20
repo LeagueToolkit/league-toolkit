@@ -98,6 +98,11 @@ impl<M> AsRef<std::string::String> for String<M> {
         &self.value
     }
 }
+impl<M> AsRef<str> for String<M> {
+    fn as_ref(&self) -> &str {
+        self.value.as_str()
+    }
+}
 
 impl<M> std::ops::Deref for String<M> {
     type Target = std::string::String;

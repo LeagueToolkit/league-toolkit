@@ -10,7 +10,13 @@ readme = "../../README.md"
 workspace = true
 
 [features]
-serde = ["dep:serde", "ltk_primitives/serde", "glam/serde", "indexmap/serde"]
+serde = [
+  "dep:serde",
+  "ltk_primitives/serde",
+  "ltk_hash/serde",
+  "glam/serde",
+  "indexmap/serde",
+]
 
 [dependencies]
 log = { workspace = true }
@@ -28,6 +34,7 @@ serde = { workspace = true, optional = true }
 
 ltk_io_ext = { version = "0.4.3", path = "../ltk_io_ext" }
 ltk_primitives = { version = "0.3.4", path = "../ltk_primitives" }
+ltk_hash = { path = "../ltk_hash" }
 
 [dev-dependencies]
 approx = { workspace = true }
