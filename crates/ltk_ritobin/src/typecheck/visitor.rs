@@ -2,11 +2,10 @@ use std::fmt::{Debug, Display};
 
 use glam::Vec4;
 use indexmap::IndexMap;
-use ltk_hash::fnv1a;
+use ltk_hash::{BinHash, Hash, WadHash};
 use ltk_meta::{
     property::values, traits::PropertyExt, Bin, BinObject, PropertyKind, PropertyValueEnum,
 };
-use xxhash_rust::xxh64::xxh64;
 
 use crate::{
     cst::{self, visitor::Visit, Child, Cst, Kind, Visitor},
@@ -409,7 +408,7 @@ pub fn coerce_type<M: Debug>(
         PropertyKind::Hash => Some(match value {
             PropertyValueEnum::Hash(_) => return Some(value),
             PropertyValueEnum::String(str) => {
-                values::Hash::new_with_meta(fnv1a::hash_lower(&str), str.meta).into()
+                values::Hash::new_with_meta(BinHash::hash_str(&str), str.meta).into()
             }
             other => {
                 eprintln!("\x1b[41mcannot coerce {other:?} to {to:?}\x1b[0m");
@@ -422,7 +421,7 @@ pub fn coerce_type<M: Debug>(
             }
             PropertyValueEnum::ObjectLink(_) => return Some(value),
             PropertyValueEnum::String(str) => {
-                values::ObjectLink::new_with_meta(fnv1a::hash_lower(&str), str.meta).into()
+                values::ObjectLink::new_with_meta(BinHash::hash_str(&str), str.meta).into()
             }
             other => {
                 eprintln!("\x1b[41mcannot coerce {other:?} to {to:?}\x1b[0m");
@@ -432,10 +431,11 @@ pub fn coerce_type<M: Debug>(
         PropertyKind::WadChunkLink => Some(match value {
             PropertyValueEnum::WadChunkLink(_) => return Some(value),
             PropertyValueEnum::Hash(hash) => {
-                values::WadChunkLink::new_with_meta((*hash).into(), hash.meta).into()
+                values::WadChunkLink::new_with_meta(WadHash((**hash).into()), hash.meta).into()
             }
             PropertyValueEnum::String(str) => {
-                values::WadChunkLink::new_with_meta(xxh64(str.as_bytes(), 0), str.meta).into()
+                values::WadChunkLink::new_with_meta(WadHash::hash_str(str.as_str()), str.meta)
+                    .into()
             }
             other => {
                 eprintln!("\x1b[41mcannot coerce {other:?} to {to:?}\x1b[0m");
@@ -539,9 +539,11 @@ fn resolve_hash(ctx: &Ctx, span: Span) -> Result<PropertyValueEnum<Span>, Diagno
     // TODO: better errs here?
     let src = ctx.text[span].strip_prefix("0x").ok_or(InvalidHash(span))?;
 
-    Ok(match u32::from_str_radix(src, 16) {
+    // since we can't know whether bin/wad was intended, we will just try fit it in the smallest hash that allows it.
+    // we can then safely coerce the type upwards when we are given type information
+    Ok(match BinHash::from_str_radix(src, 16) {
         Ok(hash) => PropertyValueEnum::Hash(values::Hash::new_with_meta(hash, span)),
-        Err(_) => match u64::from_str_radix(src, 16) {
+        Err(_) => match WadHash::from_str_radix(src, 16) {
             Ok(hash) => {
                 PropertyValueEnum::WadChunkLink(values::WadChunkLink::new_with_meta(hash, span))
             }
@@ -581,7 +583,7 @@ pub fn resolve_value(
                 Token {
                     kind: TokenKind::Name,
                     span,
-                } => fnv1a::hash_lower(&ctx.text[span]),
+                } => BinHash::hash_str(&ctx.text[span]),
                 Token {
                     kind: TokenKind::HexLit,
                     span,
