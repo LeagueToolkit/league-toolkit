@@ -59,21 +59,29 @@ impl RstVersion {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RstHashType {
     /// 40-bit hash key (`(1 << 40) - 1`). Used by RST v2 and v3.
-    Complex = 40,
+    Complex,
     /// 39-bit hash key (`(1 << 39) - 1`). Used by RST v4 and v5.
-    Simple = 39,
+    Simple,
 }
 
 impl RstHashType {
     /// Returns the bitmask for the hash portion of a packed entry.
-    #[inline]
+    ///
+    /// - [`RstHashType::Complex`] → preserve lower 40 bits
+    /// - [`RstHashType::Simple`]  → preserve lower 39 bits
+    #[must_use]
+    #[inline(always)]
     pub fn hash_mask(self) -> u64 {
-        (1u64 << (self as u8)) - 1
+        (1u64 << self.offset_shift()) - 1
     }
 
     /// Returns the bit-shift used when packing or unpacking the string offset.
-    #[inline]
+    #[must_use]
+    #[inline(always)]
     pub fn offset_shift(self) -> u8 {
-        self as u8
+        match self {
+            Self::Complex => 40,
+            Self::Simple => 39,
+        }
     }
 }

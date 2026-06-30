@@ -8,7 +8,7 @@ use std::fs::File;
 use std::io::{BufReader, Cursor};
 use std::path::Path;
 
-use ltk_rst::{compute_hash, RstError, RstHashType, Stringtable};
+use ltk_rst::{RstError, RstHash, RstHashType, Stringtable};
 
 const TEST_FILES_ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../test-files/data/menu");
 
@@ -129,9 +129,9 @@ fn round_trip_bootstrap() {
 /// result.
 #[test]
 fn compute_hash_is_case_insensitive() {
-    let lower = compute_hash("game_client_quit", RstHashType::Simple);
-    let upper = compute_hash("GAME_CLIENT_QUIT", RstHashType::Simple);
-    let mixed = compute_hash("Game_Client_Quit", RstHashType::Simple);
+    let lower = RstHash::new("game_client_quit", RstHashType::Simple);
+    let upper = RstHash::new("GAME_CLIENT_QUIT", RstHashType::Simple);
+    let mixed = RstHash::new("Game_Client_Quit", RstHashType::Simple);
 
     assert_eq!(lower, upper);
     assert_eq!(lower, mixed);
@@ -144,11 +144,11 @@ fn compute_hash_respects_bit_width() {
     let simple_mask = (1u64 << 39) - 1;
     let complex_mask = (1u64 << 40) - 1;
 
-    let simple_hash = compute_hash("some_key", RstHashType::Simple);
-    let complex_hash = compute_hash("some_key", RstHashType::Complex);
+    let simple_hash = RstHash::new("some_key", RstHashType::Simple);
+    let complex_hash = RstHash::new("some_key", RstHashType::Complex);
 
-    assert_eq!(simple_hash & simple_mask, simple_hash);
-    assert_eq!(complex_hash & complex_mask, complex_hash);
+    assert_eq!(simple_hash.0 & simple_mask, *simple_hash);
+    assert_eq!(complex_hash.0 & complex_mask, *complex_hash);
 }
 
 #[test]
@@ -187,8 +187,8 @@ fn insert_str_round_trips() {
     let mut cursor = Cursor::new(&buf);
     let loaded = Stringtable::from_rst_reader(&mut cursor).expect("re-parse failed");
 
-    let quit_hash = compute_hash("game_client_quit", RstHashType::Simple);
-    let play_hash = compute_hash("game_client_play", RstHashType::Simple);
+    let quit_hash = RstHash::new("game_client_quit", RstHashType::Simple);
+    let play_hash = RstHash::new("game_client_play", RstHashType::Simple);
 
     assert_eq!(loaded.get(quit_hash), Some("Quit"));
     assert_eq!(loaded.get(play_hash), Some("Play"));
@@ -202,7 +202,7 @@ fn to_writer_deduplicates_strings() {
     let shared_value = "Shared string value";
 
     for i in 0u64..10 {
-        table.insert(i, shared_value);
+        table.insert(i.into(), shared_value);
     }
 
     let mut buf = Vec::new();
