@@ -74,7 +74,7 @@ impl PackedHash {
     /// Packs a pre-computed masked `hash` together with a string `offset` into the
     /// single `u64` value, for use in the RST hash table.
     ///
-    /// NOTE: hash_type MUST match what was given when creating your [`RstHash`]
+    /// NOTE: `hash_type` MUST match what was given when creating your [`RstHash`]
     #[must_use]
     #[inline(always)]
     pub fn pack(hash: RstHash, offset: u64, hash_type: RstHashType) -> Self {
