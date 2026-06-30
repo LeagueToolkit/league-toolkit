@@ -3,8 +3,9 @@ use std::io;
 use crate::Error;
 
 use super::{Bin, BinObject};
-use byteorder::{ReadBytesExt, LE};
+use byteorder::{ReadBytesExt as _, LE};
 use indexmap::IndexMap;
+use ltk_hash::{BinHash, ReadBytesExt as _};
 use ltk_io_ext::ReaderExt;
 
 impl Bin {
@@ -70,7 +71,7 @@ impl Bin {
         let obj_count = reader.read_u32::<LE>()? as usize;
         let mut obj_classes = Vec::with_capacity(obj_count);
         for _ in 0..obj_count {
-            obj_classes.push(reader.read_u32::<LE>()?);
+            obj_classes.push(reader.read_bin_hash::<LE>()?);
         }
 
         let mut objects = IndexMap::with_capacity(obj_count);
@@ -106,8 +107,8 @@ impl Bin {
 
     fn try_read_objects<R: io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
-        obj_classes: &[u32],
-        objects: &mut IndexMap<u32, BinObject>,
+        obj_classes: &[BinHash],
+        objects: &mut IndexMap<BinHash, BinObject>,
         legacy: bool,
     ) -> Result<(), Error> {
         objects.clear();

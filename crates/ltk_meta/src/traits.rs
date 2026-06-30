@@ -3,7 +3,8 @@ use std::io;
 use crate::PropertyValueEnum;
 
 use super::property::Kind;
-use byteorder::{ReadBytesExt, WriteBytesExt, LE};
+use byteorder::{ReadBytesExt as _, WriteBytesExt as _, LE};
+use ltk_hash::{BinHash, ReadBytesExt as _, WriteBytesExt as _};
 
 const HEADER_SIZE: usize = 5;
 
@@ -56,11 +57,11 @@ pub trait ReaderExt: io::Read {
     fn read_property<M: Default>(
         &mut self,
         legacy: bool,
-    ) -> Result<(u32, PropertyValueEnum<M>), crate::Error>
+    ) -> Result<(BinHash, PropertyValueEnum<M>), crate::Error>
     where
         Self: io::Seek,
     {
-        let name_hash = self.read_u32::<LE>()?;
+        let name_hash = self.read_bin_hash::<LE>()?;
         let kind = self.read_property_kind(legacy)?;
 
         Ok((
@@ -89,14 +90,14 @@ pub trait WriterExt: io::Write {
 
     fn write_property<M>(
         &mut self,
-        name_hash: u32,
+        name_hash: BinHash,
         value: &PropertyValueEnum<M>,
     ) -> Result<(), io::Error>
     where
         M: Clone,
         Self: io::Seek,
     {
-        self.write_u32::<LE>(name_hash)?;
+        self.write_bin_hash::<LE>(name_hash)?;
         self.write_property_kind(value.kind())?;
         value.to_writer(self)?;
         Ok(())

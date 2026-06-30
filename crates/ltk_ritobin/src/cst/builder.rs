@@ -1,5 +1,6 @@
 use std::fmt::{LowerHex, Write};
 
+use ltk_hash::BinHash;
 use ltk_meta::{property::values, Bin, BinObject, PropertyKind, PropertyValueEnum};
 
 use crate::{
@@ -86,25 +87,25 @@ impl<H: HashProvider> Builder<H> {
         self.spanned_token(Tok::HexLit, v)
     }
 
-    fn hash_hash_lit(&mut self, h: u32) -> Child {
+    fn hash_hash_lit(&mut self, h: BinHash) -> Child {
         match self.hashes.lookup_hash(h).map(|h| format!("\"{h}\"")) {
             Some(h) => self.spanned_token(Tok::String, h),
             None => self.spanned_token(Tok::HexLit, hex_fmt(h)),
         }
     }
-    fn hash_type_lit(&mut self, h: u32) -> Child {
+    fn hash_type_lit(&mut self, h: BinHash) -> Child {
         match self.hashes.lookup_type(h).map(|h| h.to_string()) {
             Some(h) => self.spanned_token(Tok::Name, h),
             None => self.spanned_token(Tok::HexLit, hex_fmt(h)),
         }
     }
-    fn hash_field_lit(&mut self, h: u32) -> Child {
+    fn hash_field_lit(&mut self, h: BinHash) -> Child {
         match self.hashes.lookup_field(h).map(|h| h.to_string()) {
             Some(h) => self.spanned_token(Tok::Name, h),
             None => self.spanned_token(Tok::HexLit, hex_fmt(h)),
         }
     }
-    fn hash_entry_lit(&mut self, h: u32) -> Child {
+    fn hash_entry_lit(&mut self, h: BinHash) -> Child {
         match self.hashes.lookup_entry(h).map(|h| format!("\"{h}\"")) {
             Some(h) => self.spanned_token(Tok::String, h),
             None => self.spanned_token(Tok::HexLit, hex_fmt(h)),
@@ -279,7 +280,11 @@ impl<H: HashProvider> Builder<H> {
 
         tree(Kind::TypeExpr, children)
     }
-    fn property_to_cst<M: Clone>(&mut self, name_hash: u32, value: &PropertyValueEnum<M>) -> Child {
+    fn property_to_cst<M: Clone>(
+        &mut self,
+        name_hash: BinHash,
+        value: &PropertyValueEnum<M>,
+    ) -> Child {
         let k = self.hash_field_lit(name_hash);
         let t = self.rito_type(value.rito_type());
         let v = self.value_to_cst(value);
@@ -541,11 +546,11 @@ mod test {
                         .property(
                             0x91,
                             values::Struct {
-                                class_hash: 0x123,
+                                class_hash: 0x123.into(),
                                 meta: Default::default(),
                                 properties: [
-                                    (0x1, values::U64::new(5).into()),
-                                    (0x2, values::U64::new(10).into()),
+                                    (0x1.into(), values::U64::new(5).into()),
+                                    (0x2.into(), values::U64::new(10).into()),
                                 ]
                                 .into_iter()
                                 .collect(),
@@ -554,11 +559,11 @@ mod test {
                         .property(
                             0x92,
                             values::Embedded(values::Struct {
-                                class_hash: 0x234,
+                                class_hash: 0x234.into(),
                                 meta: Default::default(),
                                 properties: [
-                                    (0x2, values::U64::new(5).into()),
-                                    (0x3, values::U64::new(10).into()),
+                                    (0x2.into(), values::U64::new(5).into()),
+                                    (0x3.into(), values::U64::new(10).into()),
                                 ]
                                 .into_iter()
                                 .collect(),

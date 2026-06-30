@@ -6,25 +6,25 @@ Bin(
   is_override: false,
   version: 3,
   objects: {
-    2154231397: BinObject(
-      path_hash: 2154231397,
-      class_hash: 1171098015,
+    BinHash(2154231397): BinObject(
+      path_hash: BinHash(2154231397),
+      class_hash: BinHash(1171098015),
       properties: {
-        2257500010: PropertyValueEnum(
+        BinHash(2257500010): PropertyValueEnum(
           kind: Container,
           value: Struct(
             items: [
               Struct(
-                class_hash: 164488258,
+                class_hash: BinHash(164488258),
                 properties: {
-                  431879391: PropertyValueEnum(
+                  BinHash(431879391): PropertyValueEnum(
                     kind: U8,
                     value: U8(
                       value: 0,
                       meta: NoMeta,
                     ),
                   ),
-                  607245356: PropertyValueEnum(
+                  BinHash(607245356): PropertyValueEnum(
                     kind: Optional,
                     value: F32(
                       value: Some(F32(
@@ -34,28 +34,28 @@ Bin(
                       meta: NoMeta,
                     ),
                   ),
-                  895082843: PropertyValueEnum(
+                  BinHash(895082843): PropertyValueEnum(
                     kind: BitBool,
                     value: BitBool(
                       value: true,
                       meta: NoMeta,
                     ),
                   ),
-                  1013213428: PropertyValueEnum(
+                  BinHash(1013213428): PropertyValueEnum(
                     kind: String,
                     value: String(
                       value: "ASSETS/Characters/Leona/Skins/Base/Particles/common_Black.dds",
                       meta: NoMeta,
                     ),
                   ),
-                  1025882318: PropertyValueEnum(
+                  BinHash(1025882318): PropertyValueEnum(
                     kind: String,
                     value: String(
                       value: "empty",
                       meta: NoMeta,
                     ),
                   ),
-                  1376955374: PropertyValueEnum(
+                  BinHash(1376955374): PropertyValueEnum(
                     kind: Optional,
                     value: F32(
                       value: Some(F32(
@@ -65,12 +65,12 @@ Bin(
                       meta: NoMeta,
                     ),
                   ),
-                  2927860839: PropertyValueEnum(
+                  BinHash(2927860839): PropertyValueEnum(
                     kind: Embedded,
                     value: Embedded(Struct(
-                      class_hash: 70254680,
+                      class_hash: BinHash(70254680),
                       properties: {
-                        3031705514: PropertyValueEnum(
+                        BinHash(3031705514): PropertyValueEnum(
                           kind: F32,
                           value: F32(
                             value: 1.0,
@@ -81,7 +81,7 @@ Bin(
                       meta: NoMeta,
                     )),
                   ),
-                  3043919889: PropertyValueEnum(
+                  BinHash(3043919889): PropertyValueEnum(
                     kind: String,
                     value: String(
                       value: "ASSETS/Characters/Leona/Skins/Base/Particles/common_Black.dds",
@@ -95,28 +95,28 @@ Bin(
             meta: NoMeta,
           ),
         ),
-        2624027180: PropertyValueEnum(
+        BinHash(2624027180): PropertyValueEnum(
           kind: U16,
           value: U16(
             value: 132,
             meta: NoMeta,
           ),
         ),
-        3770906030: PropertyValueEnum(
+        BinHash(3770906030): PropertyValueEnum(
           kind: String,
           value: String(
             value: "Play_sfx_Leona_LeonaZenithBladeMissile_hit",
             meta: NoMeta,
           ),
         ),
-        3882058040: PropertyValueEnum(
+        BinHash(3882058040): PropertyValueEnum(
           kind: String,
           value: String(
             value: "Characters/Leona/Skins/Skin0/Particles/Leona_Base_E_ZB_sfx_01",
             meta: NoMeta,
           ),
         ),
-        3975268028: PropertyValueEnum(
+        BinHash(3975268028): PropertyValueEnum(
           kind: String,
           value: String(
             value: "Leona_Base_E_ZB_sfx_01",

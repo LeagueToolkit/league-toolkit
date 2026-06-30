@@ -1,8 +1,9 @@
 use std::io;
 
 use super::Bin;
-use byteorder::{WriteBytesExt, LE};
-use ltk_io_ext::WriterExt;
+use byteorder::{WriteBytesExt as _, LE};
+use ltk_hash::WriteBytesExt as _;
+use ltk_io_ext::WriterExt as _;
 
 /// The version used when writing Bin files.
 ///
@@ -49,7 +50,7 @@ impl Bin {
 
         writer.write_u32::<LE>(self.objects.len() as _)?;
         for obj in self.objects.values() {
-            writer.write_u32::<LE>(obj.class_hash)?;
+            writer.write_bin_hash::<LE>(obj.class_hash)?;
         }
         for obj in self.objects.values() {
             obj.to_writer(writer)?;

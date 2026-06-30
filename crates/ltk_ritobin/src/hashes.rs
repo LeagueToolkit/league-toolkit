@@ -11,37 +11,39 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
+use ltk_hash::BinHash;
+
 /// Trait for looking up hash values to get their original string representation.
 ///
 /// Implement this trait to provide custom hash lookup behavior when writing ritobin files.
 pub trait HashProvider {
     /// Look up a bin entry path hash (root object paths like "Characters/Aatrox/Skins/Skin0").
-    fn lookup_entry(&self, hash: u32) -> Option<&str>;
+    fn lookup_entry(&self, hash: BinHash) -> Option<&str>;
 
     /// Look up a bin field/property name hash.
-    fn lookup_field(&self, hash: u32) -> Option<&str>;
+    fn lookup_field(&self, hash: BinHash) -> Option<&str>;
 
     /// Look up a bin hash value (hash property type values).
-    fn lookup_hash(&self, hash: u32) -> Option<&str>;
+    fn lookup_hash(&self, hash: BinHash) -> Option<&str>;
 
     /// Look up a bin type/class name hash (for objects, structs, embeds).
-    fn lookup_type(&self, hash: u32) -> Option<&str>;
+    fn lookup_type(&self, hash: BinHash) -> Option<&str>;
 }
 
 impl HashProvider for () {
-    fn lookup_entry(&self, _hash: u32) -> Option<&str> {
+    fn lookup_entry(&self, _hash: BinHash) -> Option<&str> {
         None
     }
 
-    fn lookup_field(&self, _hash: u32) -> Option<&str> {
+    fn lookup_field(&self, _hash: BinHash) -> Option<&str> {
         None
     }
 
-    fn lookup_hash(&self, _hash: u32) -> Option<&str> {
+    fn lookup_hash(&self, _hash: BinHash) -> Option<&str> {
         None
     }
 
-    fn lookup_type(&self, _hash: u32) -> Option<&str> {
+    fn lookup_type(&self, _hash: BinHash) -> Option<&str> {
         None
     }
 }
@@ -52,13 +54,13 @@ impl HashProvider for () {
 #[derive(Debug, Clone, Default)]
 pub struct HashMapProvider {
     /// Hashes for bin entry paths (root object paths).
-    pub entries: HashMap<u32, String>,
+    pub entries: HashMap<BinHash, String>,
     /// Hashes for bin field/property names.
-    pub fields: HashMap<u32, String>,
+    pub fields: HashMap<BinHash, String>,
     /// Hashes for bin hash property values.
-    pub hashes: HashMap<u32, String>,
+    pub hashes: HashMap<BinHash, String>,
     /// Hashes for bin type/class names.
-    pub types: HashMap<u32, String>,
+    pub types: HashMap<BinHash, String>,
 }
 
 impl HashMapProvider {
@@ -70,7 +72,7 @@ impl HashMapProvider {
     ///
     /// Hash values are expected to be raw hex without "0x" prefix (e.g., "deadbeef SomeName").
     /// Lines starting with '#' are treated as comments and skipped.
-    fn load_file(path: impl AsRef<Path>) -> std::io::Result<HashMap<u32, String>> {
+    fn load_file(path: impl AsRef<Path>) -> std::io::Result<HashMap<BinHash, String>> {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
         let mut map = HashMap::new();
@@ -86,7 +88,7 @@ impl HashMapProvider {
 
             // Parse "{hex} {string}" format (hex without 0x prefix)
             if let Some((hash_str, value)) = line.split_once(' ') {
-                if let Ok(hash) = u32::from_str_radix(hash_str, 16) {
+                if let Ok(hash) = BinHash::from_str_radix(hash_str, 16) {
                     map.insert(hash, value.to_string());
                 }
             }
@@ -139,23 +141,31 @@ impl HashMapProvider {
         self
     }
 
-    pub fn insert_entry(&mut self, hash: u32, value: impl Into<String>) -> &mut Self {
-        self.entries.insert(hash, value.into());
+    pub fn insert_entry(
+        &mut self,
+        hash: impl Into<BinHash>,
+        value: impl Into<String>,
+    ) -> &mut Self {
+        self.entries.insert(hash.into(), value.into());
         self
     }
 
-    pub fn insert_field(&mut self, hash: u32, value: impl Into<String>) -> &mut Self {
-        self.fields.insert(hash, value.into());
+    pub fn insert_field(
+        &mut self,
+        hash: impl Into<BinHash>,
+        value: impl Into<String>,
+    ) -> &mut Self {
+        self.fields.insert(hash.into(), value.into());
         self
     }
 
-    pub fn insert_hash(&mut self, hash: u32, value: impl Into<String>) -> &mut Self {
-        self.hashes.insert(hash, value.into());
+    pub fn insert_hash(&mut self, hash: impl Into<BinHash>, value: impl Into<String>) -> &mut Self {
+        self.hashes.insert(hash.into(), value.into());
         self
     }
 
-    pub fn insert_type(&mut self, hash: u32, value: impl Into<String>) -> &mut Self {
-        self.types.insert(hash, value.into());
+    pub fn insert_type(&mut self, hash: impl Into<BinHash>, value: impl Into<String>) -> &mut Self {
+        self.types.insert(hash.into(), value.into());
         self
     }
 
@@ -166,55 +176,55 @@ impl HashMapProvider {
 }
 
 impl HashProvider for HashMapProvider {
-    fn lookup_entry(&self, hash: u32) -> Option<&str> {
+    fn lookup_entry(&self, hash: BinHash) -> Option<&str> {
         self.entries.get(&hash).map(|s| s.as_str())
     }
 
-    fn lookup_field(&self, hash: u32) -> Option<&str> {
+    fn lookup_field(&self, hash: BinHash) -> Option<&str> {
         self.fields.get(&hash).map(|s| s.as_str())
     }
 
-    fn lookup_hash(&self, hash: u32) -> Option<&str> {
+    fn lookup_hash(&self, hash: BinHash) -> Option<&str> {
         self.hashes.get(&hash).map(|s| s.as_str())
     }
 
-    fn lookup_type(&self, hash: u32) -> Option<&str> {
+    fn lookup_type(&self, hash: BinHash) -> Option<&str> {
         self.types.get(&hash).map(|s| s.as_str())
     }
 }
 
 impl<T: HashProvider + ?Sized> HashProvider for &T {
-    fn lookup_entry(&self, hash: u32) -> Option<&str> {
+    fn lookup_entry(&self, hash: BinHash) -> Option<&str> {
         (*self).lookup_entry(hash)
     }
 
-    fn lookup_field(&self, hash: u32) -> Option<&str> {
+    fn lookup_field(&self, hash: BinHash) -> Option<&str> {
         (*self).lookup_field(hash)
     }
 
-    fn lookup_hash(&self, hash: u32) -> Option<&str> {
+    fn lookup_hash(&self, hash: BinHash) -> Option<&str> {
         (*self).lookup_hash(hash)
     }
 
-    fn lookup_type(&self, hash: u32) -> Option<&str> {
+    fn lookup_type(&self, hash: BinHash) -> Option<&str> {
         (*self).lookup_type(hash)
     }
 }
 
 impl HashProvider for Box<dyn HashProvider> {
-    fn lookup_entry(&self, hash: u32) -> Option<&str> {
+    fn lookup_entry(&self, hash: BinHash) -> Option<&str> {
         self.as_ref().lookup_entry(hash)
     }
 
-    fn lookup_field(&self, hash: u32) -> Option<&str> {
+    fn lookup_field(&self, hash: BinHash) -> Option<&str> {
         self.as_ref().lookup_field(hash)
     }
 
-    fn lookup_hash(&self, hash: u32) -> Option<&str> {
+    fn lookup_hash(&self, hash: BinHash) -> Option<&str> {
         self.as_ref().lookup_hash(hash)
     }
 
-    fn lookup_type(&self, hash: u32) -> Option<&str> {
+    fn lookup_type(&self, hash: BinHash) -> Option<&str> {
         self.as_ref().lookup_type(hash)
     }
 }
@@ -226,10 +236,10 @@ mod tests {
     #[test]
     fn test_empty_provider() {
         let provider = ();
-        assert_eq!(provider.lookup_entry(0x12345678), None);
-        assert_eq!(provider.lookup_field(0x12345678), None);
-        assert_eq!(provider.lookup_hash(0x12345678), None);
-        assert_eq!(provider.lookup_type(0x12345678), None);
+        assert_eq!(provider.lookup_entry(0x12345678.into()), None);
+        assert_eq!(provider.lookup_field(0x12345678.into()), None);
+        assert_eq!(provider.lookup_hash(0x12345678.into()), None);
+        assert_eq!(provider.lookup_type(0x12345678.into()), None);
     }
 
     #[test]
@@ -241,14 +251,14 @@ mod tests {
         provider.insert_type(0xfeedface, "SkinData");
 
         assert_eq!(
-            provider.lookup_entry(0x12345678),
+            provider.lookup_entry(0x12345678.into()),
             Some("Characters/Test/Skin0")
         );
-        assert_eq!(provider.lookup_field(0xdeadbeef), Some("skinName"));
-        assert_eq!(provider.lookup_hash(0xcafebabe), Some("some/path"));
-        assert_eq!(provider.lookup_type(0xfeedface), Some("SkinData"));
+        assert_eq!(provider.lookup_field(0xdeadbeef.into()), Some("skinName"));
+        assert_eq!(provider.lookup_hash(0xcafebabe.into()), Some("some/path"));
+        assert_eq!(provider.lookup_type(0xfeedface.into()), Some("SkinData"));
 
         // Unknown hashes return None
-        assert_eq!(provider.lookup_entry(0x11111111), None);
+        assert_eq!(provider.lookup_entry(0x11111111.into()), None);
     }
 }

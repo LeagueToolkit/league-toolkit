@@ -1,17 +1,36 @@
+use ltk_hash::{BinHash, Hash};
+
 use crate::read_sized_string;
-use std::fmt;
+use std::borrow::Cow;
+use std::fmt::{self, Debug};
 use std::io::Read;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ShaderMacroHash(pub u32);
+
+impl ShaderMacroHash {
+    pub fn new(name: impl AsRef<str>, value: impl AsRef<str>) -> Self {
+        let name = name.as_ref();
+        let value = value.as_ref();
+        let s = match value.is_empty() {
+            true => Cow::from(name),
+            false => Cow::from(format!("{}={}", name, value)),
+        };
+
+        Self(*BinHash::hash_str(s))
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct ShaderMacroDefinition {
     pub name: String,
     pub value: String,
-    pub hash: u32,
+    pub hash: ShaderMacroHash,
 }
 
 impl ShaderMacroDefinition {
     pub fn new(name: String, value: String) -> Self {
-        let hash = Self::calculate_hash(&name, &value);
+        let hash = ShaderMacroHash::new(&name, &value);
         Self { name, value, hash }
     }
 
@@ -19,16 +38,6 @@ impl ShaderMacroDefinition {
         let name = read_sized_string(reader)?;
         let value = read_sized_string(reader)?;
         Ok(Self::new(name, value))
-    }
-
-    pub fn calculate_hash(name: &str, value: &str) -> u32 {
-        let s = if value.is_empty() {
-            name.to_string()
-        } else {
-            format!("{}={}", name, value)
-        };
-
-        ltk_hash::fnv1a::hash_lower(&s)
     }
 }
 
