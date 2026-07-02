@@ -1,6 +1,5 @@
 [workspace]
-pr_draft = true                                   # draft the release PR
-changelog_path = "./CHANGELOG.md"
+pr_draft = true                                    # draft the release PR
 git_tag_name = "{{ package }}-v{{ version }}"     # tag name
 git_release_name = "{{ package }} v{{ version }}" # release name
 git_release_body = "{{ changelog }}"              # release body
