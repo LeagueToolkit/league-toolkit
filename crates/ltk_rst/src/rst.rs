@@ -303,17 +303,15 @@ impl Stringtable {
     fn raw_value<'a>(&'a self, slot: &'a Slot) -> Resolved<'a> {
         match slot {
             Slot::Owned(s) => Resolved::Str(s),
-            Slot::Blob(off) => match self.blob.get(*off as usize..) {
-                // Unreachable: `Slot::Blob` is only created in `read_with`,
-                // which rejects offsets past the blob — kept panic-free
-                // defensively rather than asserting.
-                None => Resolved::Str(""),
-                Some(data) if data.first() == Some(&0xFF) && data.len() >= 3 => {
+            // `read_with` rejects out-of-range offsets when it creates
+            // `Slot::Blob`, so the slice is always in bounds.
+            Slot::Blob(off) => match &self.blob[*off as usize..] {
+                data if data.first() == Some(&0xFF) && data.len() >= 3 => {
                     let size = u16::from_le_bytes([data[1], data[2]]) as usize;
                     let end = (3 + size).min(data.len());
                     Resolved::Encrypted(&data[3..end])
                 }
-                Some(data) => {
+                data => {
                     let end = data.iter().position(|&b| b == 0).unwrap_or(data.len());
                     let bytes = &data[..end];
                     match std::str::from_utf8(bytes) {
