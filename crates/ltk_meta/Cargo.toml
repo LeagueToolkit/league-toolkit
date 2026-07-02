@@ -34,7 +34,7 @@ serde = { workspace = true, optional = true }
 
 ltk_io_ext = { version = "0.4.3", path = "../ltk_io_ext" }
 ltk_primitives = { version = "0.3.4", path = "../ltk_primitives" }
-ltk_hash = { path = "../ltk_hash" }
+ltk_hash = { version = "0.3.0", path = "../ltk_hash" }
 
 [dev-dependencies]
 approx = { workspace = true }
