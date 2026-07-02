@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - *(meta)* [**breaking**] use new hash types
 
+### Fixed
+
+- *(ltk_meta)* specify version for ltk_hash dependency in Cargo.toml
+
 ### Other
 
 - update CI configuration and add linting settings for all crates
