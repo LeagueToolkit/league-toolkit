@@ -104,12 +104,38 @@ pub use file_ext::*;
 use std::io::{BufReader, Read, Seek, SeekFrom};
 
 use byteorder::{ReadBytesExt as _, LE};
+use sha2::{Digest as _, Sha256};
+
+// serde has no built-in impls for arrays longer than 32 elements.
+#[cfg(feature = "serde")]
+mod signature_serde {
+    use serde::de::Error as _;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn serialize<S: Serializer>(
+        signature: &[u8; 256],
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        signature[..].serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<[u8; 256], D::Error> {
+        let bytes = Vec::<u8>::deserialize(deserializer)?;
+        let len = bytes.len();
+        bytes
+            .try_into()
+            .map_err(|_| D::Error::invalid_length(len, &"256 bytes"))
+    }
+}
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug)]
 /// A wad file
 pub struct Wad<TSource: Read + Seek> {
     chunks: WadChunks,
+    #[cfg_attr(feature = "serde", serde(with = "signature_serde"))]
+    signature: [u8; 256],
+    checksum: u64,
     #[cfg_attr(feature = "serde", serde(skip))]
     source: TSource,
 }
@@ -137,14 +163,19 @@ impl<TSource: Read + Seek> Wad<TSource> {
             return Err(WadError::InvalidVersion { major, minor });
         }
 
-        if major == 2 {
-            let _ecdsa_length = reader.seek(SeekFrom::Current(1))?;
-            let _ecdsa_signature = reader.seek(SeekFrom::Current(83))?;
-            let _data_checksum = reader.seek(SeekFrom::Current(8))?;
+        let (signature, checksum) = if major == 2 {
+            let mut ecdsa_signature = [0u8; 256];
+            reader.read_exact(&mut ecdsa_signature[..84])?;
+            let data_checksum = reader.read_u64::<LE>()?;
+            (ecdsa_signature, data_checksum)
         } else if major == 3 {
-            let _ecdsa_signature = reader.seek(SeekFrom::Current(256))?;
-            let _data_checksum = reader.seek(SeekFrom::Current(8))?;
-        }
+            let mut pkcs1_signature = [0u8; 256];
+            reader.read_exact(&mut pkcs1_signature)?;
+            let data_checksum = reader.read_u64::<LE>()?;
+            (pkcs1_signature, data_checksum)
+        } else {
+            ([0u8; 256], 0u64)
+        };
 
         if major == 1 || major == 2 {
             let _toc_start_offset = reader.seek(SeekFrom::Current(2))?;
@@ -165,7 +196,12 @@ impl<TSource: Read + Seek> Wad<TSource> {
 
         let chunks = WadChunks::from_iter(raw_chunks);
 
-        Ok(Wad { chunks, source })
+        Ok(Wad {
+            signature,
+            checksum,
+            chunks,
+            source,
+        })
     }
 
     /// Consumes the `Wad`, returning the underlying source and chunks.
@@ -192,5 +228,27 @@ impl<TSource: Read + Seek> Wad<TSource> {
     pub fn load_chunk_decompressed(&mut self, chunk: &WadChunk) -> Result<Box<[u8]>, WadError> {
         let raw_data = self.load_chunk_raw(chunk)?;
         decompress_raw(&raw_data, chunk.compression_type, chunk.uncompressed_size)
+    }
+
+    /// Returns embedded checksum verbatim.
+    pub fn checksum(&self) -> u64 {
+        self.checksum
+    }
+
+    /// Returns embedded signature.
+    pub fn signature(&self) -> &[u8; 256] {
+        &self.signature
+    }
+
+    /// Computes SHA-256 of the TOC.
+    ///
+    /// The TOC bytes are reconstructed from the parsed chunks in v3.4 format,
+    /// in path-hash order — byte-identical to the TOC of a v3.4 file.
+    pub fn toc_sha256(&self) -> Result<[u8; 32], WadError> {
+        let mut hasher = Sha256::new();
+        for chunk in self.chunks.iter() {
+            chunk.write_v3_4(&mut hasher)?;
+        }
+        Ok(hasher.finalize().into())
     }
 }

@@ -28,6 +28,7 @@ memchr = { workspace = true }
 byteorder = { workspace = true }
 
 xxhash-rust = { workspace = true }
+sha2 = { workspace = true }
 zstd = { workspace = true, optional = true }
 ruzstd = { workspace = true, optional = true }
 flate2 = { workspace = true }
