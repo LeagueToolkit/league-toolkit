@@ -319,4 +319,46 @@ mod tests {
         assert_eq!(chunk.uncompressed_size, 100);
         assert_eq!(chunk.compression_type, WadChunkCompression::Zstd);
     }
+
+    #[test]
+    fn test_wad_signature_verify() {
+        use rsa::{Pkcs1v15Sign, RsaPrivateKey};
+
+        let mut rng = rand::thread_rng();
+        let private_key = RsaPrivateKey::new(&mut rng, 2048).expect("Failed to generate key");
+        let public_key = private_key.to_public_key();
+
+        let build = |signature: &[u8; 256]| {
+            let mut cursor = Cursor::new(Vec::new());
+            WadBuilder::default()
+                .with_signature(signature)
+                .with_chunk(WadChunkBuilder::default().with_path("test1"))
+                .with_chunk(WadChunkBuilder::default().with_path("test2"))
+                .build_to_writer(&mut cursor, |_path, cursor| {
+                    cursor.write_all(&[0xAA; 100])?;
+
+                    Ok(())
+                })
+                .expect("Failed to build WAD");
+            cursor.set_position(0);
+            Wad::mount(cursor).expect("Failed to mount WAD")
+        };
+
+        // The TOC depends only on chunk data, so hash an unsigned build,
+        // sign it, and rebuild with the signature.
+        let unsigned = build(&[0u8; 256]);
+        let toc_sha256 = unsigned.toc_sha256().unwrap();
+        let signature = private_key
+            .sign(Pkcs1v15Sign::new::<sha2::Sha256>(), &toc_sha256)
+            .expect("Failed to sign");
+
+        let signed = build(signature.as_slice().try_into().unwrap());
+        let (valid, computed) = signed.verify_signature(&public_key).unwrap();
+        assert!(valid);
+        assert_eq!(computed, toc_sha256);
+
+        let (valid, computed) = unsigned.verify_signature(&public_key).unwrap();
+        assert!(!valid);
+        assert_eq!(computed, toc_sha256);
+    }
 }
