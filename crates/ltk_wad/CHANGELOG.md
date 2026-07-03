@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_wad-v0.2.15...ltk_wad-v0.3.0) - 2026-07-03
+
+### Added
+
+- *(wad)* add wad parsing tests and signature checks
+- *(wad)* add plumbing for preserving wad signatures
+
+### Other
+
+- *(wad)* [**breaking**] rename builder setters to with_prebuilt_signature/checksum
+- switch to per-crate changelogs
+- update CI configuration and add linting settings for all crates
+
 ## [0.2.15](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_wad-v0.2.14...ltk_wad-v0.2.15) - 2026-04-07
 
 ### Other
