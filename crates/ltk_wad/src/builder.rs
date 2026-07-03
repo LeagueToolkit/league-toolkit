@@ -66,12 +66,25 @@ impl WadBuilder {
         self
     }
 
-    pub fn with_checksum(mut self, checksum: u64) -> Self {
+    /// Sets a prebuilt checksum to write verbatim into the header.
+    ///
+    /// The builder never computes this from the submitted chunks — a
+    /// canonical checksum has to be derived from the built output after all
+    /// chunks are submitted. Use this to carry over a known-good value, e.g.
+    /// one preserved from a mounted WAD for a byte-identical rebuild.
+    pub fn with_prebuilt_checksum(mut self, checksum: u64) -> Self {
         self.checksum = checksum;
         self
     }
 
-    pub fn with_signature(mut self, signature: &[u8; 256]) -> Self {
+    /// Sets a prebuilt signature to write verbatim into the header.
+    ///
+    /// The builder never computes or signs anything — a canonical signature
+    /// is produced over the TOC of the built output after all chunks are
+    /// submitted (see [`Wad::toc_sha256`](crate::Wad::toc_sha256)). Use this
+    /// to carry over a known-good value, e.g. one preserved from a mounted
+    /// WAD for a byte-identical rebuild.
+    pub fn with_prebuilt_signature(mut self, signature: &[u8; 256]) -> Self {
         self.signature.copy_from_slice(signature);
         self
     }
@@ -283,8 +296,8 @@ mod tests {
         let mut cursor = Cursor::new(scratch);
 
         let mut builder = WadBuilder::default()
-            .with_signature(&[0xAB; 256])
-            .with_checksum(0xDEADBEEFCAFEBABE);
+            .with_prebuilt_signature(&[0xAB; 256])
+            .with_prebuilt_checksum(0xDEADBEEFCAFEBABE);
         builder = builder.with_chunk(WadChunkBuilder::default().with_path("test1"));
         builder = builder.with_chunk(WadChunkBuilder::default().with_path("test2"));
         builder = builder.with_chunk(WadChunkBuilder::default().with_path("test3"));
@@ -331,7 +344,7 @@ mod tests {
         let build = |signature: &[u8; 256]| {
             let mut cursor = Cursor::new(Vec::new());
             WadBuilder::default()
-                .with_signature(signature)
+                .with_prebuilt_signature(signature)
                 .with_chunk(WadChunkBuilder::default().with_path("test1"))
                 .with_chunk(WadChunkBuilder::default().with_path("test2"))
                 .build_to_writer(&mut cursor, |_path, cursor| {

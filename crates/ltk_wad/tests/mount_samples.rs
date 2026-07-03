@@ -39,8 +39,8 @@ fn rebuild_empty_wad_byte_identical() {
 
     let mut cursor = Cursor::new(Vec::new());
     WadBuilder::default()
-        .with_signature(wad.signature())
-        .with_checksum(wad.checksum())
+        .with_prebuilt_signature(wad.signature())
+        .with_prebuilt_checksum(wad.checksum())
         .build_to_writer(&mut cursor, |_path, _cursor| Ok(()))
         .expect("Failed to build WAD");
 
