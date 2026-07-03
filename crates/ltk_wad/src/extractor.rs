@@ -491,6 +491,8 @@ mod tests {
         fn into_wad(self, chunks: WadChunks) -> Wad<Self> {
             Wad {
                 chunks,
+                checksum: 0u64,
+                signature: [0u8; 256],
                 source: self,
             }
         }

@@ -28,6 +28,8 @@ memchr = { workspace = true }
 byteorder = { workspace = true }
 
 xxhash-rust = { workspace = true }
+sha2 = { workspace = true }
+rsa = { workspace = true }
 zstd = { workspace = true, optional = true }
 ruzstd = { workspace = true, optional = true }
 flate2 = { workspace = true }
@@ -42,3 +44,6 @@ camino = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"
+rand = "0.8"
+xxhash-rust = { workspace = true }
+sha2 = { workspace = true }

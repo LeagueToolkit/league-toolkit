@@ -43,14 +43,49 @@ pub enum WadBuilderError {
 /// })
 /// .expect("Failed to build WAD");
 /// ```
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct WadBuilder {
     chunk_builders: Vec<WadChunkBuilder>,
+    signature: [u8; 256],
+    checksum: u64,
+}
+
+impl Default for WadBuilder {
+    fn default() -> Self {
+        Self {
+            chunk_builders: Default::default(),
+            signature: [0u8; 256],
+            checksum: Default::default(),
+        }
+    }
 }
 
 impl WadBuilder {
     pub fn with_chunk(mut self, chunk: WadChunkBuilder) -> Self {
         self.chunk_builders.push(chunk);
+        self
+    }
+
+    /// Sets a prebuilt checksum to write verbatim into the header.
+    ///
+    /// The builder never computes this from the submitted chunks — a
+    /// canonical checksum has to be derived from the built output after all
+    /// chunks are submitted. Use this to carry over a known-good value, e.g.
+    /// one preserved from a mounted WAD for a byte-identical rebuild.
+    pub fn with_prebuilt_checksum(mut self, checksum: u64) -> Self {
+        self.checksum = checksum;
+        self
+    }
+
+    /// Sets a prebuilt signature to write verbatim into the header.
+    ///
+    /// The builder never computes or signs anything — a canonical signature
+    /// is produced over the TOC of the built output after all chunks are
+    /// submitted (see [`Wad::toc_sha256`](crate::Wad::toc_sha256)). Use this
+    /// to carry over a known-good value, e.g. one preserved from a mounted
+    /// WAD for a byte-identical rebuild.
+    pub fn with_prebuilt_signature(mut self, signature: &[u8; 256]) -> Self {
+        self.signature.copy_from_slice(signature);
         self
     }
 
@@ -125,9 +160,9 @@ impl WadBuilder {
             writer.write_u8(3)?; // major
             writer.write_u8(4)?; // minor
 
-            // Write dummy ECDSA signature
-            writer.write_all(&[0; 256])?;
-            writer.write_u64::<LE>(0)?;
+            // Write signature and checksum verbatim.
+            writer.write_all(&self.signature)?;
+            writer.write_u64::<LE>(self.checksum)?;
 
             // Write dummy TOC
             writer.write_u32::<LE>(self.chunk_builders.len() as u32)?;
@@ -251,6 +286,7 @@ impl WadChunkBuilder {
 #[cfg(test)]
 mod tests {
     use crate::Wad;
+    use sha2::{Digest as _, Sha256};
 
     use super::*;
 
@@ -259,7 +295,9 @@ mod tests {
         let scratch = Vec::new();
         let mut cursor = Cursor::new(scratch);
 
-        let mut builder = WadBuilder::default();
+        let mut builder = WadBuilder::default()
+            .with_prebuilt_signature(&[0xAB; 256])
+            .with_prebuilt_checksum(0xDEADBEEFCAFEBABE);
         builder = builder.with_chunk(WadChunkBuilder::default().with_path("test1"));
         builder = builder.with_chunk(WadChunkBuilder::default().with_path("test2"));
         builder = builder.with_chunk(WadChunkBuilder::default().with_path("test3"));
@@ -273,14 +311,67 @@ mod tests {
             .expect("Failed to build WAD");
 
         cursor.set_position(0);
+        let built_bytes = cursor.get_ref().clone();
 
         let wad = Wad::mount(cursor).expect("Failed to mount WAD");
         assert_eq!(wad.chunks().len(), 3);
+        assert_eq!(wad.signature(), &[0xAB; 256]);
+        assert_eq!(wad.checksum(), 0xDEADBEEFCAFEBABE);
+
+        // Header layout: magic (2) + version (2), signature (256), checksum (8),
+        // chunk count (4), then the TOC (32 bytes per chunk).
+        assert_eq!(built_bytes[4..260], [0xABu8; 256][..]);
+        assert_eq!(built_bytes[260..268], 0xDEADBEEFCAFEBABEu64.to_le_bytes());
+        let toc = &built_bytes[272..272 + 3 * 32];
+        let toc_sha256: [u8; 32] = Sha256::digest(toc).into();
+        assert_eq!(wad.toc_sha256().unwrap(), toc_sha256);
 
         let chunk = wad.chunks().get(xxh64::xxh64(b"test1", 0)).unwrap();
         assert_eq!(chunk.path_hash, xxh64::xxh64(b"test1", 0));
         assert_eq!(chunk.compressed_size, 17);
         assert_eq!(chunk.uncompressed_size, 100);
         assert_eq!(chunk.compression_type, WadChunkCompression::Zstd);
+    }
+
+    #[test]
+    fn test_wad_signature_verify() {
+        use rsa::{Pkcs1v15Sign, RsaPrivateKey};
+
+        let mut rng = rand::thread_rng();
+        let private_key = RsaPrivateKey::new(&mut rng, 2048).expect("Failed to generate key");
+        let public_key = private_key.to_public_key();
+
+        let build = |signature: &[u8; 256]| {
+            let mut cursor = Cursor::new(Vec::new());
+            WadBuilder::default()
+                .with_prebuilt_signature(signature)
+                .with_chunk(WadChunkBuilder::default().with_path("test1"))
+                .with_chunk(WadChunkBuilder::default().with_path("test2"))
+                .build_to_writer(&mut cursor, |_path, cursor| {
+                    cursor.write_all(&[0xAA; 100])?;
+
+                    Ok(())
+                })
+                .expect("Failed to build WAD");
+            cursor.set_position(0);
+            Wad::mount(cursor).expect("Failed to mount WAD")
+        };
+
+        // The TOC depends only on chunk data, so hash an unsigned build,
+        // sign it, and rebuild with the signature.
+        let unsigned = build(&[0u8; 256]);
+        let toc_sha256 = unsigned.toc_sha256().unwrap();
+        let signature = private_key
+            .sign(Pkcs1v15Sign::new::<sha2::Sha256>(), &toc_sha256)
+            .expect("Failed to sign");
+
+        let signed = build(signature.as_slice().try_into().unwrap());
+        let (valid, computed) = signed.verify_signature(&public_key).unwrap();
+        assert!(valid);
+        assert_eq!(computed, toc_sha256);
+
+        let (valid, computed) = unsigned.verify_signature(&public_key).unwrap();
+        assert!(!valid);
+        assert_eq!(computed, toc_sha256);
     }
 }
