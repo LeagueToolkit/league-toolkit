@@ -1139,16 +1139,19 @@ impl Visitor for TypeChecker<'_> {
         self.depth += 1;
         let depth = self.depth;
 
-        let indent = "  ".repeat(depth.saturating_sub(1) as _);
-        if std::env::var("RB_STACK").is_ok() {
-            eprintln!("{indent}> d:{} | {:?}", depth, tree.kind);
-            eprint!("{indent}  stack: ");
-            if self.stack.is_empty() {
-                eprint!("empty")
-            }
-            eprintln!();
-            for s in &self.stack {
-                eprintln!("{indent}    - {}: {:?}", s.0, s.1);
+        #[cfg(feature = "debug")]
+        {
+            let indent = "  ".repeat(depth.saturating_sub(1) as _);
+            if std::env::var("RB_STACK").is_ok() {
+                eprintln!("{indent}> d:{} | {:?}", depth, tree.kind);
+                eprint!("{indent}  stack: ");
+                if self.stack.is_empty() {
+                    eprint!("empty")
+                }
+                eprintln!();
+                for s in &self.stack {
+                    eprintln!("{indent}    - {}: {:?}", s.0, s.1);
+                }
             }
         }
 
@@ -1267,16 +1270,20 @@ impl Visitor for TypeChecker<'_> {
     fn exit_tree(&mut self, tree: &cst::Cst) -> Visit {
         let depth = self.depth;
         self.depth -= 1;
-        let indent = "  ".repeat(depth.saturating_sub(1) as _);
-        if std::env::var("RB_STACK").is_ok() {
-            eprintln!("{indent}< d:{} | {:?}", depth, tree.kind);
-            eprint!("{indent}  stack: ");
-            if self.stack.is_empty() {
-                eprint!("empty")
-            }
-            eprintln!();
-            for s in &self.stack {
-                eprintln!("{indent}    - {}: {:?}", s.0, s.1);
+
+        #[cfg(feature = "debug")]
+        {
+            let indent = "  ".repeat(depth.saturating_sub(1) as _);
+            if std::env::var("RB_STACK").is_ok() {
+                eprintln!("{indent}< d:{} | {:?}", depth, tree.kind);
+                eprint!("{indent}  stack: ");
+                if self.stack.is_empty() {
+                    eprint!("empty")
+                }
+                eprintln!();
+                for s in &self.stack {
+                    eprintln!("{indent}    - {}: {:?}", s.0, s.1);
+                }
             }
         }
         if tree.kind == cst::Kind::ErrorTree {
@@ -1285,9 +1292,9 @@ impl Visitor for TypeChecker<'_> {
 
         match self.stack.pop() {
             Some(mut ir) => {
-                if std::env::var("RB_STACK").is_ok() {
-                    eprintln!("{indent}< popped {}", ir.0);
-                }
+                // if std::env::var("RB_STACK").is_ok() {
+                //     eprintln!("{indent}< popped {}", ir.0);
+                // }
                 if ir.0 != depth {
                     self.stack.push(ir);
                     return Visit::Continue;
