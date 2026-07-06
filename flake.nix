@@ -89,6 +89,7 @@
           pkgs.cargo-insta
           pkgs.cargo-hack
           pkgs.cargo-nextest
+          pkgs.cargo-flamegraph
           cargo-expand'.${pkgs.system}
           cargo-public-api'.${pkgs.system}
           pkgs.bacon

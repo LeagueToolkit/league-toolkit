@@ -3,6 +3,9 @@ resolver = "2"
 
 members = ["crates/*"]
 
+[profile.bench]
+debug = true
+
 [workspace.dependencies]
 log = "0.4.21"
 byteorder = "1.5.0"
@@ -37,6 +40,8 @@ insta = { version = "1.39.0", features = ["ron"] }
 camino = "1.2.1"
 
 pretty_assertions = "1.4.1"
+
+criterion = {version = "0.8",  features = ["html_reports"] }
 
 [workspace.lints.rust]
 warnings = "warn"

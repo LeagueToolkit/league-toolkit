@@ -32,7 +32,6 @@ entries: map[hash, embed] = {
                         "ASSETS/Sounds/Wwise2016/SFX/Characters/Aatrox/Skins/Base/Aatrox_Base_SFX_audio.bnk"
                         "ASSETS/Sounds/Wwise2016/SFX/Characters/Aatrox/Skins/Base/Aatrox_Base_SFX_events.bnk"
                     }
-                    
                     events: list[string] = {
                         "Play_sfx_Aatrox_AatroxBasicAttack2_OnCast"
                         "Play_sfx_Aatrox_AatroxBasicAttack2_OnHit"
@@ -104,7 +103,7 @@ entries: map[hash, embed] = {
                         "Switch_Aatrox_Footsteps_Stone"
                         "Switch_Aatrox_Footsteps_Water"
                     }
-                    }
+                }
                 BankUnit {
                     name: string = "Aatrox_Base_VO"
                     bankPath: list[string] = {
@@ -301,10 +300,10 @@ entries: map[hash, embed] = {
                     dynamics: pointer = VfxAnimatedColorVariableData {
                         times: list[f32] = { 0, 0.100000001, 0.899999976, 1 }
                         values: list[vec4] = {
-                            { 1, 1, 1, 0 } 
-                            { 1, 1, 1, 1 } 
-                            { 1, 1, 1, 1 } 
-                            { 1, 1, 1, 0 } 
+                            { 1, 1, 1, 0 }
+                            { 1, 1, 1, 1 }
+                            { 1, 1, 1, 1 }
+                            { 1, 1, 1, 0 }
                         }
                     }
                 }
@@ -344,10 +343,10 @@ entries: map[hash, embed] = {
                     dynamics: pointer = VfxAnimatedColorVariableData {
                         times: list[f32] = { 0, 0.100000001, 0.800000012, 1 }
                         values: list[vec4] = {
-                            { 1, 1, 1, 0 } 
-                            { 1, 1, 1, 0.650003791 } 
-                            { 1, 1, 1, 0.650003791 } 
-                            { 1, 1, 1, 0 } 
+                            { 1, 1, 1, 0 }
+                            { 1, 1, 1, 0.650003791 }
+                            { 1, 1, 1, 0.650003791 }
+                            { 1, 1, 1, 0 }
                         }
                     }
                 }
@@ -403,10 +402,10 @@ entries: map[hash, embed] = {
                     dynamics: pointer = VfxAnimatedColorVariableData {
                         times: list[f32] = { 0, 0.100000001, 0.5, 1 }
                         values: list[vec4] = {
-                            { 1, 1, 1, 0 } 
-                            { 1, 1, 1, 1 } 
-                            { 1, 1, 1, 0.300007641 } 
-                            { 1, 1, 1, 0 } 
+                            { 1, 1, 1, 0 }
+                            { 1, 1, 1, 1 }
+                            { 1, 1, 1, 0.300007641 }
+                            { 1, 1, 1, 0 }
                         }
                     }
                 }
@@ -463,10 +462,10 @@ entries: map[hash, embed] = {
                     dynamics: pointer = VfxAnimatedColorVariableData {
                         times: list[f32] = { 0, 0.100000001, 0.5, 1 }
                         values: list[vec4] = {
-                            { 1, 1, 1, 0 } 
-                            { 1, 1, 1, 1 } 
-                            { 1, 1, 1, 0.300007641 } 
-                            { 1, 1, 1, 0 } 
+                            { 1, 1, 1, 0 }
+                            { 1, 1, 1, 1 }
+                            { 1, 1, 1, 0.300007641 }
+                            { 1, 1, 1, 0 }
                         }
                     }
                 }
@@ -510,10 +509,10 @@ entries: map[hash, embed] = {
                     dynamics: pointer = VfxAnimatedColorVariableData {
                         times: list[f32] = { 0, 0.100000001, 0.5, 1 }
                         values: list[vec4] = {
-                            { 1, 1, 1, 0 } 
-                            { 1, 1, 1, 1 } 
-                            { 1, 1, 1, 0.300007641 } 
-                            { 1, 1, 1, 0 } 
+                            { 1, 1, 1, 0 }
+                            { 1, 1, 1, 1 }
+                            { 1, 1, 1, 0.300007641 }
+                            { 1, 1, 1, 0 }
                         }
                     }
                 }
@@ -565,9 +564,9 @@ entries: map[hash, embed] = {
                     dynamics: pointer = VfxAnimatedColorVariableData {
                         times: list[f32] = { 0, 0.400000006, 1 }
                         values: list[vec4] = {
-                            { 1, 1, 1, 0 } 
-                            { 1, 1, 1, 1 } 
-                            { 0.330006868, 0, 0, 1 } 
+                            { 1, 1, 1, 0 }
+                            { 1, 1, 1, 1 }
+                            { 0.330006868, 0, 0, 1 }
                         }
                     }
                 }
@@ -578,12 +577,12 @@ entries: map[hash, embed] = {
                     dynamics: pointer = VfxAnimatedVector3fVariableData {
                         probabilityTables: list[pointer] = {
                             VfxProbabilityTableData {
-                                keyTimes: list[f32] = { 0, 1 } 
-                                keyValues: list[f32] = { 0, 360 } 
+                                keyTimes: list[f32] = { 0, 1 }
+                                keyValues: list[f32] = { 0, 360 }
                             }
                             VfxProbabilityTableData { }
                             VfxProbabilityTableData { }
-                        }
+                            }
                         times: list[f32] = { 0 }
                         values: list[vec3] = { { 1, 0, 0 } }
                     }
@@ -593,12 +592,12 @@ entries: map[hash, embed] = {
                     dynamics: pointer = VfxAnimatedVector3fVariableData {
                         probabilityTables: list[pointer] = {
                             VfxProbabilityTableData {
-                                keyTimes: list[f32] = { 0, 1 } 
-                                keyValues: list[f32] = { 0.5, 1 } 
+                                keyTimes: list[f32] = { 0, 1 }
+                                keyValues: list[f32] = { 0.5, 1 }
                             }
                             VfxProbabilityTableData { }
                             VfxProbabilityTableData { }
-                        }
+                            }
                         times: list[f32] = { 0 }
                         values: list[vec3] = { { 150, 100, 100 } }
                     }
@@ -607,9 +606,9 @@ entries: map[hash, embed] = {
                     dynamics: pointer = VfxAnimatedVector3fVariableData {
                         times: list[f32] = { 0, 0.200000003, 1 }
                         values: list[vec3] = {
-                            { 0.25, 0.25, 2.5 } 
-                            { 1, 1, 1 } 
-                            { 0.25, 0.25, 0.25 } 
+                            { 0.25, 0.25, 2.5 }
+                            { 1, 1, 1 }
+                            { 0.25, 0.25, 0.25 }
                         }
                     }
                 }
@@ -654,7 +653,7 @@ entries: map[hash, embed] = {
         paramValues: list2[embed] = {
             StaticMaterialShaderParamDef {
                 name: string = "Mask_Intensity"
-                value: vec4 = { 0.792500019, 0, 0, 0 } 
+                value: vec4 = { 0.792500019, 0, 0, 0 }
             }
             StaticMaterialShaderParamDef {
                 name: string = "Bloom_Intensity"
@@ -767,7 +766,7 @@ entries: map[hash, embed] = {
         paramValues: list2[embed] = {
             StaticMaterialShaderParamDef {
                 name: string = "UV_Scale"
-                value: vec4 = { 1, 1, 0, 0 } 
+                value: vec4 = { 1, 1, 0, 0 }
             }
             StaticMaterialShaderParamDef {
                 name: string = "Scroll_Speed"
@@ -854,7 +853,7 @@ entries: map[hash, embed] = {
         paramValues: list2[embed] = {
             StaticMaterialShaderParamDef {
                 name: string = "Dissolve_SmoothStep"
-                value: vec4 = { 0, 0.150000006, 0, 0 } 
+                value: vec4 = { 0, 0.150000006, 0, 0 }
             }
             StaticMaterialShaderParamDef {
                 name: string = "Dissolve_Bias"
@@ -924,7 +923,7 @@ entries: map[hash, embed] = {
                         mDrivers: list[pointer] = {
                             FloatGraphMaterialDriver {
                                 driver: pointer = LerpMaterialDriver {
-                                    mBoolDriver: pointer = IsDeadDynamicMaterialBoolDriver { } 
+                                    mBoolDriver: pointer = IsDeadDynamicMaterialBoolDriver { }
                                     mTurnOnTimeSec: f32 = 4
                                     mTurnOffTimeSec: f32 = 0
                                 }
@@ -945,7 +944,7 @@ entries: map[hash, embed] = {
                                     values: list[f32] = { -0.225780264, 0.583815038, 0.994219661 }
                                 }
                             }
-                        }
+                            }
                     }
                 }
                 DynamicMaterialParameterDef {
@@ -959,7 +958,7 @@ entries: map[hash, embed] = {
                         mTurnOffTimeSec: f32 = 0
                     }
                 }
-            }
+                }
         }
     }
     "Characters/Aatrox/Skins/Skin0/Materials/Wing_inst" = StaticMaterialDef {
@@ -987,7 +986,7 @@ entries: map[hash, embed] = {
         paramValues: list2[embed] = {
             StaticMaterialShaderParamDef {
                 name: string = "Mask_Intensity"
-                value: vec4 = { 0.939999998, 0, 0, 0 } 
+                value: vec4 = { 0.939999998, 0, 0, 0 }
             }
             StaticMaterialShaderParamDef {
                 name: string = "Bloom_Intensity"

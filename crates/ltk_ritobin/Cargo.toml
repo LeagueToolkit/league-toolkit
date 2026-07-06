@@ -6,6 +6,21 @@ description = "Ritobin text format parser and writer for League Toolkit"
 license = "MIT OR Apache-2.0"
 readme = "../../README.md"
 
+[lib]
+bench = false
+
+[[bench]]
+name = "parse"
+harness = false
+
+[[bench]]
+name = "print"
+harness = false
+
+[[bench]]
+name = "e2e"
+harness = false
+
 [lints]
 workspace = true
 
@@ -37,5 +52,6 @@ salsa = "0.22.0"
 insta.workspace = true
 pretty_assertions.workspace = true
 serde.workspace = true
+criterion.workspace = true
 ltk_ritobin = { path = ".", features = ["serde"] }
 

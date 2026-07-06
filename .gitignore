@@ -3,6 +3,11 @@
 debug/
 target/
 
+# perf stuff
+flamegraph.svg
+perf.data
+perf.data.old
+
 # https://doc.rust-lang.org/cargo/guide/cargo-toml-vs-cargo-lock.html
 Cargo.lock
 
