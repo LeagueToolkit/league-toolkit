@@ -11,6 +11,7 @@ workspace = true
 
 [features]
 default = []
+debug = []
 serde = ["dep:serde", "ltk_meta/serde"]
 
 [dependencies]
