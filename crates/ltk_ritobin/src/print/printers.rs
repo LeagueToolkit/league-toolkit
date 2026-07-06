@@ -25,7 +25,7 @@ impl<'a, W: Write> CstPrinter<'a, W> {
         if let Some(e) = self.visitor.error {
             return Err(e);
         }
-        eprintln!("max q size: {}", self.visitor.queue_size_max());
+        // eprintln!("max q size: {}", self.visitor.queue_size_max());
         Ok(self.visitor.printed_bytes())
     }
 }
