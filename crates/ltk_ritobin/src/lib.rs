@@ -8,6 +8,7 @@
 //! Parse ritobin text, build a [`Bin`], and round-trip it back to text:
 //!
 //! ```rust
+//! use bumpalo::Bump;
 //! use ltk_ritobin::{Cst, Print as _};
 //!
 //! let text = r#"
@@ -18,14 +19,15 @@
 //! entries: map[hash, embed] = { }
 //! "#.trim();
 //!
-//! let cst = Cst::parse(text);
-//! assert!(cst.errors.is_empty());
+//! let bump = Bump::new();
+//! let cst = Cst::parse(&bump, text);
+//! assert!(cst.root().errors.is_empty());
 //!
 //! let (bin, bin_errors) = cst.build_bin(text);
 //! assert!(bin_errors.is_empty());
 //!
 //! // Write back to text
-//! let output = bin.print().unwrap();
+//! let output = bin.print(&bump).unwrap();
 //!
 //! assert_eq!(text, output);
 //! ```
@@ -38,6 +40,7 @@
 //! ```no_run
 //! use std::io::BufReader;
 //! use std::fs::File;
+//! use bumpalo::Bump;
 //! use ltk_meta::Bin;
 //! use ltk_ritobin::{Print, print::PrintConfig, HashMapProvider};
 //!
@@ -47,14 +50,16 @@
 //! let mut hashes = HashMapProvider::new();
 //! hashes.load_from_directory("hashes/"); // loads hashes.bin{entries,fields,hashes,types}.txt
 //!
-//! let text = bin.print_with_config(PrintConfig::default().with_hashes(hashes))?;
+//! let bump = Bump::new();
+//!
+//! let text = bin.print_with_config(&bump, PrintConfig::default().with_hashes(hashes))?;
 //! std::fs::write("data.rito", text)?;
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
 //! # Error reporting
 //!
-//! For resilient parsing, errors exist as nodes into the concrete syntax tree (cst), which propagate into the [`Cst`] nodes' `errors` field (depending on [`parse::ErrorPropagation`]). This
+//! For resilient parsing, errors exist as nodes into the concrete syntax tree (cst), which propagate into the [`Node`]s' `errors` field (depending on [`parse::ErrorPropagation`]). This
 //! allows for more versatile behaviour with things like pretty-printing technically invalid trees,
 //! since parsing will always result in a cst.
 //!
@@ -62,15 +67,17 @@
 //! always provide a best effort construction.
 //!
 //! ```rust
+//! use bumpalo::Bump;
 //! use ltk_ritobin::Cst;
 //!
 //! let text = "test: u32 = 4!!2";
 //!
 //! // by default uses ErrorPropagation::Move,
 //! // so all errors will end up in the root
-//! let cst = Cst::parse(text);
+//! let bump = Bump::new();
+//! let cst = Cst::parse(&bump, text);
 //!
-//! assert_eq!(cst.errors.len(), 1); // the unexpected "!!" in the value
+//! assert_eq!(cst.root().errors.len(), 1); // the unexpected "!!" in the value
 //! ```
 //!
 //! `Cst::build_bin` follows the same philosophy: it returns `(Bin, Vec<DiagnosticWithSpan>)`
@@ -92,4 +99,5 @@ pub use hashes::*;
 pub use types::*;
 
 pub use cst::Cst;
+pub use cst::Node;
 pub use print::Print;

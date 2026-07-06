@@ -1,51 +1,59 @@
-use std::fmt::{LowerHex, Write};
+use std::{
+    fmt::{LowerHex, Write},
+    iter::once,
+};
 
+use bumpalo::{
+    collections::{self, CollectIn},
+    Bump,
+};
 use ltk_hash::BinHash;
 use ltk_meta::{property::values, Bin, BinObject, PropertyKind, PropertyValueEnum};
 
 use crate::{
-    cst::{Child, Cst, Kind},
+    cst::{Child, Cst, Kind, Node, NodeId},
     parse::{Span, Token, TokenKind as Tok},
     typecheck::visitor::{PropertyValueExt, RitoType},
     HashProvider, RitobinName as _,
 };
 
-pub struct Builder<H: HashProvider> {
+pub struct Builder<'arena, H: HashProvider> {
     buf: String,
     hashes: H,
+    arena: &'arena Bump,
+    nodes: collections::Vec<'arena, Node<'arena>>,
 }
 
-pub fn tree(kind: Kind, children: Vec<Child>) -> Child {
-    Child::Tree(Cst {
-        span: Span::default(),
-        kind,
-        children,
-        errors: vec![],
-    })
-}
 pub fn token(kind: Tok) -> Child {
     Child::Token(Token {
         kind,
         span: Span::default(),
     })
 }
-
-impl Default for Builder<()> {
-    fn default() -> Self {
-        Self::new(())
+impl<'arena> Builder<'arena, ()> {
+    pub fn new(arena: &'arena Bump) -> Builder<'arena, ()> {
+        Builder {
+            buf: String::new(),
+            hashes: (),
+            arena,
+            nodes: collections::Vec::new_in(arena),
+        }
     }
 }
 
-impl<H: HashProvider> Builder<H> {
-    pub fn new(hashes: H) -> Self {
-        Self {
-            buf: String::new(),
+impl<'arena, H: HashProvider> Builder<'arena, H> {
+    pub fn with_hashes<H2: HashProvider>(self, hashes: H2) -> Builder<'arena, H2> {
+        Builder {
+            buf: self.buf,
             hashes,
+            arena: self.arena,
+            nodes: self.nodes,
         }
     }
 
-    pub fn build(&mut self, bin: &Bin) -> Cst {
-        self.bin_to_cst(bin)
+    pub fn build(mut self, bin: &'arena Bin) -> (Cst<'arena>, String) {
+        self.bin_to_cst(bin);
+        (Cst { nodes: self.nodes }, self.buf)
     }
 
     /// Get a reference to the underlying text buffer all [`Cst`]'s built by this builder reference in
@@ -64,9 +72,23 @@ fn hex_fmt<T: LowerHex>(v: T) -> String {
     format!("0x{v:x}")
 }
 
-impl<H: HashProvider> Builder<H> {
+impl<'arena, H: HashProvider> Builder<'arena, H> {
+    pub fn tree(&mut self, kind: Kind, children: impl IntoIterator<Item = Child>) -> Child {
+        let id = NodeId(self.nodes.len() as u32);
+
+        self.nodes.push(Node {
+            span: Span::default(),
+            kind,
+            children: children.into_iter().collect_in(self.arena),
+            errors: collections::Vec::new_in(self.arena),
+        });
+
+        Child::Tree(id)
+    }
+
     fn number(&mut self, v: impl AsRef<str>) -> Child {
-        tree(Kind::Literal, vec![self.spanned_token(Tok::Number, v)])
+        let lit = self.spanned_token(Tok::Number, v);
+        self.tree(Kind::Literal, [lit])
     }
 
     fn spanned_token(&mut self, kind: Tok, str: impl AsRef<str>) -> Child {
@@ -112,15 +134,17 @@ impl<H: HashProvider> Builder<H> {
         }
     }
 
-    fn block(&self, children: Vec<Child>) -> Child {
-        tree(
+    fn block(&mut self, children: Vec<Child>) -> Child {
+        self.tree(
             Kind::Block,
-            [vec![token(Tok::LCurly)], children, vec![token(Tok::RCurly)]].concat(),
+            once(token(Tok::LCurly))
+                .chain(children)
+                .chain(once(token(Tok::RCurly))),
         )
     }
 
-    fn bool(&self, v: bool) -> Child {
-        tree(
+    fn bool(&mut self, v: bool) -> Child {
+        self.tree(
             Kind::Literal,
             vec![token(match v {
                 true => Tok::True,
@@ -147,7 +171,10 @@ impl<H: HashProvider> Builder<H> {
                 let items = v
                     .to_array()
                     .iter()
-                    .map(|v| tree(Kind::ListItem, vec![self.number(v.to_string())]))
+                    .map(|v| {
+                        let v = self.number(v.to_string());
+                        self.tree(Kind::ListItem, [v])
+                    })
                     .collect();
                 self.block(items)
             }
@@ -155,7 +182,10 @@ impl<H: HashProvider> Builder<H> {
                 let items = v
                     .to_array()
                     .iter()
-                    .map(|v| tree(Kind::ListItem, vec![self.number(v.to_string())]))
+                    .map(|v| {
+                        let v = self.number(v.to_string());
+                        self.tree(Kind::ListItem, [v])
+                    })
                     .collect();
                 self.block(items)
             }
@@ -163,7 +193,10 @@ impl<H: HashProvider> Builder<H> {
                 let items = v
                     .to_array()
                     .iter()
-                    .map(|v| tree(Kind::ListItem, vec![self.number(v.to_string())]))
+                    .map(|v| {
+                        let v = self.number(v.to_string());
+                        self.tree(Kind::ListItem, [v])
+                    })
                     .collect();
                 self.block(items)
             }
@@ -173,11 +206,17 @@ impl<H: HashProvider> Builder<H> {
                     .to_cols_array_2d()
                     .iter()
                     .flat_map(|v| {
+                        let values = [
+                            self.number(v[0].to_string()),
+                            self.number(v[1].to_string()),
+                            self.number(v[2].to_string()),
+                            self.number(v[3].to_string()),
+                        ];
                         [
-                            tree(Kind::ListItem, vec![self.number(v[0].to_string())]),
-                            tree(Kind::ListItem, vec![self.number(v[1].to_string())]),
-                            tree(Kind::ListItem, vec![self.number(v[2].to_string())]),
-                            tree(Kind::ListItem, vec![self.number(v[3].to_string())]),
+                            self.tree(Kind::ListItem, [values[0]]),
+                            self.tree(Kind::ListItem, [values[1]]),
+                            self.tree(Kind::ListItem, [values[2]]),
+                            self.tree(Kind::ListItem, [values[3]]),
                         ]
                     })
                     .collect();
@@ -187,14 +226,17 @@ impl<H: HashProvider> Builder<H> {
                 let items = v
                     .to_array()
                     .iter()
-                    .map(|v| tree(Kind::ListItem, vec![self.number(v.to_string())]))
+                    .map(|v| {
+                        let v = self.number(v.to_string());
+                        self.tree(Kind::ListItem, [v])
+                    })
                     .collect();
                 self.block(items)
             }
-            PropertyValueEnum::String(s) => tree(
-                Kind::Literal,
-                vec![token(Tok::Quote), self.string(&**s), token(Tok::Quote)],
-            ),
+            PropertyValueEnum::String(s) => {
+                let s = self.string(&**s);
+                self.tree(Kind::Literal, [token(Tok::Quote), s, token(Tok::Quote)])
+            }
 
             // hash/hash-likes
             PropertyValueEnum::Hash(h) => self.hash_hash_lit(**h),
@@ -206,11 +248,12 @@ impl<H: HashProvider> Builder<H> {
                 let mut children = vec![token(Tok::LCurly)];
 
                 for item in container.clone().into_items() {
-                    children.push(tree(Kind::ListItem, vec![self.value_to_cst(&item)]));
+                    let item = self.value_to_cst(&item);
+                    children.push(self.tree(Kind::ListItem, [item]));
                 }
 
                 children.push(token(Tok::RCurly));
-                tree(Kind::TypeArgList, children)
+                self.tree(Kind::TypeArgList, children)
             }
             PropertyValueEnum::Embedded(values::Embedded(s)) | PropertyValueEnum::Struct(s) => {
                 let k = self.hash_type_lit(s.class_hash);
@@ -219,7 +262,8 @@ impl<H: HashProvider> Builder<H> {
                     .iter()
                     .map(|(k, v)| self.property_to_cst(*k, v))
                     .collect();
-                tree(Kind::Class, vec![k, self.block(children)])
+                let children = self.block(children);
+                self.tree(Kind::Class, [k, children])
             }
 
             PropertyValueEnum::Optional(optional) => {
@@ -229,17 +273,16 @@ impl<H: HashProvider> Builder<H> {
                 };
                 self.block(children)
             }
-            PropertyValueEnum::None(_) => tree(Kind::Literal, vec![token(Tok::Null)]),
+            PropertyValueEnum::None(_) => self.tree(Kind::Literal, vec![token(Tok::Null)]),
 
             PropertyValueEnum::Map(map) => {
                 let children = map
                     .entries()
                     .iter()
                     .map(|(k, v)| {
-                        tree(
-                            Kind::Entry,
-                            vec![self.value_to_cst(k), token(Tok::Eq), self.value_to_cst(v)],
-                        )
+                        let k = self.value_to_cst(k);
+                        let v = self.value_to_cst(v);
+                        self.tree(Kind::Entry, [k, token(Tok::Eq), v])
                     })
                     .collect();
                 self.block(children)
@@ -247,8 +290,8 @@ impl<H: HashProvider> Builder<H> {
         }
     }
 
-    fn entry_tree(&self, key: Child, kind: Option<Child>, value: Child) -> Child {
-        tree(
+    fn entry_tree(&mut self, key: Child, kind: Option<Child>, value: Child) -> Child {
+        self.tree(
             Kind::Entry,
             match kind {
                 Some(kind) => vec![key, token(Tok::Colon), kind, token(Tok::Eq), value],
@@ -261,24 +304,17 @@ impl<H: HashProvider> Builder<H> {
         let mut children = vec![self.spanned_token(Tok::Name, rito_type.base.to_rito_name())];
 
         if let Some(sub) = rito_type.subtypes[0] {
-            let mut args = vec![
-                token(Tok::LBrack),
-                tree(
-                    Kind::TypeArg,
-                    vec![self.spanned_token(Tok::Name, sub.to_rito_name())],
-                ),
-            ];
+            let name = self.spanned_token(Tok::Name, sub.to_rito_name());
+            let mut args = vec![token(Tok::LBrack), self.tree(Kind::TypeArg, [name])];
             if let Some(sub) = rito_type.subtypes[1] {
-                args.push(tree(
-                    Kind::TypeArg,
-                    vec![self.spanned_token(Tok::Name, sub.to_rito_name())],
-                ));
+                let name = self.spanned_token(Tok::Name, sub.to_rito_name());
+                args.push(self.tree(Kind::TypeArg, [name]));
             }
             args.push(token(Tok::RBrack));
-            children.push(tree(Kind::TypeArgList, args));
+            children.push(self.tree(Kind::TypeArgList, args));
         }
 
-        tree(Kind::TypeExpr, children)
+        self.tree(Kind::TypeExpr, children)
     }
     fn property_to_cst<M: Clone>(
         &mut self,
@@ -291,8 +327,9 @@ impl<H: HashProvider> Builder<H> {
         self.entry_tree(k, Some(t), v)
     }
 
-    fn class(&self, class_name: Child, items: Vec<Child>) -> Child {
-        tree(Kind::Class, vec![class_name, self.block(items)])
+    fn class(&mut self, class_name: Child, items: Vec<Child>) -> Child {
+        let items = self.block(items);
+        self.tree(Kind::Class, [class_name, items])
     }
 
     fn bin_object_to_cst(&mut self, obj: &BinObject) -> Child {
@@ -303,7 +340,9 @@ impl<H: HashProvider> Builder<H> {
             .properties
             .iter()
             .map(|(k, v)| {
-                let k = tree(Kind::EntryKey, vec![self.hash_field_lit(*k)]);
+                let k = self.hash_field_lit(*k);
+                let k = self.tree(Kind::EntryKey, [k]);
+
                 let t = self.rito_type(v.rito_type());
                 let v = self.value_to_cst(v);
                 self.entry_tree(k, Some(t), v)
@@ -317,15 +356,24 @@ impl<H: HashProvider> Builder<H> {
     fn entry(&mut self, key: impl AsRef<str>, kind: RitoType, value: Child) -> Child {
         let key = self.spanned_token(Tok::Comment, key);
         let kind = self.rito_type(kind);
-        self.entry_tree(
-            tree(Kind::EntryKey, vec![key]),
-            Some(kind),
-            tree(Kind::EntryValue, vec![value]),
-        )
+
+        let key = self.tree(Kind::EntryKey, [key]);
+        let value = self.tree(Kind::EntryValue, [value]);
+
+        self.entry_tree(key, Some(kind), value)
     }
 
-    fn bin_to_cst(&mut self, bin: &Bin) -> Cst {
+    fn bin_to_cst(&mut self, bin: &'arena Bin) {
+        let root = Node {
+            kind: Kind::File,
+            span: Span::default(),
+            children: collections::Vec::new_in(self.arena),
+            errors: collections::Vec::new_in(self.arena),
+        };
+        self.nodes.push(root);
+
         let comment = self.spanned_token(Tok::Comment, "#PROP_text");
+        let comment = self.tree(Kind::Comment, vec![comment]);
 
         let type_entry = self.string("\"PROP\"");
         let type_entry = self.entry("type", RitoType::simple(PropertyKind::String), type_entry);
@@ -337,18 +385,14 @@ impl<H: HashProvider> Builder<H> {
             .dependencies
             .iter()
             .map(|dep| {
-                tree(
-                    Kind::ListItem,
-                    vec![tree(Kind::Literal, vec![self.string(format!("\"{dep}\""))])],
-                )
+                let lit = self.string(format!("\"{dep}\""));
+                let lit = self.tree(Kind::Literal, [lit]);
+                self.tree(Kind::ListItem, [lit])
             })
             .collect();
 
-        let linked = self.entry(
-            "linked",
-            RitoType::container(PropertyKind::String),
-            self.block(linked),
-        );
+        let linked = self.block(linked);
+        let linked = self.entry("linked", RitoType::container(PropertyKind::String), linked);
 
         let entries = bin
             .objects
@@ -356,24 +400,18 @@ impl<H: HashProvider> Builder<H> {
             .map(|obj| self.bin_object_to_cst(obj))
             .collect();
 
+        let entries = self.block(entries);
         let entries = self.entry(
             "entries",
             RitoType::map(PropertyKind::Hash, PropertyKind::Embedded),
-            self.block(entries),
+            entries,
         );
 
-        Cst {
-            kind: Kind::File,
-            span: Span::default(),
-            children: vec![
-                tree(Kind::Comment, vec![comment]),
-                type_entry,
-                version,
-                linked,
-                entries,
-            ],
-            errors: vec![],
-        }
+        self.nodes
+            .get_mut(0)
+            .unwrap()
+            .children
+            .extend([comment, type_entry, version, linked, entries]);
     }
 }
 
@@ -388,31 +426,34 @@ mod test {
     use super::*;
     use crate::print::CstPrinter;
 
+    use bumpalo::Bump;
+
     // bin -> cst -> txt -> cst -> bin
     fn roundtrip(bin: Bin) {
         println!("bin: {bin:#?}");
 
-        let mut builder = Builder::default();
-        let cst = builder.build(&bin);
-        let buf = builder.text_buffer();
+        let bump = Bump::new();
+
+        let builder = Builder::new(&bump);
+        let (cst, buf) = builder.build(&bin);
 
         let mut str = String::new();
-        cst.print(&mut str, 0, buf);
+        cst.print(&mut str, &buf);
 
         println!("cst:\n{str}");
 
         let mut str = String::new();
 
-        CstPrinter::new(buf, &mut str, Default::default())
+        CstPrinter::new(&buf, &mut str, Default::default())
             .print(&cst)
             .unwrap();
         println!("RITOBIN:\n{str}");
 
-        let cst2 = Cst::parse(&str);
+        let cst2 = Cst::parse(&bump, &str);
         assert!(
-            cst2.errors.is_empty(),
+            cst2.root().errors.is_empty(),
             "errors parsing ritobin - {:#?}",
-            cst2.errors
+            cst2.root().errors
         );
         let (bin2, errors) = cst2.build_bin(&str);
 

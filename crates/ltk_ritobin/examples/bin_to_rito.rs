@@ -1,3 +1,4 @@
+use bumpalo::Bump;
 use ltk_ritobin::{
     print::{Print, PrintConfig},
     HashMapProvider,
@@ -28,8 +29,9 @@ fn main() {
             .and_then(|p| PathBuf::from_str(&p).ok())
             .unwrap_or(std::env::current_dir().unwrap()),
     );
+    let bump = Bump::new();
     let text = tree
-        .print_with_config(PrintConfig::default().with_hashes(hashes))
+        .print_with_config(&bump, PrintConfig::default().with_hashes(hashes))
         .unwrap();
     std::fs::write(output_path, text).unwrap();
 }

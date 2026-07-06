@@ -1,5 +1,6 @@
 //! Integration test for parsing a sample ritobin file.
 
+use bumpalo::Bump;
 use ltk_ritobin::{cst::Cst, print::Print as _};
 
 const SAMPLE_RITOBIN: &str = r#"#PROP_text
@@ -44,36 +45,41 @@ entries: map[hash,embed] = {
 "#;
 
 fn tree(input: &str) -> String {
-    let cst = Cst::parse(input);
-    assert!(cst.errors.is_empty());
+    let bump = Bump::new();
+    let cst = Cst::parse(&bump, input);
+    assert!(cst.root().errors.is_empty());
 
     let mut debug = String::new();
-    cst.print(&mut debug, 0, input);
+    cst.print(&mut debug, input);
 
     debug
 }
 
 #[test]
 fn test_roundtrip() {
-    let cst = Cst::parse(SAMPLE_RITOBIN);
+    let bump_a = Bump::new();
+    let cst = Cst::parse(&bump_a, SAMPLE_RITOBIN);
     let (tree, errors) = cst.build_bin(SAMPLE_RITOBIN);
     assert!(errors.is_empty(), "errors = {errors:#?}");
 
     // Write back to text
-    let output = tree.print().expect("Failed to write");
+    let output = tree.print(&bump_a).expect("Failed to write");
+    drop(cst);
+    drop(bump_a);
 
     println!("output:\n{output}");
 
+    let bump_b = Bump::new();
     // Parse again
-    let cst2 = Cst::parse(&output);
+    let cst2 = Cst::parse(&bump_b, &output);
     assert!(
-        cst2.errors.is_empty(),
+        cst2.root().errors.is_empty(),
         "reparse errors = {:#?}",
-        cst2.errors
+        cst2.root().errors
     );
 
     let mut str = String::new();
-    cst2.print(&mut str, 0, &output);
+    cst2.print(&mut str, &output);
     println!("reparsed:\n{str}");
 
     let (tree2, errors) = cst2.build_bin(&output);

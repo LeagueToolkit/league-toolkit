@@ -8,7 +8,11 @@ use ltk_meta::{
 };
 
 use crate::{
-    cst::{self, visitor::Visit, Child, Cst, Kind, Visitor},
+    cst::{
+        self,
+        visitor::{Visit, VisitCtx},
+        Child, Kind, Node, NodeId, Visitor,
+    },
     parse::{Span, Token, TokenKind},
     RitobinName,
 };
@@ -377,7 +381,11 @@ pub enum Statement {
 }
 
 trait TreeIterExt<'a>: Iterator {
-    fn expect_tree(&mut self, kind: cst::Kind) -> Result<&'a Cst, Diagnostic>;
+    fn expect_tree(
+        &mut self,
+        nodes: &'a [Node<'a>],
+        kind: cst::Kind,
+    ) -> Result<&'a Node<'a>, Diagnostic>;
     fn expect_token(&mut self, kind: TokenKind) -> Result<&'a Token, Diagnostic>;
 }
 
@@ -385,8 +393,12 @@ impl<'a, I> TreeIterExt<'a> for I
 where
     I: Iterator<Item = &'a cst::Child>,
 {
-    fn expect_tree(&mut self, kind: cst::Kind) -> Result<&'a Cst, Diagnostic> {
-        self.find_map(|c| c.tree().filter(|t| t.kind == kind))
+    fn expect_tree(
+        &mut self,
+        nodes: &'a [Node<'a>],
+        kind: cst::Kind,
+    ) -> Result<&'a Node<'a>, Diagnostic> {
+        self.find_map(|c| c.tree(nodes).filter(|t| t.kind == kind))
             .ok_or(MissingTree(kind))
     }
     fn expect_token(&mut self, kind: TokenKind) -> Result<&'a Token, Diagnostic> {
@@ -472,7 +484,11 @@ pub fn coerce_type<M: Debug>(
     }
 }
 
-pub fn resolve_rito_type(ctx: &mut Ctx<'_>, tree: &Cst) -> Result<RitoType, Diagnostic> {
+pub fn resolve_rito_type(
+    ctx: &mut Ctx<'_>,
+    visit_ctx: &VisitCtx,
+    tree: &Node,
+) -> Result<RitoType, Diagnostic> {
     let mut c = tree.children.iter();
 
     let base = c.expect_token(TokenKind::Name)?;
@@ -480,10 +496,10 @@ pub fn resolve_rito_type(ctx: &mut Ctx<'_>, tree: &Cst) -> Result<RitoType, Diag
 
     let base = PropertyKind::from_rito_name(&ctx.text[base.span]).ok_or(UnknownType(base.span))?;
 
-    let subtypes = match c
-        .clone()
-        .find_map(|c| c.tree().filter(|t| t.kind == Kind::TypeArgList))
-    {
+    let subtypes = match c.clone().find_map(|c| {
+        c.tree(&visit_ctx.cst.nodes)
+            .filter(|t| t.kind == Kind::TypeArgList)
+    }) {
         Some(subtypes) => {
             let subtypes_span = subtypes.span;
 
@@ -499,7 +515,10 @@ pub fn resolve_rito_type(ctx: &mut Ctx<'_>, tree: &Cst) -> Result<RitoType, Diag
             let subtypes = subtypes
                 .children
                 .iter()
-                .filter_map(|c| c.tree().filter(|t| t.kind == Kind::TypeArg))
+                .filter_map(|c| {
+                    c.tree(&visit_ctx.cst.nodes)
+                        .filter(|t| t.kind == Kind::TypeArg)
+                })
                 .map(|t| {
                     let resolved = PropertyKind::from_rito_name(&ctx.text[t.span]);
                     if resolved.is_none() {
@@ -559,7 +578,8 @@ fn resolve_hash(ctx: &Ctx, span: Span) -> Result<PropertyValueEnum<Span>, Diagno
 
 pub fn resolve_value(
     ctx: &mut Ctx,
-    tree: &Cst,
+    visit_ctx: &VisitCtx,
+    tree: &Node,
     kind_hint: Option<PropertyKind>,
 ) -> Result<Option<PropertyValueEnum<Span>>, Diagnostic> {
     use PropertyKind as K;
@@ -570,8 +590,8 @@ pub fn resolve_value(
     let Some(child) = tree.children.first() else {
         return Ok(None);
     };
-    Ok(Some(match child {
-        cst::Child::Tree(Cst {
+    Ok(Some(match child.tree(&visit_ctx.cst.nodes) {
+        Some(Node {
             kind: Kind::Class,
             children,
             span,
@@ -630,7 +650,7 @@ pub fn resolve_value(
                 }
             }
         }
-        cst::Child::Tree(Cst {
+        Some(Node {
             kind: Kind::Literal,
             children,
             ..
@@ -728,12 +748,13 @@ pub fn resolve_value(
 
 pub fn resolve_entry(
     ctx: &mut Ctx,
-    tree: &Cst,
+    visit_ctx: &VisitCtx,
+    tree: &Node,
     parent_value_kind: Option<RitoType>,
 ) -> Result<IrEntry, MaybeSpanDiag> {
     let mut c = tree.children.iter();
 
-    let key = c.expect_tree(Kind::EntryKey)?;
+    let key = c.expect_tree(&visit_ctx.cst.nodes, Kind::EntryKey)?;
 
     let key = match key.children.first().ok_or(InvalidHash(key.span))? {
         Child::Token(Token {
@@ -760,13 +781,16 @@ pub fn resolve_entry(
         .and_then(|p| p.value_subtype())
         .map(RitoType::simple);
 
-    let kind = c
-        .clone()
-        .find_map(|c| c.tree().filter(|t| t.kind == Kind::TypeExpr));
+    let kind = c.clone().find_map(|c| {
+        c.tree(&visit_ctx.cst.nodes)
+            .filter(|t| t.kind == Kind::TypeExpr)
+    });
     let kind_span = kind.map(|k| k.span);
-    let kind = kind.map(|t| resolve_rito_type(ctx, t)).transpose()?;
+    let kind = kind
+        .map(|t| resolve_rito_type(ctx, visit_ctx, t))
+        .transpose()?;
 
-    let value = c.expect_tree(Kind::EntryValue)?;
+    let value = c.expect_tree(&visit_ctx.cst.nodes, Kind::EntryValue)?;
     let value_span = value.span;
 
     // entries: map[string, u8] = {
@@ -795,10 +819,11 @@ pub fn resolve_entry(
 
     let kind = kind.or(parent_value_kind);
 
-    let resolved_val = resolve_value(ctx, value, kind.map(|k| k.base))?.map(|value| match kind {
-        Some(kind) => coerce_type(value.clone(), kind.base).unwrap_or(value),
-        None => value,
-    });
+    let resolved_val =
+        resolve_value(ctx, visit_ctx, value, kind.map(|k| k.base))?.map(|value| match kind {
+            Some(kind) => coerce_type(value.clone(), kind.base).unwrap_or(value),
+            None => value,
+        });
 
     let value = match (kind, resolved_val) {
         (None, Some(value)) => value,
@@ -1146,7 +1171,8 @@ fn populate_vec_or_color(
 }
 
 impl Visitor for TypeChecker<'_> {
-    fn enter_tree(&mut self, tree: &Cst) -> Visit {
+    fn enter_tree(&mut self, ctx: &VisitCtx, tree: NodeId) -> Visit {
+        let tree = ctx.node(tree).unwrap();
         self.depth += 1;
         let depth = self.depth;
 
@@ -1226,7 +1252,7 @@ impl Visitor for TypeChecker<'_> {
 
                 let value_hint = color_vec_type.or(parent_type.value_subtype());
 
-                match resolve_value(&mut self.ctx, tree, value_hint) {
+                match resolve_value(&mut self.ctx, ctx, tree, value_hint) {
                     Ok(Some(item)) => {
                         // eprintln!("{indent}  list item {item:?}");
                         if color_vec_type.is_some() {
@@ -1243,8 +1269,13 @@ impl Visitor for TypeChecker<'_> {
             }
 
             Kind::Entry => {
-                match resolve_entry(&mut self.ctx, tree, parent.map(|p| p.1.value().rito_type()))
-                    .map_err(|e| e.fallback(tree.span))
+                match resolve_entry(
+                    &mut self.ctx,
+                    ctx,
+                    tree,
+                    parent.map(|p| p.1.value().rito_type()),
+                )
+                .map_err(|e| e.fallback(tree.span))
                 {
                     Ok(entry) => {
                         // eprintln!("{indent}  push {entry:?}");
@@ -1279,7 +1310,8 @@ impl Visitor for TypeChecker<'_> {
         Visit::Continue
     }
 
-    fn exit_tree(&mut self, tree: &cst::Cst) -> Visit {
+    fn exit_tree(&mut self, ctx: &VisitCtx, tree: NodeId) -> Visit {
+        let tree = ctx.node(tree).unwrap();
         let depth = self.depth;
         self.depth -= 1;
 

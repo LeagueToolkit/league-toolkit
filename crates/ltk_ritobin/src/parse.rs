@@ -25,35 +25,43 @@ use crate::cst;
 
 #[cfg(test)]
 mod test {
+    use bumpalo::Bump;
+
     use crate::{cst::Cst, print::CstPrinter, typecheck::visitor::TypeChecker};
 
-    fn assert_success(text: &str) -> Cst {
-        let cst = Cst::parse(text);
+    fn assert_success<'a>(bump: &'a Bump, text: &str) -> Cst<'a> {
+        let cst = Cst::parse(&bump, text);
 
         let mut buf = String::new();
-        cst.print(&mut buf, 0, text);
+        cst.print(&mut buf, text);
 
         println!("{buf}");
 
-        assert!(cst.errors.is_empty(), "Parse errors: {:#?}", cst.errors);
+        assert!(
+            cst.root().errors.is_empty(),
+            "Parse errors: {:#?}",
+            cst.root().errors
+        );
         cst
     }
 
     #[allow(unused, reason = "tests will use this")]
-    fn assert_fail(text: &str) -> Cst {
-        let cst = Cst::parse(text);
+    fn assert_fail(text: &str) {
+        let bump = Bump::new();
+        let cst = Cst::parse(&bump, text);
 
         let mut buf = String::new();
-        cst.print(&mut buf, 0, text);
+        cst.print(&mut buf, text);
 
         println!("{buf}");
-        assert!(!cst.errors.is_empty(), "Parsed successfully",);
-        cst
+        assert!(!cst.root().errors.is_empty(), "Parsed successfully",);
     }
 
     #[test]
     fn comments() {
+        let bump = Bump::new();
         assert_success(
+            &bump,
             r#"
 #PROP_text
 type: string = "my_str" # inline comment
@@ -71,7 +79,8 @@ entries: map[hash, embed] = {
 
     #[test]
     fn inline_comment_into_eof() {
-        assert_success(r#"mVelMultiplier: f32 = 0 # asd"#);
+        let bump = Bump::new();
+        assert_success(&bump, r#"mVelMultiplier: f32 = 0 # asd"#);
     }
 
     #[ignore = "Nice to have"]
@@ -82,7 +91,8 @@ entries: map[hash, embed] = {
             "thing" = ClassThing { ooo }
         }
         "#;
-        let cst = assert_success(text);
+        let bump = Bump::new();
+        let cst = assert_success(&bump, text);
 
         let (_bin, errors) = cst.build_bin(text);
         assert!(
@@ -102,14 +112,15 @@ entries: map[hash, embed] = {
 }
 
 "#;
-        let cst = Cst::parse(text);
+        let bump = Bump::new();
+        let cst = Cst::parse(&bump, text);
 
         let mut str = String::new();
-        cst.print(&mut str, 0, text);
+        cst.print(&mut str, text);
         eprintln!("text len: {}", text.len());
         eprintln!("{str}\n====== errors: ======\n");
 
-        let errors = &cst.errors;
+        let errors = &cst.root().errors;
         for err in errors {
             eprintln!("{:?}: {:#?}", &text[err.span], err.kind);
         }
@@ -183,10 +194,11 @@ entries: map[hash,embed] = {
             }
 }
 "#;
-        let cst = Cst::parse(text);
+        let bump = Bump::new();
+        let cst = Cst::parse(&bump, text);
 
         let mut str = String::new();
-        cst.print(&mut str, 0, text);
+        cst.print(&mut str, text);
 
         println!("============= CST ===========");
         println!("{str}");

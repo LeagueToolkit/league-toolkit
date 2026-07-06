@@ -21,6 +21,8 @@ thiserror = { workspace = true }
 miette = { workspace = true }
 indexmap = { workspace = true }
 
+bumpalo.workspace = true
+
 glam = { workspace = true }
 xxhash-rust = { workspace = true }
 

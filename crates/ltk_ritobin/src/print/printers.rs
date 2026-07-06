@@ -54,24 +54,28 @@ impl<H: HashProvider> BinPrinter<H> {
 
     pub fn print<W: fmt::Write + ?Sized>(
         &mut self,
+        arena: &bumpalo::Bump,
         tree: &Bin,
         writer: &mut W,
     ) -> Result<usize, PrintError>
     where
         H: Clone,
     {
-        let mut builder = cst::builder::Builder::new(self.config.hashes.clone());
-        let cst = builder.build(tree);
-        let buf = builder.into_text_buffer();
+        let builder = cst::builder::Builder::new(arena).with_hashes(self.config.hashes.clone());
+        let (cst, buf) = builder.build(tree);
         CstPrinter::new(&buf, writer, Default::default()).print(&cst)
     }
 
-    pub fn print_to_string(&mut self, tree: &Bin) -> Result<String, PrintError>
+    pub fn print_to_string(
+        &mut self,
+        arena: &bumpalo::Bump,
+        tree: &Bin,
+    ) -> Result<String, PrintError>
     where
         H: Clone,
     {
         let mut str = String::new();
-        self.print(tree, &mut str)?;
+        self.print(arena, tree, &mut str)?;
         Ok(str)
     }
 }
