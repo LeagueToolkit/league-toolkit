@@ -76,7 +76,13 @@ impl<'a> Parser<'a> {
         let mut events = self.events;
 
         assert!(matches!(events.pop(), Some(Event::Close)));
-        let mut nodes = collections::Vec::new_in(arena);
+
+        let nodes_len = events
+            .iter()
+            .filter(|e| matches!(e, Event::Open { .. }))
+            .count();
+
+        let mut nodes = collections::Vec::with_capacity_in(nodes_len, arena);
         let mut stack = Vec::new();
         let mut last_span = Span::default();
         let mut just_opened = false;
