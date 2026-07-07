@@ -30,6 +30,25 @@ impl TokenKind {
         matches!(self, Self::String | Self::UnterminatedString)
     }
 
+    /// Maps a punctuation byte -> its token kind, inverse of [`Self::print_value`] for single-byte punctuation
+    pub fn from_punct_byte(b: u8) -> Option<Self> {
+        Some(match b {
+            b'(' => Self::LParen,
+            b')' => Self::RParen,
+            b'{' => Self::LCurly,
+            b'}' => Self::RCurly,
+            b'[' => Self::LBrack,
+            b']' => Self::RBrack,
+            b'=' => Self::Eq,
+            b',' => Self::Comma,
+            b':' => Self::Colon,
+            b';' => Self::SemiColon,
+            b'*' => Self::Star,
+            b'/' => Self::Slash,
+            _ => return None,
+        })
+    }
+
     pub fn print_value(&self) -> Option<&'static str> {
         match self {
             TokenKind::Unknown => None,
@@ -101,16 +120,6 @@ pub struct Token {
 }
 pub fn lex(mut text: &str) -> Vec<Token> {
     use TokenKind::*;
-    let punctuation = (
-        "( ) { } [ ] = , : ; * /",
-        [
-            LParen, RParen, LCurly, RCurly, LBrack, RBrack, Eq, Comma, Colon, SemiColon, Star,
-            Slash,
-        ],
-    );
-
-    let keywords = ("true false null", [True, False, Null]);
-
     let source = text;
 
     let mut result: Vec<Token> = Vec::new();
@@ -144,13 +153,12 @@ pub fn lex(mut text: &str) -> Vec<Token> {
             text = rest;
             continue;
         }
+
         let text_orig = text;
         let mut kind = 'kind: {
-            for (i, symbol) in punctuation.0.split_ascii_whitespace().enumerate() {
-                if let Some(rest) = text.strip_prefix(symbol) {
-                    text = rest;
-                    break 'kind punctuation.1[i];
-                }
+            if let Some(k) = TokenKind::from_punct_byte(text.as_bytes()[0]) {
+                text = &text[1..];
+                break 'kind k;
             }
 
             if let Some(rest) = text.strip_prefix('#') {
@@ -228,12 +236,12 @@ pub fn lex(mut text: &str) -> Vec<Token> {
             end: end as u32,
         };
         if kind == Name {
-            for (i, symbol) in keywords.0.split_ascii_whitespace().enumerate() {
-                if token_text == symbol {
-                    kind = keywords.1[i];
-                    break;
-                }
-            }
+            kind = match token_text {
+                "true" => True,
+                "false" => False,
+                "null" => Null,
+                _ => Name,
+            };
         }
         result.push(Token { kind, span });
     }
