@@ -417,8 +417,9 @@ pub fn coerce_type<M: Debug>(
     to: PropertyKind,
 ) -> Option<PropertyValueEnum<M>> {
     match to {
+        to if to == value.kind() => Some(value),
+
         PropertyKind::Hash => Some(match value {
-            PropertyValueEnum::Hash(_) => return Some(value),
             PropertyValueEnum::String(str) => {
                 values::Hash::new_with_meta(BinHash::hash_str(&str), str.meta).into()
             }
@@ -432,7 +433,6 @@ pub fn coerce_type<M: Debug>(
             PropertyValueEnum::Hash(hash) => {
                 values::ObjectLink::new_with_meta(*hash, hash.meta).into()
             }
-            PropertyValueEnum::ObjectLink(_) => return Some(value),
             PropertyValueEnum::String(str) => {
                 values::ObjectLink::new_with_meta(BinHash::hash_str(&str), str.meta).into()
             }
@@ -443,7 +443,6 @@ pub fn coerce_type<M: Debug>(
             }
         }),
         PropertyKind::WadChunkLink => Some(match value {
-            PropertyValueEnum::WadChunkLink(_) => return Some(value),
             PropertyValueEnum::Hash(hash) => {
                 values::WadChunkLink::new_with_meta(WadHash((**hash).into()), hash.meta).into()
             }
@@ -458,7 +457,6 @@ pub fn coerce_type<M: Debug>(
             }
         }),
         PropertyKind::BitBool => Some(match value {
-            PropertyValueEnum::BitBool(_) => return Some(value),
             PropertyValueEnum::Bool(bool) => {
                 values::BitBool::new_with_meta(*bool, bool.meta).into()
             }
@@ -469,7 +467,6 @@ pub fn coerce_type<M: Debug>(
             }
         }),
         PropertyKind::Bool => Some(match value {
-            PropertyValueEnum::Bool(_) => return Some(value),
             PropertyValueEnum::BitBool(bool) => {
                 values::Bool::new_with_meta(*bool, bool.meta).into()
             }
@@ -479,7 +476,6 @@ pub fn coerce_type<M: Debug>(
                 return None;
             }
         }),
-        to if to == value.kind() => Some(value),
         _ => None,
     }
 }
