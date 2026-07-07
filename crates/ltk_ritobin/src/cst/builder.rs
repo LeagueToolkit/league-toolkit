@@ -68,10 +68,6 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
     }
 }
 
-fn hex_fmt<T: LowerHex>(v: T) -> String {
-    format!("0x{v:x}")
-}
-
 impl<'arena, H: HashProvider> Builder<'arena, H> {
     pub fn tree(&mut self, kind: Kind, children: impl IntoIterator<Item = Child>) -> Child {
         let id = NodeId(self.nodes.len() as u32);
@@ -86,8 +82,8 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
         Child::Tree(id)
     }
 
-    fn number(&mut self, v: impl AsRef<str>) -> Child {
-        let lit = self.spanned_token(Tok::Number, v);
+    fn number(&mut self, v: impl std::fmt::Display) -> Child {
+        let lit = self.spanned_display(Tok::Number, v);
         self.tree(Kind::Literal, [lit])
     }
 
@@ -101,36 +97,52 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
         })
     }
 
-    fn string(&mut self, v: impl AsRef<str>) -> Child {
-        self.spanned_token(Tok::String, v)
+    fn spanned_display(&mut self, kind: Tok, v: impl std::fmt::Display) -> Child {
+        let start = self.buf.len() as u32;
+        write!(self.buf, "{v}").unwrap();
+        let end = self.buf.len() as u32;
+        Child::Token(Token {
+            kind,
+            span: Span::new(start, end),
+        })
     }
 
-    fn hex_lit(&mut self, v: impl AsRef<str>) -> Child {
-        self.spanned_token(Tok::HexLit, v)
+    fn spanned_hexlit<T: LowerHex>(&mut self, v: T) -> Child {
+        let start = self.buf.len() as u32;
+        write!(self.buf, "0x{v:x}").unwrap();
+        let end = self.buf.len() as u32;
+        Child::Token(Token {
+            kind: Tok::HexLit,
+            span: Span::new(start, end),
+        })
+    }
+
+    fn string(&mut self, v: impl AsRef<str>) -> Child {
+        self.spanned_token(Tok::String, v)
     }
 
     fn hash_hash_lit(&mut self, h: BinHash) -> Child {
         match self.hashes.lookup_hash(h).map(|h| format!("\"{h}\"")) {
             Some(h) => self.spanned_token(Tok::String, h),
-            None => self.spanned_token(Tok::HexLit, hex_fmt(h)),
+            None => self.spanned_hexlit(h),
         }
     }
     fn hash_type_lit(&mut self, h: BinHash) -> Child {
         match self.hashes.lookup_type(h).map(|h| h.to_string()) {
             Some(h) => self.spanned_token(Tok::Name, h),
-            None => self.spanned_token(Tok::HexLit, hex_fmt(h)),
+            None => self.spanned_hexlit(h),
         }
     }
     fn hash_field_lit(&mut self, h: BinHash) -> Child {
         match self.hashes.lookup_field(h).map(|h| h.to_string()) {
             Some(h) => self.spanned_token(Tok::Name, h),
-            None => self.spanned_token(Tok::HexLit, hex_fmt(h)),
+            None => self.spanned_hexlit(h),
         }
     }
     fn hash_entry_lit(&mut self, h: BinHash) -> Child {
         match self.hashes.lookup_entry(h).map(|h| format!("\"{h}\"")) {
             Some(h) => self.spanned_token(Tok::String, h),
-            None => self.spanned_token(Tok::HexLit, hex_fmt(h)),
+            None => self.spanned_hexlit(h),
         }
     }
 
@@ -158,21 +170,21 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
             PropertyValueEnum::Bool(b) => self.bool(**b),
             PropertyValueEnum::BitBool(b) => self.bool(**b),
 
-            PropertyValueEnum::U8(n) => self.number(n.to_string()),
-            PropertyValueEnum::U16(n) => self.number(n.to_string()),
-            PropertyValueEnum::U32(n) => self.number(n.to_string()),
-            PropertyValueEnum::U64(n) => self.number(n.to_string()),
-            PropertyValueEnum::I8(n) => self.number(n.to_string()),
-            PropertyValueEnum::I16(n) => self.number(n.to_string()),
-            PropertyValueEnum::I32(n) => self.number(n.to_string()),
-            PropertyValueEnum::I64(n) => self.number(n.to_string()),
-            PropertyValueEnum::F32(n) => self.number(n.to_string()),
+            PropertyValueEnum::U8(n) => self.number(**n),
+            PropertyValueEnum::U16(n) => self.number(**n),
+            PropertyValueEnum::U32(n) => self.number(**n),
+            PropertyValueEnum::U64(n) => self.number(**n),
+            PropertyValueEnum::I8(n) => self.number(**n),
+            PropertyValueEnum::I16(n) => self.number(**n),
+            PropertyValueEnum::I32(n) => self.number(**n),
+            PropertyValueEnum::I64(n) => self.number(**n),
+            PropertyValueEnum::F32(n) => self.number(**n),
             PropertyValueEnum::Vector2(v) => {
                 let items = v
                     .to_array()
                     .iter()
                     .map(|v| {
-                        let v = self.number(v.to_string());
+                        let v = self.number(*v);
                         self.tree(Kind::ListItem, [v])
                     })
                     .collect();
@@ -183,7 +195,7 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
                     .to_array()
                     .iter()
                     .map(|v| {
-                        let v = self.number(v.to_string());
+                        let v = self.number(*v);
                         self.tree(Kind::ListItem, [v])
                     })
                     .collect();
@@ -194,7 +206,7 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
                     .to_array()
                     .iter()
                     .map(|v| {
-                        let v = self.number(v.to_string());
+                        let v = self.number(*v);
                         self.tree(Kind::ListItem, [v])
                     })
                     .collect();
@@ -207,10 +219,10 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
                     .iter()
                     .flat_map(|v| {
                         let values = [
-                            self.number(v[0].to_string()),
-                            self.number(v[1].to_string()),
-                            self.number(v[2].to_string()),
-                            self.number(v[3].to_string()),
+                            self.number(v[0]),
+                            self.number(v[1]),
+                            self.number(v[2]),
+                            self.number(v[3]),
                         ];
                         [
                             self.tree(Kind::ListItem, [values[0]]),
@@ -227,7 +239,7 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
                     .to_array()
                     .iter()
                     .map(|v| {
-                        let v = self.number(v.to_string());
+                        let v = self.number(*v);
                         self.tree(Kind::ListItem, [v])
                     })
                     .collect();
@@ -240,7 +252,7 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
 
             // hash/hash-likes
             PropertyValueEnum::Hash(h) => self.hash_hash_lit(**h),
-            PropertyValueEnum::WadChunkLink(h) => self.hex_lit(hex_fmt(**h)),
+            PropertyValueEnum::WadChunkLink(h) => self.spanned_hexlit(**h),
             PropertyValueEnum::ObjectLink(h) => self.hash_hash_lit(**h),
 
             PropertyValueEnum::Container(container)
