@@ -1,4 +1,7 @@
-use std::fmt::{Debug, Display};
+use std::{
+    borrow::Cow,
+    fmt::{Debug, Display},
+};
 
 use glam::Vec4;
 use indexmap::IndexMap;
@@ -686,7 +689,10 @@ pub fn resolve_value(
                         return Err(AmbiguousNumeric(*span));
                     };
 
-                    let txt = txt.replace('_', "");
+                    let txt = match txt.contains('_') {
+                        true => Cow::Owned(txt.replace('_', "")),
+                        false => Cow::Borrowed(txt),
+                    };
 
                     match kind_hint {
                         K::U8 => P::U8(values::U8::new_with_meta(
