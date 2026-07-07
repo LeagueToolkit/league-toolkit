@@ -122,7 +122,8 @@ pub fn lex(mut text: &str) -> Vec<Token> {
     use TokenKind::*;
     let source = text;
 
-    let mut result: Vec<Token> = Vec::new();
+    // real bins run ~6.82 (hashes) to ~7.25 (resolved) bytes/token; /6 stays under both so big files don't realloc
+    let mut result: Vec<Token> = Vec::with_capacity(text.len() / 6);
     while !text.is_empty() {
         if let Some(rest) = trim(text, |it| it.is_ascii_whitespace()) {
             let eaten = &source[source.len() - text.len()..source.len() - rest.len()];
