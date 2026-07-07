@@ -2,6 +2,14 @@
 pub fn hash_lower(input: &str) -> u32 {
     let mut hash: u32 = 0x811c9dc5;
 
+    if input.is_ascii() {
+        for &byte in input.as_bytes() {
+            hash ^= byte.to_ascii_lowercase() as u32;
+            hash = hash.wrapping_mul(0x01000193);
+        }
+        return hash;
+    }
+
     for c in input.chars().flat_map(|c| c.to_lowercase()) {
         let mut buf = [0u8; 4];
         let encoded = c.encode_utf8(&mut buf);
