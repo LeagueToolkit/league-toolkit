@@ -260,27 +260,38 @@ impl<'a> Parser<'a> {
         self.pos == self.tokens.len()
     }
 
+    #[inline]
     pub(crate) fn nth(&self, lookahead: usize) -> TokenKind {
-        if self.fuel.get() == 0 {
+        #[cold]
+        #[inline(never)]
+        fn stuck(p: &Parser<'_>) -> ! {
             eprintln!("last 5 tokens behind self.pos:");
-            for tok in &self.tokens[self.pos.saturating_sub(5)..self.pos] {
-                eprintln!(" - {:?}: {:?}", tok.kind, &self.text[tok.span]);
+            for tok in &p.tokens[p.pos.saturating_sub(5)..p.pos] {
+                eprintln!(" - {:?}: {:?}", tok.kind, &p.text[tok.span]);
             }
 
             panic!("parser is stuck")
         }
-        self.fuel.set(self.fuel.get() - 1);
+
+        match self.fuel.get() {
+            0 => stuck(self),
+            f => self.fuel.set(f - 1),
+        }
+
         self.tokens
             .get(self.pos + lookahead)
             .map_or(TokenKind::Eof, |it| it.kind)
     }
 
+    #[inline]
     pub(crate) fn at(&self, kind: TokenKind) -> bool {
         self.nth(0) == kind
     }
 
+    #[inline]
     pub(crate) fn at_any(&self, kinds: &[TokenKind]) -> Option<TokenKind> {
-        kinds.contains(&self.nth(0)).then_some(self.nth(0))
+        let kind = self.nth(0);
+        kinds.contains(&kind).then_some(kind)
     }
 
     pub(crate) fn eat_any(&mut self, kinds: &[TokenKind]) -> Option<TokenKind> {
