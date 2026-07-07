@@ -911,7 +911,7 @@ impl<'a> TypeChecker<'a> {
                                 Some(BinObject {
                                     path_hash: *path_hash,
                                     class_hash: struct_val.class_hash,
-                                    properties: struct_val.properties.clone(),
+                                    properties: struct_val.properties,
                                 })
                             } else {
                                 None
@@ -933,8 +933,11 @@ impl<'a> TypeChecker<'a> {
             PropertyValueEnum::Container(list)
             | PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(list)) => {
                 match child {
-                    IrItem::ListItem(IrListItem(value)) => {
-                        let value = coerce_type(value.clone(), list.item_kind()).unwrap_or(value);
+                    IrItem::ListItem(IrListItem(mut value)) => {
+                        if value.kind() != list.item_kind() {
+                            value = coerce_type(value.clone(), list.item_kind()).unwrap_or(value);
+                        }
+
                         let span = *value.meta();
                         match list.push(value) {
                             Ok(_) => {}
@@ -1362,17 +1365,14 @@ impl Visitor for TypeChecker<'_> {
                             return Visit::Continue;
                         }
                         // assert_eq!(depth, 2);
-                        let (
-                            _,
-                            IrItem::Entry(IrEntry {
-                                key:
-                                    PropertyValueEnum::String(values::String {
-                                        value: key,
-                                        meta: key_span,
-                                    }),
-                                value,
-                            }),
-                        ) = ir.clone()
+                        let IrItem::Entry(IrEntry {
+                            key:
+                                PropertyValueEnum::String(values::String {
+                                    value: key,
+                                    meta: key_span,
+                                }),
+                            value,
+                        }) = ir.1
                         else {
                             self.ctx
                                 .diagnostics
