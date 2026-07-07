@@ -821,6 +821,7 @@ pub fn resolve_entry(
 
     let resolved_val =
         resolve_value(ctx, visit_ctx, value, kind.map(|k| k.base))?.map(|value| match kind {
+            Some(kind) if value.kind() == kind.base => value,
             Some(kind) => coerce_type(value.clone(), kind.base).unwrap_or(value),
             None => value,
         });
