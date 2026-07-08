@@ -411,6 +411,7 @@ pub fn coerce_type<M: Debug>(
                 values::Hash::new_with_meta(BinHash::hash_str(&str), str.meta).into()
             }
             other => {
+                #[cfg(feature = "debug")]
                 eprintln!("\x1b[41mcannot coerce {other:?} to {to:?}\x1b[0m");
                 return None;
             }
@@ -424,6 +425,7 @@ pub fn coerce_type<M: Debug>(
                 values::ObjectLink::new_with_meta(BinHash::hash_str(&str), str.meta).into()
             }
             other => {
+                #[cfg(feature = "debug")]
                 eprintln!("\x1b[41mcannot coerce {other:?} to {to:?}\x1b[0m");
                 return None;
             }
@@ -438,6 +440,7 @@ pub fn coerce_type<M: Debug>(
                     .into()
             }
             other => {
+                #[cfg(feature = "debug")]
                 eprintln!("\x1b[41mcannot coerce {other:?} to {to:?}\x1b[0m");
                 return None;
             }
@@ -448,6 +451,7 @@ pub fn coerce_type<M: Debug>(
                 values::BitBool::new_with_meta(*bool, bool.meta).into()
             }
             other => {
+                #[cfg(feature = "debug")]
                 eprintln!("\x1b[41mcannot coerce {other:?} to {to:?}\x1b[0m");
                 return None;
             }
@@ -458,6 +462,7 @@ pub fn coerce_type<M: Debug>(
                 values::Bool::new_with_meta(*bool, bool.meta).into()
             }
             other => {
+                #[cfg(feature = "debug")]
                 eprintln!("\x1b[41mcannot coerce {other:?} to {to:?}\x1b[0m");
                 return None;
             }
@@ -614,6 +619,7 @@ pub fn resolve_value(
                     properties: Default::default(),
                 })),
                 other => {
+                    #[cfg(feature = "debug")]
                     eprintln!("can't create class value from kind {other:?}");
                     return Err(TypeMismatch {
                         span: class.span,
@@ -927,6 +933,7 @@ impl<'a> TypeChecker<'a> {
                         }
                     }
                     IrItem::Entry(IrEntry { key: _, value: _ }) => {
+                        #[cfg(feature = "debug")]
                         eprintln!("\x1b[41mlist item must be list item\x1b[0m");
                         return parent;
                     }
@@ -935,6 +942,7 @@ impl<'a> TypeChecker<'a> {
             PropertyValueEnum::Struct(struct_val)
             | PropertyValueEnum::Embedded(values::Embedded(struct_val)) => {
                 let IrItem::Entry(IrEntry { key, value }) = child else {
+                    #[cfg(feature = "debug")]
                     eprintln!("\x1b[41mstruct item must be entry\x1b[0m");
                     return parent;
                 };
@@ -949,6 +957,7 @@ impl<'a> TypeChecker<'a> {
             }
             PropertyValueEnum::Map(map_value) => {
                 let IrItem::Entry(IrEntry { key, value }) = child else {
+                    #[cfg(feature = "debug")]
                     eprintln!("map item must be entry");
                     return parent;
                 };
@@ -977,6 +986,7 @@ impl<'a> TypeChecker<'a> {
             }
             PropertyValueEnum::Optional(option) => {
                 let IrItem::ListItem(IrListItem(child)) = child else {
+                    #[cfg(feature = "debug")]
                     eprintln!("\x1b[41moptional value must be list item\x1b[0m");
                     return parent;
                 };
@@ -1010,6 +1020,7 @@ impl<'a> TypeChecker<'a> {
                     .unwrap(),
                 );
 
+                #[cfg(feature = "debug")]
                 eprintln!("cant inject into {:?}", other.kind())
             }
         }
@@ -1186,6 +1197,7 @@ impl Visitor for TypeChecker<'_> {
                         ));
                     }
                     parent_type => {
+                        #[cfg(feature = "debug")]
                         eprintln!(
                             "[warn] got {parent_type:?} in ListItemBlock - {:?}",
                             &self.ctx.text[tree.span]
