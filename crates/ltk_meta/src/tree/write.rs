@@ -1,20 +1,24 @@
 use std::io;
 
+use crate::header::PropHeader;
+
 use super::Bin;
 use byteorder::{WriteBytesExt as _, LE};
 use ltk_hash::WriteBytesExt as _;
-use ltk_io_ext::WriterExt as _;
+use ltk_primitives::StringWriteError;
 
-/// The version used when writing Bin files.
-///
-/// This is always version 3, which supports all features including
-/// dependencies and data overrides.
-pub const WRITE_VERSION: u32 = 3;
+#[derive(Debug, thiserror::Error)]
+pub enum BinWriteError {
+    #[error(transparent)]
+    StringWrite(#[from] StringWriteError),
+    #[error(transparent)]
+    Io(#[from] io::Error),
+}
 
 impl Bin {
     /// Write this bin to a writer.
     ///
-    /// The output will always use version 3 format, regardless of the
+    /// The output will always use the latest format we support ([`PropHeader::LATEST_VERSION`]), regardless of the
     /// `version` field on this struct. This ensures maximum compatibility
     /// and feature support.
     ///
@@ -31,24 +35,21 @@ impl Bin {
     /// let tree = Bin::default();
     /// let mut buffer = Cursor::new(Vec::new());
     /// tree.to_writer(&mut buffer)?;
-    /// # Ok::<(), std::io::Error>(())
+    /// # Ok::<(), ltk_meta::BinWriteError>(())
     /// ```
-    pub fn to_writer<W: io::Write + io::Seek + ?Sized>(&self, writer: &mut W) -> io::Result<()> {
-        match self.is_override {
-            true => todo!("implement is_override Bin write"),
-            false => {
-                writer.write_u32::<LE>(Self::PROP)?;
-            }
-        }
+    pub fn to_writer<W: io::Write + io::Seek + ?Sized>(
+        &self,
+        writer: &mut W,
+    ) -> Result<(), BinWriteError> {
+        writer.write_u32::<LE>(PropHeader::MAGIC)?;
 
-        // Always write version 3
-        writer.write_u32::<LE>(WRITE_VERSION)?;
-        writer.write_u32::<LE>(self.dependencies.len() as _)?;
+        writer.write_u32::<LE>(self.version)?;
+        writer.write_u32::<LE>(self.dependencies.len().try_into().unwrap())?;
         for dep in &self.dependencies {
-            writer.write_len_prefixed_string::<LE, _>(dep)?;
+            dep.to_writer(writer)?;
         }
 
-        writer.write_u32::<LE>(self.objects.len() as _)?;
+        writer.write_u32::<LE>(self.objects.len().try_into().unwrap())?;
         for obj in self.objects.values() {
             writer.write_bin_hash::<LE>(obj.class_hash)?;
         }

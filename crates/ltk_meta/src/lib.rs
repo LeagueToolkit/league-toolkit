@@ -78,4 +78,5 @@ pub use tree::*;
 mod error;
 pub use error::*;
 
+pub mod header;
 pub mod traits;
