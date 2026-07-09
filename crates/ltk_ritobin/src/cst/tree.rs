@@ -9,7 +9,7 @@ use ltk_meta::Bin;
 use crate::{
     cst::{
         visitor::{Visit, VisitCtx},
-        Visitor,
+        NodeId, TokenId, Visitor,
     },
     parse::{
         self, impls,
@@ -62,49 +62,38 @@ impl Display for Kind {
 ///
 /// See [`crate::cst`] for more information.
 pub struct Cst<'arena> {
-    pub(crate) nodes: bumpalo::collections::Vec<'arena, Node<'arena>>,
+    pub(crate) nodes: Vec<Node<'arena>>,
+    pub(crate) tokens: Vec<Token>,
 }
 
 impl<'arena> Cst<'arena> {
     pub fn node(&self, id: NodeId) -> Option<&Node<'arena>> {
         self.nodes.get((id.0) as usize)
     }
+    pub fn node_mut(&mut self, id: NodeId) -> Option<&mut Node<'arena>> {
+        self.nodes.get_mut((id.0) as usize)
+    }
+
+    pub fn token(&self, id: TokenId) -> Option<&Token> {
+        self.tokens.get((id.0) as usize)
+    }
+    pub fn token_mut(&mut self, id: TokenId) -> Option<&mut Token> {
+        self.tokens.get_mut((id.0) as usize)
+    }
+
+    pub(crate) fn push_node(&mut self, node: Node<'arena>) -> NodeId {
+        let id = NodeId(self.nodes.len().try_into().unwrap());
+        self.nodes.push(node);
+        id
+    }
+    pub(crate) fn push_token(&mut self, token: Token) -> TokenId {
+        let id = TokenId(self.tokens.len().try_into().unwrap());
+        self.tokens.push(token);
+        id
+    }
 
     pub fn root(&self) -> &Node<'arena> {
         &self.nodes[0]
-    }
-}
-
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[repr(transparent)]
-pub struct NodeId(pub(crate) u32);
-
-impl<'arena> Index<NodeId> for [Node<'arena>] {
-    type Output = Node<'arena>;
-
-    fn index(&self, index: NodeId) -> &Self::Output {
-        &self[index.0 as usize]
-    }
-}
-
-impl<'arena> IndexMut<NodeId> for [Node<'arena>] {
-    fn index_mut(&mut self, index: NodeId) -> &mut Self::Output {
-        &mut self[index.0 as usize]
-    }
-}
-
-impl<'arena> Index<NodeId> for collections::Vec<'arena, Node<'arena>> {
-    type Output = Node<'arena>;
-
-    fn index(&self, index: NodeId) -> &Self::Output {
-        &self[index.0 as usize]
-    }
-}
-
-impl<'arena> IndexMut<NodeId> for collections::Vec<'arena, Node<'arena>> {
-    fn index_mut(&mut self, index: NodeId) -> &mut Self::Output {
-        &mut self[index.0 as usize]
     }
 }
 
@@ -127,32 +116,32 @@ pub struct Node<'arena> {
 #[derive(Clone, Copy, Debug)]
 /// A [`Cst`] child node - either a [`Token`] or a [`Cst`]
 pub enum Child {
-    Token(Token),
+    Token(TokenId),
     Tree(NodeId),
 }
 
 impl Child {
     /// Get a reference to this node as a [`Token`], if it is one.
-    pub fn token(&self) -> Option<&Token> {
+    pub fn token<'a>(&'a self, cst: &'a Cst<'_>) -> Option<&'a Token> {
         match self {
-            Child::Token(token) => Some(token),
+            Child::Token(id) => cst.token(*id),
             Child::Tree(_) => None,
         }
     }
 
     /// Get a reference to this node as a [`Node`], if it is one.
-    pub fn tree<'arena: 'b, 'b>(&'b self, nodes: &'arena [Node]) -> Option<&'arena Node<'arena>> {
+    pub fn tree<'a>(&'a self, cst: &'a Cst<'a>) -> Option<&'a Node<'a>> {
         match self {
             Child::Token(_) => None,
-            Child::Tree(id) => Some(&nodes[id.0 as usize]),
+            Child::Tree(id) => cst.node(*id),
         }
     }
 
     /// The span of this node
-    pub fn span<'arena: 'b, 'b>(&'b self, nodes: &'arena [Node]) -> Span {
+    pub fn span(&self, cst: &Cst<'_>) -> Span {
         match self {
-            Child::Token(token) => token.span,
-            Child::Tree(id) => nodes[id.0 as usize].span,
+            Child::Token(id) => cst.token(*id).unwrap().span,
+            Child::Tree(id) => cst.node(*id).unwrap().span,
         }
     }
 }
@@ -239,7 +228,9 @@ impl<W: fmt::Write + ?Sized> Visitor for DebugPrinter<'_, '_, W> {
         Visit::Continue
     }
 
-    fn visit_token(&mut self, _ctx: &VisitCtx<'_>, token: Token, _parent: NodeId) -> Visit {
+    fn visit_token(&mut self, ctx: &VisitCtx<'_>, token: TokenId, _parent: NodeId) -> Visit {
+        let token = ctx.cst.token(token).unwrap();
+
         let indent = "    ".repeat(self.indent_level);
 
         let text = &self.source[token.span.start as usize..token.span.end as usize];

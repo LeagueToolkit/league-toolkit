@@ -11,7 +11,7 @@ use ltk_hash::BinHash;
 use ltk_meta::{property::values, Bin, BinObject, PropertyKind, PropertyValueEnum};
 
 use crate::{
-    cst::{Child, Cst, Kind, Node, NodeId},
+    cst::{Child, Cst, Kind, Node, NodeId, TokenId},
     parse::{Span, Token, TokenKind as Tok},
     typecheck::visitor::{PropertyValueExt, RitoType},
     HashProvider, RitobinName as _,
@@ -22,14 +22,9 @@ pub struct Builder<'arena, H: HashProvider> {
     hashes: H,
     arena: &'arena Bump,
     nodes: collections::Vec<'arena, Node<'arena>>,
+    tokens: Vec<Token>,
 }
 
-pub fn token(kind: Tok) -> Child {
-    Child::Token(Token {
-        kind,
-        span: Span::default(),
-    })
-}
 impl<'arena> Builder<'arena, ()> {
     pub fn new(arena: &'arena Bump) -> Builder<'arena, ()> {
         Builder {
@@ -37,6 +32,7 @@ impl<'arena> Builder<'arena, ()> {
             hashes: (),
             arena,
             nodes: collections::Vec::new_in(arena),
+            tokens: Vec::new(),
         }
     }
 }
@@ -48,12 +44,19 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
             hashes,
             arena: self.arena,
             nodes: self.nodes,
+            tokens: self.tokens,
         }
     }
 
     pub fn build(mut self, bin: &'arena Bin) -> (Cst<'arena>, String) {
         self.bin_to_cst(bin);
-        (Cst { nodes: self.nodes }, self.buf)
+        (
+            Cst {
+                nodes: self.nodes.to_vec(),
+                tokens: self.tokens,
+            },
+            self.buf,
+        )
     }
 
     /// Get a reference to the underlying text buffer all [`Cst`]'s built by this builder reference in
@@ -69,8 +72,17 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
 }
 
 impl<'arena, H: HashProvider> Builder<'arena, H> {
+    pub fn token(&mut self, kind: Tok) -> Child {
+        let id = TokenId(self.tokens.len().try_into().unwrap());
+        self.tokens.push(Token {
+            kind,
+            span: Span::default(),
+        });
+        Child::Token(id)
+    }
+
     pub fn tree(&mut self, kind: Kind, children: impl IntoIterator<Item = Child>) -> Child {
-        let id = NodeId(self.nodes.len() as u32);
+        let id = NodeId(self.nodes.len().try_into().unwrap());
 
         self.nodes.push(Node {
             span: Span::default(),
@@ -91,30 +103,36 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
         let start = self.buf.len() as u32;
         self.buf.write_str(str.as_ref()).unwrap();
         let end = self.buf.len() as u32;
-        Child::Token(Token {
+        let id = TokenId(self.tokens.len().try_into().unwrap());
+        self.tokens.push(Token {
             kind,
             span: Span::new(start, end),
-        })
+        });
+        Child::Token(id)
     }
 
     fn spanned_display(&mut self, kind: Tok, v: impl std::fmt::Display) -> Child {
         let start = self.buf.len() as u32;
         write!(self.buf, "{v}").unwrap();
         let end = self.buf.len() as u32;
-        Child::Token(Token {
+        let id = TokenId(self.tokens.len().try_into().unwrap());
+        self.tokens.push(Token {
             kind,
             span: Span::new(start, end),
-        })
+        });
+        Child::Token(id)
     }
 
     fn spanned_hexlit<T: LowerHex>(&mut self, v: T) -> Child {
         let start = self.buf.len() as u32;
         write!(self.buf, "0x{v:x}").unwrap();
         let end = self.buf.len() as u32;
-        Child::Token(Token {
+        let id = TokenId(self.tokens.len().try_into().unwrap());
+        self.tokens.push(Token {
             kind: Tok::HexLit,
             span: Span::new(start, end),
-        })
+        });
+        Child::Token(id)
     }
 
     fn string(&mut self, v: impl AsRef<str>) -> Child {
@@ -147,22 +165,20 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
     }
 
     fn block(&mut self, children: Vec<Child>) -> Child {
+        let lcurly = self.token(Tok::LCurly);
+        let rcurly = self.token(Tok::RCurly);
         self.tree(
             Kind::Block,
-            once(token(Tok::LCurly))
-                .chain(children)
-                .chain(once(token(Tok::RCurly))),
+            once(lcurly).chain(children).chain(once(rcurly)),
         )
     }
 
     fn bool(&mut self, v: bool) -> Child {
-        self.tree(
-            Kind::Literal,
-            vec![token(match v {
-                true => Tok::True,
-                false => Tok::False,
-            })],
-        )
+        let tok = self.token(match v {
+            true => Tok::True,
+            false => Tok::False,
+        });
+        self.tree(Kind::Literal, [tok])
     }
 
     fn value_to_cst<M: Clone>(&mut self, value: &PropertyValueEnum<M>) -> Child {
@@ -247,7 +263,9 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
             }
             PropertyValueEnum::String(s) => {
                 let s = self.string(&**s);
-                self.tree(Kind::Literal, [token(Tok::Quote), s, token(Tok::Quote)])
+                // TODO (alan): can I get away with this?
+                let quote = self.token(Tok::Quote);
+                self.tree(Kind::Literal, [quote, s, quote])
             }
 
             // hash/hash-likes
@@ -257,14 +275,14 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
 
             PropertyValueEnum::Container(container)
             | PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(container)) => {
-                let mut children = vec![token(Tok::LCurly)];
+                let mut children = vec![self.token(Tok::LCurly)];
 
                 for item in container.clone().into_items() {
                     let item = self.value_to_cst(&item);
                     children.push(self.tree(Kind::ListItem, [item]));
                 }
 
-                children.push(token(Tok::RCurly));
+                children.push(self.token(Tok::RCurly));
                 self.tree(Kind::TypeArgList, children)
             }
             PropertyValueEnum::Embedded(values::Embedded(s)) | PropertyValueEnum::Struct(s) => {
@@ -285,7 +303,10 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
                 };
                 self.block(children)
             }
-            PropertyValueEnum::None(_) => self.tree(Kind::Literal, vec![token(Tok::Null)]),
+            PropertyValueEnum::None(_) => {
+                let tok = self.token(Tok::Null);
+                self.tree(Kind::Literal, [tok])
+            }
 
             PropertyValueEnum::Map(map) => {
                 let children = map
@@ -293,8 +314,9 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
                     .iter()
                     .map(|(k, v)| {
                         let k = self.value_to_cst(k);
+                        let eq = self.token(Tok::Eq);
                         let v = self.value_to_cst(v);
-                        self.tree(Kind::Entry, [k, token(Tok::Eq), v])
+                        self.tree(Kind::Entry, [k, eq, v])
                     })
                     .collect();
                 self.block(children)
@@ -303,13 +325,13 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
     }
 
     fn entry_tree(&mut self, key: Child, kind: Option<Child>, value: Child) -> Child {
-        self.tree(
-            Kind::Entry,
-            match kind {
-                Some(kind) => vec![key, token(Tok::Colon), kind, token(Tok::Eq), value],
-                None => vec![key, token(Tok::Eq), value],
-            },
-        )
+        let colon = self.token(Tok::Colon);
+        let eq = self.token(Tok::Eq);
+
+        match kind {
+            Some(kind) => self.tree(Kind::Entry, [key, colon, kind, eq, value]),
+            None => self.tree(Kind::Entry, [key, eq, value]),
+        }
     }
 
     fn rito_type(&mut self, rito_type: RitoType) -> Child {
@@ -317,12 +339,12 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
 
         if let Some(sub) = rito_type.subtypes[0] {
             let name = self.spanned_token(Tok::Name, sub.to_rito_name());
-            let mut args = vec![token(Tok::LBrack), self.tree(Kind::TypeArg, [name])];
+            let mut args = vec![self.token(Tok::LBrack), self.tree(Kind::TypeArg, [name])];
             if let Some(sub) = rito_type.subtypes[1] {
                 let name = self.spanned_token(Tok::Name, sub.to_rito_name());
                 args.push(self.tree(Kind::TypeArg, [name]));
             }
-            args.push(token(Tok::RBrack));
+            args.push(self.token(Tok::RBrack));
             children.push(self.tree(Kind::TypeArgList, args));
         }
 

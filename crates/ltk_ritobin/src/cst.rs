@@ -11,6 +11,9 @@ mod tree;
 pub use tree::Kind as TreeKind;
 pub use tree::*;
 
+mod ids;
+pub use ids::*;
+
 pub mod visitor;
 pub use visitor::Visitor;
 

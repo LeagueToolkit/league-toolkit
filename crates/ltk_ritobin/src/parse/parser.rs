@@ -82,7 +82,11 @@ impl<'a> Parser<'a> {
             .filter(|e| matches!(e, Event::Open { .. }))
             .count();
 
-        let mut nodes = collections::Vec::with_capacity_in(nodes_len, arena);
+        let mut cst = Cst {
+            nodes: Vec::with_capacity(nodes_len),
+            tokens: vec![],
+        };
+
         let mut stack = Vec::new();
         let mut last_span = Span::default();
         let mut just_opened = false;
@@ -91,22 +95,19 @@ impl<'a> Parser<'a> {
                 Event::Open { kind } => {
                     just_opened = true;
 
-                    let idx = NodeId(nodes.len().try_into().unwrap());
-                    nodes.push(Node {
+                    stack.push(cst.push_node(Node {
                         span: Span::new(last_span.end, 0),
                         kind,
                         children: collections::Vec::new_in(arena),
                         errors: collections::Vec::new_in(arena),
-                    });
-
-                    stack.push(idx);
+                    }));
                 }
                 Event::Close => {
                     let node_idx = stack.pop().unwrap();
                     let parent_idx = *stack.last().unwrap();
 
                     let (parent, node) = {
-                        let (left, right) = nodes.split_at_mut(node_idx.0 as usize);
+                        let (left, right) = cst.nodes.split_at_mut(node_idx.0 as usize);
                         (&mut left[parent_idx], &mut right[0])
                     };
 
@@ -126,21 +127,24 @@ impl<'a> Parser<'a> {
                 Event::Advance => {
                     let token = tokens.next().unwrap();
                     let last_idx = *stack.last().unwrap();
-                    let last = &mut nodes[last_idx];
+                    {
+                        let last = cst.node_mut(last_idx).unwrap();
 
-                    if just_opened {
-                        // first token of the tree
-                        last.span.start = token.span.start;
+                        if just_opened {
+                            // first token of the tree
+                            last.span.start = token.span.start;
+                        }
+                        just_opened = false;
+
+                        last.span.end = token.span.end;
+                        last_span = token.span;
                     }
-                    just_opened = false;
-
-                    last.span.end = token.span.end;
-                    last_span = token.span;
-                    last.children.push(Child::Token(token));
+                    let token = Child::Token(cst.push_token(token));
+                    cst.node_mut(last_idx).unwrap().children.push(token);
                 }
                 Event::Error { kind, span } => {
                     let cur_tree_idx = *stack.last().unwrap();
-                    let cur_tree = &nodes[cur_tree_idx];
+                    let cur_tree = cst.node(cur_tree_idx).unwrap();
 
                     let span = match cur_tree.kind {
                         TreeKind::ErrorTree => cur_tree.span,
@@ -156,7 +160,7 @@ impl<'a> Parser<'a> {
                             // whole tree is the problem
                             ErrorKind::UnexpectedTree => cur_tree.span,
                             _ => span
-                                .or(cur_tree.children.last().map(|c| c.span(&nodes)))
+                                .or(cur_tree.children.last().map(|c| c.span(&cst)))
                                 // we can't use Tree.span.end because that's only known on Close
                                 .unwrap_or(Span::new(
                                     cur_tree.span.start,
@@ -168,7 +172,7 @@ impl<'a> Parser<'a> {
                         },
                     };
 
-                    let cur_tree = &mut nodes[cur_tree_idx];
+                    let cur_tree = cst.node_mut(cur_tree_idx).unwrap();
                     cur_tree.errors.push(Error {
                         span,
                         tree: cur_tree.kind,
@@ -182,7 +186,7 @@ impl<'a> Parser<'a> {
         assert!(stack.is_empty());
         assert!(tokens.next().is_none());
         assert_eq!(tree, NodeId(0));
-        Cst { nodes }
+        cst
     }
 
     pub(crate) fn open(&mut self) -> MarkOpened {

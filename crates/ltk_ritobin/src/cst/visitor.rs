@@ -1,7 +1,7 @@
 //! Visitor pattern for walking CSTs
 use super::{tree::Child, Cst};
 use crate::{
-    cst::{Node, NodeId},
+    cst::{Node, NodeId, TokenId},
     parse::tokenizer::Token,
 };
 
@@ -41,7 +41,7 @@ pub trait Visitor {
 
     /// Called on every token walked, with the node the token was found in provided as context.
     #[must_use]
-    fn visit_token(&mut self, ctx: &VisitCtx<'_>, token: Token, parent: NodeId) -> Visit {
+    fn visit_token(&mut self, ctx: &VisitCtx<'_>, token: TokenId, parent: NodeId) -> Visit {
         Visit::Continue
     }
 }
@@ -67,7 +67,7 @@ impl Cst<'_> {
     fn walk_inner<V: Visitor>(&self, visitor: &mut V, node_idx: NodeId) -> Visit {
         let ctx = VisitCtx { cst: self };
 
-        let node = &self.nodes[node_idx];
+        let node = self.node(node_idx).unwrap();
         if let Some(ret) = match visitor.enter_tree(&ctx, node_idx) {
             Visit::Stop => Some(Visit::Stop),
             Visit::Skip => Some(Visit::Continue),
