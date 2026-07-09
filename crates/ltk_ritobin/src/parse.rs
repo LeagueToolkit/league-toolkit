@@ -30,18 +30,14 @@ mod test {
     use crate::{cst::Cst, print::CstPrinter, typecheck::visitor::TypeChecker};
 
     fn assert_success<'a>(bump: &'a Bump, text: &str) -> Cst<'a> {
-        let cst = Cst::parse(&bump, text);
+        let cst = Cst::parse(bump, text);
 
         let mut buf = String::new();
         cst.print(&mut buf, text);
 
         println!("{buf}");
 
-        assert!(
-            cst.root().errors.is_empty(),
-            "Parse errors: {:#?}",
-            cst.root().errors
-        );
+        assert!(cst.errors.is_empty(), "Parse errors: {:#?}", cst.errors);
         cst
     }
 
@@ -54,7 +50,7 @@ mod test {
         cst.print(&mut buf, text);
 
         println!("{buf}");
-        assert!(!cst.root().errors.is_empty(), "Parsed successfully",);
+        assert!(!cst.errors.is_empty(), "Parsed successfully",);
     }
 
     #[test]
@@ -120,7 +116,7 @@ entries: map[hash, embed] = {
         eprintln!("text len: {}", text.len());
         eprintln!("{str}\n====== errors: ======\n");
 
-        let errors = &cst.root().errors;
+        let errors = &cst.errors;
         for err in errors {
             eprintln!("{:?}: {:#?}", &text[err.span], err.kind);
         }

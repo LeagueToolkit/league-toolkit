@@ -21,7 +21,7 @@
 //!
 //! let bump = Bump::new();
 //! let cst = Cst::parse(&bump, text);
-//! assert!(cst.root().errors.is_empty());
+//! assert!(cst.errors.is_empty());
 //!
 //! let (bin, bin_errors) = cst.build_bin(text);
 //! assert!(bin_errors.is_empty());
@@ -77,7 +77,7 @@
 //! let bump = Bump::new();
 //! let cst = Cst::parse(&bump, text);
 //!
-//! assert_eq!(cst.root().errors.len(), 1); // the unexpected "!!" in the value
+//! assert_eq!(cst.errors.len(), 1); // the unexpected "!!" in the value
 //! ```
 //!
 //! `Cst::build_bin` follows the same philosophy: it returns `(Bin, Vec<DiagnosticWithSpan>)`

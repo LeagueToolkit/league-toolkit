@@ -47,7 +47,7 @@ entries: map[hash,embed] = {
 fn tree(input: &str) -> String {
     let bump = Bump::new();
     let cst = Cst::parse(&bump, input);
-    assert!(cst.root().errors.is_empty());
+    assert!(cst.errors.is_empty());
 
     let mut debug = String::new();
     cst.print(&mut debug, input);
@@ -73,9 +73,9 @@ fn test_roundtrip() {
     // Parse again
     let cst2 = Cst::parse(&bump_b, &output);
     assert!(
-        cst2.root().errors.is_empty(),
+        cst2.errors.is_empty(),
         "reparse errors = {:#?}",
-        cst2.root().errors
+        cst2.errors
     );
 
     let mut str = String::new();

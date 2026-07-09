@@ -29,7 +29,7 @@ impl FlatErrors {
 impl Visitor for FlatErrors {
     fn exit_tree(&mut self, ctx: &VisitCtx, tree: NodeId) -> Visit {
         let tree = ctx.node(tree).unwrap();
-        self.errors.extend_from_slice(&tree.errors);
+        self.errors.extend_from_slice(tree.errors.get(ctx.cst));
         Visit::Continue
     }
 }

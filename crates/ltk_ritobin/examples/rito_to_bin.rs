@@ -19,9 +19,9 @@ fn main() {
     let bump = Bump::new();
 
     let cst = ltk_ritobin::Cst::parse(&bump, &text);
-    if !cst.root().errors.is_empty() {
+    if !cst.errors.is_empty() {
         eprintln!("Errors while parsing:");
-        for err in &cst.root().errors {
+        for err in &cst.errors {
             eprintln!("- {err:#?}");
         }
         return;

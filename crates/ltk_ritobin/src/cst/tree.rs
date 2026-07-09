@@ -1,4 +1,7 @@
-use std::fmt::{self, Display};
+use std::{
+    fmt::{self, Display},
+    marker::PhantomData,
+};
 
 use bumpalo::Bump;
 use ltk_meta::Bin;
@@ -6,12 +9,12 @@ use ltk_meta::Bin;
 use crate::{
     cst::{
         visitor::{Visit, VisitCtx},
-        NodeId, TokenId, Visitor,
+        ChildRange, ErrorId, ErrorRange, NodeId, TokenId, Visitor,
     },
     parse::{
         self, impls,
         tokenizer::{self, Token},
-        ErrorPropagation, Parser, Span,
+        Error, ErrorPropagation, Parser, Span,
     },
     typecheck::visitor::DiagnosticWithSpan,
 };
@@ -62,6 +65,7 @@ pub struct Cst<'arena> {
     pub(crate) nodes: Vec<Node<'arena>>,
     pub(crate) children: Vec<Child>,
     pub(crate) tokens: Vec<Token>,
+    pub errors: Vec<Error>,
 }
 
 impl<'arena> Cst<'arena> {
@@ -101,27 +105,18 @@ impl<'arena> Cst<'arena> {
             len: end - start,
         }
     }
+    pub(crate) fn push_errors(&mut self, errors: impl IntoIterator<Item = Error>) -> ErrorRange {
+        let start = u32::try_from(self.children.len()).unwrap();
+        self.errors.extend(errors);
+        let end = u32::try_from(self.children.len()).unwrap();
+        ErrorRange {
+            start,
+            len: end - start,
+        }
+    }
 
     pub fn root(&self) -> &Node<'arena> {
         &self.nodes[0]
-    }
-}
-
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-#[derive(Clone, Copy, Debug)]
-pub struct ChildRange {
-    pub(crate) start: u32,
-    pub(crate) len: u32,
-}
-impl ChildRange {
-    pub fn get<'a>(&self, cst: &'a Cst) -> &'a [Child] {
-        let start = self.start as usize;
-        let end = start + self.len as usize;
-        &cst.children[start..end]
-    }
-
-    pub fn empty() -> Self {
-        Self { start: 0, len: 0 }
     }
 }
 
@@ -137,7 +132,9 @@ pub struct Node<'arena> {
     /// Parse errors - whether this contains the errors for its children depends on what
     /// [`ErrorPropagation`] the parser was using.
     #[cfg_attr(feature = "serde", serde(skip_deserializing))]
-    pub errors: bumpalo::collections::Vec<'arena, parse::Error>,
+    pub errors: ErrorRange,
+
+    pub phantom: PhantomData<&'arena ()>,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

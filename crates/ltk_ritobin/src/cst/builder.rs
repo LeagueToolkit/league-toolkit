@@ -1,6 +1,7 @@
 use std::{
     fmt::{LowerHex, Write},
     iter::once,
+    marker::PhantomData,
 };
 
 use bumpalo::{
@@ -11,8 +12,8 @@ use ltk_hash::BinHash;
 use ltk_meta::{property::values, Bin, BinObject, PropertyKind, PropertyValueEnum};
 
 use crate::{
-    cst::{Child, ChildRange, Cst, Kind, Node, NodeId, TokenId},
-    parse::{Span, Token, TokenKind as Tok},
+    cst::{Child, ChildRange, Cst, ErrorRange, Kind, Node, NodeId, TokenId},
+    parse::{Error, Span, Token, TokenKind as Tok},
     typecheck::visitor::{PropertyValueExt, RitoType},
     HashProvider, RitobinName as _,
 };
@@ -23,6 +24,7 @@ pub struct Builder<'arena, H: HashProvider> {
     arena: &'arena Bump,
     nodes: collections::Vec<'arena, Node<'arena>>,
     children: Vec<Child>,
+    errors: Vec<Error>,
     tokens: Vec<Token>,
 }
 
@@ -35,6 +37,7 @@ impl<'arena> Builder<'arena, ()> {
             nodes: collections::Vec::new_in(arena),
             children: Vec::new(),
             tokens: Vec::new(),
+            errors: Vec::new(),
         }
     }
 }
@@ -48,6 +51,7 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
             nodes: self.nodes,
             children: self.children,
             tokens: self.tokens,
+            errors: self.errors,
         }
     }
 
@@ -58,6 +62,7 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
                 nodes: self.nodes.to_vec(),
                 children: self.children,
                 tokens: self.tokens,
+                errors: self.errors,
             },
             self.buf,
         )
@@ -87,7 +92,7 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
 
     pub fn children(&mut self, children: impl IntoIterator<Item = Child>) -> ChildRange {
         let start: u32 = self.children.len().try_into().unwrap();
-        self.children.extend(children.into_iter());
+        self.children.extend(children);
         let end: u32 = self.children.len().try_into().unwrap();
         ChildRange {
             start,
@@ -104,7 +109,8 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
             span: Span::default(),
             kind,
             children,
-            errors: collections::Vec::new_in(self.arena),
+            errors: ErrorRange::empty(),
+            phantom: PhantomData,
         });
 
         Child::Tree(id)
@@ -418,7 +424,8 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
             kind: Kind::File,
             span: Span::default(),
             children: ChildRange::empty(),
-            errors: collections::Vec::new_in(self.arena),
+            errors: ErrorRange::empty(),
+            phantom: PhantomData,
         };
         self.nodes.push(root);
 
@@ -498,9 +505,9 @@ mod test {
 
         let cst2 = Cst::parse(&bump, &str);
         assert!(
-            cst2.root().errors.is_empty(),
+            cst2.errors.is_empty(),
             "errors parsing ritobin - {:#?}",
-            cst2.root().errors
+            cst2.errors
         );
         let (bin2, errors) = cst2.build_bin(&str);
 
