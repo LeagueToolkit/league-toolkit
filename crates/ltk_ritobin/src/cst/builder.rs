@@ -4,14 +4,14 @@ use std::{
 };
 
 use bumpalo::{
-    collections::{self, CollectIn},
+    collections::{self},
     Bump,
 };
 use ltk_hash::BinHash;
 use ltk_meta::{property::values, Bin, BinObject, PropertyKind, PropertyValueEnum};
 
 use crate::{
-    cst::{Child, Cst, Kind, Node, NodeId, TokenId},
+    cst::{Child, ChildRange, Cst, Kind, Node, NodeId, TokenId},
     parse::{Span, Token, TokenKind as Tok},
     typecheck::visitor::{PropertyValueExt, RitoType},
     HashProvider, RitobinName as _,
@@ -22,6 +22,7 @@ pub struct Builder<'arena, H: HashProvider> {
     hashes: H,
     arena: &'arena Bump,
     nodes: collections::Vec<'arena, Node<'arena>>,
+    children: Vec<Child>,
     tokens: Vec<Token>,
 }
 
@@ -32,6 +33,7 @@ impl<'arena> Builder<'arena, ()> {
             hashes: (),
             arena,
             nodes: collections::Vec::new_in(arena),
+            children: Vec::new(),
             tokens: Vec::new(),
         }
     }
@@ -44,6 +46,7 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
             hashes,
             arena: self.arena,
             nodes: self.nodes,
+            children: self.children,
             tokens: self.tokens,
         }
     }
@@ -53,6 +56,7 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
         (
             Cst {
                 nodes: self.nodes.to_vec(),
+                children: self.children,
                 tokens: self.tokens,
             },
             self.buf,
@@ -81,13 +85,25 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
         Child::Token(id)
     }
 
+    pub fn children(&mut self, children: impl IntoIterator<Item = Child>) -> ChildRange {
+        let start: u32 = self.children.len().try_into().unwrap();
+        self.children.extend(children.into_iter());
+        let end: u32 = self.children.len().try_into().unwrap();
+        ChildRange {
+            start,
+            len: end - start,
+        }
+    }
+
     pub fn tree(&mut self, kind: Kind, children: impl IntoIterator<Item = Child>) -> Child {
+        let children = self.children(children);
+
         let id = NodeId(self.nodes.len().try_into().unwrap());
 
         self.nodes.push(Node {
             span: Span::default(),
             kind,
-            children: children.into_iter().collect_in(self.arena),
+            children,
             errors: collections::Vec::new_in(self.arena),
         });
 
@@ -401,7 +417,7 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
         let root = Node {
             kind: Kind::File,
             span: Span::default(),
-            children: collections::Vec::new_in(self.arena),
+            children: ChildRange::empty(),
             errors: collections::Vec::new_in(self.arena),
         };
         self.nodes.push(root);
@@ -441,11 +457,8 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
             entries,
         );
 
-        self.nodes
-            .get_mut(0)
-            .unwrap()
-            .children
-            .extend([comment, type_entry, version, linked, entries]);
+        self.nodes.get_mut(0).unwrap().children =
+            self.children([comment, type_entry, version, linked, entries]);
     }
 }
 

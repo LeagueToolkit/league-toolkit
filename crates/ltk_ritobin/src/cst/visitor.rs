@@ -76,7 +76,7 @@ impl Cst<'_> {
             return ret;
         }
 
-        for child in &node.children {
+        for child in node.children.get(self) {
             match child {
                 Child::Token(token) => match visitor.visit_token(&ctx, *token, node_idx) {
                     Visit::Continue => {}

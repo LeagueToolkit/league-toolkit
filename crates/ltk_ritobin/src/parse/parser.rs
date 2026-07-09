@@ -3,7 +3,7 @@ use std::cell::Cell;
 use bumpalo::{collections, Bump};
 
 use crate::{
-    cst::{Node, NodeId},
+    cst::{ChildRange, Node, NodeId},
     parse::{
         cst::{Child, Cst, Kind as TreeKind},
         error::{Error, ErrorKind},
@@ -84,6 +84,7 @@ impl<'a> Parser<'a> {
 
         let mut cst = Cst {
             nodes: Vec::with_capacity(nodes_len),
+            children: Vec::with_capacity(nodes_len),
             tokens: vec![],
         };
 
@@ -95,20 +96,25 @@ impl<'a> Parser<'a> {
                 Event::Open { kind } => {
                     just_opened = true;
 
-                    stack.push(cst.push_node(Node {
-                        span: Span::new(last_span.end, 0),
-                        kind,
-                        children: collections::Vec::new_in(arena),
-                        errors: collections::Vec::new_in(arena),
-                    }));
+                    stack.push((
+                        cst.push_node(Node {
+                            span: Span::new(last_span.end, 0),
+                            kind,
+                            children: ChildRange::empty(),
+                            errors: collections::Vec::new_in(arena),
+                        }),
+                        vec![],
+                    ));
                 }
                 Event::Close => {
-                    let node_idx = stack.pop().unwrap();
-                    let parent_idx = *stack.last().unwrap();
+                    let (node_idx, node_children) = stack.pop().unwrap();
+                    cst.node_mut(node_idx).unwrap().children = cst.push_children(node_children);
+
+                    let (parent_idx, parent_children) = stack.last_mut().unwrap();
 
                     let (parent, node) = {
                         let (left, right) = cst.nodes.split_at_mut(node_idx.0 as usize);
-                        (&mut left[parent_idx], &mut right[0])
+                        (&mut left[*parent_idx], &mut right[0])
                     };
 
                     if node.span.end == 0 {
@@ -117,7 +123,7 @@ impl<'a> Parser<'a> {
                     }
 
                     parent.span.end = node.span.end.max(parent.span.end); // update our parent tree's span
-                    parent.children.push(Child::Tree(node_idx));
+                    parent_children.push(Child::Tree(node_idx));
                     match error_propagation {
                         ErrorPropagation::None => {}
                         ErrorPropagation::Move => parent.errors.append(&mut node.errors),
@@ -126,9 +132,9 @@ impl<'a> Parser<'a> {
                 }
                 Event::Advance => {
                     let token = tokens.next().unwrap();
-                    let last_idx = *stack.last().unwrap();
+                    let (last_idx, last_children) = stack.last_mut().unwrap();
                     {
-                        let last = cst.node_mut(last_idx).unwrap();
+                        let last = cst.node_mut(*last_idx).unwrap();
 
                         if just_opened {
                             // first token of the tree
@@ -140,11 +146,11 @@ impl<'a> Parser<'a> {
                         last_span = token.span;
                     }
                     let token = Child::Token(cst.push_token(token));
-                    cst.node_mut(last_idx).unwrap().children.push(token);
+                    last_children.push(token);
                 }
                 Event::Error { kind, span } => {
-                    let cur_tree_idx = *stack.last().unwrap();
-                    let cur_tree = cst.node(cur_tree_idx).unwrap();
+                    let (cur_tree_idx, cur_tree_children) = stack.last().unwrap();
+                    let cur_tree = cst.node(*cur_tree_idx).unwrap();
 
                     let span = match cur_tree.kind {
                         TreeKind::ErrorTree => cur_tree.span,
@@ -160,7 +166,7 @@ impl<'a> Parser<'a> {
                             // whole tree is the problem
                             ErrorKind::UnexpectedTree => cur_tree.span,
                             _ => span
-                                .or(cur_tree.children.last().map(|c| c.span(&cst)))
+                                .or(cur_tree_children.last().map(|c| c.span(&cst)))
                                 // we can't use Tree.span.end because that's only known on Close
                                 .unwrap_or(Span::new(
                                     cur_tree.span.start,
@@ -172,7 +178,7 @@ impl<'a> Parser<'a> {
                         },
                     };
 
-                    let cur_tree = cst.node_mut(cur_tree_idx).unwrap();
+                    let cur_tree = cst.node_mut(*cur_tree_idx).unwrap();
                     cur_tree.errors.push(Error {
                         span,
                         tree: cur_tree.kind,
@@ -182,7 +188,9 @@ impl<'a> Parser<'a> {
             }
         }
 
-        let tree = stack.pop().unwrap();
+        let (tree, children) = stack.pop().unwrap();
+        cst.node_mut(tree).unwrap().children = cst.push_children(children);
+
         assert!(stack.is_empty());
         assert!(tokens.next().is_none());
         assert_eq!(tree, NodeId(0));

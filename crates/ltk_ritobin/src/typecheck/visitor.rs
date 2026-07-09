@@ -488,7 +488,7 @@ pub fn resolve_rito_type(
     visit_ctx: &VisitCtx,
     tree: &Node,
 ) -> Result<RitoType, Diagnostic> {
-    let mut c = tree.children.iter();
+    let mut c = tree.children.get(visit_ctx.cst).iter();
 
     let base = c.expect_token(visit_ctx.cst, TokenKind::Name)?;
     let base_span = base.span;
@@ -513,6 +513,7 @@ pub fn resolve_rito_type(
 
             let subtypes = subtypes
                 .children
+                .get(visit_ctx.cst)
                 .iter()
                 .filter_map(|c| c.tree(visit_ctx.cst).filter(|t| t.kind == Kind::TypeArg))
                 .map(|t| {
@@ -583,7 +584,7 @@ pub fn resolve_value(
 
     // dbg!(tree, kind_hint);
 
-    let Some(child) = tree.children.first() else {
+    let Some(child) = tree.children.get(visit_ctx.cst).first() else {
         return Ok(None);
     };
     Ok(Some(match child.tree(visit_ctx.cst) {
@@ -596,7 +597,11 @@ pub fn resolve_value(
             let Some(kind_hint) = kind_hint else {
                 return Ok(None); // TODO: err
             };
-            let Some(class) = children.first().and_then(|t| t.token(visit_ctx.cst)) else {
+            let Some(class) = children
+                .get(visit_ctx.cst)
+                .first()
+                .and_then(|t| t.token(visit_ctx.cst))
+            else {
                 return Err(InvalidHash(*span));
             };
 
@@ -651,7 +656,7 @@ pub fn resolve_value(
             children,
             ..
         }) => {
-            let Some(child) = children.first() else {
+            let Some(child) = children.get(visit_ctx.cst).first() else {
                 return Ok(None);
             };
             match child.token(&visit_ctx.cst) {
@@ -751,12 +756,13 @@ pub fn resolve_entry(
     tree: &Node,
     parent_value_kind: Option<RitoType>,
 ) -> Result<IrEntry, MaybeSpanDiag> {
-    let mut c = tree.children.iter();
+    let mut c = tree.children.get(visit_ctx.cst).iter();
 
     let key = c.expect_tree(visit_ctx.cst, Kind::EntryKey)?;
 
     let key = match key
         .children
+        .get(visit_ctx.cst)
         .first()
         .ok_or(InvalidHash(key.span))?
         .token(visit_ctx.cst)
@@ -787,13 +793,13 @@ pub fn resolve_entry(
 
     let kind = c
         .clone()
-        .find_map(|c| c.tree(&visit_ctx.cst).filter(|t| t.kind == Kind::TypeExpr));
+        .find_map(|c| c.tree(visit_ctx.cst).filter(|t| t.kind == Kind::TypeExpr));
     let kind_span = kind.map(|k| k.span);
     let kind = kind
         .map(|t| resolve_rito_type(ctx, visit_ctx, t))
         .transpose()?;
 
-    let value = c.expect_tree(&visit_ctx.cst, Kind::EntryValue)?;
+    let value = c.expect_tree(visit_ctx.cst, Kind::EntryValue)?;
     let value_span = value.span;
 
     // entries: map[string, u8] = {

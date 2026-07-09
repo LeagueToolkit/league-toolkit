@@ -401,6 +401,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                 self.list_stack.push(ListContext {
                     len: tree
                         .children
+                        .get(ctx.cst)
                         .iter()
                         .filter(|n| n.tree(&ctx.cst).is_some_and(|t| t.kind == Kind::TypeArg))
                         .count()
@@ -416,6 +417,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
 
                 let len = tree
                     .children
+                    .get(ctx.cst)
                     .iter()
                     .filter(|n| n.tree(&ctx.cst).is_some_and(|t| t.kind == Kind::ListItem))
                     .count();
@@ -437,6 +439,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                 let grp = self.begin_group(None)?;
                 let list_len = tree
                     .children
+                    .get(ctx.cst)
                     .iter()
                     .filter(|n| {
                         n.tree(&ctx.cst)
@@ -445,6 +448,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                     .count();
                 let struct_len = tree
                     .children
+                    .get(ctx.cst)
                     .iter()
                     .filter(|n| {
                         n.tree(&ctx.cst)
@@ -478,6 +482,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
             Kind::ListItem => {
                 if tree
                     .children
+                    .get(ctx.cst)
                     .first()
                     .is_some_and(|c| c.tree(&ctx.cst).is_some_and(|t| t.kind == Kind::Class))
                 {
