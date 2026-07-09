@@ -1,6 +1,7 @@
 use std::{cell::Cell, marker::PhantomData};
 
 use bumpalo::{collections, Bump};
+use smallvec::SmallVec;
 
 use crate::{
     cst::{ChildRange, ErrorRange, Node, NodeId},
@@ -56,8 +57,8 @@ pub enum ErrorPropagation {
 
 struct StackItem {
     idx: NodeId,
-    children: Vec<Child>,
-    errors: Vec<Error>,
+    children: SmallVec<[Child; 4]>,
+    errors: SmallVec<[Error; 1]>,
 }
 
 impl<'a> Parser<'a> {
@@ -111,8 +112,8 @@ impl<'a> Parser<'a> {
                             errors: ErrorRange::empty(),
                             phantom: PhantomData,
                         }),
-                        children: vec![],
-                        errors: vec![],
+                        children: SmallVec::new(),
+                        errors: SmallVec::new(),
                     });
                 }
                 Event::Close => {
