@@ -14,7 +14,7 @@ use crate::{
     cst::{
         self,
         visitor::{Visit, VisitCtx},
-        Child, Kind, Node, NodeId, Visitor,
+        Kind, Node, NodeId, Visitor,
     },
     parse::{Span, Token, TokenKind},
     Cst, RitobinName,
@@ -426,9 +426,9 @@ pub fn coerce_type<M: Debug>(
             PropertyValueEnum::String(str) => {
                 values::Hash::new_with_meta(BinHash::hash_str(&str), str.meta).into()
             }
-            other => {
+            _other => {
                 #[cfg(feature = "debug")]
-                eprintln!("\x1b[41mcannot coerce {other:?} to {to:?}\x1b[0m");
+                eprintln!("\x1b[41mcannot coerce {_other:?} to {to:?}\x1b[0m");
                 return None;
             }
         }),
@@ -439,9 +439,9 @@ pub fn coerce_type<M: Debug>(
             PropertyValueEnum::String(str) => {
                 values::ObjectLink::new_with_meta(BinHash::hash_str(&str), str.meta).into()
             }
-            other => {
+            _other => {
                 #[cfg(feature = "debug")]
-                eprintln!("\x1b[41mcannot coerce {other:?} to {to:?}\x1b[0m");
+                eprintln!("\x1b[41mcannot coerce {_other:?} to {to:?}\x1b[0m");
                 return None;
             }
         }),
@@ -453,9 +453,9 @@ pub fn coerce_type<M: Debug>(
                 values::WadChunkLink::new_with_meta(WadHash::hash_str(str.as_str()), str.meta)
                     .into()
             }
-            other => {
+            _other => {
                 #[cfg(feature = "debug")]
-                eprintln!("\x1b[41mcannot coerce {other:?} to {to:?}\x1b[0m");
+                eprintln!("\x1b[41mcannot coerce {_other:?} to {to:?}\x1b[0m");
                 return None;
             }
         }),
@@ -463,9 +463,9 @@ pub fn coerce_type<M: Debug>(
             PropertyValueEnum::Bool(bool) => {
                 values::BitBool::new_with_meta(*bool, bool.meta).into()
             }
-            other => {
+            _other => {
                 #[cfg(feature = "debug")]
-                eprintln!("\x1b[41mcannot coerce {other:?} to {to:?}\x1b[0m");
+                eprintln!("\x1b[41mcannot coerce {_other:?} to {to:?}\x1b[0m");
                 return None;
             }
         }),
@@ -473,9 +473,9 @@ pub fn coerce_type<M: Debug>(
             PropertyValueEnum::BitBool(bool) => {
                 values::Bool::new_with_meta(*bool, bool.meta).into()
             }
-            other => {
+            _other => {
                 #[cfg(feature = "debug")]
-                eprintln!("\x1b[41mcannot coerce {other:?} to {to:?}\x1b[0m");
+                eprintln!("\x1b[41mcannot coerce {_other:?} to {to:?}\x1b[0m");
                 return None;
             }
         }),
@@ -490,13 +490,13 @@ pub fn resolve_rito_type(
 ) -> Result<RitoType, Diagnostic> {
     let mut c = tree.children.iter();
 
-    let base = c.expect_token(&visit_ctx.cst, TokenKind::Name)?;
+    let base = c.expect_token(visit_ctx.cst, TokenKind::Name)?;
     let base_span = base.span;
 
     let base = PropertyKind::from_rito_name(&ctx.text[base.span]).ok_or(UnknownType(base.span))?;
 
     let subtypes = match c.clone().find_map(|c| {
-        c.tree(&visit_ctx.cst)
+        c.tree(visit_ctx.cst)
             .filter(|t| t.kind == Kind::TypeArgList)
     }) {
         Some(subtypes) => {
@@ -514,7 +514,7 @@ pub fn resolve_rito_type(
             let subtypes = subtypes
                 .children
                 .iter()
-                .filter_map(|c| c.tree(&visit_ctx.cst).filter(|t| t.kind == Kind::TypeArg))
+                .filter_map(|c| c.tree(visit_ctx.cst).filter(|t| t.kind == Kind::TypeArg))
                 .map(|t| {
                     let resolved = PropertyKind::from_rito_name(&ctx.text[t.span]);
                     if resolved.is_none() {
@@ -586,7 +586,7 @@ pub fn resolve_value(
     let Some(child) = tree.children.first() else {
         return Ok(None);
     };
-    Ok(Some(match child.tree(&visit_ctx.cst) {
+    Ok(Some(match child.tree(visit_ctx.cst) {
         Some(Node {
             kind: Kind::Class,
             children,
@@ -596,7 +596,7 @@ pub fn resolve_value(
             let Some(kind_hint) = kind_hint else {
                 return Ok(None); // TODO: err
             };
-            let Some(class) = children.first().and_then(|t| t.token(&visit_ctx.cst)) else {
+            let Some(class) = children.first().and_then(|t| t.token(visit_ctx.cst)) else {
                 return Err(InvalidHash(*span));
             };
 
@@ -753,13 +753,13 @@ pub fn resolve_entry(
 ) -> Result<IrEntry, MaybeSpanDiag> {
     let mut c = tree.children.iter();
 
-    let key = c.expect_tree(&visit_ctx.cst, Kind::EntryKey)?;
+    let key = c.expect_tree(visit_ctx.cst, Kind::EntryKey)?;
 
     let key = match key
         .children
         .first()
         .ok_or(InvalidHash(key.span))?
-        .token(&visit_ctx.cst)
+        .token(visit_ctx.cst)
     {
         Some(Token {
             kind: TokenKind::Name,
@@ -1229,10 +1229,10 @@ impl Visitor for TypeChecker<'_> {
                             })),
                         ));
                     }
-                    parent_type => {
+                    _parent_type => {
                         #[cfg(feature = "debug")]
                         eprintln!(
-                            "[warn] got {parent_type:?} in ListItemBlock - {:?}",
+                            "[warn] got {_parent_type:?} in ListItemBlock - {:?}",
                             &self.ctx.text[tree.span]
                         );
                     }

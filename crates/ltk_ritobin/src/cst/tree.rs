@@ -3,7 +3,7 @@ use std::{
     ops::{Index, IndexMut},
 };
 
-use bumpalo::{collections, Bump};
+use bumpalo::Bump;
 use ltk_meta::Bin;
 
 use crate::{

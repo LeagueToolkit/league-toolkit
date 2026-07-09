@@ -1,9 +1,6 @@
 //! Visitor pattern for walking CSTs
 use super::{tree::Child, Cst};
-use crate::{
-    cst::{Node, NodeId, TokenId},
-    parse::tokenizer::Token,
-};
+use crate::cst::{Node, NodeId, TokenId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Visit {
