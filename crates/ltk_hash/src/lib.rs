@@ -57,6 +57,12 @@ impl WadHash {
     }
 }
 
+impl From<&str> for WadHash {
+    fn from(value: &str) -> Self {
+        Self::hash_str(value)
+    }
+}
+
 impl From<u64> for WadHash {
     fn from(value: u64) -> Self {
         Self(value)
@@ -120,6 +126,12 @@ impl BinHash {
             Ok(v) => Ok(Self(v)),
             Err(e) => Err(e),
         }
+    }
+}
+
+impl From<&str> for BinHash {
+    fn from(value: &str) -> Self {
+        Self::hash_str(value)
     }
 }
 
