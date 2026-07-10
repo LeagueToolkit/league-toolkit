@@ -1,7 +1,6 @@
 use std::{
     borrow::Cow,
     fmt::{Debug, Display},
-    num::ParseFloatError,
     vec::Drain,
 };
 

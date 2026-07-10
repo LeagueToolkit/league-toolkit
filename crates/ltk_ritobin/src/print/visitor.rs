@@ -403,7 +403,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                         .children
                         .get(ctx.cst)
                         .iter()
-                        .filter(|n| n.tree(&ctx.cst).is_some_and(|t| t.kind == Kind::TypeArg))
+                        .filter(|n| n.tree(ctx.cst).is_some_and(|t| t.kind == Kind::TypeArg))
                         .count()
                         .try_into()
                         .unwrap(),
@@ -419,7 +419,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                     .children
                     .get(ctx.cst)
                     .iter()
-                    .filter(|n| n.tree(&ctx.cst).is_some_and(|t| t.kind == Kind::ListItem))
+                    .filter(|n| n.tree(ctx.cst).is_some_and(|t| t.kind == Kind::ListItem))
                     .count();
 
                 if !self.config.wrap.inline_lists {
@@ -442,7 +442,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                     .get(ctx.cst)
                     .iter()
                     .filter(|n| {
-                        n.tree(&ctx.cst)
+                        n.tree(ctx.cst)
                             .is_some_and(|t| matches!(t.kind, Kind::ListItem | Kind::ListItemBlock))
                     })
                     .count();
@@ -451,7 +451,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                     .get(ctx.cst)
                     .iter()
                     .filter(|n| {
-                        n.tree(&ctx.cst)
+                        n.tree(ctx.cst)
                             .is_some_and(|t| matches!(t.kind, Kind::Entry))
                     })
                     .count();
@@ -484,7 +484,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                     .children
                     .get(ctx.cst)
                     .first()
-                    .is_some_and(|c| c.tree(&ctx.cst).is_some_and(|t| t.kind == Kind::Class))
+                    .is_some_and(|c| c.tree(ctx.cst).is_some_and(|t| t.kind == Kind::Class))
                 {
                     if let Some(list) = self.list_stack.last() {
                         self.force_group(list.grp, Mode::Break);
