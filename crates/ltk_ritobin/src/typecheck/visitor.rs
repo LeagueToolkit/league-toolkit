@@ -411,12 +411,14 @@ pub struct Ctx<'a> {
     diagnostics: Vec<DiagnosticWithSpan>,
 }
 
-pub fn coerce_type<M: Debug>(
+pub fn coerce_type<M: Debug + Default>(
     value: PropertyValueEnum<M>,
     to: PropertyKind,
 ) -> Option<PropertyValueEnum<M>> {
     match to {
         to if to == value.kind() => Some(value),
+
+        PropertyKind::Optional => Some(values::Optional::try_from(value).ok()?.into()),
 
         PropertyKind::Hash => Some(match value {
             PropertyValueEnum::String(str) => {
@@ -573,7 +575,7 @@ pub fn resolve_value(
     ctx: &mut Ctx,
     visit_ctx: &VisitCtx,
     tree: &Node,
-    kind_hint: Option<PropertyKind>,
+    kind_hint: Option<RitoType>,
 ) -> Result<Option<PropertyValueEnum<Span>>, Diagnostic> {
     use PropertyKind as K;
     use PropertyValueEnum as P;
@@ -624,7 +626,7 @@ pub fn resolve_value(
                     return Err(InvalidHash(class.span));
                 }
             };
-            match kind_hint {
+            match kind_hint.base {
                 K::Struct => P::Struct(values::Struct {
                     class_hash,
                     meta: class.span,
@@ -690,6 +692,11 @@ pub fn resolve_value(
                     let txt = match txt.contains('_') {
                         true => Cow::Owned(txt.replace('_', "")),
                         false => Cow::Borrowed(txt),
+                    };
+
+                    let kind_hint = match kind_hint.base {
+                        K::Optional => kind_hint.value_subtype().unwrap(),
+                        base => base,
                     };
 
                     match kind_hint {
@@ -824,12 +831,11 @@ pub fn resolve_entry(
 
     let kind = kind.or(parent_value_kind);
 
-    let resolved_val =
-        resolve_value(ctx, visit_ctx, value, kind.map(|k| k.base))?.map(|value| match kind {
-            Some(kind) if value.kind() == kind.base => value,
-            Some(kind) => coerce_type(value.clone(), kind.base).unwrap_or(value),
-            None => value,
-        });
+    let resolved_val = resolve_value(ctx, visit_ctx, value, kind)?.map(|value| match kind {
+        Some(kind) if value.kind() == kind.base => value,
+        Some(kind) => coerce_type(value.clone(), kind.base).unwrap_or(value),
+        None => value,
+    });
 
     let value = match (kind, resolved_val) {
         (None, Some(value)) => value,
@@ -1325,7 +1331,9 @@ impl Visitor for TypeChecker<'_> {
 
                 // dbg!(color_vec_type, parent_type);
 
-                let value_hint = color_vec_type.or(parent_type.value_subtype());
+                let value_hint = color_vec_type
+                    .or(parent_type.value_subtype())
+                    .map(RitoType::simple);
 
                 match resolve_value(&mut self.ctx, ctx, tree, value_hint) {
                     Ok(Some(item)) => {

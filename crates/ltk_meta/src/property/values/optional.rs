@@ -78,6 +78,19 @@ macro_rules! construct_enum {
             }
         )*
 
+        impl<M: Default> TryFrom<PropertyValueEnum<M>> for Optional<M> {
+            type Error = ();
+            fn try_from(other: PropertyValueEnum<M>) -> Result<Self, Self::Error> {
+                Ok(match other {
+                    $(
+                        PropertyValueEnum::$variant(value) => Self::$variant{value: Some(value), meta: M::default()},
+                    )*
+                    _ => return Err(())
+                })
+            }
+
+        }
+
         impl<M> Optional<M> {
             #[inline(always)]
             pub fn new(item_kind: Kind, value: Option<PropertyValueEnum<M>>) -> Result<Self, Error> where M: Default {
