@@ -12,7 +12,7 @@ mod test {
     use glam::{Vec3, Vec4};
     use ltk_meta::{
         property::{values, NoMeta},
-        Bin, BinObject, ObjectBuilder,
+        Bin, BinObject, ObjectBuilder, PropertyKind,
     };
 
     use crate::Cst;
@@ -73,6 +73,31 @@ entries: map[hash,embed] = {{
                         values::Vector4::from(Vec4::new(1., 1., 1., 1.)),
                         values::Vector4::from(Vec4::new(1., 1., 1., 0.)),
                     ]),
+                )
+            },
+        );
+    }
+
+    #[test]
+    fn u8_map() {
+        assert(
+            r#"
+        0xe6d60f41: map[u8,string] = {
+            1 = "hello"
+        }
+        "#,
+            |obj| {
+                obj.property(
+                    0xe6d60f41,
+                    values::Map::new(
+                        PropertyKind::U8,
+                        PropertyKind::String,
+                        vec![(
+                            values::U8::from(1).into(),
+                            values::String::from("hello").into(),
+                        )],
+                    )
+                    .unwrap(),
                 )
             },
         );

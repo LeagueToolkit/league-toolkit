@@ -571,6 +571,106 @@ fn resolve_hash(ctx: &Ctx, span: Span) -> Result<PropertyValueEnum<Span>, Diagno
     })
 }
 
+pub fn resolve_literal(
+    ctx: &mut Ctx,
+    token: &Token,
+    kind_hint: Option<RitoType>,
+) -> Result<Option<PropertyValueEnum<Span>>, Diagnostic> {
+    use PropertyKind as K;
+    use PropertyValueEnum as P;
+    Ok(Some(match token {
+        Token {
+            kind: TokenKind::String,
+            span,
+        } => values::String::new_with_meta(
+            ctx.text[Span::new(span.start + 1, span.end - 1)].into(),
+            *span,
+        )
+        .into(),
+
+        Token {
+            kind: TokenKind::True,
+            span,
+        } => values::Bool::new_with_meta(true, *span).into(),
+        Token {
+            kind: TokenKind::False,
+            span,
+        } => values::Bool::new_with_meta(false, *span).into(),
+
+        Token {
+            kind: TokenKind::HexLit,
+            span,
+        } => resolve_hash(ctx, *span)?,
+        Token {
+            kind: TokenKind::Number,
+            span,
+        } => {
+            let txt = &ctx.text[span];
+            let Some(kind_hint) = kind_hint else {
+                return Err(AmbiguousNumeric(*span));
+            };
+
+            let txt = match txt.contains('_') {
+                true => Cow::Owned(txt.replace('_', "")),
+                false => Cow::Borrowed(txt),
+            };
+
+            let kind_hint = match kind_hint.base {
+                K::Optional => kind_hint.value_subtype().unwrap(),
+                base => base,
+            };
+
+            match kind_hint {
+                K::U8 => P::U8(values::U8::new_with_meta(
+                    txt.parse::<u8>().map_err(|_| Diagnostic::ResolveLiteral)?,
+                    *span,
+                )),
+                K::U16 => P::U16(values::U16::new_with_meta(
+                    txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                    *span,
+                )),
+                K::U32 => P::U32(values::U32::new_with_meta(
+                    txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                    *span,
+                )),
+                K::U64 => P::U64(values::U64::new_with_meta(
+                    txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                    *span,
+                )),
+                K::I8 => P::I8(values::I8::new_with_meta(
+                    txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                    *span,
+                )),
+                K::I16 => P::I16(values::I16::new_with_meta(
+                    txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                    *span,
+                )),
+                K::I32 => P::I32(values::I32::new_with_meta(
+                    txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                    *span,
+                )),
+                K::I64 => P::I64(values::I64::new_with_meta(
+                    txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                    *span,
+                )),
+                K::F32 => P::F32(values::F32::new_with_meta(
+                    txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                    *span,
+                )),
+                _ => {
+                    return Err(TypeMismatch {
+                        span: *span,
+                        expected: RitoType::simple(kind_hint),
+                        expected_span: None, // TODO: would be nice here
+                        got: RitoTypeOrVirtual::numeric(),
+                    });
+                }
+            }
+        }
+        _ => return Ok(None),
+    }))
+}
+
 pub fn resolve_value(
     ctx: &mut Ctx,
     visit_ctx: &VisitCtx,
@@ -657,97 +757,7 @@ pub fn resolve_value(
             let Some(child) = children.get(visit_ctx.cst).first() else {
                 return Ok(None);
             };
-            match child.token(visit_ctx.cst) {
-                Some(Token {
-                    kind: TokenKind::String,
-                    span,
-                }) => values::String::new_with_meta(
-                    ctx.text[Span::new(span.start + 1, span.end - 1)].into(),
-                    *span,
-                )
-                .into(),
-
-                Some(Token {
-                    kind: TokenKind::True,
-                    span,
-                }) => values::Bool::new_with_meta(true, *span).into(),
-                Some(Token {
-                    kind: TokenKind::False,
-                    span,
-                }) => values::Bool::new_with_meta(false, *span).into(),
-
-                Some(Token {
-                    kind: TokenKind::HexLit,
-                    span,
-                }) => resolve_hash(ctx, *span)?,
-                Some(Token {
-                    kind: TokenKind::Number,
-                    span,
-                }) => {
-                    let txt = &ctx.text[span];
-                    let Some(kind_hint) = kind_hint else {
-                        return Err(AmbiguousNumeric(*span));
-                    };
-
-                    let txt = match txt.contains('_') {
-                        true => Cow::Owned(txt.replace('_', "")),
-                        false => Cow::Borrowed(txt),
-                    };
-
-                    let kind_hint = match kind_hint.base {
-                        K::Optional => kind_hint.value_subtype().unwrap(),
-                        base => base,
-                    };
-
-                    match kind_hint {
-                        K::U8 => P::U8(values::U8::new_with_meta(
-                            txt.parse::<u8>().map_err(|_| Diagnostic::ResolveLiteral)?,
-                            *span,
-                        )),
-                        K::U16 => P::U16(values::U16::new_with_meta(
-                            txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
-                            *span,
-                        )),
-                        K::U32 => P::U32(values::U32::new_with_meta(
-                            txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
-                            *span,
-                        )),
-                        K::U64 => P::U64(values::U64::new_with_meta(
-                            txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
-                            *span,
-                        )),
-                        K::I8 => P::I8(values::I8::new_with_meta(
-                            txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
-                            *span,
-                        )),
-                        K::I16 => P::I16(values::I16::new_with_meta(
-                            txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
-                            *span,
-                        )),
-                        K::I32 => P::I32(values::I32::new_with_meta(
-                            txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
-                            *span,
-                        )),
-                        K::I64 => P::I64(values::I64::new_with_meta(
-                            txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
-                            *span,
-                        )),
-                        K::F32 => P::F32(values::F32::new_with_meta(
-                            txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
-                            *span,
-                        )),
-                        _ => {
-                            return Err(TypeMismatch {
-                                span: *span,
-                                expected: RitoType::simple(kind_hint),
-                                expected_span: None, // TODO: would be nice here
-                                got: RitoTypeOrVirtual::numeric(),
-                            });
-                        }
-                    }
-                }
-                _ => return Ok(None),
-            }
+            return resolve_literal(ctx, child.token(visit_ctx.cst).unwrap(), kind_hint);
         }
         _ => return Ok(None),
     }))
@@ -785,6 +795,14 @@ pub fn resolve_entry(
             kind: TokenKind::HexLit,
             span,
         }) => resolve_hash(ctx, *span)?,
+        Some(token) => resolve_literal(
+            ctx,
+            token,
+            parent_value_kind
+                .and_then(|k| k.subtypes[0])
+                .map(RitoType::simple),
+        )?
+        .ok_or(CustomSpan("erm idk bad literal", key.span))?,
         _ => {
             return Err(InvalidHash(key.span).into());
         }
