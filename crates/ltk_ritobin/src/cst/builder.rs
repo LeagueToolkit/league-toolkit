@@ -9,8 +9,7 @@ use ltk_meta::{property::values, Bin, BinObject, PropertyKind, PropertyValueEnum
 use crate::{
     cst::{Child, ChildRange, Cst, ErrorRange, Kind, Node, NodeId, TokenId},
     parse::{Error, Span, Token, TokenKind as Tok},
-    typecheck::visitor::{PropertyValueExt, RitoType},
-    HashProvider, RitobinName as _,
+    HashProvider, PropertyValueExt as _, RitoType, RitobinName as _,
 };
 
 #[derive(Default)]

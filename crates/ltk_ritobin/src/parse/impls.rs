@@ -32,7 +32,7 @@ pub fn stmt_or_list_item(p: &mut Parser) -> (MarkClosed, TreeKind) {
             p.close(block, TreeKind::Block);
             res = (p.close(m, TreeKind::Class), TreeKind::Class);
         }
-        (Name | String | HexLit, Colon | Eq, _) => {
+        (Name | HexLit | String | Number | True | False, Colon | Eq, _) => {
             res = (stmt(p), TreeKind::Entry);
         }
         (LCurly, _, _) => {
@@ -60,9 +60,17 @@ pub fn stmt_or_list_item(p: &mut Parser) -> (MarkClosed, TreeKind) {
 pub fn stmt(p: &mut Parser) -> MarkClosed {
     let m = p.open();
 
-    p.scope(TreeKind::EntryKey, |p| {
-        p.expect_any(&[Name, String, HexLit])
-    });
+    if p.scope(TreeKind::EntryKey, |p| {
+        p.expect_any(&[Name, HexLit, String, Number, True, False])
+    })
+    .0
+    .is_none()
+    {
+        p.advance();
+        let g = p.close(m, TreeKind::Entry);
+        return g;
+    }
+
     if p.eat_any(&[Colon, Eq, Newline]) == Some(Colon) {
         type_expr(p);
         p.expect(TokenKind::Eq);

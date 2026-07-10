@@ -1,6 +1,8 @@
 use std::{
     borrow::Cow,
     fmt::{Debug, Display},
+    num::ParseFloatError,
+    vec::Drain,
 };
 
 use glam::Vec4;
@@ -17,7 +19,7 @@ use crate::{
         Kind, Node, NodeId, Visitor,
     },
     parse::{Span, Token, TokenKind},
-    Cst, RitobinName,
+    Cst, PropertyValueExt as _, RitoType, RitobinName,
 };
 
 #[derive(Debug, Clone)]
@@ -118,6 +120,8 @@ pub enum RitoTypeOrVirtual {
     RitoType(RitoType),
     Numeric,
     StructOrEmbedded,
+    Token(TokenKind),
+    Tree(Kind),
 }
 
 impl RitoTypeOrVirtual {
@@ -138,6 +142,8 @@ impl Display for RitoTypeOrVirtual {
             Self::RitoType(rito_type) => Display::fmt(rito_type, f),
             Self::Numeric => f.write_str("numeric type"),
             Self::StructOrEmbedded => f.write_str("struct/embedded"),
+            Self::Token(kind) => Display::fmt(kind, f),
+            Self::Tree(kind) => Display::fmt(kind, f),
         }
     }
 }
@@ -153,6 +159,8 @@ pub enum ColorOrVec {
 
 #[derive(Debug, Clone, Copy)]
 pub enum Diagnostic {
+    CustomSpan(&'static str, Span),
+
     MissingTree(cst::Kind),
     EmptyTree(cst::Kind),
     MissingToken(TokenKind),
@@ -183,6 +191,11 @@ pub enum Diagnostic {
     },
 
     ResolveLiteral,
+    ParseNumericError {
+        expected: PropertyKind,
+        error: Option<std::num::IntErrorKind>,
+        span: Span,
+    },
     AmbiguousNumeric(Span),
 
     NotEnoughItems {
@@ -222,6 +235,7 @@ impl Diagnostic {
             MissingTree(_) | EmptyTree(_) | MissingToken(_) | RootNonEntry | ResolveLiteral
             | MissingEntriesMap => None,
             UnknownType(span)
+            | CustomSpan(_, span)
             | SubtypeCountMismatch { span, .. }
             | UnexpectedSubtypes { span, .. }
             | UnexpectedContainerItem { span, .. }
@@ -230,6 +244,7 @@ impl Diagnostic {
             | ShadowedEntry { shadower: span, .. }
             | InvalidHash(span)
             | AmbiguousNumeric(span)
+            | ParseNumericError { span, .. }
             | NotEnoughItems { span, .. }
             | TooManyItems { span, .. }
             | InvalidDependenciesEntry { span, .. }
@@ -284,97 +299,6 @@ impl From<Diagnostic> for MaybeSpanDiag {
 
 use Diagnostic::*;
 
-pub trait PropertyValueExt {
-    fn rito_type(&self) -> RitoType;
-}
-impl<M> PropertyValueExt for PropertyValueEnum<M> {
-    fn rito_type(&self) -> RitoType {
-        let base = self.kind();
-        let subtypes = match self {
-            PropertyValueEnum::Map(map) => [Some(map.key_kind()), Some(map.value_kind())],
-            PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(container))
-            | PropertyValueEnum::Container(container) => [Some(container.item_kind()), None],
-            PropertyValueEnum::Optional(optional) => [Some(optional.item_kind()), None],
-
-            _ => [None, None],
-        };
-        RitoType { base, subtypes }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RitoType {
-    pub base: PropertyKind,
-    pub subtypes: [Option<PropertyKind>; 2],
-}
-
-impl Display for RitoType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let base = self.base.to_rito_name();
-        match self.subtypes {
-            [None, None] => f.write_str(base),
-            [Some(a), None] => write!(f, "{base}[{}]", a.to_rito_name()),
-            [Some(a), Some(b)] => {
-                write!(f, "{base}[{},{}]", a.to_rito_name(), b.to_rito_name())
-            }
-            _ => write!(f, "{base}[!!]"),
-        }
-    }
-}
-
-impl RitoType {
-    pub fn simple(kind: PropertyKind) -> Self {
-        Self {
-            base: kind,
-            subtypes: [None, None],
-        }
-    }
-
-    pub fn container(value: PropertyKind) -> Self {
-        Self {
-            base: PropertyKind::Container,
-            subtypes: [Some(value), None],
-        }
-    }
-
-    pub fn map(key: PropertyKind, value: PropertyKind) -> Self {
-        Self {
-            base: PropertyKind::Map,
-            subtypes: [Some(key), Some(value)],
-        }
-    }
-
-    fn subtype(&self, idx: usize) -> PropertyKind {
-        self.subtypes[idx].unwrap_or_default()
-    }
-
-    fn value_subtype(&self) -> Option<PropertyKind> {
-        self.subtypes[1].or(self.subtypes[0])
-    }
-
-    pub fn make_default(&self, span: Span) -> PropertyValueEnum<Span> {
-        let mut value = match self.base {
-            PropertyKind::Map => {
-                PropertyValueEnum::Map(values::Map::empty(self.subtype(0), self.subtype(1)))
-            }
-            PropertyKind::UnorderedContainer => {
-                PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(
-                    values::Container::empty(self.subtype(0)).unwrap_or_default(),
-                ))
-            }
-            PropertyKind::Container => PropertyValueEnum::Container(
-                values::Container::empty(self.subtype(0)).unwrap_or_default(),
-            ),
-            PropertyKind::Optional => PropertyValueEnum::Optional(
-                values::Optional::empty(self.subtype(0)).unwrap_or_default(),
-            ),
-
-            _ => self.base.default_value(),
-        };
-        *value.meta_mut() = span;
-        value
-    }
-}
 pub enum Statement {
     KeyValue {
         key: Span,
@@ -407,12 +331,14 @@ pub struct Ctx<'a> {
     diagnostics: Vec<DiagnosticWithSpan>,
 }
 
-pub fn coerce_type<M: Debug>(
+pub fn coerce_type<M: Debug + Default>(
     value: PropertyValueEnum<M>,
     to: PropertyKind,
 ) -> Option<PropertyValueEnum<M>> {
     match to {
         to if to == value.kind() => Some(value),
+
+        PropertyKind::Optional => Some(values::Optional::try_from(value).ok()?.into()),
 
         PropertyKind::Hash => Some(match value {
             PropertyValueEnum::String(str) => {
@@ -565,11 +491,155 @@ fn resolve_hash(ctx: &Ctx, span: Span) -> Result<PropertyValueEnum<Span>, Diagno
     })
 }
 
+pub fn resolve_literal(
+    ctx: &mut Ctx,
+    token: &Token,
+    kind_hint: Option<RitoType>,
+) -> Result<Option<PropertyValueEnum<Span>>, Diagnostic> {
+    use PropertyKind as K;
+    use PropertyValueEnum as P;
+    Ok(Some(match token {
+        Token {
+            kind: TokenKind::String,
+            span,
+        } => values::String::new_with_meta(
+            ctx.text[Span::new(span.start + 1, span.end - 1)].into(),
+            *span,
+        )
+        .into(),
+
+        Token {
+            kind: TokenKind::True,
+            span,
+        } => values::Bool::new_with_meta(true, *span).into(),
+        Token {
+            kind: TokenKind::False,
+            span,
+        } => values::Bool::new_with_meta(false, *span).into(),
+
+        Token {
+            kind: TokenKind::HexLit,
+            span,
+        } => resolve_hash(ctx, *span)?,
+        Token {
+            kind: TokenKind::Number,
+            span,
+        } => {
+            let txt = &ctx.text[span];
+            let Some(kind_hint) = kind_hint else {
+                return Err(AmbiguousNumeric(*span));
+            };
+
+            let txt = match txt.contains('_') {
+                true => Cow::Owned(txt.replace('_', "")),
+                false => Cow::Borrowed(txt),
+            };
+
+            let kind_hint = match kind_hint.base {
+                K::Optional => kind_hint.value_subtype().unwrap(),
+                base => base,
+            };
+
+            match kind_hint {
+                K::U8 => P::U8(values::U8::new_with_meta(
+                    txt.parse::<u8>()
+                        .map_err(|e| Diagnostic::ParseNumericError {
+                            expected: kind_hint,
+                            error: Some(*e.kind()),
+                            span: *span,
+                        })?,
+                    *span,
+                )),
+                K::U16 => P::U16(values::U16::new_with_meta(
+                    txt.parse::<u16>()
+                        .map_err(|e| Diagnostic::ParseNumericError {
+                            expected: kind_hint,
+                            error: Some(*e.kind()),
+                            span: *span,
+                        })?,
+                    *span,
+                )),
+                K::U32 => P::U32(values::U32::new_with_meta(
+                    txt.parse::<u32>()
+                        .map_err(|e| Diagnostic::ParseNumericError {
+                            expected: kind_hint,
+                            error: Some(*e.kind()),
+                            span: *span,
+                        })?,
+                    *span,
+                )),
+                K::U64 => P::U64(values::U64::new_with_meta(
+                    txt.parse::<u64>()
+                        .map_err(|e| Diagnostic::ParseNumericError {
+                            expected: kind_hint,
+                            error: Some(*e.kind()),
+                            span: *span,
+                        })?,
+                    *span,
+                )),
+                K::I8 => P::I8(values::I8::new_with_meta(
+                    txt.parse::<i8>()
+                        .map_err(|e| Diagnostic::ParseNumericError {
+                            expected: kind_hint,
+                            error: Some(*e.kind()),
+                            span: *span,
+                        })?,
+                    *span,
+                )),
+                K::I16 => P::I16(values::I16::new_with_meta(
+                    txt.parse::<i16>()
+                        .map_err(|e| Diagnostic::ParseNumericError {
+                            expected: kind_hint,
+                            error: Some(*e.kind()),
+                            span: *span,
+                        })?,
+                    *span,
+                )),
+                K::I32 => P::I32(values::I32::new_with_meta(
+                    txt.parse::<i32>()
+                        .map_err(|e| Diagnostic::ParseNumericError {
+                            expected: kind_hint,
+                            error: Some(*e.kind()),
+                            span: *span,
+                        })?,
+                    *span,
+                )),
+                K::I64 => P::I64(values::I64::new_with_meta(
+                    txt.parse::<i64>()
+                        .map_err(|e| Diagnostic::ParseNumericError {
+                            expected: kind_hint,
+                            error: Some(*e.kind()),
+                            span: *span,
+                        })?,
+                    *span,
+                )),
+                K::F32 => P::F32(values::F32::new_with_meta(
+                    txt.parse().map_err(|_| Diagnostic::ParseNumericError {
+                        expected: kind_hint,
+                        error: None,
+                        span: *span,
+                    })?,
+                    *span,
+                )),
+                _ => {
+                    return Err(TypeMismatch {
+                        span: *span,
+                        expected: RitoType::simple(kind_hint),
+                        expected_span: None, // TODO: would be nice here
+                        got: RitoTypeOrVirtual::numeric(),
+                    });
+                }
+            }
+        }
+        _ => return Ok(None),
+    }))
+}
+
 pub fn resolve_value(
     ctx: &mut Ctx,
     visit_ctx: &VisitCtx,
     tree: &Node,
-    kind_hint: Option<PropertyKind>,
+    kind_hint: Option<RitoType>,
 ) -> Result<Option<PropertyValueEnum<Span>>, Diagnostic> {
     use PropertyKind as K;
     use PropertyValueEnum as P;
@@ -620,7 +690,7 @@ pub fn resolve_value(
                     return Err(InvalidHash(class.span));
                 }
             };
-            match kind_hint {
+            match kind_hint.base {
                 K::Struct => P::Struct(values::Struct {
                     class_hash,
                     meta: class.span,
@@ -651,92 +721,7 @@ pub fn resolve_value(
             let Some(child) = children.get(visit_ctx.cst).first() else {
                 return Ok(None);
             };
-            match child.token(&visit_ctx.cst) {
-                Some(Token {
-                    kind: TokenKind::String,
-                    span,
-                }) => values::String::new_with_meta(
-                    ctx.text[Span::new(span.start + 1, span.end - 1)].into(),
-                    *span,
-                )
-                .into(),
-
-                Some(Token {
-                    kind: TokenKind::True,
-                    span,
-                }) => values::Bool::new_with_meta(true, *span).into(),
-                Some(Token {
-                    kind: TokenKind::False,
-                    span,
-                }) => values::Bool::new_with_meta(false, *span).into(),
-
-                Some(Token {
-                    kind: TokenKind::HexLit,
-                    span,
-                }) => resolve_hash(ctx, *span)?,
-                Some(Token {
-                    kind: TokenKind::Number,
-                    span,
-                }) => {
-                    let txt = &ctx.text[span];
-                    let Some(kind_hint) = kind_hint else {
-                        return Err(AmbiguousNumeric(*span));
-                    };
-
-                    let txt = match txt.contains('_') {
-                        true => Cow::Owned(txt.replace('_', "")),
-                        false => Cow::Borrowed(txt),
-                    };
-
-                    match kind_hint {
-                        K::U8 => P::U8(values::U8::new_with_meta(
-                            txt.parse::<u8>().map_err(|_| Diagnostic::ResolveLiteral)?,
-                            *span,
-                        )),
-                        K::U16 => P::U16(values::U16::new_with_meta(
-                            txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
-                            *span,
-                        )),
-                        K::U32 => P::U32(values::U32::new_with_meta(
-                            txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
-                            *span,
-                        )),
-                        K::U64 => P::U64(values::U64::new_with_meta(
-                            txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
-                            *span,
-                        )),
-                        K::I8 => P::I8(values::I8::new_with_meta(
-                            txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
-                            *span,
-                        )),
-                        K::I16 => P::I16(values::I16::new_with_meta(
-                            txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
-                            *span,
-                        )),
-                        K::I32 => P::I32(values::I32::new_with_meta(
-                            txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
-                            *span,
-                        )),
-                        K::I64 => P::I64(values::I64::new_with_meta(
-                            txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
-                            *span,
-                        )),
-                        K::F32 => P::F32(values::F32::new_with_meta(
-                            txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
-                            *span,
-                        )),
-                        _ => {
-                            return Err(TypeMismatch {
-                                span: *span,
-                                expected: RitoType::simple(kind_hint),
-                                expected_span: None, // TODO: would be nice here
-                                got: RitoTypeOrVirtual::numeric(),
-                            });
-                        }
-                    }
-                }
-                _ => return Ok(None),
-            }
+            return resolve_literal(ctx, child.token(visit_ctx.cst).unwrap(), kind_hint);
         }
         _ => return Ok(None),
     }))
@@ -774,6 +759,14 @@ pub fn resolve_entry(
             kind: TokenKind::HexLit,
             span,
         }) => resolve_hash(ctx, *span)?,
+        Some(token) => resolve_literal(
+            ctx,
+            token,
+            parent_value_kind
+                .and_then(|k| k.subtypes[0])
+                .map(RitoType::simple),
+        )?
+        .ok_or(CustomSpan("erm idk bad literal", key.span))?,
         _ => {
             return Err(InvalidHash(key.span).into());
         }
@@ -820,12 +813,11 @@ pub fn resolve_entry(
 
     let kind = kind.or(parent_value_kind);
 
-    let resolved_val =
-        resolve_value(ctx, visit_ctx, value, kind.map(|k| k.base))?.map(|value| match kind {
-            Some(kind) if value.kind() == kind.base => value,
-            Some(kind) => coerce_type(value.clone(), kind.base).unwrap_or(value),
-            None => value,
-        });
+    let resolved_val = resolve_value(ctx, visit_ctx, value, kind)?.map(|value| match kind {
+        Some(kind) if value.kind() == kind.base => value,
+        Some(kind) => coerce_type(value.clone(), kind.base).unwrap_or(value),
+        None => value,
+    });
 
     let value = match (kind, resolved_val) {
         (None, Some(value)) => value,
@@ -1088,7 +1080,7 @@ fn populate_vec_or_color(
     };
 
     let mut items = items.drain(..);
-    let mut get_next = |span: &mut Span| -> Result<_, Diagnostic> {
+    let get_next = |span: &mut Span, items: &mut Drain<'_, IrListItem>| -> Result<_, Diagnostic> {
         let item = items
             .next()
             .ok_or(NotEnoughItems {
@@ -1103,65 +1095,118 @@ fn populate_vec_or_color(
 
     use PropertyValueEnum as V;
     let mut span = *target.value().meta(); // TODO: is this the right span to start with?
-    let expected;
-    match target.value_mut() {
-        V::Vector2(values::Vector2 { value: vec, .. }) => {
-            vec.x = resolve_f32(get_next(&mut span)?)?;
-            vec.y = resolve_f32(get_next(&mut span)?)?;
-            expected = ColorOrVec::Vec2;
-        }
-        V::Vector3(values::Vector3 { value: vec, .. }) => {
-            vec.x = resolve_f32(get_next(&mut span)?)?;
-            vec.y = resolve_f32(get_next(&mut span)?)?;
-            vec.z = resolve_f32(get_next(&mut span)?)?;
-            expected = ColorOrVec::Vec3;
-        }
-        V::Vector4(values::Vector4 { value: vec, .. }) => {
-            vec.x = resolve_f32(get_next(&mut span)?)?;
-            vec.y = resolve_f32(get_next(&mut span)?)?;
-            vec.z = resolve_f32(get_next(&mut span)?)?;
-            vec.w = resolve_f32(get_next(&mut span)?)?;
-            expected = ColorOrVec::Vec4;
-        }
-        V::Color(values::Color { value: color, .. }) => {
-            color.r = resolve_u8(get_next(&mut span)?)?;
-            color.g = resolve_u8(get_next(&mut span)?)?;
-            color.b = resolve_u8(get_next(&mut span)?)?;
-            color.a = resolve_u8(get_next(&mut span)?)?;
-            expected = ColorOrVec::Color;
-        }
-        V::Matrix44(values::Matrix44 { value: mat, .. }) => {
-            mat.x_axis = Vec4::new(
-                resolve_f32(get_next(&mut span)?)?,
-                resolve_f32(get_next(&mut span)?)?,
-                resolve_f32(get_next(&mut span)?)?,
-                resolve_f32(get_next(&mut span)?)?,
-            );
-            mat.y_axis = Vec4::new(
-                resolve_f32(get_next(&mut span)?)?,
-                resolve_f32(get_next(&mut span)?)?,
-                resolve_f32(get_next(&mut span)?)?,
-                resolve_f32(get_next(&mut span)?)?,
-            );
-            mat.z_axis = Vec4::new(
-                resolve_f32(get_next(&mut span)?)?,
-                resolve_f32(get_next(&mut span)?)?,
-                resolve_f32(get_next(&mut span)?)?,
-                resolve_f32(get_next(&mut span)?)?,
-            );
-            mat.w_axis = Vec4::new(
-                resolve_f32(get_next(&mut span)?)?,
-                resolve_f32(get_next(&mut span)?)?,
-                resolve_f32(get_next(&mut span)?)?,
-                resolve_f32(get_next(&mut span)?)?,
-            );
-            *mat = mat.transpose();
-            expected = ColorOrVec::Mat44;
-        }
-        _ => {
-            unreachable!("non-empty list queue with non color/vec type receiver?");
-        }
-    }
+
+    let inject_vec2 = |v: &mut values::Vector2<Span>,
+                       span: &mut Span,
+                       items: &mut Drain<'_, IrListItem>|
+     -> Result<ColorOrVec, MaybeSpanDiag> {
+        let values::Vector2 { value: vec, .. } = v;
+        vec.x = resolve_f32(get_next(span, items)?)?;
+        vec.y = resolve_f32(get_next(span, items)?)?;
+        Ok(ColorOrVec::Vec2)
+    };
+    let inject_vec3 = |v: &mut values::Vector3<Span>,
+                       span: &mut Span,
+                       items: &mut Drain<'_, IrListItem>|
+     -> Result<ColorOrVec, MaybeSpanDiag> {
+        let values::Vector3 { value: vec, .. } = v;
+        vec.x = resolve_f32(get_next(span, items)?)?;
+        vec.y = resolve_f32(get_next(span, items)?)?;
+        vec.z = resolve_f32(get_next(span, items)?)?;
+        Ok(ColorOrVec::Vec3)
+    };
+    let inject_vec4 = |v: &mut values::Vector4<Span>,
+                       span: &mut Span,
+                       items: &mut Drain<'_, IrListItem>|
+     -> Result<ColorOrVec, MaybeSpanDiag> {
+        let values::Vector4 { value: vec, .. } = v;
+        vec.x = resolve_f32(get_next(span, items)?)?;
+        vec.y = resolve_f32(get_next(span, items)?)?;
+        vec.z = resolve_f32(get_next(span, items)?)?;
+        vec.w = resolve_f32(get_next(span, items)?)?;
+        Ok(ColorOrVec::Vec4)
+    };
+    let inject_color = |v: &mut values::Color<Span>,
+                        span: &mut Span,
+                        items: &mut Drain<'_, IrListItem>|
+     -> Result<ColorOrVec, MaybeSpanDiag> {
+        let values::Color { value: color, .. } = v;
+        color.r = resolve_u8(get_next(span, items)?)?;
+        color.g = resolve_u8(get_next(span, items)?)?;
+        color.b = resolve_u8(get_next(span, items)?)?;
+        color.a = resolve_u8(get_next(span, items)?)?;
+        Ok(ColorOrVec::Color)
+    };
+    let inject_mat44 = |v: &mut values::Matrix44<Span>,
+                        span: &mut Span,
+                        items: &mut Drain<'_, IrListItem>|
+     -> Result<ColorOrVec, MaybeSpanDiag> {
+        let values::Matrix44 { value: mat, .. } = v;
+        mat.x_axis = Vec4::new(
+            resolve_f32(get_next(span, items)?)?,
+            resolve_f32(get_next(span, items)?)?,
+            resolve_f32(get_next(span, items)?)?,
+            resolve_f32(get_next(span, items)?)?,
+        );
+        mat.y_axis = Vec4::new(
+            resolve_f32(get_next(span, items)?)?,
+            resolve_f32(get_next(span, items)?)?,
+            resolve_f32(get_next(span, items)?)?,
+            resolve_f32(get_next(span, items)?)?,
+        );
+        mat.z_axis = Vec4::new(
+            resolve_f32(get_next(span, items)?)?,
+            resolve_f32(get_next(span, items)?)?,
+            resolve_f32(get_next(span, items)?)?,
+            resolve_f32(get_next(span, items)?)?,
+        );
+        mat.w_axis = Vec4::new(
+            resolve_f32(get_next(span, items)?)?,
+            resolve_f32(get_next(span, items)?)?,
+            resolve_f32(get_next(span, items)?)?,
+            resolve_f32(get_next(span, items)?)?,
+        );
+        *mat = mat.transpose();
+        Ok(ColorOrVec::Mat44)
+    };
+
+    let mut inject =
+        |target: &mut PropertyValueEnum<Span>| -> Result<Option<ColorOrVec>, MaybeSpanDiag> {
+            Ok(Some(match target {
+                V::Vector2(v) => inject_vec2(v, &mut span, &mut items)?,
+                V::Vector3(v) => inject_vec3(v, &mut span, &mut items)?,
+                V::Vector4(v) => inject_vec4(v, &mut span, &mut items)?,
+                V::Color(v) => inject_color(v, &mut span, &mut items)?,
+                V::Matrix44(v) => inject_mat44(v, &mut span, &mut items)?,
+                V::Optional(opt) => match opt {
+                    values::Optional::Vector2 { value, .. } => {
+                        inject_vec2(value.get_or_insert_default(), &mut span, &mut items)?
+                    }
+                    values::Optional::Vector3 { value, .. } => {
+                        inject_vec3(value.get_or_insert_default(), &mut span, &mut items)?
+                    }
+                    values::Optional::Vector4 { value, .. } => {
+                        inject_vec4(value.get_or_insert_default(), &mut span, &mut items)?
+                    }
+                    values::Optional::Color { value, .. } => {
+                        inject_color(value.get_or_insert_default(), &mut span, &mut items)?
+                    }
+                    values::Optional::Matrix44 { value, .. } => {
+                        inject_mat44(value.get_or_insert_default(), &mut span, &mut items)?
+                    }
+                    _ => return Ok(None),
+                },
+                _ => {
+                    return Ok(None);
+                    // unreachable!("non-empty list queue with non color/vec type receiver?");
+                }
+            }))
+        };
+
+    let expected = inject(target.value_mut())?.ok_or(CustomSpan(
+        "non-empty list queue with non color/vec type receiver",
+        span,
+    ))?;
 
     if let Some(extra) = items.next() {
         let count = 1 + items.count();
@@ -1182,8 +1227,10 @@ impl Visitor for TypeChecker<'_> {
         let depth = self.depth;
 
         #[cfg(feature = "debug")]
+        let indent = "  ".repeat(depth.saturating_sub(1) as _);
+
+        #[cfg(feature = "debug")]
         {
-            let indent = "  ".repeat(depth.saturating_sub(1) as _);
             if std::env::var("RB_STACK").is_ok() {
                 eprintln!("{indent}> d:{} | {:?}", depth, tree.kind);
                 eprint!("{indent}  stack: ");
@@ -1218,6 +1265,7 @@ impl Visitor for TypeChecker<'_> {
                         let value_type = parent_type
                             .value_subtype()
                             .expect("container must have value_subtype");
+
                         self.stack.push((
                             depth,
                             IrItem::ListItem(IrListItem({
@@ -1226,12 +1274,18 @@ impl Visitor for TypeChecker<'_> {
                                 v
                             })),
                         ));
+
+                        #[cfg(feature = "debug")]
+                        eprintln!(
+                            "[{}] got {value_type:?} inside {parent_type:?} - {:?}",
+                            tree.kind, &self.ctx.text[tree.span]
+                        );
                     }
                     _parent_type => {
                         #[cfg(feature = "debug")]
                         eprintln!(
-                            "[warn] got {_parent_type:?} in ListItemBlock - {:?}",
-                            &self.ctx.text[tree.span]
+                            "[warn] got {_parent_type:?} in {} - {:?}",
+                            tree.kind, &self.ctx.text[tree.span]
                         );
                     }
                 }
@@ -1247,19 +1301,26 @@ impl Visitor for TypeChecker<'_> {
                 let parent_type = parent.value().rito_type();
 
                 use PropertyKind as K;
-                let color_vec_type = match parent_type.base {
+
+                let get_color_vec_type = |kind: PropertyKind| match kind {
                     K::Vector2 | K::Vector3 | K::Vector4 | K::Matrix44 => Some(K::F32),
                     K::Color => Some(K::U8),
                     _ => None,
                 };
 
+                let color_vec_type = get_color_vec_type(parent_type.base)
+                    .or(parent_type.value_subtype().and_then(get_color_vec_type));
+
                 // dbg!(color_vec_type, parent_type);
 
-                let value_hint = color_vec_type.or(parent_type.value_subtype());
+                let value_hint = color_vec_type
+                    .or(parent_type.value_subtype())
+                    .map(RitoType::simple);
 
                 match resolve_value(&mut self.ctx, ctx, tree, value_hint) {
                     Ok(Some(item)) => {
-                        // eprintln!("{indent}  list item {item:?}");
+                        #[cfg(feature = "debug")]
+                        eprintln!("{indent}  list item {item:?}");
                         if color_vec_type.is_some() {
                             self.list_queue.push(IrListItem(item));
                         } else {
@@ -1267,7 +1328,30 @@ impl Visitor for TypeChecker<'_> {
                         }
                     }
                     Ok(None) => {
-                        // eprintln!("{indent}  ERROR empty item");
+                        #[cfg(feature = "debug")]
+                        eprintln!("{indent}  ERROR empty item");
+                        for child in tree.children.get(ctx.cst).iter() {
+                            let (got, span) = match child {
+                                cst::Child::Token(token_id) => {
+                                    let tok = ctx.cst.token(*token_id).unwrap();
+                                    (RitoTypeOrVirtual::Token(tok.kind), tok.span)
+                                }
+                                cst::Child::Tree(node_id) => {
+                                    let node = ctx.cst.node(*node_id).unwrap();
+                                    (RitoTypeOrVirtual::Tree(node.kind), node.span)
+                                }
+                            };
+                            self.ctx.diagnostics.push(
+                                TypeMismatch {
+                                    span,
+                                    got,
+                                    expected: value_hint
+                                        .unwrap_or(RitoType::simple(PropertyKind::None)),
+                                    expected_span: None,
+                                }
+                                .unwrap(),
+                            );
+                        }
                     }
                     Err(e) => self.ctx.diagnostics.push(e.default_span(tree.span)),
                 }
@@ -1321,8 +1405,9 @@ impl Visitor for TypeChecker<'_> {
         self.depth -= 1;
 
         #[cfg(feature = "debug")]
+        let indent = "  ".repeat(depth.saturating_sub(1) as _);
+        #[cfg(feature = "debug")]
         {
-            let indent = "  ".repeat(depth.saturating_sub(1) as _);
             if std::env::var("RB_STACK").is_ok() {
                 eprintln!("{indent}< d:{} | {:?}", depth, tree.kind);
                 eprint!("{indent}  stack: ");
@@ -1341,9 +1426,12 @@ impl Visitor for TypeChecker<'_> {
 
         match self.stack.pop() {
             Some(mut ir) => {
-                // if std::env::var("RB_STACK").is_ok() {
-                //     eprintln!("{indent}< popped {}", ir.0);
-                // }
+                #[cfg(feature = "debug")]
+                {
+                    if std::env::var("RB_STACK").is_ok() {
+                        eprintln!("{indent}< popped {}", ir.0);
+                    }
+                }
                 if ir.0 != depth {
                     self.stack.push(ir);
                     return Visit::Continue;

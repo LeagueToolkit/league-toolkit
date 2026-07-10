@@ -72,6 +72,9 @@ impl ErrorRange {
     pub fn get<'a>(&self, cst: &'a Cst) -> &'a [Error] {
         let start = self.start as usize;
         let end = start + self.len as usize;
+        if start > cst.errors.len() {
+            return &[];
+        }
         &cst.errors[start..end]
     }
 

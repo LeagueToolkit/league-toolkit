@@ -45,8 +45,8 @@ pub struct Parser<'a> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub enum ErrorPropagation {
     /// No propagation, errors will remain in their respective nodes
-    None,
     #[default]
+    None,
     /// Child nodes will move their errors to their parent. This is the default, since it
     /// conveniently accumulates all parse errors to the root node.
     Move,
@@ -165,7 +165,9 @@ impl<'a> Parser<'a> {
                         TreeKind::ErrorTree => cur_node.span,
                         _ => match kind {
                             // these errors are talking about what they wanted next
-                            ErrorKind::Expected { .. } | ErrorKind::Unexpected { .. } => {
+                            ErrorKind::Expected { .. }
+                            | ErrorKind::ExpectedAny { .. }
+                            | ErrorKind::Unexpected { .. } => {
                                 let mut span = tokens.peek().map(|t| t.span).unwrap_or(last_span);
                                 // so we point at the character just after our token
                                 span.end += 1;
