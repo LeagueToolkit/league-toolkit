@@ -1,6 +1,7 @@
 use std::{
     borrow::Cow,
     fmt::{Debug, Display},
+    num::ParseFloatError,
     vec::Drain,
 };
 
@@ -186,6 +187,11 @@ pub enum Diagnostic {
     },
 
     ResolveLiteral,
+    ParseNumericError {
+        expected: PropertyKind,
+        error: Option<std::num::IntErrorKind>,
+        span: Span,
+    },
     AmbiguousNumeric(Span),
 
     NotEnoughItems {
@@ -234,6 +240,7 @@ impl Diagnostic {
             | ShadowedEntry { shadower: span, .. }
             | InvalidHash(span)
             | AmbiguousNumeric(span)
+            | ParseNumericError { span, .. }
             | NotEnoughItems { span, .. }
             | TooManyItems { span, .. }
             | InvalidDependenciesEntry { span, .. }
@@ -622,39 +629,83 @@ pub fn resolve_literal(
 
             match kind_hint {
                 K::U8 => P::U8(values::U8::new_with_meta(
-                    txt.parse::<u8>().map_err(|_| Diagnostic::ResolveLiteral)?,
+                    txt.parse::<u8>()
+                        .map_err(|e| Diagnostic::ParseNumericError {
+                            expected: kind_hint,
+                            error: Some(*e.kind()),
+                            span: *span,
+                        })?,
                     *span,
                 )),
                 K::U16 => P::U16(values::U16::new_with_meta(
-                    txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                    txt.parse::<u16>()
+                        .map_err(|e| Diagnostic::ParseNumericError {
+                            expected: kind_hint,
+                            error: Some(*e.kind()),
+                            span: *span,
+                        })?,
                     *span,
                 )),
                 K::U32 => P::U32(values::U32::new_with_meta(
-                    txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                    txt.parse::<u32>()
+                        .map_err(|e| Diagnostic::ParseNumericError {
+                            expected: kind_hint,
+                            error: Some(*e.kind()),
+                            span: *span,
+                        })?,
                     *span,
                 )),
                 K::U64 => P::U64(values::U64::new_with_meta(
-                    txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                    txt.parse::<u64>()
+                        .map_err(|e| Diagnostic::ParseNumericError {
+                            expected: kind_hint,
+                            error: Some(*e.kind()),
+                            span: *span,
+                        })?,
                     *span,
                 )),
                 K::I8 => P::I8(values::I8::new_with_meta(
-                    txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                    txt.parse::<i8>()
+                        .map_err(|e| Diagnostic::ParseNumericError {
+                            expected: kind_hint,
+                            error: Some(*e.kind()),
+                            span: *span,
+                        })?,
                     *span,
                 )),
                 K::I16 => P::I16(values::I16::new_with_meta(
-                    txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                    txt.parse::<i16>()
+                        .map_err(|e| Diagnostic::ParseNumericError {
+                            expected: kind_hint,
+                            error: Some(*e.kind()),
+                            span: *span,
+                        })?,
                     *span,
                 )),
                 K::I32 => P::I32(values::I32::new_with_meta(
-                    txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                    txt.parse::<i32>()
+                        .map_err(|e| Diagnostic::ParseNumericError {
+                            expected: kind_hint,
+                            error: Some(*e.kind()),
+                            span: *span,
+                        })?,
                     *span,
                 )),
                 K::I64 => P::I64(values::I64::new_with_meta(
-                    txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                    txt.parse::<i64>()
+                        .map_err(|e| Diagnostic::ParseNumericError {
+                            expected: kind_hint,
+                            error: Some(*e.kind()),
+                            span: *span,
+                        })?,
                     *span,
                 )),
                 K::F32 => P::F32(values::F32::new_with_meta(
-                    txt.parse().map_err(|_| Diagnostic::ResolveLiteral)?,
+                    txt.parse().map_err(|_| Diagnostic::ParseNumericError {
+                        expected: kind_hint,
+                        error: None,
+                        span: *span,
+                    })?,
                     *span,
                 )),
                 _ => {
