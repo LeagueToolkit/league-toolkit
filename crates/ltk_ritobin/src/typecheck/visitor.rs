@@ -19,7 +19,7 @@ use crate::{
         Kind, Node, NodeId, Visitor,
     },
     parse::{Span, Token, TokenKind},
-    Cst, RitobinName,
+    Cst, PropertyValueExt as _, RitoType, RitobinName,
 };
 
 #[derive(Debug, Clone)]
@@ -295,97 +295,6 @@ impl From<Diagnostic> for MaybeSpanDiag {
 
 use Diagnostic::*;
 
-pub trait PropertyValueExt {
-    fn rito_type(&self) -> RitoType;
-}
-impl<M> PropertyValueExt for PropertyValueEnum<M> {
-    fn rito_type(&self) -> RitoType {
-        let base = self.kind();
-        let subtypes = match self {
-            PropertyValueEnum::Map(map) => [Some(map.key_kind()), Some(map.value_kind())],
-            PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(container))
-            | PropertyValueEnum::Container(container) => [Some(container.item_kind()), None],
-            PropertyValueEnum::Optional(optional) => [Some(optional.item_kind()), None],
-
-            _ => [None, None],
-        };
-        RitoType { base, subtypes }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RitoType {
-    pub base: PropertyKind,
-    pub subtypes: [Option<PropertyKind>; 2],
-}
-
-impl Display for RitoType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let base = self.base.to_rito_name();
-        match self.subtypes {
-            [None, None] => f.write_str(base),
-            [Some(a), None] => write!(f, "{base}[{}]", a.to_rito_name()),
-            [Some(a), Some(b)] => {
-                write!(f, "{base}[{},{}]", a.to_rito_name(), b.to_rito_name())
-            }
-            _ => write!(f, "{base}[!!]"),
-        }
-    }
-}
-
-impl RitoType {
-    pub fn simple(kind: PropertyKind) -> Self {
-        Self {
-            base: kind,
-            subtypes: [None, None],
-        }
-    }
-
-    pub fn container(value: PropertyKind) -> Self {
-        Self {
-            base: PropertyKind::Container,
-            subtypes: [Some(value), None],
-        }
-    }
-
-    pub fn map(key: PropertyKind, value: PropertyKind) -> Self {
-        Self {
-            base: PropertyKind::Map,
-            subtypes: [Some(key), Some(value)],
-        }
-    }
-
-    fn subtype(&self, idx: usize) -> PropertyKind {
-        self.subtypes[idx].unwrap_or_default()
-    }
-
-    fn value_subtype(&self) -> Option<PropertyKind> {
-        self.subtypes[1].or(self.subtypes[0])
-    }
-
-    pub fn make_default(&self, span: Span) -> PropertyValueEnum<Span> {
-        let mut value = match self.base {
-            PropertyKind::Map => {
-                PropertyValueEnum::Map(values::Map::empty(self.subtype(0), self.subtype(1)))
-            }
-            PropertyKind::UnorderedContainer => {
-                PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(
-                    values::Container::empty(self.subtype(0)).unwrap_or_default(),
-                ))
-            }
-            PropertyKind::Container => PropertyValueEnum::Container(
-                values::Container::empty(self.subtype(0)).unwrap_or_default(),
-            ),
-            PropertyKind::Optional => PropertyValueEnum::Optional(
-                values::Optional::empty(self.subtype(0)).unwrap_or_default(),
-            ),
-
-            _ => self.base.default_value(),
-        };
-        *value.meta_mut() = span;
-        value
-    }
-}
 pub enum Statement {
     KeyValue {
         key: Span,

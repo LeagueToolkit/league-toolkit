@@ -1,7 +1,7 @@
 //! Type name mappings for ritobin format.
 
-use ltk_meta::PropertyKind;
-use std::str::FromStr;
+use ltk_meta::{property::values, traits::PropertyExt, PropertyKind, PropertyValueEnum};
+use std::{fmt::Display, str::FromStr};
 
 /// Extension trait for mapping ritobin type names to/from [`PropertyKind`]'s
 pub trait RitobinName {
@@ -84,44 +84,93 @@ impl RitobinName for PropertyKind {
 
 /// Ritobin type representation for parsing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RitobinType {
-    pub kind: PropertyKind,
-    pub inner_kind: Option<PropertyKind>,
-    pub value_kind: Option<PropertyKind>,
+pub struct RitoType {
+    pub base: PropertyKind,
+    pub subtypes: [Option<PropertyKind>; 2],
 }
 
-impl RitobinType {
+impl Display for RitoType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let base = self.base.to_rito_name();
+        match self.subtypes {
+            [None, None] => f.write_str(base),
+            [Some(a), None] => write!(f, "{base}[{}]", a.to_rito_name()),
+            [Some(a), Some(b)] => {
+                write!(f, "{base}[{},{}]", a.to_rito_name(), b.to_rito_name())
+            }
+            _ => write!(f, "{base}[!!]"),
+        }
+    }
+}
+
+impl RitoType {
     pub fn simple(kind: PropertyKind) -> Self {
         Self {
-            kind,
-            inner_kind: None,
-            value_kind: None,
+            base: kind,
+            subtypes: [None, None],
         }
     }
 
-    pub fn container(kind: PropertyKind, inner: PropertyKind) -> Self {
+    pub fn container(value: PropertyKind) -> Self {
         Self {
-            kind,
-            inner_kind: Some(inner),
-            value_kind: None,
+            base: PropertyKind::Container,
+            subtypes: [Some(value), None],
         }
     }
 
     pub fn map(key: PropertyKind, value: PropertyKind) -> Self {
         Self {
-            kind: PropertyKind::Map,
-            inner_kind: Some(key),
-            value_kind: Some(value),
+            base: PropertyKind::Map,
+            subtypes: [Some(key), Some(value)],
         }
+    }
+
+    pub fn subtype(&self, idx: usize) -> PropertyKind {
+        self.subtypes[idx].unwrap_or_default()
+    }
+
+    pub fn value_subtype(&self) -> Option<PropertyKind> {
+        self.subtypes[1].or(self.subtypes[0])
+    }
+
+    pub fn make_default<M: Default>(&self, span: M) -> PropertyValueEnum<M> {
+        let mut value = match self.base {
+            PropertyKind::Map => {
+                PropertyValueEnum::Map(values::Map::empty(self.subtype(0), self.subtype(1)))
+            }
+            PropertyKind::UnorderedContainer => {
+                PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(
+                    values::Container::empty(self.subtype(0)).unwrap_or_default(),
+                ))
+            }
+            PropertyKind::Container => PropertyValueEnum::Container(
+                values::Container::empty(self.subtype(0)).unwrap_or_default(),
+            ),
+            PropertyKind::Optional => PropertyValueEnum::Optional(
+                values::Optional::empty(self.subtype(0)).unwrap_or_default(),
+            ),
+
+            _ => self.base.default_value(),
+        };
+        *value.meta_mut() = span;
+        value
     }
 }
 
-impl FromStr for RitobinType {
-    type Err = ();
+pub trait PropertyValueExt {
+    fn rito_type(&self) -> RitoType;
+}
+impl<M> PropertyValueExt for PropertyValueEnum<M> {
+    fn rito_type(&self) -> RitoType {
+        let base = self.kind();
+        let subtypes = match self {
+            PropertyValueEnum::Map(map) => [Some(map.key_kind()), Some(map.value_kind())],
+            PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(container))
+            | PropertyValueEnum::Container(container) => [Some(container.item_kind()), None],
+            PropertyValueEnum::Optional(optional) => [Some(optional.item_kind()), None],
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        PropertyKind::from_rito_name(s)
-            .map(RitobinType::simple)
-            .ok_or(())
+            _ => [None, None],
+        };
+        RitoType { base, subtypes }
     }
 }
