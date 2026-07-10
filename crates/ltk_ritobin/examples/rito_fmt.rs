@@ -1,6 +1,5 @@
 use std::{path::PathBuf, str::FromStr};
 
-use bumpalo::Bump;
 use ltk_ritobin::{
     cst::Cst,
     print::{CstPrinter, PrintConfig, WrapConfig},
@@ -21,8 +20,7 @@ fn main() {
 
     let input = std::fs::read_to_string(input_path).unwrap();
 
-    let bump = Bump::new();
-    let cst = Cst::parse(&bump, &input);
+    let cst = Cst::parse(&input);
 
     // let mut str = String::new();
     // cst.print(&mut str, 0, &input);

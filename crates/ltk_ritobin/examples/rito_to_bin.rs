@@ -1,7 +1,5 @@
 use std::{fs::File, path::PathBuf, str::FromStr};
 
-use bumpalo::Bump;
-
 fn main() {
     let mut args = std::env::args().skip(1);
     let Some((input_path, output_path)) = args
@@ -16,9 +14,7 @@ fn main() {
 
     let text = std::fs::read_to_string(input_path).unwrap();
 
-    let bump = Bump::new();
-
-    let cst = ltk_ritobin::Cst::parse(&bump, &text);
+    let cst = ltk_ritobin::Cst::parse(&text);
     if !cst.errors.is_empty() {
         eprintln!("Errors while parsing:");
         for err in &cst.errors {

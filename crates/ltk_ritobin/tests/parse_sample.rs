@@ -1,6 +1,5 @@
 //! Integration test for parsing a sample ritobin file.
 
-use bumpalo::Bump;
 use ltk_ritobin::{cst::Cst, print::Print as _};
 
 const SAMPLE_RITOBIN: &str = r#"#PROP_text
@@ -45,8 +44,7 @@ entries: map[hash,embed] = {
 "#;
 
 fn tree(input: &str) -> String {
-    let bump = Bump::new();
-    let cst = Cst::parse(&bump, input);
+    let cst = Cst::parse(input);
     assert!(cst.errors.is_empty());
 
     let mut debug = String::new();
@@ -57,21 +55,17 @@ fn tree(input: &str) -> String {
 
 #[test]
 fn test_roundtrip() {
-    let bump_a = Bump::new();
-    let cst = Cst::parse(&bump_a, SAMPLE_RITOBIN);
+    let cst = Cst::parse(SAMPLE_RITOBIN);
     let (tree, errors) = cst.build_bin(SAMPLE_RITOBIN);
     assert!(errors.is_empty(), "errors = {errors:#?}");
 
     // Write back to text
-    let output = tree.print(&bump_a).expect("Failed to write");
-    drop(cst);
-    drop(bump_a);
+    let output = tree.print().expect("Failed to write");
 
     println!("output:\n{output}");
 
-    let bump_b = Bump::new();
     // Parse again
-    let cst2 = Cst::parse(&bump_b, &output);
+    let cst2 = Cst::parse(&output);
     assert!(
         cst2.errors.is_empty(),
         "reparse errors = {:#?}",

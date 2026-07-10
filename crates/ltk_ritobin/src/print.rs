@@ -7,7 +7,6 @@ pub enum PrintError {
 
 use std::fmt::{self};
 
-use bumpalo::Bump;
 use ltk_meta::Bin;
 
 use crate::hashes::HashProvider;
@@ -23,35 +22,29 @@ pub use printers::*;
 
 pub trait Print {
     /// Print as ritobin code to the given writer (using default config, which prints hashes as hex).
-    fn print_to_writer<W: fmt::Write>(
-        &self,
-        arena: &Bump,
-        writer: &mut W,
-    ) -> Result<usize, PrintError> {
-        Self::print_to_writer_with_config::<W, ()>(self, arena, writer, Default::default())
+    fn print_to_writer<W: fmt::Write>(&self, writer: &mut W) -> Result<usize, PrintError> {
+        Self::print_to_writer_with_config::<W, ()>(self, writer, Default::default())
     }
     /// Print as ritobin code to the given writer, using the given config.
     fn print_to_writer_with_config<W: fmt::Write, H: HashProvider + Clone>(
         &self,
-        arena: &Bump,
         writer: &mut W,
         config: PrintConfig<H>,
     ) -> Result<usize, PrintError>;
 
     /// Print as ritobin code to a string (using default config, which prints hashes as hex).
-    fn print(&self, arena: &Bump) -> Result<String, PrintError> {
+    fn print(&self) -> Result<String, PrintError> {
         let mut str = String::new();
-        Self::print_to_writer(self, arena, &mut str)?;
+        Self::print_to_writer(self, &mut str)?;
         Ok(str)
     }
     /// Print as ritobin code to a string, using the given config.
     fn print_with_config<H: HashProvider + Clone>(
         &self,
-        arena: &Bump,
         config: PrintConfig<H>,
     ) -> Result<String, PrintError> {
         let mut str = String::new();
-        Self::print_to_writer_with_config(self, arena, &mut str, config)?;
+        Self::print_to_writer_with_config(self, &mut str, config)?;
         Ok(str)
     }
 }
@@ -59,28 +52,22 @@ pub trait Print {
 impl Print for Bin {
     fn print_to_writer_with_config<W: fmt::Write, H: HashProvider + Clone>(
         &self,
-        arena: &Bump,
         writer: &mut W,
         config: PrintConfig<H>,
     ) -> Result<usize, PrintError> {
-        BinPrinter::new()
-            .with_config(config)
-            .print(arena, self, writer)
+        BinPrinter::new().with_config(config).print(self, writer)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use bumpalo::Bump;
-
     use crate::{
         cst::Cst,
         print::{config::PrintConfig, CstPrinter, WrapConfig},
     };
 
     fn assert_pretty(input: &str, is: &str, config: PrintConfig<()>) {
-        let bump = Bump::new();
-        let cst = Cst::parse(&bump, input);
+        let cst = Cst::parse(input);
         let mut str = String::new();
 
         cst.print(&mut str, input);

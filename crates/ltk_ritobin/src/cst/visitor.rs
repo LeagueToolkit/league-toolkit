@@ -12,11 +12,11 @@ pub enum Visit {
     Continue,
 }
 
-pub struct VisitCtx<'arena> {
-    pub cst: &'arena Cst<'arena>,
+pub struct VisitCtx<'a> {
+    pub cst: &'a Cst,
 }
-impl<'arena> VisitCtx<'arena> {
-    pub fn node(&self, id: NodeId) -> Option<&Node<'arena>> {
+impl<'a> VisitCtx<'a> {
+    pub fn node(&self, id: NodeId) -> Option<&Node> {
         self.cst.node(id)
     }
 }
@@ -52,7 +52,7 @@ pub trait VisitorExt: Sized + Visitor {
 
 impl<T: Sized + Visitor> VisitorExt for T {}
 
-impl Cst<'_> {
+impl Cst {
     /// Walk a [`Visitor`] implementor along this tree.
     pub fn walk<V: Visitor>(&self, visitor: &mut V) {
         if self.nodes.is_empty() {
@@ -96,58 +96,3 @@ impl Cst<'_> {
         visitor.exit_tree(&ctx, node_idx)
     }
 }
-
-// #[cfg(test)]
-// mod test {
-//     use crate::{
-//         cst::{Node, Visitor},
-//         parse::Span,
-//         Cst,
-//     };
-//     use bumpalo::{vec, Bump};
-//
-//     #[derive(Default)]
-//     struct TestVisitor {
-//         seen: Vec<()>,
-//     }
-//
-//     impl Visitor for TestVisitor {
-//         fn enter_tree(
-//             &mut self,
-//             ctx: &super::VisitCtx<'_>,
-//             tree: crate::cst::NodeId,
-//         ) -> super::Visit {
-//             println!("tree: {tree:?}");
-//             super::Visit::Continue
-//         }
-//
-//         fn exit_tree(
-//             &mut self,
-//             ctx: &super::VisitCtx<'_>,
-//             tree: crate::cst::NodeId,
-//         ) -> super::Visit {
-//             super::Visit::Continue
-//         }
-//
-//         fn visit_token(
-//             &mut self,
-//             ctx: &super::VisitCtx<'_>,
-//             token: crate::parse::Token,
-//             parent: crate::cst::NodeId,
-//         ) -> super::Visit {
-//             super::Visit::Continue
-//         }
-//     }
-//
-//     #[test]
-//     fn visitor() {
-//         let bump = Bump::new();
-//         let cst = Cst {
-//             nodes: vec![in &bump; Node {span: Span::default(), kind: crate::cst::Kind::Class, children: vec![in &bump;], errors: vec![in &bump;]}],
-//         };
-//
-//         let mut visitor = TestVisitor::default();
-//         cst.walk(&mut visitor);
-//         assert!(false);
-//     }
-// }

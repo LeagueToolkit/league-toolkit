@@ -25,12 +25,11 @@ use crate::cst;
 
 #[cfg(test)]
 mod test {
-    use bumpalo::Bump;
 
     use crate::{cst::Cst, print::CstPrinter, typecheck::visitor::TypeChecker};
 
-    fn assert_success<'a>(bump: &'a Bump, text: &str) -> Cst<'a> {
-        let cst = Cst::parse(bump, text);
+    fn assert_success(text: &str) -> Cst {
+        let cst = Cst::parse(text);
 
         let mut buf = String::new();
         cst.print(&mut buf, text);
@@ -43,8 +42,7 @@ mod test {
 
     #[allow(unused, reason = "tests will use this")]
     fn assert_fail(text: &str) {
-        let bump = Bump::new();
-        let cst = Cst::parse(&bump, text);
+        let cst = Cst::parse(text);
 
         let mut buf = String::new();
         cst.print(&mut buf, text);
@@ -55,9 +53,7 @@ mod test {
 
     #[test]
     fn comments() {
-        let bump = Bump::new();
         assert_success(
-            &bump,
             r#"
 #PROP_text
 type: string = "my_str" # inline comment
@@ -75,8 +71,7 @@ entries: map[hash, embed] = {
 
     #[test]
     fn inline_comment_into_eof() {
-        let bump = Bump::new();
-        assert_success(&bump, r#"mVelMultiplier: f32 = 0 # asd"#);
+        assert_success(r#"mVelMultiplier: f32 = 0 # asd"#);
     }
 
     #[ignore = "Nice to have"]
@@ -87,8 +82,7 @@ entries: map[hash, embed] = {
             "thing" = ClassThing { ooo }
         }
         "#;
-        let bump = Bump::new();
-        let cst = assert_success(&bump, text);
+        let cst = assert_success(text);
 
         let (_bin, errors) = cst.build_bin(text);
         assert!(
@@ -108,8 +102,7 @@ entries: map[hash, embed] = {
 }
 
 "#;
-        let bump = Bump::new();
-        let cst = Cst::parse(&bump, text);
+        let cst = Cst::parse(text);
 
         let mut str = String::new();
         cst.print(&mut str, text);
@@ -190,8 +183,7 @@ entries: map[hash,embed] = {
             }
 }
 "#;
-        let bump = Bump::new();
-        let cst = Cst::parse(&bump, text);
+        let cst = Cst::parse(text);
 
         let mut str = String::new();
         cst.print(&mut str, text);

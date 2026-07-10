@@ -384,27 +384,19 @@ pub enum Statement {
 }
 
 trait TreeIterExt<'a>: Iterator {
-    fn expect_tree(
-        &mut self,
-        cst: &'a Cst<'a>,
-        kind: cst::Kind,
-    ) -> Result<&'a Node<'a>, Diagnostic>;
-    fn expect_token(&mut self, cst: &'a Cst<'a>, kind: TokenKind) -> Result<&'a Token, Diagnostic>;
+    fn expect_tree(&mut self, cst: &'a Cst, kind: cst::Kind) -> Result<&'a Node, Diagnostic>;
+    fn expect_token(&mut self, cst: &'a Cst, kind: TokenKind) -> Result<&'a Token, Diagnostic>;
 }
 
 impl<'a, I> TreeIterExt<'a> for I
 where
     I: Iterator<Item = &'a cst::Child>,
 {
-    fn expect_tree(
-        &mut self,
-        cst: &'a Cst<'a>,
-        kind: cst::Kind,
-    ) -> Result<&'a Node<'a>, Diagnostic> {
+    fn expect_tree(&mut self, cst: &'a Cst, kind: cst::Kind) -> Result<&'a Node, Diagnostic> {
         self.find_map(|c| c.tree(cst).filter(|t| t.kind == kind))
             .ok_or(MissingTree(kind))
     }
-    fn expect_token(&mut self, cst: &'a Cst<'a>, kind: TokenKind) -> Result<&'a Token, Diagnostic> {
+    fn expect_token(&mut self, cst: &'a Cst, kind: TokenKind) -> Result<&'a Token, Diagnostic> {
         self.find_map(|c| c.token(cst).filter(|t| t.kind == kind))
             .ok_or(MissingToken(kind))
     }

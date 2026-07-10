@@ -1,18 +1,14 @@
-use std::{
-    fmt::{self, Display},
-    marker::PhantomData,
-};
+use std::fmt::{self, Display};
 
-use bumpalo::Bump;
 use ltk_meta::Bin;
 
 use crate::{
     cst::{
         visitor::{Visit, VisitCtx},
-        ChildRange, ErrorId, ErrorRange, NodeId, TokenId, Visitor,
+        ChildRange, ErrorRange, NodeId, TokenId, Visitor,
     },
     parse::{
-        self, impls,
+        impls,
         tokenizer::{self, Token},
         Error, ErrorPropagation, Parser, Span,
     },
@@ -61,18 +57,18 @@ impl Display for Kind {
 /// The ritobin concrete syntax tree / a node in the syntax tree
 ///
 /// See [`crate::cst`] for more information.
-pub struct Cst<'arena> {
-    pub(crate) nodes: Vec<Node<'arena>>,
+pub struct Cst {
+    pub(crate) nodes: Vec<Node>,
     pub(crate) children: Vec<Child>,
     pub(crate) tokens: Vec<Token>,
     pub errors: Vec<Error>,
 }
 
-impl<'arena> Cst<'arena> {
-    pub fn node(&self, id: NodeId) -> Option<&Node<'arena>> {
+impl Cst {
+    pub fn node(&self, id: NodeId) -> Option<&Node> {
         self.nodes.get((id.0) as usize)
     }
-    pub fn node_mut(&mut self, id: NodeId) -> Option<&mut Node<'arena>> {
+    pub fn node_mut(&mut self, id: NodeId) -> Option<&mut Node> {
         self.nodes.get_mut((id.0) as usize)
     }
 
@@ -83,7 +79,7 @@ impl<'arena> Cst<'arena> {
         self.tokens.get_mut((id.0) as usize)
     }
 
-    pub(crate) fn push_node(&mut self, node: Node<'arena>) -> NodeId {
+    pub(crate) fn push_node(&mut self, node: Node) -> NodeId {
         let id = NodeId(self.nodes.len().try_into().unwrap());
         self.nodes.push(node);
         id
@@ -115,14 +111,14 @@ impl<'arena> Cst<'arena> {
         }
     }
 
-    pub fn root(&self) -> &Node<'arena> {
+    pub fn root(&self) -> &Node {
         &self.nodes[0]
     }
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug)]
-pub struct Node<'arena> {
+pub struct Node {
     /// The span of this node in the source text
     pub span: Span,
     /// The type of this node
@@ -133,8 +129,6 @@ pub struct Node<'arena> {
     /// [`ErrorPropagation`] the parser was using.
     #[cfg_attr(feature = "serde", serde(skip_deserializing))]
     pub errors: ErrorRange,
-
-    pub phantom: PhantomData<&'arena ()>,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -147,7 +141,7 @@ pub enum Child {
 
 impl Child {
     /// Get a reference to this node as a [`Token`], if it is one.
-    pub fn token<'a>(&'a self, cst: &'a Cst<'_>) -> Option<&'a Token> {
+    pub fn token<'a>(&'a self, cst: &'a Cst) -> Option<&'a Token> {
         match self {
             Child::Token(id) => cst.token(*id),
             Child::Tree(_) => None,
@@ -155,7 +149,7 @@ impl Child {
     }
 
     /// Get a reference to this node as a [`Node`], if it is one.
-    pub fn tree<'a>(&'a self, cst: &'a Cst<'a>) -> Option<&'a Node<'a>> {
+    pub fn tree<'a>(&'a self, cst: &'a Cst) -> Option<&'a Node> {
         match self {
             Child::Token(_) => None,
             Child::Tree(id) => cst.node(*id),
@@ -163,7 +157,7 @@ impl Child {
     }
 
     /// The span of this node
-    pub fn span(&self, cst: &Cst<'_>) -> Span {
+    pub fn span(&self, cst: &Cst) -> Span {
         match self {
             Child::Token(id) => cst.token(*id).unwrap().span,
             Child::Tree(id) => cst.node(*id).unwrap().span,
@@ -178,25 +172,21 @@ macro_rules! format_to {
         { use ::std::fmt::Write as _; let _ = ::std::write!($buf, $lit $($arg)*); }
     };
 }
-impl<'arena> Cst<'arena> {
+impl Cst {
     /// Parses a CST from ritobin source code.
     ///
     /// **NOTE:** Parsing errors will end up in [`Self::errors`] - make sure to check this if needed
     /// (e.g before calling [`Self::build_bin`] later)
-    pub fn parse(arena: &'arena Bump, text: &str) -> Self {
-        Self::parse_with_config(arena, text, ErrorPropagation::Move)
+    pub fn parse(text: &str) -> Self {
+        Self::parse_with_config(text, ErrorPropagation::Move)
     }
 
     /// Parses a CST from ritobin source code, with definable error propagation behaviour.
-    pub fn parse_with_config(
-        arena: &'arena Bump,
-        text: &str,
-        error_propagation: ErrorPropagation,
-    ) -> Self {
+    pub fn parse_with_config(text: &str, error_propagation: ErrorPropagation) -> Self {
         let tokens = tokenizer::lex(text);
         let mut p = Parser::new(text, tokens);
         impls::file(&mut p);
-        p.build_tree(arena, error_propagation)
+        p.build_tree(error_propagation)
     }
 
     /// Construct a best-effort [`Bin`] from this tree, returning any errors. If there are any

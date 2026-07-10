@@ -1,7 +1,5 @@
 use std::ops::{Index, IndexMut};
 
-use bumpalo::collections;
-
 use crate::{
     cst::Child,
     parse::{Error, Token},
@@ -13,29 +11,15 @@ use crate::{
 #[repr(transparent)]
 pub struct NodeId(pub(crate) u32);
 
-impl<'arena> Index<NodeId> for [Node<'arena>] {
-    type Output = Node<'arena>;
+impl Index<NodeId> for [Node] {
+    type Output = Node;
 
     fn index(&self, index: NodeId) -> &Self::Output {
         &self[index.0 as usize]
     }
 }
 
-impl<'arena> IndexMut<NodeId> for [Node<'arena>] {
-    fn index_mut(&mut self, index: NodeId) -> &mut Self::Output {
-        &mut self[index.0 as usize]
-    }
-}
-
-impl<'arena> Index<NodeId> for collections::Vec<'arena, Node<'arena>> {
-    type Output = Node<'arena>;
-
-    fn index(&self, index: NodeId) -> &Self::Output {
-        &self[index.0 as usize]
-    }
-}
-
-impl<'arena> IndexMut<NodeId> for collections::Vec<'arena, Node<'arena>> {
+impl IndexMut<NodeId> for [Node] {
     fn index_mut(&mut self, index: NodeId) -> &mut Self::Output {
         &mut self[index.0 as usize]
     }
@@ -55,20 +39,6 @@ impl Index<TokenId> for [Token] {
 }
 
 impl IndexMut<TokenId> for [Token] {
-    fn index_mut(&mut self, index: TokenId) -> &mut Self::Output {
-        &mut self[index.0 as usize]
-    }
-}
-
-impl<'arena> Index<TokenId> for collections::Vec<'arena, Token> {
-    type Output = Token;
-
-    fn index(&self, index: TokenId) -> &Self::Output {
-        &self[index.0 as usize]
-    }
-}
-
-impl<'arena> IndexMut<TokenId> for collections::Vec<'arena, Token> {
     fn index_mut(&mut self, index: TokenId) -> &mut Self::Output {
         &mut self[index.0 as usize]
     }

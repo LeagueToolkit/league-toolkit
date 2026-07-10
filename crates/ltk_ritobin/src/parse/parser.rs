@@ -1,6 +1,5 @@
-use std::{cell::Cell, marker::PhantomData};
+use std::cell::Cell;
 
-use bumpalo::{collections, Bump};
 use smallvec::SmallVec;
 
 use crate::{
@@ -72,11 +71,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn build_tree<'arena>(
-        self,
-        arena: &'arena Bump,
-        error_propagation: ErrorPropagation,
-    ) -> Cst<'arena> {
+    pub fn build_tree(self, error_propagation: ErrorPropagation) -> Cst {
         let last_token = self.tokens.last().copied();
 
         let mut tokens = self.tokens.into_iter().peekable();
@@ -110,7 +105,6 @@ impl<'a> Parser<'a> {
                             kind,
                             children: ChildRange::empty(),
                             errors: ErrorRange::empty(),
-                            phantom: PhantomData,
                         }),
                         children: SmallVec::new(),
                         errors: SmallVec::new(),

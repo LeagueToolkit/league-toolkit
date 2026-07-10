@@ -8,7 +8,6 @@
 //! Parse ritobin text, build a [`Bin`], and round-trip it back to text:
 //!
 //! ```rust
-//! use bumpalo::Bump;
 //! use ltk_ritobin::{Cst, Print as _};
 //!
 //! let text = r#"
@@ -19,15 +18,14 @@
 //! entries: map[hash, embed] = { }
 //! "#.trim();
 //!
-//! let bump = Bump::new();
-//! let cst = Cst::parse(&bump, text);
+//! let cst = Cst::parse(text);
 //! assert!(cst.errors.is_empty());
 //!
 //! let (bin, bin_errors) = cst.build_bin(text);
 //! assert!(bin_errors.is_empty());
 //!
 //! // Write back to text
-//! let output = bin.print(&bump).unwrap();
+//! let output = bin.print().unwrap();
 //!
 //! assert_eq!(text, output);
 //! ```
@@ -40,7 +38,6 @@
 //! ```no_run
 //! use std::io::BufReader;
 //! use std::fs::File;
-//! use bumpalo::Bump;
 //! use ltk_meta::Bin;
 //! use ltk_ritobin::{Print, print::PrintConfig, HashMapProvider};
 //!
@@ -50,9 +47,7 @@
 //! let mut hashes = HashMapProvider::new();
 //! hashes.load_from_directory("hashes/"); // loads hashes.bin{entries,fields,hashes,types}.txt
 //!
-//! let bump = Bump::new();
-//!
-//! let text = bin.print_with_config(&bump, PrintConfig::default().with_hashes(hashes))?;
+//! let text = bin.print_with_config(PrintConfig::default().with_hashes(hashes))?;
 //! std::fs::write("data.rito", text)?;
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
@@ -67,15 +62,13 @@
 //! always provide a best effort construction.
 //!
 //! ```rust
-//! use bumpalo::Bump;
 //! use ltk_ritobin::Cst;
 //!
 //! let text = "test: u32 = 4!!2";
 //!
 //! // by default uses ErrorPropagation::Move,
 //! // so all errors will end up in the root
-//! let bump = Bump::new();
-//! let cst = Cst::parse(&bump, text);
+//! let cst = Cst::parse(text);
 //!
 //! assert_eq!(cst.errors.len(), 1); // the unexpected "!!" in the value
 //! ```

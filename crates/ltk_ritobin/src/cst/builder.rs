@@ -1,13 +1,8 @@
 use std::{
     fmt::{LowerHex, Write},
     iter::once,
-    marker::PhantomData,
 };
 
-use bumpalo::{
-    collections::{self},
-    Bump,
-};
 use ltk_hash::BinHash;
 use ltk_meta::{property::values, Bin, BinObject, PropertyKind, PropertyValueEnum};
 
@@ -18,36 +13,27 @@ use crate::{
     HashProvider, RitobinName as _,
 };
 
-pub struct Builder<'arena, H: HashProvider> {
+#[derive(Default)]
+pub struct Builder<H: HashProvider> {
     buf: String,
     hashes: H,
-    arena: &'arena Bump,
-    nodes: collections::Vec<'arena, Node<'arena>>,
+    nodes: Vec<Node>,
     children: Vec<Child>,
     errors: Vec<Error>,
     tokens: Vec<Token>,
 }
 
-impl<'arena> Builder<'arena, ()> {
-    pub fn new(arena: &'arena Bump) -> Builder<'arena, ()> {
-        Builder {
-            buf: String::new(),
-            hashes: (),
-            arena,
-            nodes: collections::Vec::new_in(arena),
-            children: Vec::new(),
-            tokens: Vec::new(),
-            errors: Vec::new(),
-        }
+impl Builder<()> {
+    pub fn new() -> Builder<()> {
+        Builder::default()
     }
 }
 
-impl<'arena, H: HashProvider> Builder<'arena, H> {
-    pub fn with_hashes<H2: HashProvider>(self, hashes: H2) -> Builder<'arena, H2> {
+impl<H: HashProvider> Builder<H> {
+    pub fn with_hashes<H2: HashProvider>(self, hashes: H2) -> Builder<H2> {
         Builder {
             buf: self.buf,
             hashes,
-            arena: self.arena,
             nodes: self.nodes,
             children: self.children,
             tokens: self.tokens,
@@ -55,7 +41,7 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
         }
     }
 
-    pub fn build(mut self, bin: &'arena Bin) -> (Cst<'arena>, String) {
+    pub fn build(mut self, bin: &Bin) -> (Cst, String) {
         self.bin_to_cst(bin);
         (
             Cst {
@@ -80,7 +66,7 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
     }
 }
 
-impl<'arena, H: HashProvider> Builder<'arena, H> {
+impl<H: HashProvider> Builder<H> {
     pub fn token(&mut self, kind: Tok) -> Child {
         let id = TokenId(self.tokens.len().try_into().unwrap());
         self.tokens.push(Token {
@@ -110,7 +96,6 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
             kind,
             children,
             errors: ErrorRange::empty(),
-            phantom: PhantomData,
         });
 
         Child::Tree(id)
@@ -419,13 +404,12 @@ impl<'arena, H: HashProvider> Builder<'arena, H> {
         self.entry_tree(key, Some(kind), value)
     }
 
-    fn bin_to_cst(&mut self, bin: &'arena Bin) {
+    fn bin_to_cst(&mut self, bin: &Bin) {
         let root = Node {
             kind: Kind::File,
             span: Span::default(),
             children: ChildRange::empty(),
             errors: ErrorRange::empty(),
-            phantom: PhantomData,
         };
         self.nodes.push(root);
 
@@ -480,15 +464,11 @@ mod test {
     use super::*;
     use crate::print::CstPrinter;
 
-    use bumpalo::Bump;
-
     // bin -> cst -> txt -> cst -> bin
     fn roundtrip(bin: Bin) {
         println!("bin: {bin:#?}");
 
-        let bump = Bump::new();
-
-        let builder = Builder::new(&bump);
+        let builder = Builder::new();
         let (cst, buf) = builder.build(&bin);
 
         let mut str = String::new();
@@ -503,7 +483,7 @@ mod test {
             .unwrap();
         println!("RITOBIN:\n{str}");
 
-        let cst2 = Cst::parse(&bump, &str);
+        let cst2 = Cst::parse(&str);
         assert!(
             cst2.errors.is_empty(),
             "errors parsing ritobin - {:#?}",
