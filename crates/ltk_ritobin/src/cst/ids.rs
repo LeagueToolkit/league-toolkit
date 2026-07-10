@@ -44,39 +44,6 @@ impl IndexMut<TokenId> for [Token] {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[repr(transparent)]
-pub struct ErrorId(pub(crate) u32);
-
-impl Index<ErrorId> for [Error] {
-    type Output = Error;
-
-    fn index(&self, index: ErrorId) -> &Self::Output {
-        &self[index.0 as usize]
-    }
-}
-
-impl IndexMut<ErrorId> for [Error] {
-    fn index_mut(&mut self, index: ErrorId) -> &mut Self::Output {
-        &mut self[index.0 as usize]
-    }
-}
-
-impl<'arena> Index<ErrorId> for collections::Vec<'arena, Error> {
-    type Output = Error;
-
-    fn index(&self, index: ErrorId) -> &Self::Output {
-        &self[index.0 as usize]
-    }
-}
-
-impl<'arena> IndexMut<ErrorId> for collections::Vec<'arena, Error> {
-    fn index_mut(&mut self, index: ErrorId) -> &mut Self::Output {
-        &mut self[index.0 as usize]
-    }
-}
-
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Copy, Debug)]
 pub struct ChildRange {
