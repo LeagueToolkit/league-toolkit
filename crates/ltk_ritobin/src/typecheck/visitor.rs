@@ -120,6 +120,8 @@ pub enum RitoTypeOrVirtual {
     RitoType(RitoType),
     Numeric,
     StructOrEmbedded,
+    Token(TokenKind),
+    Tree(Kind),
 }
 
 impl RitoTypeOrVirtual {
@@ -140,6 +142,8 @@ impl Display for RitoTypeOrVirtual {
             Self::RitoType(rito_type) => Display::fmt(rito_type, f),
             Self::Numeric => f.write_str("numeric type"),
             Self::StructOrEmbedded => f.write_str("struct/embedded"),
+            Self::Token(kind) => Display::fmt(kind, f),
+            Self::Tree(kind) => Display::fmt(kind, f),
         }
     }
 }
@@ -1324,7 +1328,30 @@ impl Visitor for TypeChecker<'_> {
                         }
                     }
                     Ok(None) => {
-                        // eprintln!("{indent}  ERROR empty item");
+                        #[cfg(feature = "debug")]
+                        eprintln!("{indent}  ERROR empty item");
+                        for child in tree.children.get(ctx.cst).iter() {
+                            let (got, span) = match child {
+                                cst::Child::Token(token_id) => {
+                                    let tok = ctx.cst.token(*token_id).unwrap();
+                                    (RitoTypeOrVirtual::Token(tok.kind), tok.span)
+                                }
+                                cst::Child::Tree(node_id) => {
+                                    let node = ctx.cst.node(*node_id).unwrap();
+                                    (RitoTypeOrVirtual::Tree(node.kind), node.span)
+                                }
+                            };
+                            self.ctx.diagnostics.push(
+                                TypeMismatch {
+                                    span,
+                                    got,
+                                    expected: value_hint
+                                        .unwrap_or(RitoType::simple(PropertyKind::None)),
+                                    expected_span: None,
+                                }
+                                .unwrap(),
+                            );
+                        }
                     }
                     Err(e) => self.ctx.diagnostics.push(e.default_span(tree.span)),
                 }

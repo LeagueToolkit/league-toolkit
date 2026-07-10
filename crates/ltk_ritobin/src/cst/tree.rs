@@ -140,6 +140,13 @@ pub enum Child {
 }
 
 impl Child {
+    pub fn is_token(&self) -> bool {
+        matches!(self, Self::Token(_))
+    }
+    pub fn is_tree(&self) -> bool {
+        matches!(self, Self::Tree(_))
+    }
+
     /// Get a reference to this node as a [`Token`], if it is one.
     pub fn token<'a>(&'a self, cst: &'a Cst) -> Option<&'a Token> {
         match self {
