@@ -45,8 +45,8 @@ pub struct Parser<'a> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub enum ErrorPropagation {
     /// No propagation, errors will remain in their respective nodes
-    None,
     #[default]
+    None,
     /// Child nodes will move their errors to their parent. This is the default, since it
     /// conveniently accumulates all parse errors to the root node.
     Move,
