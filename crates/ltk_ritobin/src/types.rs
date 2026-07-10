@@ -1,7 +1,7 @@
 //! Type name mappings for ritobin format.
 
 use ltk_meta::{property::values, traits::PropertyExt, PropertyKind, PropertyValueEnum};
-use std::{fmt::Display, str::FromStr};
+use std::fmt::Display;
 
 /// Extension trait for mapping ritobin type names to/from [`PropertyKind`]'s
 pub trait RitobinName {
