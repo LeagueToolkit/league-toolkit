@@ -165,7 +165,9 @@ impl<'a> Parser<'a> {
                         TreeKind::ErrorTree => cur_node.span,
                         _ => match kind {
                             // these errors are talking about what they wanted next
-                            ErrorKind::Expected { .. } | ErrorKind::Unexpected { .. } => {
+                            ErrorKind::Expected { .. }
+                            | ErrorKind::ExpectedAny { .. }
+                            | ErrorKind::Unexpected { .. } => {
                                 let mut span = tokens.peek().map(|t| t.span).unwrap_or(last_span);
                                 // so we point at the character just after our token
                                 span.end += 1;
