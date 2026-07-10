@@ -1,7 +1,7 @@
 use crate::{
     cst::{
-        visitor::{Visit, Visitor},
-        Cst,
+        visitor::{Visit, VisitCtx, Visitor},
+        Cst, NodeId,
     },
     parse::Error,
 };
@@ -27,8 +27,9 @@ impl FlatErrors {
 }
 
 impl Visitor for FlatErrors {
-    fn exit_tree(&mut self, tree: &Cst) -> Visit {
-        self.errors.extend_from_slice(&tree.errors);
+    fn exit_tree(&mut self, ctx: &VisitCtx, tree: NodeId) -> Visit {
+        let tree = ctx.node(tree).unwrap();
+        self.errors.extend_from_slice(tree.errors.get(ctx.cst));
         Visit::Continue
     }
 }

@@ -1,12 +1,16 @@
-use std::fmt::Display;
+use std::fmt::{self, Display};
 
 use ltk_meta::Bin;
 
 use crate::{
+    cst::{
+        visitor::{Visit, VisitCtx},
+        ChildRange, ErrorRange, NodeId, TokenId, Visitor,
+    },
     parse::{
-        self, impls,
+        impls,
         tokenizer::{self, Token},
-        ErrorPropagation, Parser, Span,
+        Error, ErrorPropagation, Parser, Span,
     },
     typecheck::visitor::DiagnosticWithSpan,
 };
@@ -48,55 +52,115 @@ impl Display for Kind {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug)]
 /// The ritobin concrete syntax tree / a node in the syntax tree
 ///
 /// See [`crate::cst`] for more information.
 pub struct Cst {
+    pub(crate) nodes: Vec<Node>,
+    pub(crate) children: Vec<Child>,
+    pub(crate) tokens: Vec<Token>,
+    pub errors: Vec<Error>,
+}
+
+impl Cst {
+    pub fn node(&self, id: NodeId) -> Option<&Node> {
+        self.nodes.get((id.0) as usize)
+    }
+    pub fn node_mut(&mut self, id: NodeId) -> Option<&mut Node> {
+        self.nodes.get_mut((id.0) as usize)
+    }
+
+    pub fn token(&self, id: TokenId) -> Option<&Token> {
+        self.tokens.get((id.0) as usize)
+    }
+    pub fn token_mut(&mut self, id: TokenId) -> Option<&mut Token> {
+        self.tokens.get_mut((id.0) as usize)
+    }
+
+    pub(crate) fn push_node(&mut self, node: Node) -> NodeId {
+        let id = NodeId(self.nodes.len().try_into().unwrap());
+        self.nodes.push(node);
+        id
+    }
+    pub(crate) fn push_token(&mut self, token: Token) -> TokenId {
+        let id = TokenId(self.tokens.len().try_into().unwrap());
+        self.tokens.push(token);
+        id
+    }
+    pub(crate) fn push_children(
+        &mut self,
+        children: impl IntoIterator<Item = Child>,
+    ) -> ChildRange {
+        let start = u32::try_from(self.children.len()).unwrap();
+        self.children.extend(children);
+        let end = u32::try_from(self.children.len()).unwrap();
+        ChildRange {
+            start,
+            len: end - start,
+        }
+    }
+    pub(crate) fn push_errors(&mut self, errors: impl IntoIterator<Item = Error>) -> ErrorRange {
+        let start = u32::try_from(self.children.len()).unwrap();
+        self.errors.extend(errors);
+        let end = u32::try_from(self.children.len()).unwrap();
+        ErrorRange {
+            start,
+            len: end - start,
+        }
+    }
+
+    pub fn root(&self) -> &Node {
+        &self.nodes[0]
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[derive(Clone, Debug)]
+pub struct Node {
     /// The span of this node in the source text
     pub span: Span,
     /// The type of this node
     pub kind: Kind,
-
-    pub children: Vec<Child>,
+    pub children: ChildRange,
 
     /// Parse errors - whether this contains the errors for its children depends on what
     /// [`ErrorPropagation`] the parser was using.
     #[cfg_attr(feature = "serde", serde(skip_deserializing))]
-    pub errors: Vec<parse::Error>,
+    pub errors: ErrorRange,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 /// A [`Cst`] child node - either a [`Token`] or a [`Cst`]
 pub enum Child {
-    Token(Token),
-    Tree(Cst),
+    Token(TokenId),
+    Tree(NodeId),
 }
 
 impl Child {
     /// Get a reference to this node as a [`Token`], if it is one.
-    pub fn token(&self) -> Option<&Token> {
+    pub fn token<'a>(&'a self, cst: &'a Cst) -> Option<&'a Token> {
         match self {
-            Child::Token(token) => Some(token),
+            Child::Token(id) => cst.token(*id),
             Child::Tree(_) => None,
         }
     }
 
-    /// Get a reference to this node as a [`Cst`], if it is one.
-    pub fn tree(&self) -> Option<&Cst> {
+    /// Get a reference to this node as a [`Node`], if it is one.
+    pub fn tree<'a>(&'a self, cst: &'a Cst) -> Option<&'a Node> {
         match self {
             Child::Token(_) => None,
-            Child::Tree(cst) => Some(cst),
+            Child::Tree(id) => cst.node(*id),
         }
     }
 
     /// The span of this node
-    pub fn span(&self) -> Span {
+    pub fn span(&self, cst: &Cst) -> Span {
         match self {
-            Child::Token(token) => token.span,
-            Child::Tree(tree) => tree.span,
+            Child::Token(id) => cst.token(*id).unwrap().span,
+            Child::Tree(id) => cst.node(*id).unwrap().span,
         }
     }
 }
@@ -135,43 +199,59 @@ impl Cst {
 
     /// Print this tree to a string for debugging purposes. This does **NOT** output ritobin, see [`crate::Print`] for
     /// actual ritobin pretty-printing.
-    pub fn print(&self, buf: &mut String, level: usize, source: &str) {
-        // let parent_indent = "│ ".repeat(level.saturating_sub(1));
-        let parent_indent = "    ".repeat(level.saturating_sub(1));
-        let indent = match level > 0 {
-            true => "    ", // "├ "
-            false => "",
+    pub fn print(&self, mut buf: &mut String, source: &str) {
+        let mut printer = DebugPrinter {
+            writer: &mut buf,
+            source,
+            indent_level: 0,
         };
-        let safe_span = match self.span.end >= self.span.start {
-            true => &source[self.span],
-            false => "!!!!!!",
+        self.walk(&mut printer);
+    }
+}
+
+struct DebugPrinter<'b, 's, W: fmt::Write + ?Sized> {
+    writer: &'b mut W,
+    source: &'s str,
+    indent_level: usize,
+}
+
+impl<W: fmt::Write + ?Sized> Visitor for DebugPrinter<'_, '_, W> {
+    fn enter_tree(&mut self, ctx: &VisitCtx<'_>, tree: NodeId) -> Visit {
+        let node = ctx.node(tree).unwrap();
+
+        let indent = "    ".repeat(self.indent_level);
+
+        let safe_span = if node.span.end >= node.span.start {
+            &self.source[node.span]
+        } else {
+            "!!!!!!"
         };
-        format_to!(
-            buf,
-            "{parent_indent}{indent}{:?} - ({}..{}): {:?}\n",
-            self.kind,
-            self.span.start,
-            self.span.end,
-            safe_span
+
+        let _ = writeln!(
+            self.writer,
+            "{indent}{:?} - ({}..{}): {:?}",
+            node.kind, node.span.start, node.span.end, safe_span
         );
-        for (i, child) in self.children.iter().enumerate() {
-            let bar = match i + 1 == self.children.len() {
-                true => ' ',  // '└'
-                false => ' ', // '├'
-            };
-            match child {
-                Child::Token(token) => {
-                    format_to!(
-                        buf,
-                        // "{parent_indent}│ {bar} {:?} ({:?})\n",
-                        "{parent_indent}    {bar} {:?} ({:?})\n",
-                        &source[token.span.start as _..token.span.end as _],
-                        token.kind,
-                    )
-                }
-                Child::Tree(tree) => tree.print(buf, level + 1, source),
-            }
-        }
-        assert!(buf.ends_with('\n'));
+
+        self.indent_level += 1;
+
+        Visit::Continue
+    }
+
+    fn exit_tree(&mut self, _ctx: &VisitCtx<'_>, _tree: NodeId) -> Visit {
+        self.indent_level -= 1;
+        Visit::Continue
+    }
+
+    fn visit_token(&mut self, ctx: &VisitCtx<'_>, token: TokenId, _parent: NodeId) -> Visit {
+        let token = ctx.cst.token(token).unwrap();
+
+        let indent = "    ".repeat(self.indent_level);
+
+        let text = &self.source[token.span.start as usize..token.span.end as usize];
+
+        let _ = writeln!(self.writer, "{indent}{:?} ({:?})", text, token.kind);
+
+        Visit::Continue
     }
 }

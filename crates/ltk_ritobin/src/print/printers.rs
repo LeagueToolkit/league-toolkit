@@ -60,9 +60,8 @@ impl<H: HashProvider> BinPrinter<H> {
     where
         H: Clone,
     {
-        let mut builder = cst::builder::Builder::new(self.config.hashes.clone());
-        let cst = builder.build(tree);
-        let buf = builder.into_text_buffer();
+        let builder = cst::builder::Builder::new().with_hashes(self.config.hashes.clone());
+        let (cst, buf) = builder.build(tree);
         CstPrinter::new(&buf, writer, Default::default()).print(&cst)
     }
 

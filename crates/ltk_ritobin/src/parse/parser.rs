@@ -1,10 +1,15 @@
 use std::cell::Cell;
 
-use crate::parse::{
-    cst::{Child, Cst, Kind as TreeKind},
-    error::{Error, ErrorKind},
-    tokenizer::{Token, TokenKind},
-    Span,
+use smallvec::SmallVec;
+
+use crate::{
+    cst::{ChildRange, ErrorRange, Node, NodeId},
+    parse::{
+        cst::{Child, Cst, Kind as TreeKind},
+        error::{Error, ErrorKind},
+        tokenizer::{Token, TokenKind},
+        Span,
+    },
 };
 
 #[derive(Debug)]
@@ -49,6 +54,12 @@ pub enum ErrorPropagation {
     Clone,
 }
 
+struct StackItem {
+    idx: NodeId,
+    children: SmallVec<[Child; 4]>,
+    errors: SmallVec<[Error; 1]>,
+}
+
 impl<'a> Parser<'a> {
     pub fn new(text: &'a str, tokens: Vec<Token>) -> Parser<'a> {
         Parser {
@@ -67,6 +78,19 @@ impl<'a> Parser<'a> {
         let mut events = self.events;
 
         assert!(matches!(events.pop(), Some(Event::Close)));
+
+        let nodes_len = events
+            .iter()
+            .filter(|e| matches!(e, Event::Open { .. }))
+            .count();
+
+        let mut cst = Cst {
+            nodes: Vec::with_capacity(nodes_len),
+            children: Vec::with_capacity(nodes_len),
+            tokens: vec![],
+            errors: vec![],
+        };
+
         let mut stack = Vec::new();
         let mut last_span = Span::default();
         let mut just_opened = false;
@@ -74,46 +98,71 @@ impl<'a> Parser<'a> {
             match event {
                 Event::Open { kind } => {
                     just_opened = true;
-                    stack.push(Cst {
-                        span: Span::new(last_span.end, 0),
-                        kind,
-                        children: Vec::new(),
-                        errors: Vec::new(),
-                    })
+
+                    stack.push(StackItem {
+                        idx: cst.push_node(Node {
+                            span: Span::new(last_span.end, 0),
+                            kind,
+                            children: ChildRange::empty(),
+                            errors: ErrorRange::empty(),
+                        }),
+                        children: SmallVec::new(),
+                        errors: SmallVec::new(),
+                    });
                 }
                 Event::Close => {
-                    let mut tree = stack.pop().unwrap();
-                    let last = stack.last_mut().unwrap();
-                    if tree.span.end == 0 {
-                        // empty trees
-                        tree.span.end = tree.span.start;
+                    let mut cur = stack.pop().unwrap();
+                    cst.node_mut(cur.idx).unwrap().children = cst.push_children(cur.children);
+
+                    let parent = stack.last_mut().unwrap();
+
+                    {
+                        let (parent_node, cur_node) = {
+                            let (left, right) = cst.nodes.split_at_mut(cur.idx.0 as usize);
+                            (&mut left[parent.idx], &mut right[0])
+                        };
+
+                        if cur_node.span.end == 0 {
+                            // empty trees
+                            cur_node.span.end = cur_node.span.start;
+                        }
+
+                        parent_node.span.end = cur_node.span.end.max(parent_node.span.end); // update our parent tree's span
+                        parent.children.push(Child::Tree(cur.idx));
+
+                        match error_propagation {
+                            ErrorPropagation::None => {}
+                            ErrorPropagation::Move => parent.errors.append(&mut cur.errors),
+                            ErrorPropagation::Clone => parent.errors.extend_from_slice(&cur.errors),
+                        }
                     }
-                    last.span.end = tree.span.end.max(last.span.end); // update our parent tree's span
-                    match error_propagation {
-                        ErrorPropagation::None => {}
-                        ErrorPropagation::Move => last.errors.append(&mut tree.errors),
-                        ErrorPropagation::Clone => last.errors.extend_from_slice(&tree.errors),
-                    }
-                    last.children.push(Child::Tree(tree));
+
+                    cst.node_mut(cur.idx).unwrap().errors = cst.push_errors(cur.errors);
                 }
                 Event::Advance => {
                     let token = tokens.next().unwrap();
                     let last = stack.last_mut().unwrap();
+                    {
+                        let last = cst.node_mut(last.idx).unwrap();
 
-                    if just_opened {
-                        // first token of the tree
-                        last.span.start = token.span.start;
+                        if just_opened {
+                            // first token of the tree
+                            last.span.start = token.span.start;
+                        }
+                        just_opened = false;
+
+                        last.span.end = token.span.end;
+                        last_span = token.span;
                     }
-                    just_opened = false;
-
-                    last.span.end = token.span.end;
-                    last_span = token.span;
-                    last.children.push(Child::Token(token));
+                    let token = Child::Token(cst.push_token(token));
+                    last.children.push(token);
                 }
                 Event::Error { kind, span } => {
-                    let cur_tree = stack.last_mut().unwrap();
-                    let span = match cur_tree.kind {
-                        TreeKind::ErrorTree => cur_tree.span,
+                    let cur = stack.last_mut().unwrap();
+                    let cur_node = cst.node(cur.idx).unwrap();
+
+                    let span = match cur_node.kind {
+                        TreeKind::ErrorTree => cur_node.span,
                         _ => match kind {
                             // these errors are talking about what they wanted next
                             ErrorKind::Expected { .. } | ErrorKind::Unexpected { .. } => {
@@ -124,32 +173,43 @@ impl<'a> Parser<'a> {
                                 span
                             }
                             // whole tree is the problem
-                            ErrorKind::UnexpectedTree => cur_tree.span,
+                            ErrorKind::UnexpectedTree => cur_node.span,
                             _ => span
-                                .or(cur_tree.children.last().map(|c| c.span()))
+                                .or(cur.children.last().map(|c| c.span(&cst)))
                                 // we can't use Tree.span.end because that's only known on Close
                                 .unwrap_or(Span::new(
-                                    cur_tree.span.start,
+                                    cur_node.span.start,
                                     last_token
                                         .as_ref()
                                         .map(|t| t.span.end)
-                                        .unwrap_or(cur_tree.span.start),
+                                        .unwrap_or(cur_node.span.start),
                                 )),
                         },
                     };
-                    cur_tree.errors.push(Error {
+
+                    cur.errors.push(Error {
                         span,
-                        tree: cur_tree.kind,
+                        tree: cur_node.kind,
                         kind,
                     });
                 }
             }
         }
 
-        let tree = stack.pop().unwrap();
+        let root = stack.pop().unwrap();
+        {
+            let children = cst.push_children(root.children);
+            let errors = cst.push_errors(root.errors);
+
+            let root_node = cst.node_mut(root.idx).unwrap();
+            root_node.children = children;
+            root_node.errors = errors;
+        }
+
         assert!(stack.is_empty());
         assert!(tokens.next().is_none());
-        tree
+        assert_eq!(root.idx, NodeId(0));
+        cst
     }
 
     pub(crate) fn open(&mut self) -> MarkOpened {
@@ -233,27 +293,38 @@ impl<'a> Parser<'a> {
         self.pos == self.tokens.len()
     }
 
+    #[inline]
     pub(crate) fn nth(&self, lookahead: usize) -> TokenKind {
-        if self.fuel.get() == 0 {
+        #[cold]
+        #[inline(never)]
+        fn stuck(p: &Parser<'_>) -> ! {
             eprintln!("last 5 tokens behind self.pos:");
-            for tok in &self.tokens[self.pos.saturating_sub(5)..self.pos] {
-                eprintln!(" - {:?}: {:?}", tok.kind, &self.text[tok.span]);
+            for tok in &p.tokens[p.pos.saturating_sub(5)..p.pos] {
+                eprintln!(" - {:?}: {:?}", tok.kind, &p.text[tok.span]);
             }
 
             panic!("parser is stuck")
         }
-        self.fuel.set(self.fuel.get() - 1);
+
+        match self.fuel.get() {
+            0 => stuck(self),
+            f => self.fuel.set(f - 1),
+        }
+
         self.tokens
             .get(self.pos + lookahead)
             .map_or(TokenKind::Eof, |it| it.kind)
     }
 
+    #[inline]
     pub(crate) fn at(&self, kind: TokenKind) -> bool {
         self.nth(0) == kind
     }
 
+    #[inline]
     pub(crate) fn at_any(&self, kinds: &[TokenKind]) -> Option<TokenKind> {
-        kinds.contains(&self.nth(0)).then_some(self.nth(0))
+        let kind = self.nth(0);
+        kinds.contains(&kind).then_some(kind)
     }
 
     pub(crate) fn eat_any(&mut self, kinds: &[TokenKind]) -> Option<TokenKind> {

@@ -48,7 +48,7 @@ fn tree(input: &str) -> String {
     assert!(cst.errors.is_empty());
 
     let mut debug = String::new();
-    cst.print(&mut debug, 0, input);
+    cst.print(&mut debug, input);
 
     debug
 }
@@ -73,7 +73,7 @@ fn test_roundtrip() {
     );
 
     let mut str = String::new();
-    cst2.print(&mut str, 0, &output);
+    cst2.print(&mut str, &output);
     println!("reparsed:\n{str}");
 
     let (tree2, errors) = cst2.build_bin(&output);

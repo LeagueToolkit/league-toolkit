@@ -1,51 +1,57 @@
-use std::fmt::{LowerHex, Write};
+use std::{
+    fmt::{LowerHex, Write},
+    iter::once,
+};
 
 use ltk_hash::BinHash;
 use ltk_meta::{property::values, Bin, BinObject, PropertyKind, PropertyValueEnum};
 
 use crate::{
-    cst::{Child, Cst, Kind},
-    parse::{Span, Token, TokenKind as Tok},
+    cst::{Child, ChildRange, Cst, ErrorRange, Kind, Node, NodeId, TokenId},
+    parse::{Error, Span, Token, TokenKind as Tok},
     typecheck::visitor::{PropertyValueExt, RitoType},
     HashProvider, RitobinName as _,
 };
 
+#[derive(Default)]
 pub struct Builder<H: HashProvider> {
     buf: String,
     hashes: H,
+    nodes: Vec<Node>,
+    children: Vec<Child>,
+    errors: Vec<Error>,
+    tokens: Vec<Token>,
 }
 
-pub fn tree(kind: Kind, children: Vec<Child>) -> Child {
-    Child::Tree(Cst {
-        span: Span::default(),
-        kind,
-        children,
-        errors: vec![],
-    })
-}
-pub fn token(kind: Tok) -> Child {
-    Child::Token(Token {
-        kind,
-        span: Span::default(),
-    })
-}
-
-impl Default for Builder<()> {
-    fn default() -> Self {
-        Self::new(())
+impl Builder<()> {
+    pub fn new() -> Builder<()> {
+        Builder::default()
     }
 }
 
 impl<H: HashProvider> Builder<H> {
-    pub fn new(hashes: H) -> Self {
-        Self {
-            buf: String::new(),
+    pub fn with_hashes<H2: HashProvider>(self, hashes: H2) -> Builder<H2> {
+        Builder {
+            buf: self.buf,
             hashes,
+            nodes: self.nodes,
+            children: self.children,
+            tokens: self.tokens,
+            errors: self.errors,
         }
     }
 
-    pub fn build(&mut self, bin: &Bin) -> Cst {
-        self.bin_to_cst(bin)
+    pub fn build(mut self, bin: &Bin) -> (Cst, String) {
+        self.bin_to_cst(bin);
+        (
+            Cst {
+                nodes: self.nodes.to_vec(),
+                children: self.children,
+                tokens: self.tokens,
+                errors: self.errors,
+            },
+            self.buf,
+        )
     }
 
     /// Get a reference to the underlying text buffer all [`Cst`]'s built by this builder reference in
@@ -60,73 +66,126 @@ impl<H: HashProvider> Builder<H> {
     }
 }
 
-fn hex_fmt<T: LowerHex>(v: T) -> String {
-    format!("0x{v:x}")
-}
-
 impl<H: HashProvider> Builder<H> {
-    fn number(&mut self, v: impl AsRef<str>) -> Child {
-        tree(Kind::Literal, vec![self.spanned_token(Tok::Number, v)])
+    pub fn token(&mut self, kind: Tok) -> Child {
+        let id = TokenId(self.tokens.len().try_into().unwrap());
+        self.tokens.push(Token {
+            kind,
+            span: Span::default(),
+        });
+        Child::Token(id)
+    }
+
+    pub fn children(&mut self, children: impl IntoIterator<Item = Child>) -> ChildRange {
+        let start: u32 = self.children.len().try_into().unwrap();
+        self.children.extend(children);
+        let end: u32 = self.children.len().try_into().unwrap();
+        ChildRange {
+            start,
+            len: end - start,
+        }
+    }
+
+    pub fn tree(&mut self, kind: Kind, children: impl IntoIterator<Item = Child>) -> Child {
+        let children = self.children(children);
+
+        let id = NodeId(self.nodes.len().try_into().unwrap());
+
+        self.nodes.push(Node {
+            span: Span::default(),
+            kind,
+            children,
+            errors: ErrorRange::empty(),
+        });
+
+        Child::Tree(id)
+    }
+
+    fn number(&mut self, v: impl std::fmt::Display) -> Child {
+        let lit = self.spanned_display(Tok::Number, v);
+        self.tree(Kind::Literal, [lit])
     }
 
     fn spanned_token(&mut self, kind: Tok, str: impl AsRef<str>) -> Child {
         let start = self.buf.len() as u32;
         self.buf.write_str(str.as_ref()).unwrap();
         let end = self.buf.len() as u32;
-        Child::Token(Token {
+        let id = TokenId(self.tokens.len().try_into().unwrap());
+        self.tokens.push(Token {
             kind,
             span: Span::new(start, end),
-        })
+        });
+        Child::Token(id)
+    }
+
+    fn spanned_display(&mut self, kind: Tok, v: impl std::fmt::Display) -> Child {
+        let start = self.buf.len() as u32;
+        write!(self.buf, "{v}").unwrap();
+        let end = self.buf.len() as u32;
+        let id = TokenId(self.tokens.len().try_into().unwrap());
+        self.tokens.push(Token {
+            kind,
+            span: Span::new(start, end),
+        });
+        Child::Token(id)
+    }
+
+    fn spanned_hexlit<T: LowerHex>(&mut self, v: T) -> Child {
+        let start = self.buf.len() as u32;
+        write!(self.buf, "0x{v:x}").unwrap();
+        let end = self.buf.len() as u32;
+        let id = TokenId(self.tokens.len().try_into().unwrap());
+        self.tokens.push(Token {
+            kind: Tok::HexLit,
+            span: Span::new(start, end),
+        });
+        Child::Token(id)
     }
 
     fn string(&mut self, v: impl AsRef<str>) -> Child {
         self.spanned_token(Tok::String, v)
     }
 
-    fn hex_lit(&mut self, v: impl AsRef<str>) -> Child {
-        self.spanned_token(Tok::HexLit, v)
-    }
-
     fn hash_hash_lit(&mut self, h: BinHash) -> Child {
         match self.hashes.lookup_hash(h).map(|h| format!("\"{h}\"")) {
             Some(h) => self.spanned_token(Tok::String, h),
-            None => self.spanned_token(Tok::HexLit, hex_fmt(h)),
+            None => self.spanned_hexlit(h),
         }
     }
     fn hash_type_lit(&mut self, h: BinHash) -> Child {
         match self.hashes.lookup_type(h).map(|h| h.to_string()) {
             Some(h) => self.spanned_token(Tok::Name, h),
-            None => self.spanned_token(Tok::HexLit, hex_fmt(h)),
+            None => self.spanned_hexlit(h),
         }
     }
     fn hash_field_lit(&mut self, h: BinHash) -> Child {
         match self.hashes.lookup_field(h).map(|h| h.to_string()) {
             Some(h) => self.spanned_token(Tok::Name, h),
-            None => self.spanned_token(Tok::HexLit, hex_fmt(h)),
+            None => self.spanned_hexlit(h),
         }
     }
     fn hash_entry_lit(&mut self, h: BinHash) -> Child {
         match self.hashes.lookup_entry(h).map(|h| format!("\"{h}\"")) {
             Some(h) => self.spanned_token(Tok::String, h),
-            None => self.spanned_token(Tok::HexLit, hex_fmt(h)),
+            None => self.spanned_hexlit(h),
         }
     }
 
-    fn block(&self, children: Vec<Child>) -> Child {
-        tree(
+    fn block(&mut self, children: Vec<Child>) -> Child {
+        let lcurly = self.token(Tok::LCurly);
+        let rcurly = self.token(Tok::RCurly);
+        self.tree(
             Kind::Block,
-            [vec![token(Tok::LCurly)], children, vec![token(Tok::RCurly)]].concat(),
+            once(lcurly).chain(children).chain(once(rcurly)),
         )
     }
 
-    fn bool(&self, v: bool) -> Child {
-        tree(
-            Kind::Literal,
-            vec![token(match v {
-                true => Tok::True,
-                false => Tok::False,
-            })],
-        )
+    fn bool(&mut self, v: bool) -> Child {
+        let tok = self.token(match v {
+            true => Tok::True,
+            false => Tok::False,
+        });
+        self.tree(Kind::Literal, [tok])
     }
 
     fn value_to_cst<M: Clone>(&mut self, value: &PropertyValueEnum<M>) -> Child {
@@ -134,20 +193,23 @@ impl<H: HashProvider> Builder<H> {
             PropertyValueEnum::Bool(b) => self.bool(**b),
             PropertyValueEnum::BitBool(b) => self.bool(**b),
 
-            PropertyValueEnum::U8(n) => self.number(n.to_string()),
-            PropertyValueEnum::U16(n) => self.number(n.to_string()),
-            PropertyValueEnum::U32(n) => self.number(n.to_string()),
-            PropertyValueEnum::U64(n) => self.number(n.to_string()),
-            PropertyValueEnum::I8(n) => self.number(n.to_string()),
-            PropertyValueEnum::I16(n) => self.number(n.to_string()),
-            PropertyValueEnum::I32(n) => self.number(n.to_string()),
-            PropertyValueEnum::I64(n) => self.number(n.to_string()),
-            PropertyValueEnum::F32(n) => self.number(n.to_string()),
+            PropertyValueEnum::U8(n) => self.number(**n),
+            PropertyValueEnum::U16(n) => self.number(**n),
+            PropertyValueEnum::U32(n) => self.number(**n),
+            PropertyValueEnum::U64(n) => self.number(**n),
+            PropertyValueEnum::I8(n) => self.number(**n),
+            PropertyValueEnum::I16(n) => self.number(**n),
+            PropertyValueEnum::I32(n) => self.number(**n),
+            PropertyValueEnum::I64(n) => self.number(**n),
+            PropertyValueEnum::F32(n) => self.number(**n),
             PropertyValueEnum::Vector2(v) => {
                 let items = v
                     .to_array()
                     .iter()
-                    .map(|v| tree(Kind::ListItem, vec![self.number(v.to_string())]))
+                    .map(|v| {
+                        let v = self.number(*v);
+                        self.tree(Kind::ListItem, [v])
+                    })
                     .collect();
                 self.block(items)
             }
@@ -155,7 +217,10 @@ impl<H: HashProvider> Builder<H> {
                 let items = v
                     .to_array()
                     .iter()
-                    .map(|v| tree(Kind::ListItem, vec![self.number(v.to_string())]))
+                    .map(|v| {
+                        let v = self.number(*v);
+                        self.tree(Kind::ListItem, [v])
+                    })
                     .collect();
                 self.block(items)
             }
@@ -163,7 +228,10 @@ impl<H: HashProvider> Builder<H> {
                 let items = v
                     .to_array()
                     .iter()
-                    .map(|v| tree(Kind::ListItem, vec![self.number(v.to_string())]))
+                    .map(|v| {
+                        let v = self.number(*v);
+                        self.tree(Kind::ListItem, [v])
+                    })
                     .collect();
                 self.block(items)
             }
@@ -173,11 +241,17 @@ impl<H: HashProvider> Builder<H> {
                     .to_cols_array_2d()
                     .iter()
                     .flat_map(|v| {
+                        let values = [
+                            self.number(v[0]),
+                            self.number(v[1]),
+                            self.number(v[2]),
+                            self.number(v[3]),
+                        ];
                         [
-                            tree(Kind::ListItem, vec![self.number(v[0].to_string())]),
-                            tree(Kind::ListItem, vec![self.number(v[1].to_string())]),
-                            tree(Kind::ListItem, vec![self.number(v[2].to_string())]),
-                            tree(Kind::ListItem, vec![self.number(v[3].to_string())]),
+                            self.tree(Kind::ListItem, [values[0]]),
+                            self.tree(Kind::ListItem, [values[1]]),
+                            self.tree(Kind::ListItem, [values[2]]),
+                            self.tree(Kind::ListItem, [values[3]]),
                         ]
                     })
                     .collect();
@@ -187,30 +261,36 @@ impl<H: HashProvider> Builder<H> {
                 let items = v
                     .to_array()
                     .iter()
-                    .map(|v| tree(Kind::ListItem, vec![self.number(v.to_string())]))
+                    .map(|v| {
+                        let v = self.number(*v);
+                        self.tree(Kind::ListItem, [v])
+                    })
                     .collect();
                 self.block(items)
             }
-            PropertyValueEnum::String(s) => tree(
-                Kind::Literal,
-                vec![token(Tok::Quote), self.string(&**s), token(Tok::Quote)],
-            ),
+            PropertyValueEnum::String(s) => {
+                let s = self.string(&**s);
+                // TODO (alan): can I get away with this?
+                let quote = self.token(Tok::Quote);
+                self.tree(Kind::Literal, [quote, s, quote])
+            }
 
             // hash/hash-likes
             PropertyValueEnum::Hash(h) => self.hash_hash_lit(**h),
-            PropertyValueEnum::WadChunkLink(h) => self.hex_lit(hex_fmt(**h)),
+            PropertyValueEnum::WadChunkLink(h) => self.spanned_hexlit(**h),
             PropertyValueEnum::ObjectLink(h) => self.hash_hash_lit(**h),
 
             PropertyValueEnum::Container(container)
             | PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(container)) => {
-                let mut children = vec![token(Tok::LCurly)];
+                let mut children = vec![self.token(Tok::LCurly)];
 
                 for item in container.clone().into_items() {
-                    children.push(tree(Kind::ListItem, vec![self.value_to_cst(&item)]));
+                    let item = self.value_to_cst(&item);
+                    children.push(self.tree(Kind::ListItem, [item]));
                 }
 
-                children.push(token(Tok::RCurly));
-                tree(Kind::TypeArgList, children)
+                children.push(self.token(Tok::RCurly));
+                self.tree(Kind::TypeArgList, children)
             }
             PropertyValueEnum::Embedded(values::Embedded(s)) | PropertyValueEnum::Struct(s) => {
                 let k = self.hash_type_lit(s.class_hash);
@@ -219,7 +299,8 @@ impl<H: HashProvider> Builder<H> {
                     .iter()
                     .map(|(k, v)| self.property_to_cst(*k, v))
                     .collect();
-                tree(Kind::Class, vec![k, self.block(children)])
+                let children = self.block(children);
+                self.tree(Kind::Class, [k, children])
             }
 
             PropertyValueEnum::Optional(optional) => {
@@ -229,17 +310,20 @@ impl<H: HashProvider> Builder<H> {
                 };
                 self.block(children)
             }
-            PropertyValueEnum::None(_) => tree(Kind::Literal, vec![token(Tok::Null)]),
+            PropertyValueEnum::None(_) => {
+                let tok = self.token(Tok::Null);
+                self.tree(Kind::Literal, [tok])
+            }
 
             PropertyValueEnum::Map(map) => {
                 let children = map
                     .entries()
                     .iter()
                     .map(|(k, v)| {
-                        tree(
-                            Kind::Entry,
-                            vec![self.value_to_cst(k), token(Tok::Eq), self.value_to_cst(v)],
-                        )
+                        let k = self.value_to_cst(k);
+                        let eq = self.token(Tok::Eq);
+                        let v = self.value_to_cst(v);
+                        self.tree(Kind::Entry, [k, eq, v])
                     })
                     .collect();
                 self.block(children)
@@ -247,38 +331,31 @@ impl<H: HashProvider> Builder<H> {
         }
     }
 
-    fn entry_tree(&self, key: Child, kind: Option<Child>, value: Child) -> Child {
-        tree(
-            Kind::Entry,
-            match kind {
-                Some(kind) => vec![key, token(Tok::Colon), kind, token(Tok::Eq), value],
-                None => vec![key, token(Tok::Eq), value],
-            },
-        )
+    fn entry_tree(&mut self, key: Child, kind: Option<Child>, value: Child) -> Child {
+        let colon = self.token(Tok::Colon);
+        let eq = self.token(Tok::Eq);
+
+        match kind {
+            Some(kind) => self.tree(Kind::Entry, [key, colon, kind, eq, value]),
+            None => self.tree(Kind::Entry, [key, eq, value]),
+        }
     }
 
     fn rito_type(&mut self, rito_type: RitoType) -> Child {
         let mut children = vec![self.spanned_token(Tok::Name, rito_type.base.to_rito_name())];
 
         if let Some(sub) = rito_type.subtypes[0] {
-            let mut args = vec![
-                token(Tok::LBrack),
-                tree(
-                    Kind::TypeArg,
-                    vec![self.spanned_token(Tok::Name, sub.to_rito_name())],
-                ),
-            ];
+            let name = self.spanned_token(Tok::Name, sub.to_rito_name());
+            let mut args = vec![self.token(Tok::LBrack), self.tree(Kind::TypeArg, [name])];
             if let Some(sub) = rito_type.subtypes[1] {
-                args.push(tree(
-                    Kind::TypeArg,
-                    vec![self.spanned_token(Tok::Name, sub.to_rito_name())],
-                ));
+                let name = self.spanned_token(Tok::Name, sub.to_rito_name());
+                args.push(self.tree(Kind::TypeArg, [name]));
             }
-            args.push(token(Tok::RBrack));
-            children.push(tree(Kind::TypeArgList, args));
+            args.push(self.token(Tok::RBrack));
+            children.push(self.tree(Kind::TypeArgList, args));
         }
 
-        tree(Kind::TypeExpr, children)
+        self.tree(Kind::TypeExpr, children)
     }
     fn property_to_cst<M: Clone>(
         &mut self,
@@ -291,8 +368,9 @@ impl<H: HashProvider> Builder<H> {
         self.entry_tree(k, Some(t), v)
     }
 
-    fn class(&self, class_name: Child, items: Vec<Child>) -> Child {
-        tree(Kind::Class, vec![class_name, self.block(items)])
+    fn class(&mut self, class_name: Child, items: Vec<Child>) -> Child {
+        let items = self.block(items);
+        self.tree(Kind::Class, [class_name, items])
     }
 
     fn bin_object_to_cst(&mut self, obj: &BinObject) -> Child {
@@ -303,7 +381,9 @@ impl<H: HashProvider> Builder<H> {
             .properties
             .iter()
             .map(|(k, v)| {
-                let k = tree(Kind::EntryKey, vec![self.hash_field_lit(*k)]);
+                let k = self.hash_field_lit(*k);
+                let k = self.tree(Kind::EntryKey, [k]);
+
                 let t = self.rito_type(v.rito_type());
                 let v = self.value_to_cst(v);
                 self.entry_tree(k, Some(t), v)
@@ -317,15 +397,24 @@ impl<H: HashProvider> Builder<H> {
     fn entry(&mut self, key: impl AsRef<str>, kind: RitoType, value: Child) -> Child {
         let key = self.spanned_token(Tok::Comment, key);
         let kind = self.rito_type(kind);
-        self.entry_tree(
-            tree(Kind::EntryKey, vec![key]),
-            Some(kind),
-            tree(Kind::EntryValue, vec![value]),
-        )
+
+        let key = self.tree(Kind::EntryKey, [key]);
+        let value = self.tree(Kind::EntryValue, [value]);
+
+        self.entry_tree(key, Some(kind), value)
     }
 
-    fn bin_to_cst(&mut self, bin: &Bin) -> Cst {
+    fn bin_to_cst(&mut self, bin: &Bin) {
+        let root = Node {
+            kind: Kind::File,
+            span: Span::default(),
+            children: ChildRange::empty(),
+            errors: ErrorRange::empty(),
+        };
+        self.nodes.push(root);
+
         let comment = self.spanned_token(Tok::Comment, "#PROP_text");
+        let comment = self.tree(Kind::Comment, vec![comment]);
 
         let type_entry = self.string("\"PROP\"");
         let type_entry = self.entry("type", RitoType::simple(PropertyKind::String), type_entry);
@@ -337,18 +426,14 @@ impl<H: HashProvider> Builder<H> {
             .dependencies
             .iter()
             .map(|dep| {
-                tree(
-                    Kind::ListItem,
-                    vec![tree(Kind::Literal, vec![self.string(format!("\"{dep}\""))])],
-                )
+                let lit = self.string(format!("\"{dep}\""));
+                let lit = self.tree(Kind::Literal, [lit]);
+                self.tree(Kind::ListItem, [lit])
             })
             .collect();
 
-        let linked = self.entry(
-            "linked",
-            RitoType::container(PropertyKind::String),
-            self.block(linked),
-        );
+        let linked = self.block(linked);
+        let linked = self.entry("linked", RitoType::container(PropertyKind::String), linked);
 
         let entries = bin
             .objects
@@ -356,24 +441,15 @@ impl<H: HashProvider> Builder<H> {
             .map(|obj| self.bin_object_to_cst(obj))
             .collect();
 
+        let entries = self.block(entries);
         let entries = self.entry(
             "entries",
             RitoType::map(PropertyKind::Hash, PropertyKind::Embedded),
-            self.block(entries),
+            entries,
         );
 
-        Cst {
-            kind: Kind::File,
-            span: Span::default(),
-            children: vec![
-                tree(Kind::Comment, vec![comment]),
-                type_entry,
-                version,
-                linked,
-                entries,
-            ],
-            errors: vec![],
-        }
+        self.nodes.get_mut(0).unwrap().children =
+            self.children([comment, type_entry, version, linked, entries]);
     }
 }
 
@@ -392,18 +468,17 @@ mod test {
     fn roundtrip(bin: Bin) {
         println!("bin: {bin:#?}");
 
-        let mut builder = Builder::default();
-        let cst = builder.build(&bin);
-        let buf = builder.text_buffer();
+        let builder = Builder::new();
+        let (cst, buf) = builder.build(&bin);
 
         let mut str = String::new();
-        cst.print(&mut str, 0, buf);
+        cst.print(&mut str, &buf);
 
         println!("cst:\n{str}");
 
         let mut str = String::new();
 
-        CstPrinter::new(buf, &mut str, Default::default())
+        CstPrinter::new(&buf, &mut str, Default::default())
             .print(&cst)
             .unwrap();
         println!("RITOBIN:\n{str}");

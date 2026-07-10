@@ -54,7 +54,7 @@
 //!
 //! # Error reporting
 //!
-//! For resilient parsing, errors exist as nodes into the concrete syntax tree (cst), which propagate into the [`Cst`] nodes' `errors` field (depending on [`parse::ErrorPropagation`]). This
+//! For resilient parsing, errors exist as nodes into the concrete syntax tree (cst), which propagate into the [`Node`]s' `errors` field (depending on [`parse::ErrorPropagation`]). This
 //! allows for more versatile behaviour with things like pretty-printing technically invalid trees,
 //! since parsing will always result in a cst.
 //!
@@ -92,4 +92,5 @@ pub use hashes::*;
 pub use types::*;
 
 pub use cst::Cst;
+pub use cst::Node;
 pub use print::Print;

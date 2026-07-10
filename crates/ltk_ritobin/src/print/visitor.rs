@@ -4,7 +4,10 @@ use std::{
 };
 
 use crate::{
-    cst::{visitor::Visit, Cst, Kind, Visitor},
+    cst::{
+        visitor::{Visit, VisitCtx},
+        Kind, NodeId, TokenId, Visitor,
+    },
     parse::TokenKind,
     print::{
         command::{Cmd, Mode},
@@ -388,7 +391,9 @@ impl<'a, W: Write> CstVisitor<'a, W> {
         }
     }
 
-    fn enter_tree_inner(&mut self, tree: &Cst) -> Result<(), PrintError> {
+    fn enter_tree_inner(&mut self, ctx: &VisitCtx<'_>, tree: NodeId) -> Result<(), PrintError> {
+        let tree = ctx.node(tree).unwrap();
+
         match tree.kind {
             Kind::TypeArgList => {
                 let grp = self.begin_group(Some(Mode::Flat))?;
@@ -396,8 +401,9 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                 self.list_stack.push(ListContext {
                     len: tree
                         .children
+                        .get(ctx.cst)
                         .iter()
-                        .filter(|n| n.tree().is_some_and(|t| t.kind == Kind::TypeArg))
+                        .filter(|n| n.tree(&ctx.cst).is_some_and(|t| t.kind == Kind::TypeArg))
                         .count()
                         .try_into()
                         .unwrap(),
@@ -411,8 +417,9 @@ impl<'a, W: Write> CstVisitor<'a, W> {
 
                 let len = tree
                     .children
+                    .get(ctx.cst)
                     .iter()
-                    .filter(|n| n.tree().is_some_and(|t| t.kind == Kind::ListItem))
+                    .filter(|n| n.tree(&ctx.cst).is_some_and(|t| t.kind == Kind::ListItem))
                     .count();
 
                 if !self.config.wrap.inline_lists {
@@ -432,16 +439,21 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                 let grp = self.begin_group(None)?;
                 let list_len = tree
                     .children
+                    .get(ctx.cst)
                     .iter()
                     .filter(|n| {
-                        n.tree()
+                        n.tree(&ctx.cst)
                             .is_some_and(|t| matches!(t.kind, Kind::ListItem | Kind::ListItemBlock))
                     })
                     .count();
                 let struct_len = tree
                     .children
+                    .get(ctx.cst)
                     .iter()
-                    .filter(|n| n.tree().is_some_and(|t| matches!(t.kind, Kind::Entry)))
+                    .filter(|n| {
+                        n.tree(&ctx.cst)
+                            .is_some_and(|t| matches!(t.kind, Kind::Entry))
+                    })
                     .count();
 
                 if self.config.wrap.inline_structs {
@@ -470,8 +482,9 @@ impl<'a, W: Write> CstVisitor<'a, W> {
             Kind::ListItem => {
                 if tree
                     .children
+                    .get(ctx.cst)
                     .first()
-                    .is_some_and(|c| c.tree().is_some_and(|t| t.kind == Kind::Class))
+                    .is_some_and(|c| c.tree(&ctx.cst).is_some_and(|t| t.kind == Kind::Class))
                 {
                     if let Some(list) = self.list_stack.last() {
                         self.force_group(list.grp, Mode::Break);
@@ -491,7 +504,8 @@ impl<'a, W: Write> CstVisitor<'a, W> {
         Ok(())
     }
 
-    fn exit_tree_inner(&mut self, tree: &Cst) -> Result<(), PrintError> {
+    fn exit_tree_inner(&mut self, ctx: &VisitCtx<'_>, tree: NodeId) -> Result<(), PrintError> {
+        let tree = ctx.node(tree).unwrap();
         match tree.kind {
             Kind::TypeArgList => {
                 self.list_stack.pop();
@@ -542,9 +556,13 @@ impl<'a, W: Write> CstVisitor<'a, W> {
 
     fn visit_token_inner(
         &mut self,
-        token: &crate::parse::Token,
-        ctx: &Cst,
+        ctx: &VisitCtx<'_>,
+        token: TokenId,
+        parent: NodeId,
     ) -> Result<(), PrintError> {
+        let token = ctx.cst.token(token).unwrap();
+        let parent = ctx.node(parent).unwrap();
+
         let txt = self.src[token.span].trim();
         let print_value = token.kind.print_value();
 
@@ -555,7 +573,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
         // eprintln!("->{:?}", token.kind);
         match token.kind {
             TokenKind::Comment => {
-                match ctx.kind {
+                match parent.kind {
                     Kind::EntryTerminator => self.space()?,
                     Kind::ListItem => {
                         if let Some(list) = self.list_stack.last() {
@@ -632,8 +650,8 @@ impl<'a, W: Write> CstVisitor<'a, W> {
 }
 
 impl<'a, W: fmt::Write> Visitor for CstVisitor<'a, W> {
-    fn enter_tree(&mut self, tree: &Cst) -> Visit {
-        match self.enter_tree_inner(tree) {
+    fn enter_tree(&mut self, ctx: &VisitCtx<'_>, tree: NodeId) -> Visit {
+        match self.enter_tree_inner(ctx, tree) {
             Ok(_) => Visit::Continue,
             Err(e) => {
                 self.error.replace(e);
@@ -641,8 +659,8 @@ impl<'a, W: fmt::Write> Visitor for CstVisitor<'a, W> {
             }
         }
     }
-    fn exit_tree(&mut self, tree: &Cst) -> Visit {
-        match self.exit_tree_inner(tree) {
+    fn exit_tree(&mut self, ctx: &VisitCtx<'_>, tree: NodeId) -> Visit {
+        match self.exit_tree_inner(ctx, tree) {
             Ok(_) => Visit::Continue,
             Err(e) => {
                 self.error.replace(e);
@@ -650,8 +668,8 @@ impl<'a, W: fmt::Write> Visitor for CstVisitor<'a, W> {
             }
         }
     }
-    fn visit_token(&mut self, token: &crate::parse::Token, context: &crate::cst::Cst) -> Visit {
-        match self.visit_token_inner(token, context) {
+    fn visit_token(&mut self, ctx: &VisitCtx<'_>, token: TokenId, parent: NodeId) -> Visit {
+        match self.visit_token_inner(ctx, token, parent) {
             Ok(_) => Visit::Continue,
             Err(e) => {
                 self.error.replace(e);

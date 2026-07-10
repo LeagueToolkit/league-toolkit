@@ -70,7 +70,7 @@ mod test {
         let cst = Cst::parse(input);
         let mut str = String::new();
 
-        cst.print(&mut str, 0, input);
+        cst.print(&mut str, input);
         eprintln!("#### CST:\n{str}");
 
         let mut str = String::new();

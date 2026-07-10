@@ -30,6 +30,25 @@ impl TokenKind {
         matches!(self, Self::String | Self::UnterminatedString)
     }
 
+    /// Maps a punctuation byte -> its token kind, inverse of [`Self::print_value`] for single-byte punctuation
+    pub fn from_punct_byte(b: u8) -> Option<Self> {
+        Some(match b {
+            b'(' => Self::LParen,
+            b')' => Self::RParen,
+            b'{' => Self::LCurly,
+            b'}' => Self::RCurly,
+            b'[' => Self::LBrack,
+            b']' => Self::RBrack,
+            b'=' => Self::Eq,
+            b',' => Self::Comma,
+            b':' => Self::Colon,
+            b';' => Self::SemiColon,
+            b'*' => Self::Star,
+            b'/' => Self::Slash,
+            _ => return None,
+        })
+    }
+
     pub fn print_value(&self) -> Option<&'static str> {
         match self {
             TokenKind::Unknown => None,
@@ -99,189 +118,203 @@ pub struct Token {
     pub kind: TokenKind,
     pub span: Span,
 }
-pub fn lex(mut text: &str) -> Vec<Token> {
+pub fn lex(source: &str) -> Vec<Token> {
     use TokenKind::*;
-    let punctuation = (
-        "( ) { } [ ] = , : ; * /",
-        [
-            LParen, RParen, LCurly, RCurly, LBrack, RBrack, Eq, Comma, Colon, SemiColon, Star,
-            Slash,
-        ],
-    );
 
-    let keywords = ("true false null", [True, False, Null]);
+    // real bins run ~6.82 (hashes) to ~7.25 (resolved) bytes/token; /6 stays under both so big files don't realloc
+    let mut result = Vec::with_capacity(source.len() / 6);
+    let mut cur = Cursor::new(source);
 
-    let source = text;
+    while !cur.at_end() {
+        let start = cur.pos;
 
-    let mut result: Vec<Token> = Vec::new();
-    while !text.is_empty() {
-        if let Some(rest) = trim(text, |it| it.is_ascii_whitespace()) {
-            let eaten = &source[source.len() - text.len()..source.len() - rest.len()];
-            if let Some(last_token) = result.last() {
-                if matches!(
-                    last_token.kind,
-                    TokenKind::Name
-                        | TokenKind::HexLit
-                        | TokenKind::True
-                        | TokenKind::False
-                        | TokenKind::Number
-                        | TokenKind::RCurly
-                        | TokenKind::String
-                        | TokenKind::Eq
-                        | TokenKind::Comment
-                ) && eaten.find(['\n', '\r']).is_some()
-                {
-                    let start = source.len() - text.len();
-                    let end = source.len() - rest.len();
-                    let span = Span::new(start as _, end as _);
-                    result.push(Token {
-                        span,
-                        kind: TokenKind::Newline,
-                    });
-                }
+        // whitespace: eat the run, emitting a synthetic Newline between value-ending tokens
+        // when it spans a line break
+        if cur.consume_while(|b| b.is_ascii_whitespace()) > 0 {
+            if ends_line(result.last(), cur.consumed(start)) {
+                result.push(Token {
+                    kind: Newline,
+                    span: cur.span(start),
+                });
             }
 
-            text = rest;
             continue;
         }
-        let text_orig = text;
-        let mut kind = 'kind: {
-            for (i, symbol) in punctuation.0.split_ascii_whitespace().enumerate() {
-                if let Some(rest) = text.strip_prefix(symbol) {
-                    text = rest;
-                    break 'kind punctuation.1[i];
-                }
-            }
 
-            if let Some(rest) = text.strip_prefix('#') {
-                text = rest;
-                if let Some(rest) = trim(text, |t| !matches!(t, '\n' | '\r')) {
-                    text = rest;
-                }
-                break 'kind Comment;
-            }
+        let mut kind = cur.consume_token();
+        assert!(cur.pos > start);
 
-            if let Some(rest) = text.strip_prefix("0x") {
-                text = rest;
-                if let Some(rest) = trim(text, |it: char| it.is_ascii_hexdigit()) {
-                    text = rest;
-                }
-                break 'kind HexLit;
-            }
-
-            if let Some(rest) = scan_number(text) {
-                text = rest;
-                break 'kind Number;
-            }
-
-            if let Some(rest) = text.strip_prefix(['\'', '"']) {
-                let eaten = &source[source.len() - text.len()..source.len() - rest.len()]
-                    .chars()
-                    .next()
-                    .unwrap();
-                text = rest;
-                let mut skip = false;
-                loop {
-                    let Some(c) = text.chars().next() else {
-                        break 'kind UnterminatedString;
-                    };
-
-                    text = &text[c.len_utf8()..];
-                    match c {
-                        '\\' => {
-                            skip = true;
-                        }
-                        c if c == *eaten => match skip {
-                            true => {
-                                skip = false;
-                            }
-                            false => {
-                                break 'kind String;
-                            }
-                        },
-                        '\n' | '\r' => break 'kind UnterminatedString,
-                        _ => {
-                            skip = false;
-                        }
-                    }
-                }
-            }
-            if let Some(rest) = trim(text, name_char) {
-                text = rest;
-                break 'kind Name;
-            }
-
-            let error_index = text
-                .find(|it: char| it.is_ascii_whitespace())
-                .unwrap_or(text.len());
-            text = &text[error_index..];
-            Unknown
-        };
-        assert!(text.len() < text_orig.len());
-        let token_text = &text_orig[..text_orig.len() - text.len()];
-
-        let start = source.len() - text_orig.len();
-        let end = source.len() - text.len();
-
-        let span = Span {
-            start: start as u32,
-            end: end as u32,
-        };
         if kind == Name {
-            for (i, symbol) in keywords.0.split_ascii_whitespace().enumerate() {
-                if token_text == symbol {
-                    kind = keywords.1[i];
-                    break;
-                }
+            kind = keyword_or_name(&source[start..cur.pos]);
+        }
+
+        result.push(Token {
+            kind,
+            span: cur.span(start),
+        });
+    }
+
+    result
+}
+
+/// A byte cursor over the source. `pos` is always on a UTF-8 char boundary: every token
+/// ends on an ASCII byte (or swallows whole multi-byte sequences), so slicing at `pos`
+/// never splits a char.
+struct Cursor<'a> {
+    bytes: &'a [u8],
+    pos: usize,
+}
+
+impl<'a> Cursor<'a> {
+    fn new(source: &'a str) -> Self {
+        Cursor {
+            bytes: source.as_bytes(),
+            pos: 0,
+        }
+    }
+
+    fn at_end(&self) -> bool {
+        self.pos >= self.bytes.len()
+    }
+
+    fn rest(&self) -> &'a [u8] {
+        &self.bytes[self.pos..]
+    }
+
+    fn consumed(&self, start: usize) -> &'a [u8] {
+        &self.bytes[start..self.pos]
+    }
+
+    fn span(&self, start: usize) -> Span {
+        Span::new(start as u32, self.pos as u32)
+    }
+
+    fn starts_with(&self, prefix: &[u8]) -> bool {
+        self.rest().starts_with(prefix)
+    }
+
+    #[inline]
+    fn consume_while(&mut self, pred: impl Fn(u8) -> bool) -> usize {
+        let n = scan_run(self.rest(), pred);
+        self.pos += n;
+        n
+    }
+
+    #[inline]
+    fn consume_token(&mut self) -> TokenKind {
+        use TokenKind::*;
+        let b = self.bytes[self.pos];
+
+        if let Some(k) = TokenKind::from_punct_byte(b) {
+            self.pos += 1;
+            return k;
+        }
+
+        if b == b'#' {
+            self.pos += 1;
+            self.consume_while(|b| !matches!(b, b'\n' | b'\r'));
+            return Comment;
+        }
+
+        if self.starts_with(b"0x") {
+            self.pos += 2;
+            self.consume_while(|b| b.is_ascii_hexdigit());
+            return HexLit;
+        }
+
+        if let Some(len) = scan_number(self.rest()) {
+            self.pos += len;
+            return Number;
+        }
+
+        if matches!(b, b'\'' | b'"') {
+            return self.consume_string();
+        }
+
+        if self.consume_while(is_name_char) > 0 {
+            return Name;
+        }
+
+        // unrecognized: consume up to the next whitespace
+        self.consume_while(|b| !b.is_ascii_whitespace());
+        Unknown
+    }
+
+    #[inline]
+    fn consume_string(&mut self) -> TokenKind {
+        use TokenKind::*;
+        let quote = self.bytes[self.pos];
+        self.pos += 1;
+
+        let mut escaped = false;
+        while let Some(&b) = self.bytes.get(self.pos) {
+            self.pos += 1;
+            match b {
+                b'\\' => escaped = true,
+                b'\n' | b'\r' => return UnterminatedString,
+                _ if b == quote && !escaped => return String,
+                _ => escaped = false,
             }
         }
-        result.push(Token { kind, span });
+
+        UnterminatedString
     }
-    return result;
+}
 
-    fn name_char(c: char) -> bool {
-        matches!(c, '_' | 'a'..='z' | 'A'..='Z' | '0'..='9')
+fn is_name_char(b: u8) -> bool {
+    matches!(b, b'_' | b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9')
+}
+
+fn keyword_or_name(word: &str) -> TokenKind {
+    use TokenKind::*;
+    match word {
+        "true" => True,
+        "false" => False,
+        "null" => Null,
+        _ => Name,
+    }
+}
+
+fn ends_value(kind: TokenKind) -> bool {
+    use TokenKind::*;
+    matches!(
+        kind,
+        Name | HexLit | True | False | Number | RCurly | String | Eq | Comment
+    )
+}
+
+fn ends_line(last: Option<&Token>, ws: &[u8]) -> bool {
+    last.is_some_and(|t| ends_value(t.kind)) && ws.iter().any(|&b| matches!(b, b'\n' | b'\r'))
+}
+
+#[inline]
+fn scan_run(bytes: &[u8], pred: impl Fn(u8) -> bool) -> usize {
+    bytes.iter().position(|&b| !pred(b)).unwrap_or(bytes.len())
+}
+
+#[inline]
+fn scan_number_segment(bytes: &[u8]) -> Option<usize> {
+    let len = scan_run(bytes, |b| matches!(b, b'0'..=b'9' | b'_'));
+    bytes[..len]
+        .split(|&b| b == b'_')
+        .all(|group| !group.is_empty())
+        .then_some(len)
+}
+
+#[inline]
+fn scan_number(bytes: &[u8]) -> Option<usize> {
+    let mut i = (bytes.first() == Some(&b'-')) as usize;
+
+    // ".5"
+    if bytes.get(i) == Some(&b'.') {
+        return Some(i + 1 + scan_number_segment(&bytes[i + 1..])?);
     }
 
-    fn trim(text: &str, predicate: impl std::ops::Fn(char) -> bool) -> Option<&str> {
-        let index = text.find(|it: char| !predicate(it)).unwrap_or(text.len());
-        if index == 0 {
-            None
-        } else {
-            Some(&text[index..])
-        }
+    // "123" / "123.45"
+    i += scan_number_segment(&bytes[i..])?;
+    if bytes.get(i) == Some(&b'.') {
+        i += 1 + scan_number_segment(&bytes[i + 1..])?;
     }
 
-    fn take_num_segment(s: &str) -> Option<(&str, &str)> {
-        let rest = trim(s, |c| matches!(c, '0'..='9' | '_'))?;
-        let seg = &s[..s.len() - rest.len()];
-
-        if seg.is_empty() || seg.starts_with('_') || seg.ends_with('_') || seg.contains("__") {
-            return None;
-        }
-
-        Some((seg, rest))
-    }
-
-    fn scan_number(mut s: &str) -> Option<&str> {
-        if let Some(rest) = s.strip_prefix('-') {
-            s = rest;
-        }
-
-        // ".5"
-        if let Some(after_dot) = s.strip_prefix('.') {
-            let (_frac, rest) = take_num_segment(after_dot)?;
-            return Some(rest);
-        }
-
-        // "123" / "123.45"
-        let (_int, mut rest) = take_num_segment(s)?;
-
-        if let Some(after_dot) = rest.strip_prefix('.') {
-            let (_frac, new_rest) = take_num_segment(after_dot)?;
-            rest = new_rest;
-        }
-
-        Some(rest)
-    }
+    Some(i)
 }

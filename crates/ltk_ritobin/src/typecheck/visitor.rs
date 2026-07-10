@@ -1,4 +1,7 @@
-use std::fmt::{Debug, Display};
+use std::{
+    borrow::Cow,
+    fmt::{Debug, Display},
+};
 
 use glam::Vec4;
 use indexmap::IndexMap;
@@ -8,9 +11,13 @@ use ltk_meta::{
 };
 
 use crate::{
-    cst::{self, visitor::Visit, Child, Cst, Kind, Visitor},
+    cst::{
+        self,
+        visitor::{Visit, VisitCtx},
+        Kind, Node, NodeId, Visitor,
+    },
     parse::{Span, Token, TokenKind},
-    RitobinName,
+    Cst, RitobinName,
 };
 
 #[derive(Debug, Clone)]
@@ -377,20 +384,20 @@ pub enum Statement {
 }
 
 trait TreeIterExt<'a>: Iterator {
-    fn expect_tree(&mut self, kind: cst::Kind) -> Result<&'a Cst, Diagnostic>;
-    fn expect_token(&mut self, kind: TokenKind) -> Result<&'a Token, Diagnostic>;
+    fn expect_tree(&mut self, cst: &'a Cst, kind: cst::Kind) -> Result<&'a Node, Diagnostic>;
+    fn expect_token(&mut self, cst: &'a Cst, kind: TokenKind) -> Result<&'a Token, Diagnostic>;
 }
 
 impl<'a, I> TreeIterExt<'a> for I
 where
     I: Iterator<Item = &'a cst::Child>,
 {
-    fn expect_tree(&mut self, kind: cst::Kind) -> Result<&'a Cst, Diagnostic> {
-        self.find_map(|c| c.tree().filter(|t| t.kind == kind))
+    fn expect_tree(&mut self, cst: &'a Cst, kind: cst::Kind) -> Result<&'a Node, Diagnostic> {
+        self.find_map(|c| c.tree(cst).filter(|t| t.kind == kind))
             .ok_or(MissingTree(kind))
     }
-    fn expect_token(&mut self, kind: TokenKind) -> Result<&'a Token, Diagnostic> {
-        self.find_map(|c| c.token().filter(|t| t.kind == kind))
+    fn expect_token(&mut self, cst: &'a Cst, kind: TokenKind) -> Result<&'a Token, Diagnostic> {
+        self.find_map(|c| c.token(cst).filter(|t| t.kind == kind))
             .ok_or(MissingToken(kind))
     }
 }
@@ -405,14 +412,15 @@ pub fn coerce_type<M: Debug>(
     to: PropertyKind,
 ) -> Option<PropertyValueEnum<M>> {
     match to {
+        to if to == value.kind() => Some(value),
+
         PropertyKind::Hash => Some(match value {
-            PropertyValueEnum::Hash(_) => return Some(value),
             PropertyValueEnum::String(str) => {
                 values::Hash::new_with_meta(BinHash::hash_str(&str), str.meta).into()
             }
-            other => {
+            _other => {
                 #[cfg(feature = "debug")]
-                eprintln!("\x1b[41mcannot coerce {other:?} to {to:?}\x1b[0m");
+                eprintln!("\x1b[41mcannot coerce {_other:?} to {to:?}\x1b[0m");
                 return None;
             }
         }),
@@ -420,18 +428,16 @@ pub fn coerce_type<M: Debug>(
             PropertyValueEnum::Hash(hash) => {
                 values::ObjectLink::new_with_meta(*hash, hash.meta).into()
             }
-            PropertyValueEnum::ObjectLink(_) => return Some(value),
             PropertyValueEnum::String(str) => {
                 values::ObjectLink::new_with_meta(BinHash::hash_str(&str), str.meta).into()
             }
-            other => {
+            _other => {
                 #[cfg(feature = "debug")]
-                eprintln!("\x1b[41mcannot coerce {other:?} to {to:?}\x1b[0m");
+                eprintln!("\x1b[41mcannot coerce {_other:?} to {to:?}\x1b[0m");
                 return None;
             }
         }),
         PropertyKind::WadChunkLink => Some(match value {
-            PropertyValueEnum::WadChunkLink(_) => return Some(value),
             PropertyValueEnum::Hash(hash) => {
                 values::WadChunkLink::new_with_meta(WadHash((**hash).into()), hash.meta).into()
             }
@@ -439,51 +445,52 @@ pub fn coerce_type<M: Debug>(
                 values::WadChunkLink::new_with_meta(WadHash::hash_str(str.as_str()), str.meta)
                     .into()
             }
-            other => {
+            _other => {
                 #[cfg(feature = "debug")]
-                eprintln!("\x1b[41mcannot coerce {other:?} to {to:?}\x1b[0m");
+                eprintln!("\x1b[41mcannot coerce {_other:?} to {to:?}\x1b[0m");
                 return None;
             }
         }),
         PropertyKind::BitBool => Some(match value {
-            PropertyValueEnum::BitBool(_) => return Some(value),
             PropertyValueEnum::Bool(bool) => {
                 values::BitBool::new_with_meta(*bool, bool.meta).into()
             }
-            other => {
+            _other => {
                 #[cfg(feature = "debug")]
-                eprintln!("\x1b[41mcannot coerce {other:?} to {to:?}\x1b[0m");
+                eprintln!("\x1b[41mcannot coerce {_other:?} to {to:?}\x1b[0m");
                 return None;
             }
         }),
         PropertyKind::Bool => Some(match value {
-            PropertyValueEnum::Bool(_) => return Some(value),
             PropertyValueEnum::BitBool(bool) => {
                 values::Bool::new_with_meta(*bool, bool.meta).into()
             }
-            other => {
+            _other => {
                 #[cfg(feature = "debug")]
-                eprintln!("\x1b[41mcannot coerce {other:?} to {to:?}\x1b[0m");
+                eprintln!("\x1b[41mcannot coerce {_other:?} to {to:?}\x1b[0m");
                 return None;
             }
         }),
-        to if to == value.kind() => Some(value),
         _ => None,
     }
 }
 
-pub fn resolve_rito_type(ctx: &mut Ctx<'_>, tree: &Cst) -> Result<RitoType, Diagnostic> {
-    let mut c = tree.children.iter();
+pub fn resolve_rito_type(
+    ctx: &mut Ctx<'_>,
+    visit_ctx: &VisitCtx,
+    tree: &Node,
+) -> Result<RitoType, Diagnostic> {
+    let mut c = tree.children.get(visit_ctx.cst).iter();
 
-    let base = c.expect_token(TokenKind::Name)?;
+    let base = c.expect_token(visit_ctx.cst, TokenKind::Name)?;
     let base_span = base.span;
 
     let base = PropertyKind::from_rito_name(&ctx.text[base.span]).ok_or(UnknownType(base.span))?;
 
-    let subtypes = match c
-        .clone()
-        .find_map(|c| c.tree().filter(|t| t.kind == Kind::TypeArgList))
-    {
+    let subtypes = match c.clone().find_map(|c| {
+        c.tree(visit_ctx.cst)
+            .filter(|t| t.kind == Kind::TypeArgList)
+    }) {
         Some(subtypes) => {
             let subtypes_span = subtypes.span;
 
@@ -498,8 +505,9 @@ pub fn resolve_rito_type(ctx: &mut Ctx<'_>, tree: &Cst) -> Result<RitoType, Diag
 
             let subtypes = subtypes
                 .children
+                .get(visit_ctx.cst)
                 .iter()
-                .filter_map(|c| c.tree().filter(|t| t.kind == Kind::TypeArg))
+                .filter_map(|c| c.tree(visit_ctx.cst).filter(|t| t.kind == Kind::TypeArg))
                 .map(|t| {
                     let resolved = PropertyKind::from_rito_name(&ctx.text[t.span]);
                     if resolved.is_none() {
@@ -559,7 +567,8 @@ fn resolve_hash(ctx: &Ctx, span: Span) -> Result<PropertyValueEnum<Span>, Diagno
 
 pub fn resolve_value(
     ctx: &mut Ctx,
-    tree: &Cst,
+    visit_ctx: &VisitCtx,
+    tree: &Node,
     kind_hint: Option<PropertyKind>,
 ) -> Result<Option<PropertyValueEnum<Span>>, Diagnostic> {
     use PropertyKind as K;
@@ -567,11 +576,11 @@ pub fn resolve_value(
 
     // dbg!(tree, kind_hint);
 
-    let Some(child) = tree.children.first() else {
+    let Some(child) = tree.children.get(visit_ctx.cst).first() else {
         return Ok(None);
     };
-    Ok(Some(match child {
-        cst::Child::Tree(Cst {
+    Ok(Some(match child.tree(visit_ctx.cst) {
+        Some(Node {
             kind: Kind::Class,
             children,
             span,
@@ -580,7 +589,11 @@ pub fn resolve_value(
             let Some(kind_hint) = kind_hint else {
                 return Ok(None); // TODO: err
             };
-            let Some(class) = children.first().and_then(|t| t.token()) else {
+            let Some(class) = children
+                .get(visit_ctx.cst)
+                .first()
+                .and_then(|t| t.token(visit_ctx.cst))
+            else {
                 return Err(InvalidHash(*span));
             };
 
@@ -630,16 +643,16 @@ pub fn resolve_value(
                 }
             }
         }
-        cst::Child::Tree(Cst {
+        Some(Node {
             kind: Kind::Literal,
             children,
             ..
         }) => {
-            let Some(child) = children.first() else {
+            let Some(child) = children.get(visit_ctx.cst).first() else {
                 return Ok(None);
             };
-            match child {
-                cst::Child::Token(Token {
+            match child.token(&visit_ctx.cst) {
+                Some(Token {
                     kind: TokenKind::String,
                     span,
                 }) => values::String::new_with_meta(
@@ -648,20 +661,20 @@ pub fn resolve_value(
                 )
                 .into(),
 
-                cst::Child::Token(Token {
+                Some(Token {
                     kind: TokenKind::True,
                     span,
                 }) => values::Bool::new_with_meta(true, *span).into(),
-                cst::Child::Token(Token {
+                Some(Token {
                     kind: TokenKind::False,
                     span,
                 }) => values::Bool::new_with_meta(false, *span).into(),
 
-                cst::Child::Token(Token {
+                Some(Token {
                     kind: TokenKind::HexLit,
                     span,
                 }) => resolve_hash(ctx, *span)?,
-                cst::Child::Token(Token {
+                Some(Token {
                     kind: TokenKind::Number,
                     span,
                 }) => {
@@ -670,7 +683,10 @@ pub fn resolve_value(
                         return Err(AmbiguousNumeric(*span));
                     };
 
-                    let txt = txt.replace('_', "");
+                    let txt = match txt.contains('_') {
+                        true => Cow::Owned(txt.replace('_', "")),
+                        false => Cow::Borrowed(txt),
+                    };
 
                     match kind_hint {
                         K::U8 => P::U8(values::U8::new_with_meta(
@@ -728,26 +744,33 @@ pub fn resolve_value(
 
 pub fn resolve_entry(
     ctx: &mut Ctx,
-    tree: &Cst,
+    visit_ctx: &VisitCtx,
+    tree: &Node,
     parent_value_kind: Option<RitoType>,
 ) -> Result<IrEntry, MaybeSpanDiag> {
-    let mut c = tree.children.iter();
+    let mut c = tree.children.get(visit_ctx.cst).iter();
 
-    let key = c.expect_tree(Kind::EntryKey)?;
+    let key = c.expect_tree(visit_ctx.cst, Kind::EntryKey)?;
 
-    let key = match key.children.first().ok_or(InvalidHash(key.span))? {
-        Child::Token(Token {
+    let key = match key
+        .children
+        .get(visit_ctx.cst)
+        .first()
+        .ok_or(InvalidHash(key.span))?
+        .token(visit_ctx.cst)
+    {
+        Some(Token {
             kind: TokenKind::Name,
             span,
         }) => PropertyValueEnum::from(values::String::new_with_meta(ctx.text[span].into(), *span)),
-        Child::Token(Token {
+        Some(Token {
             kind: TokenKind::String,
             span,
         }) => PropertyValueEnum::from(values::String::new_with_meta(
             ctx.text[Span::new(span.start + 1, span.end - 1)].into(),
             *span,
         )),
-        Child::Token(Token {
+        Some(Token {
             kind: TokenKind::HexLit,
             span,
         }) => resolve_hash(ctx, *span)?,
@@ -762,11 +785,13 @@ pub fn resolve_entry(
 
     let kind = c
         .clone()
-        .find_map(|c| c.tree().filter(|t| t.kind == Kind::TypeExpr));
+        .find_map(|c| c.tree(visit_ctx.cst).filter(|t| t.kind == Kind::TypeExpr));
     let kind_span = kind.map(|k| k.span);
-    let kind = kind.map(|t| resolve_rito_type(ctx, t)).transpose()?;
+    let kind = kind
+        .map(|t| resolve_rito_type(ctx, visit_ctx, t))
+        .transpose()?;
 
-    let value = c.expect_tree(Kind::EntryValue)?;
+    let value = c.expect_tree(visit_ctx.cst, Kind::EntryValue)?;
     let value_span = value.span;
 
     // entries: map[string, u8] = {
@@ -795,10 +820,12 @@ pub fn resolve_entry(
 
     let kind = kind.or(parent_value_kind);
 
-    let resolved_val = resolve_value(ctx, value, kind.map(|k| k.base))?.map(|value| match kind {
-        Some(kind) => coerce_type(value.clone(), kind.base).unwrap_or(value),
-        None => value,
-    });
+    let resolved_val =
+        resolve_value(ctx, visit_ctx, value, kind.map(|k| k.base))?.map(|value| match kind {
+            Some(kind) if value.kind() == kind.base => value,
+            Some(kind) => coerce_type(value.clone(), kind.base).unwrap_or(value),
+            None => value,
+        });
 
     let value = match (kind, resolved_val) {
         (None, Some(value)) => value,
@@ -889,7 +916,7 @@ impl<'a> TypeChecker<'a> {
                                 Some(BinObject {
                                     path_hash: *path_hash,
                                     class_hash: struct_val.class_hash,
-                                    properties: struct_val.properties.clone(),
+                                    properties: struct_val.properties,
                                 })
                             } else {
                                 None
@@ -911,8 +938,11 @@ impl<'a> TypeChecker<'a> {
             PropertyValueEnum::Container(list)
             | PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(list)) => {
                 match child {
-                    IrItem::ListItem(IrListItem(value)) => {
-                        let value = coerce_type(value.clone(), list.item_kind()).unwrap_or(value);
+                    IrItem::ListItem(IrListItem(mut value)) => {
+                        if value.kind() != list.item_kind() {
+                            value = coerce_type(value.clone(), list.item_kind()).unwrap_or(value);
+                        }
+
                         let span = *value.meta();
                         match list.push(value) {
                             Ok(_) => {}
@@ -1146,7 +1176,8 @@ fn populate_vec_or_color(
 }
 
 impl Visitor for TypeChecker<'_> {
-    fn enter_tree(&mut self, tree: &Cst) -> Visit {
+    fn enter_tree(&mut self, ctx: &VisitCtx, tree: NodeId) -> Visit {
+        let tree = ctx.node(tree).unwrap();
         self.depth += 1;
         let depth = self.depth;
 
@@ -1196,10 +1227,10 @@ impl Visitor for TypeChecker<'_> {
                             })),
                         ));
                     }
-                    parent_type => {
+                    _parent_type => {
                         #[cfg(feature = "debug")]
                         eprintln!(
-                            "[warn] got {parent_type:?} in ListItemBlock - {:?}",
+                            "[warn] got {_parent_type:?} in ListItemBlock - {:?}",
                             &self.ctx.text[tree.span]
                         );
                     }
@@ -1226,7 +1257,7 @@ impl Visitor for TypeChecker<'_> {
 
                 let value_hint = color_vec_type.or(parent_type.value_subtype());
 
-                match resolve_value(&mut self.ctx, tree, value_hint) {
+                match resolve_value(&mut self.ctx, ctx, tree, value_hint) {
                     Ok(Some(item)) => {
                         // eprintln!("{indent}  list item {item:?}");
                         if color_vec_type.is_some() {
@@ -1243,8 +1274,13 @@ impl Visitor for TypeChecker<'_> {
             }
 
             Kind::Entry => {
-                match resolve_entry(&mut self.ctx, tree, parent.map(|p| p.1.value().rito_type()))
-                    .map_err(|e| e.fallback(tree.span))
+                match resolve_entry(
+                    &mut self.ctx,
+                    ctx,
+                    tree,
+                    parent.map(|p| p.1.value().rito_type()),
+                )
+                .map_err(|e| e.fallback(tree.span))
                 {
                     Ok(entry) => {
                         // eprintln!("{indent}  push {entry:?}");
@@ -1279,7 +1315,8 @@ impl Visitor for TypeChecker<'_> {
         Visit::Continue
     }
 
-    fn exit_tree(&mut self, tree: &cst::Cst) -> Visit {
+    fn exit_tree(&mut self, ctx: &VisitCtx, tree: NodeId) -> Visit {
+        let tree = ctx.node(tree).unwrap();
         let depth = self.depth;
         self.depth -= 1;
 
@@ -1333,17 +1370,14 @@ impl Visitor for TypeChecker<'_> {
                             return Visit::Continue;
                         }
                         // assert_eq!(depth, 2);
-                        let (
-                            _,
-                            IrItem::Entry(IrEntry {
-                                key:
-                                    PropertyValueEnum::String(values::String {
-                                        value: key,
-                                        meta: key_span,
-                                    }),
-                                value,
-                            }),
-                        ) = ir.clone()
+                        let IrItem::Entry(IrEntry {
+                            key:
+                                PropertyValueEnum::String(values::String {
+                                    value: key,
+                                    meta: key_span,
+                                }),
+                            value,
+                        }) = ir.1
                         else {
                             self.ctx
                                 .diagnostics

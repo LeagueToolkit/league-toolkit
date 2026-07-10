@@ -17,7 +17,7 @@ fn main() {
     let cst = ltk_ritobin::Cst::parse(&text);
     if !cst.errors.is_empty() {
         eprintln!("Errors while parsing:");
-        for err in cst.errors {
+        for err in &cst.errors {
             eprintln!("- {err:#?}");
         }
         return;
