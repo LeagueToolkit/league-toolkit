@@ -18,6 +18,8 @@ pub enum Format {
     Bgra8 = 20,
     /// Uncompressed RGBA16 half-float (`R16G16B16A16_FLOAT`)
     Rgba16Float = 21,
+    /// Uncompressed RGBA32 float (`R32G32B32A32_FLOAT`)
+    Rgba32Float = 22,
 }
 
 impl Format {
@@ -32,7 +34,7 @@ impl Format {
     /// Get the block size of the format
     pub fn block_size(&self) -> (usize, usize) {
         match self {
-            Format::Bgra8 | Format::Rgba16Float => (1, 1),
+            Format::Bgra8 | Format::Rgba16Float | Format::Rgba32Float => (1, 1),
             _ => (4, 4),
         }
     }
@@ -48,6 +50,7 @@ impl Format {
             Format::Bc5Snorm => 16,
             Format::Bgra8 => 4,
             Format::Rgba16Float => 8,
+            Format::Rgba32Float => 16,
         }
     }
 }

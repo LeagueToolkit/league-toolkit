@@ -22,6 +22,7 @@ Both 2D textures and volume (3D) textures are supported - a handful of map WADs 
 | 14 | BC5 (`BC5_SNORM`) | ✅ | ❌ |
 | 20 | Uncompressed BGRA8 | ✅ | ✅ |
 | 21 | Uncompressed RGBA16 half-float | ✅ | ✅ |
+| 22 | Uncompressed RGBA32 float | ✅ | ✅ |
 
 BC5_SNORM is decoded by this crate's own implementation, verified against DirectXTex and the D3D11 functional spec - general-purpose decoders (`image_dds`, `texture2ddecoder`) only implement the unsigned variant, which silently corrupts signed data.
 

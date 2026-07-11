@@ -131,6 +131,7 @@ pub fn encode_rgba(
         Format::Bc7 => encode_bc7(width, height, rgba_data),
         Format::Bgra8 => encode_bgra8(rgba_data),
         Format::Rgba16Float => encode_rgba16_float(rgba_data),
+        Format::Rgba32Float => encode_rgba32_float(rgba_data),
         format => Err(EncodeError::UnsupportedFormat(format)),
     }
 }
@@ -283,6 +284,18 @@ fn encode_rgba16_float(rgba_data: &[u8]) -> Result<Vec<u8>, EncodeError> {
     Ok(rgba_data
         .iter()
         .flat_map(|&channel| half::f16::from_f32(channel as f32 / 255.0).to_le_bytes())
+        .collect())
+}
+
+/// Convert RGBA8 to RGBA32 float (uncompressed)
+fn encode_rgba32_float(rgba_data: &[u8]) -> Result<Vec<u8>, EncodeError> {
+    if !rgba_data.len().is_multiple_of(4) {
+        return Err(EncodeError::InvalidPixelData);
+    }
+
+    Ok(rgba_data
+        .iter()
+        .flat_map(|&channel| (channel as f32 / 255.0).to_le_bytes())
         .collect())
 }
 

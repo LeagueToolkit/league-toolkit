@@ -13,12 +13,17 @@ pub enum PixelFormat {
     Rg8Snorm,
     /// 16-bit RGBA, half-float (channels are little-endian [`half::f16`] bit patterns)
     Rgba16Float,
+    /// 32-bit RGBA, float (channels are little-endian [`f32`] bit patterns)
+    Rgba32Float,
 }
 
 impl PixelFormat {
     pub const fn channel_count(self) -> usize {
         match self {
-            PixelFormat::Bgra8Unorm | PixelFormat::Rgba8Unorm | PixelFormat::Rgba16Float => 4,
+            PixelFormat::Bgra8Unorm
+            | PixelFormat::Rgba8Unorm
+            | PixelFormat::Rgba16Float
+            | PixelFormat::Rgba32Float => 4,
             PixelFormat::Rg8Snorm => 2,
         }
     }
@@ -28,6 +33,7 @@ impl PixelFormat {
             PixelFormat::Bgra8Unorm | PixelFormat::Rgba8Unorm => 4,
             PixelFormat::Rg8Snorm => 2,
             PixelFormat::Rgba16Float => 8,
+            PixelFormat::Rgba32Float => 16,
         }
     }
 }
@@ -89,6 +95,15 @@ impl TexSurface<'_> {
                 .chunks_exact(2)
                 .map(|channel| {
                     let value = half::f16::from_le_bytes([channel[0], channel[1]]).to_f32();
+                    (value.clamp(0.0, 1.0) * 255.0).round() as u8
+                })
+                .collect(),
+            PixelFormat::Rgba32Float => self
+                .data
+                .chunks_exact(4)
+                .map(|channel| {
+                    let value =
+                        f32::from_le_bytes([channel[0], channel[1], channel[2], channel[3]]);
                     (value.clamp(0.0, 1.0) * 255.0).round() as u8
                 })
                 .collect(),

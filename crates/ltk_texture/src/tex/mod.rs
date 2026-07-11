@@ -221,6 +221,7 @@ impl Tex {
                 bc5_snorm::decode_bc5_snorm(mip_data, w, h).into(),
             ),
             Format::Rgba16Float => (PixelFormat::Rgba16Float, Cow::Borrowed(mip_data)),
+            Format::Rgba32Float => (PixelFormat::Rgba32Float, Cow::Borrowed(mip_data)),
             Format::Etc1 => (
                 PixelFormat::Bgra8Unorm,
                 decode_texture2d(texture2ddecoder::decode_etc1)?.into(),
@@ -335,8 +336,10 @@ mod tests {
     fn parses_new_format_ids() {
         assert_eq!(Format::from_u8(13).unwrap(), Format::Bc7);
         assert_eq!(Format::from_u8(14).unwrap(), Format::Bc5Snorm);
+        assert_eq!(Format::from_u8(22).unwrap(), Format::Rgba32Float);
         assert_eq!(Format::Bc7.to_u8(), 13);
         assert_eq!(Format::Bc5Snorm.to_u8(), 14);
+        assert_eq!(Format::Rgba32Float.to_u8(), 22);
     }
 
     fn tex_file(format: u8, data: &[u8]) -> Vec<u8> {
@@ -454,6 +457,42 @@ mod tests {
 
         let tex = Tex::encode_rgba_image(&img, EncodeOptions::new(Format::Rgba16Float)).unwrap();
         assert_eq!(tex.format, Format::Rgba16Float);
+
+        let decoded = tex.decode_mipmap(0).unwrap().into_rgba_image().unwrap();
+        assert_eq!(decoded.pixels().next().unwrap().0, [0, 51, 204, 255]);
+    }
+
+    #[test]
+    fn reads_and_decodes_rgba32_float_tex() {
+        // 4x4 RGBA32F: every pixel (0.5, -1.0, 2.0, 1.0) — out-of-[0,1] values must
+        // survive decoding intact and only clamp in the image conversion
+        let pixel = [0.5f32, -1.0, 2.0, 1.0];
+        let data: Vec<u8> = std::iter::repeat_n(pixel, 16)
+            .flatten()
+            .flat_map(f32::to_le_bytes)
+            .collect();
+        let file = tex_file(22, &data);
+
+        let tex = Tex::from_reader(&mut file.as_slice()).unwrap();
+        assert_eq!(tex.format, Format::Rgba32Float);
+
+        let surface = tex.decode_mipmap(0).unwrap();
+        assert_eq!(surface.format, PixelFormat::Rgba32Float);
+        assert_eq!(surface.as_pixels::<[f32; 4]>().unwrap(), [pixel; 16]);
+
+        let img = surface.into_rgba_image().unwrap();
+        for p in img.pixels() {
+            assert_eq!(p.0, [128, 0, 255, 255]);
+        }
+    }
+
+    #[test]
+    fn rgba32_float_encode_roundtrips() {
+        let mut img = image::RgbaImage::new(4, 4);
+        img.pixels_mut().for_each(|p| p.0 = [0, 51, 204, 255]);
+
+        let tex = Tex::encode_rgba_image(&img, EncodeOptions::new(Format::Rgba32Float)).unwrap();
+        assert_eq!(tex.format, Format::Rgba32Float);
 
         let decoded = tex.decode_mipmap(0).unwrap().into_rgba_image().unwrap();
         assert_eq!(decoded.pixels().next().unwrap().0, [0, 51, 204, 255]);
