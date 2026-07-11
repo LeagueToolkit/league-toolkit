@@ -43,7 +43,7 @@ impl Default for WrapConfig {
 }
 
 /// Configuration for the ritobin printer.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PrintConfig<Hashes: HashProvider> {
     /// Number of spaces per indent level.
