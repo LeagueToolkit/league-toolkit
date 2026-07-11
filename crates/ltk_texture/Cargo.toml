@@ -4,13 +4,14 @@ version = "0.5.1"
 edition = "2021"
 description = "Texture decoding/encoding utilities for League Toolkit"
 license = "MIT OR Apache-2.0"
-readme = "../../README.md"
+readme = "README.md"
 
 [lints]
 workspace = true
 
 [dependencies]
 bitflags = { workspace = true }
+bytemuck = { workspace = true }
 byteorder = { workspace = true }
 thiserror = { workspace = true }
 num_enum = { workspace = true }

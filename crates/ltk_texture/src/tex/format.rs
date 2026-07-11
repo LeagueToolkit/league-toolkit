@@ -10,6 +10,10 @@ pub enum Format {
     #[num_enum(alternatives = [11])]
     Bc1 = 10,
     Bc3 = 12,
+    /// BC7 (`BC7_UNORM_SRGB`)
+    Bc7 = 13,
+    /// BC5 (`BC5_SNORM`)
+    Bc5Snorm = 14,
     /// Uncompressed BGRA8
     Bgra8 = 20,
 }
@@ -38,6 +42,8 @@ impl Format {
             Format::Etc2Eac => 16,
             Format::Bc1 => 8,
             Format::Bc3 => 16,
+            Format::Bc7 => 16,
+            Format::Bc5Snorm => 16,
             Format::Bgra8 => 4,
         }
     }

@@ -1,7 +1,8 @@
 use byteorder::{ReadBytesExt, LE};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use std::{hint::unreachable_unchecked, io};
+use std::{borrow::Cow, io};
 
+mod bc5_snorm;
 mod encode;
 mod error;
 mod format;
@@ -14,6 +15,9 @@ pub use format::*;
 pub use surface::*;
 
 use super::ReadError;
+
+/// Signature of `texture2ddecoder`'s surface decode functions
+type Texture2dDecodeFn = fn(&[u8], usize, usize, &mut [u32]) -> Result<(), &'static str>;
 
 /// League extended texture file (.tex)
 #[derive(Debug)]
@@ -133,51 +137,74 @@ impl Tex {
         // size of mip
         let (w, h) = mip_dims(level);
 
-        let data = match self.format {
-            Format::Bgra8 => TexSurfaceData::Bgra8Slice(
-                // TODO: test me (this is likely wrong)
-                &self.data[off..off + (w * h * self.format.bytes_per_block())],
+        let mip_data =
+            self.data
+                .get(off..off + mip_bytes((w, h)))
+                .ok_or(DecodeErr::MipOutOfBounds {
+                    level,
+                    start: off,
+                    end: off + mip_bytes((w, h)),
+                    len: self.data.len(),
+                })?;
+
+        // decodes a block-compressed mip to RGBA8 via image_dds
+        let decode_image_dds = |image_format| -> Result<Vec<u8>, DecodeErr> {
+            let surface = image_dds::Surface {
+                width: w as u32,
+                height: h as u32,
+                depth: 1,
+                layers: 1,
+                mipmaps: 1,
+                image_format,
+                data: mip_data,
+            };
+            Ok(surface.decode_layers_mipmaps_rgba8(0..1, 0..1)?.data)
+        };
+
+        // decodes a mip to BGRA8 via texture2ddecoder
+        let decode_texture2d = |decode: Texture2dDecodeFn| -> Result<Vec<u8>, DecodeErr> {
+            let mut data = vec![0u32; w * h];
+            decode(mip_data, w, h, &mut data)
+                .map_err(|reason| DecodeErr::Decode(self.format, reason))?;
+            // the u32 pixels are BGRA8 packed as little-endian
+            Ok(data.into_iter().flat_map(u32::to_le_bytes).collect())
+        };
+
+        use image_dds::ImageFormat as IF;
+        let (format, data): (PixelFormat, Cow<'_, [u8]>) = match self.format {
+            // TODO: test me (this is likely wrong)
+            Format::Bgra8 => (PixelFormat::Bgra8Unorm, Cow::Borrowed(mip_data)),
+            Format::Bc1 => (
+                PixelFormat::Rgba8Unorm,
+                decode_image_dds(IF::BC1RgbaUnorm)?.into(),
             ),
-            Format::Bc1 | Format::Bc3 => {
-                let image_format = match self.format {
-                    Format::Bc1 => image_dds::ImageFormat::BC1RgbaUnorm,
-                    Format::Bc3 => image_dds::ImageFormat::BC3RgbaUnorm,
-                    // Safety: outer match guarantees only Bc1/Bc3 reach here
-                    _ => unsafe { unreachable_unchecked() },
-                };
-                let surface = image_dds::Surface {
-                    width: w as u32,
-                    height: h as u32,
-                    depth: 1,
-                    layers: 1,
-                    mipmaps: 1,
-                    image_format,
-                    data: &self.data[off..off + mip_bytes((w, h))],
-                };
-                let rgba8 = surface.decode_layers_mipmaps_rgba8(0..1, 0..1)?;
-                TexSurfaceData::Rgba8Owned(rgba8.data)
-            }
-            _ => {
-                let mut data = vec![0u32; w * h];
-                let i = &self.data[off..off + mip_bytes((w, h))];
-                let o = &mut data;
-                match self.format {
-                    Format::Etc1 => {
-                        texture2ddecoder::decode_etc1(i, w, h, o).map_err(DecodeErr::Etc1)
-                    }
-                    Format::Etc2Eac => {
-                        texture2ddecoder::decode_etc2_rgba8(i, w, h, o).map_err(DecodeErr::Etc2Eac)
-                    }
-                    // Safety: Bgra8/Bc1/Bc3 are handled above
-                    Format::Bgra8 | Format::Bc1 | Format::Bc3 => unsafe { unreachable_unchecked() },
-                }?;
-                TexSurfaceData::Bgra8Owned(data)
-            }
+            Format::Bc3 => (
+                PixelFormat::Rgba8Unorm,
+                decode_image_dds(IF::BC3RgbaUnorm)?.into(),
+            ),
+            Format::Bc7 => (
+                PixelFormat::Rgba8Unorm,
+                decode_image_dds(IF::BC7RgbaUnormSrgb)?.into(),
+            ),
+            // image_dds/texture2ddecoder only decode *unsigned* BC5, so we do it ourselves
+            Format::Bc5Snorm => (
+                PixelFormat::Rg8Snorm,
+                bc5_snorm::decode_bc5_snorm(mip_data, w, h).into(),
+            ),
+            Format::Etc1 => (
+                PixelFormat::Bgra8Unorm,
+                decode_texture2d(texture2ddecoder::decode_etc1)?.into(),
+            ),
+            Format::Etc2Eac => (
+                PixelFormat::Bgra8Unorm,
+                decode_texture2d(texture2ddecoder::decode_etc2_rgba8)?.into(),
+            ),
         };
 
         Ok(TexSurface {
             width: w as _,
             height: h as _,
+            format,
             data,
         })
     }
@@ -246,8 +273,70 @@ pub enum TextureAddress {
     Clamp,
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_new_format_ids() {
+        assert_eq!(Format::from_u8(13).unwrap(), Format::Bc7);
+        assert_eq!(Format::from_u8(14).unwrap(), Format::Bc5Snorm);
+        assert_eq!(Format::Bc7.to_u8(), 13);
+        assert_eq!(Format::Bc5Snorm.to_u8(), 14);
+    }
+
+    fn tex_file(format: u8, data: &[u8]) -> Vec<u8> {
+        let mut file = Vec::new();
+        file.extend_from_slice(b"TEX\0");
+        file.extend_from_slice(&4u16.to_le_bytes()); // width
+        file.extend_from_slice(&4u16.to_le_bytes()); // height
+        file.push(0); // is_extended_format
+        file.push(format);
+        file.push(0); // resource type: texture
+        file.push(0); // flags: no mipmaps
+        file.extend_from_slice(data);
+        file
+    }
+
+    #[test]
+    fn reads_and_decodes_bc5_snorm_tex() {
+        // one BC5 block: red = constant 1.0 (endpoints 127/-127, all indices 0),
+        // green = constant -1.0 (endpoints -127/-127)
+        let mut block = Vec::new();
+        block.extend_from_slice(&[127, 0x81, 0, 0, 0, 0, 0, 0]);
+        block.extend_from_slice(&[0x81, 0x81, 0, 0, 0, 0, 0, 0]);
+        let file = tex_file(14, &block);
+
+        let tex = Tex::from_reader(&mut file.as_slice()).unwrap();
+        assert_eq!(tex.format, Format::Bc5Snorm);
+        assert_eq!(tex.mip_count, 1);
+
+        // the decoded surface preserves the signed data
+        let surface = tex.decode_mipmap(0).unwrap();
+        assert_eq!(surface.format, PixelFormat::Rg8Snorm);
+        assert_eq!(surface.as_pixels::<[i8; 2]>().unwrap(), [[127, -127]; 16]);
+
+        // ...while the image conversion remaps to [0, 255]
+        let img = surface.into_rgba_image().unwrap();
+        assert_eq!(img.dimensions(), (4, 4));
+        for pixel in img.pixels() {
+            assert_eq!(pixel.0, [255, 0, 0, 255]);
+        }
+    }
+
+    #[test]
+    fn truncated_data_errors_instead_of_panicking() {
+        let file = tex_file(13, &[0; 4]); // BC7 4x4 needs a full 16-byte block
+        let tex = Tex::from_reader(&mut file.as_slice()).unwrap();
+        assert!(matches!(
+            tex.decode_mipmap(0),
+            Err(DecodeErr::MipOutOfBounds { .. })
+        ));
+    }
+}
+
 //#[cfg(test)]
-//mod tests {
+//mod old_tests {
 //    use super::*;
 //    use image::codecs::png::PngEncoder;
 //    use io::BufWriter;

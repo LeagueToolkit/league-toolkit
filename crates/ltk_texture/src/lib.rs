@@ -54,19 +54,12 @@ impl<'a> From<TexSurface<'a>> for Surface<'a> {
 impl From<image::RgbaImage> for Surface<'static> {
     fn from(img: image::RgbaImage) -> Self {
         let (width, height) = img.dimensions();
-        let data = img.into_raw();
 
         Surface::Tex(TexSurface {
             width,
             height,
-            data: tex::TexSurfaceData::Bgra8Owned(
-                data.chunks_exact(4)
-                    .map(|pixel| {
-                        let [r, g, b, a] = pixel else { unreachable!() };
-                        u32::from_le_bytes([*b, *g, *r, *a])
-                    })
-                    .collect(),
-            ),
+            format: tex::PixelFormat::Rgba8Unorm,
+            data: img.into_raw().into(),
         })
     }
 }

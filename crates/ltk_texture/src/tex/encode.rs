@@ -1,7 +1,7 @@
 use super::Format;
 
 #[cfg(feature = "intel-tex")]
-use intel_tex_2::{bc1, bc3, RgbaSurface};
+use intel_tex_2::{bc1, bc3, bc7, RgbaSurface};
 
 #[cfg(any(feature = "intel-tex", test))]
 #[inline]
@@ -203,6 +203,7 @@ pub fn encode_rgba(
     match format {
         Format::Bc1 => encode_bc1(width, height, rgba_data),
         Format::Bc3 => encode_bc3(width, height, rgba_data),
+        Format::Bc7 => encode_bc7(width, height, rgba_data),
         Format::Bgra8 => encode_bgra8(rgba_data),
         _ => Err(EncodeError::UnsupportedFormat(format)),
     }
@@ -310,6 +311,31 @@ fn encode_bc3(width: u32, height: u32, rgba_data: &[u8]) -> Result<Vec<u8>, Enco
         stride: 4 * width,
     };
     Ok(bc3::compress_blocks(&surface))
+}
+
+/// Encode RGBA8 data to BC7 format
+///
+/// No pre-dithering is applied - BC7 uses full 8-bit endpoints, so the RGB565
+/// dither used for BC1/BC3 would only hurt quality.
+#[cfg(feature = "intel-tex")]
+fn encode_bc7(width: u32, height: u32, rgba_data: &[u8]) -> Result<Vec<u8>, EncodeError> {
+    let expected_len = width as usize * height as usize * 4;
+    if rgba_data.len() != expected_len {
+        return Err(EncodeError::InvalidPixelData);
+    }
+
+    let surface = RgbaSurface {
+        data: rgba_data,
+        width,
+        height,
+        stride: 4 * width,
+    };
+    Ok(bc7::compress_blocks(&bc7::alpha_basic_settings(), &surface))
+}
+
+#[cfg(not(feature = "intel-tex"))]
+fn encode_bc7(_width: u32, _height: u32, _rgba_data: &[u8]) -> Result<Vec<u8>, EncodeError> {
+    Err(EncodeError::UnsupportedFormat(Format::Bc7))
 }
 
 #[cfg(test)]
