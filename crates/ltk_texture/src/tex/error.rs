@@ -7,6 +7,8 @@ pub enum Error {
     UnknownTextureFormat(u8),
     #[error("Unsupported TEX format: {0:?}")]
     UnsupportedTextureFormat(Format),
+    #[error("Unknown TEX resource type: {0}")]
+    UnknownResourceType(u8),
     #[error("Invalid TEX flags: {0:#b}")]
     InvalidTextureFlags(u8),
     #[error("IO Error: {0}")]
@@ -36,4 +38,6 @@ pub enum DecodeErr {
         end: usize,
         len: usize,
     },
+    #[error("Slice {slice} is out of bounds of the texture depth ({depth} slices)")]
+    SliceOutOfBounds { slice: u32, depth: usize },
 }

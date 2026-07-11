@@ -26,9 +26,9 @@ impl Tex {
         // Write header
         writer.write_u16::<LE>(self.width)?;
         writer.write_u16::<LE>(self.height)?;
-        writer.write_u8(0)?; // is_extended_format (maybe)
+        writer.write_u8(self.depth)?;
         writer.write_u8(self.format.into())?;
-        writer.write_u8(self.resource_type)?;
+        writer.write_u8(self.resource_type.to_u8())?;
         writer.write_u8(self.flags.bits())?;
 
         // Write data

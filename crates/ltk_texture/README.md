@@ -4,6 +4,8 @@ Decoding and encoding for League of Legends textures: the proprietary **`.tex`**
 
 `.tex` is a thin container around block-compressed (or raw BGRA8) pixel data, with mipmaps stored smallest-first. This crate parses and writes the container, decodes every format the game ships, and can encode new textures from any `image::RgbaImage`.
 
+Both 2D textures and volume (3D) textures are supported - a handful of map WADs ship `ResourceType::VolumeTexture` files whose `depth` z-slices are stored sequentially per mip. `decode_mipmap` decodes slice 0; `decode_mipmap_slice(level, slice)` decodes the rest.
+
 ## Feature flags
 
 - `intel-tex`: enables BC1/BC3/BC7 encoding via [`intel_tex_2`](https://crates.io/crates/intel_tex_2). Decoding never requires it.

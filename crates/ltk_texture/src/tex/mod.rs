@@ -24,8 +24,10 @@ type Texture2dDecodeFn = fn(&[u8], usize, usize, &mut [u32]) -> Result<(), &'sta
 pub struct Tex {
     pub width: u16,
     pub height: u16,
+    /// Number of z-slices; `1` for everything but volume textures.
+    pub depth: u8,
     pub format: Format,
-    pub resource_type: u8,
+    pub resource_type: ResourceType,
     pub flags: TextureFlags,
     pub mip_count: u32,
     data: Vec<u8>,
@@ -85,8 +87,9 @@ impl Tex {
         Ok(Self {
             width: width as u16,
             height: height as u16,
+            depth: 1,
             format: options.format,
-            resource_type: 0, // texture
+            resource_type: ResourceType::Texture,
             flags,
             mip_count,
             data,
@@ -117,33 +120,57 @@ impl Tex {
 impl Tex {
     /// Try to decode a single mipmap, where 0 is full resolution, and [Self::mip_count] is the smallest
     /// mip (1x1).
+    ///
+    /// For volume textures this decodes z-slice 0; use [Self::decode_mipmap_slice] for the rest.
     pub fn decode_mipmap(&self, level: u32) -> Result<TexSurface<'_>, DecodeErr> {
+        self.decode_mipmap_slice(level, 0)
+    }
+
+    /// Try to decode a single z-slice of a mipmap. For 2D textures the only valid slice is 0.
+    ///
+    /// - Mip dimensions halve per level with a floor of 1
+    /// - Mip slices are stored sequentially, matching the D3D volume texture layout
+    /// - Mip levels are stored in reverse order, smallest to largest
+    pub fn decode_mipmap_slice(&self, level: u32, slice: u32) -> Result<TexSurface<'_>, DecodeErr> {
         let level = level.min(self.mip_count - 1);
         let width = self.width as usize;
         let height = self.height as usize;
+        let depth = (self.depth as usize).max(1);
         let (block_w, block_h) = self.format.block_size();
 
-        let mip_dims = |level: u32| ((width >> level).max(1), (height >> level).max(1));
-        let mip_bytes = |dims: (usize, usize)| {
+        let mip_dims = |level: u32| {
+            (
+                (width >> level).max(1),
+                (height >> level).max(1),
+                (depth >> level).max(1),
+            )
+        };
+        // size of a single z-slice of a mip
+        let slice_bytes = |dims: (usize, usize, usize)| {
             (dims.0.div_ceil(block_w)) * (dims.1.div_ceil(block_h)) * self.format.bytes_per_block()
         };
+        let mip_bytes = |dims: (usize, usize, usize)| slice_bytes(dims) * dims.2;
+
+        // size of mip
+        let (w, h, d) = mip_dims(level);
+        if slice as usize >= d {
+            return Err(DecodeErr::SliceOutOfBounds { slice, depth: d });
+        }
 
         // sum all mips before our one
         // (league sorts mips smallest -> largest so our iterator counts up)
         let off = (level + 1..self.mip_count)
             .map(|level| mip_bytes(mip_dims(level)))
-            .sum::<usize>();
-
-        // size of mip
-        let (w, h) = mip_dims(level);
+            .sum::<usize>()
+            + slice as usize * slice_bytes((w, h, d));
 
         let mip_data =
             self.data
-                .get(off..off + mip_bytes((w, h)))
+                .get(off..off + slice_bytes((w, h, d)))
                 .ok_or(DecodeErr::MipOutOfBounds {
                     level,
                     start: off,
-                    end: off + mip_bytes((w, h)),
+                    end: off + slice_bytes((w, h, d)),
                     len: self.data.len(),
                 })?;
 
@@ -223,11 +250,9 @@ impl Tex {
     pub fn from_reader_no_magic<R: io::Read + ?Sized>(reader: &mut R) -> Result<Self, Error> {
         let (width, height) = (reader.read_u16::<LE>()?, reader.read_u16::<LE>()?);
 
-        let _is_extended_format = reader.read_u8(); // maybe..
+        let depth = reader.read_u8()?;
         let format = Format::from_u8(reader.read_u8()?)?;
-
-        // (0: texture, 1: cubemap, 2: surface, 3: volumetexture)
-        let resource_type = reader.read_u8()?; // maybe..
+        let resource_type = ResourceType::from_u8(reader.read_u8()?)?;
 
         let flags = reader.read_u8()?;
         let flags = TextureFlags::from_bits(flags).ok_or(Error::InvalidTextureFlags(flags))?;
@@ -238,15 +263,41 @@ impl Tex {
         Ok(Self {
             width,
             height,
+            depth,
             format,
             flags,
             resource_type,
             data,
             mip_count: match flags.contains(TextureFlags::HasMipMaps) {
-                true => ((height.max(width) as f32).log2().floor() + 1.0) as u32,
+                true => ((height.max(width).max(depth as u16) as f32).log2().floor() + 1.0) as u32,
                 false => 1,
             },
         })
+    }
+}
+
+/// GPU resource type, as stored in the TEX header.
+/// Only regular and volume textures can be found in live builds of the game.
+#[derive(TryFromPrimitive, IntoPrimitive, Clone, Copy, Debug, Hash, PartialEq, Eq)]
+#[repr(u8)]
+pub enum ResourceType {
+    /// A regular 2D texture (`depth == 1`)
+    Texture = 0,
+    /// Six 2D faces (This resource type is assumed by reverse engineering)
+    Cubemap = 1,
+    /// A bare 2D image (This resource type is assumed by reverse engineering)
+    Surface = 2,
+    /// A 3D texture: [`Tex::depth`] z-slices per mip level, stored sequentially
+    VolumeTexture = 3,
+}
+
+impl ResourceType {
+    pub fn from_u8(resource_type: u8) -> Result<Self, Error> {
+        Self::try_from(resource_type).map_err(|_| Error::UnknownResourceType(resource_type))
+    }
+
+    pub fn to_u8(&self) -> u8 {
+        (*self).into()
     }
 }
 
@@ -290,12 +341,52 @@ mod tests {
         file.extend_from_slice(b"TEX\0");
         file.extend_from_slice(&4u16.to_le_bytes()); // width
         file.extend_from_slice(&4u16.to_le_bytes()); // height
-        file.push(0); // is_extended_format
+        file.push(1); // depth
         file.push(format);
         file.push(0); // resource type: texture
         file.push(0); // flags: no mipmaps
         file.extend_from_slice(data);
         file
+    }
+
+    #[test]
+    fn write_roundtrips_header_bytes() {
+        let file = tex_file(20, &[0u8; 64]);
+        let tex = Tex::from_reader(&mut file.as_slice()).unwrap();
+        assert_eq!(tex.depth, 1);
+        assert_eq!(tex.resource_type, ResourceType::Texture);
+
+        let mut out = Vec::new();
+        tex.write(&mut out).unwrap();
+        assert_eq!(out, file);
+    }
+
+    #[test]
+    fn decodes_volume_texture_slices() {
+        // 2x2x2 BGRA8 volume texture, no mips: two sequential 16-byte z-slices
+        let mut file = Vec::new();
+        file.extend_from_slice(b"TEX\0");
+        file.extend_from_slice(&2u16.to_le_bytes()); // width
+        file.extend_from_slice(&2u16.to_le_bytes()); // height
+        file.push(2); // depth
+        file.push(20); // Bgra8
+        file.push(3); // resource type: volume texture
+        file.push(0); // flags: no mipmaps
+        file.extend_from_slice(&[0x11; 16]); // slice 0
+        file.extend_from_slice(&[0x22; 16]); // slice 1
+
+        let tex = Tex::from_reader(&mut file.as_slice()).unwrap();
+        assert_eq!(tex.depth, 2);
+        assert_eq!(tex.resource_type, ResourceType::VolumeTexture);
+
+        assert_eq!(&*tex.decode_mipmap_slice(0, 0).unwrap().data, &[0x11; 16]);
+        assert_eq!(&*tex.decode_mipmap_slice(0, 1).unwrap().data, &[0x22; 16]);
+        // decode_mipmap is slice 0
+        assert_eq!(&*tex.decode_mipmap(0).unwrap().data, &[0x11; 16]);
+        assert!(matches!(
+            tex.decode_mipmap_slice(0, 2),
+            Err(DecodeErr::SliceOutOfBounds { slice: 2, depth: 2 })
+        ));
     }
 
     #[test]
