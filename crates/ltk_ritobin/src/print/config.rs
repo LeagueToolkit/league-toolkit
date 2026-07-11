@@ -1,6 +1,7 @@
 use crate::HashProvider;
 
 #[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct WrapConfig {
     /// Maximum line width - will try to break blocks if the line exceeds this number.
     pub line_width: usize,
@@ -43,6 +44,7 @@ impl Default for WrapConfig {
 
 /// Configuration for the ritobin printer.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PrintConfig<Hashes: HashProvider> {
     /// Number of spaces per indent level.
     pub indent_size: usize,
