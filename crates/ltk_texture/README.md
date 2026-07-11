@@ -8,7 +8,7 @@ Both 2D textures and volume (3D) textures are supported - a handful of map WADs 
 
 ## Feature flags
 
-- `intel-tex`: enables BC1/BC3/BC7 encoding via [`intel_tex_2`](https://crates.io/crates/intel_tex_2). Decoding never requires it.
+- `intel-tex`: enables BC7 encoding via [`intel_tex_2`](https://crates.io/crates/intel_tex_2)'s ISPC kernels (x86/x86_64 only). BC1/BC3 encoding is always available through [`texpresso`](https://crates.io/crates/texpresso) (pure Rust, any target). Decoding never requires any feature.
 
 ## Supported `.tex` formats
 
@@ -16,8 +16,8 @@ Both 2D textures and volume (3D) textures are supported - a handful of map WADs 
 |-----|-------------------|--------|-----------------------|
 | 1 | ETC1 | ✅ | ❌ |
 | 2, 3 | ETC2/EAC | ✅ | ❌ |
-| 10, 11 | BC1 | ✅ | ✅ (`intel-tex`) |
-| 12 | BC3 | ✅ | ✅ (`intel-tex`) |
+| 10, 11 | BC1 | ✅ | ✅ |
+| 12 | BC3 | ✅ | ✅ |
 | 13 | BC7 (`BC7_UNORM_SRGB`) | ✅ | ✅ (`intel-tex`) |
 | 14 | BC5 (`BC5_SNORM`) | ✅ | ❌ |
 | 20 | Uncompressed BGRA8 | ✅ | ✅ |
@@ -88,7 +88,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Encoding
 
-Encoding to the block-compressed formats requires the `intel-tex` feature (ISPC texture compressor bindings):
+BC1/BC3 encoding always works (texpresso cluster fit, parallelized with rayon); BC7 additionally requires the `intel-tex` feature (ISPC texture compressor bindings):
 
 ```rust
 use ltk_texture::Tex;
@@ -99,7 +99,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let img = image::open("input.png")?;
     let tex = Tex::encode_dynamic_image(
         img,
-        EncodeOptions::new(Format::Bc7)
+        EncodeOptions::new(Format::Bc3)
             .with_mipmaps()
             .with_mipmap_filter(MipmapFilter::Lanczos3),
     )?;
@@ -109,7 +109,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-BC1/BC3 encodes apply Floyd–Steinberg dithering toward RGB565 to reduce banding; BC7 encodes from the full 8-bit data.
+For alpha-blended textures, `EncodeOptions::with_weigh_colour_by_alpha(true)` weighs each pixel's contribution to the BC1/BC3 endpoint fit by its alpha, which can significantly improve perceived quality.
+
+Input dimensions don't need to be multiples of 4; partial edge blocks are handled correctly and the true dimensions go in the header.
+
+For textures headed back into the game, keep the base dimensions a multiple of 4: D3D11 forbids block-compressed textures with a non-aligned top mip. Uncompressed formats (BGRA8, RGBA16F) have no such restriction.
 
 ## Related crates
 

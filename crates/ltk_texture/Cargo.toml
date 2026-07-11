@@ -26,6 +26,7 @@ image_dds = { version = "0.6.0", default-features = false, features = [
 ] }
 
 texture2ddecoder = "0.1.2"
+texpresso = { workspace = true }
 intel_tex_2 = { version = "0.5.0", optional = true }
 
 

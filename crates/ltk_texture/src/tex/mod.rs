@@ -78,12 +78,11 @@ impl Tex {
         }
 
         let (data, mip_count, flags) = if options.generate_mipmaps {
-            let (mip_data, mip_count) =
-                encode_rgba_with_mipmaps(img, options.format, options.mipmap_filter)?;
+            let (mip_data, mip_count) = encode_rgba_with_mipmaps(img, &options)?;
             (mip_data, mip_count, TextureFlags::HasMipMaps)
         } else {
             let rgba_data = img.as_raw();
-            let encoded = encode_rgba(width, height, rgba_data, options.format)?;
+            let encoded = encode_rgba(width, height, rgba_data, &options)?;
             (encoded, 1, TextureFlags::empty())
         };
 
@@ -458,6 +457,30 @@ mod tests {
 
         let decoded = tex.decode_mipmap(0).unwrap().into_rgba_image().unwrap();
         assert_eq!(decoded.pixels().next().unwrap().0, [0, 51, 204, 255]);
+    }
+
+    /// The texpresso BC1/BC3 backend: a solid color that's exact in RGB565 must
+    /// round-trip unchanged, including through the masked partial blocks and
+    /// non-block-aligned mip levels of a 10x6 NPOT chain.
+    #[test]
+    fn texpresso_bc_encode_roundtrips() {
+        let mut img = image::RgbaImage::new(10, 6);
+        img.pixels_mut().for_each(|p| p.0 = [255, 0, 0, 255]);
+
+        for format in [Format::Bc1, Format::Bc3] {
+            let tex =
+                Tex::encode_rgba_image(&img, EncodeOptions::new(format).with_mipmaps()).unwrap();
+            assert_eq!(tex.mip_count, 4); // 10x6 -> 5x3 -> 2x1 -> 1x1
+
+            for level in 0..tex.mip_count {
+                let surface = tex.decode_mipmap(level).unwrap();
+                assert_eq!(surface.width, (10 >> level).max(1));
+                assert_eq!(surface.height, (6 >> level).max(1));
+                for p in surface.into_rgba_image().unwrap().pixels() {
+                    assert_eq!(p.0, [255, 0, 0, 255], "{format:?} level {level}");
+                }
+            }
+        }
     }
 
     #[test]
