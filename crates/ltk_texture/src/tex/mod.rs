@@ -73,6 +73,9 @@ impl Tex {
         options: EncodeOptions,
     ) -> Result<Self, EncodeError> {
         let (width, height) = img.dimensions();
+        if width == 0 || height == 0 {
+            return Err(EncodeError::ZeroSizedImage);
+        }
 
         let (data, mip_count, flags) = if options.generate_mipmaps {
             let (mip_data, mip_count) =
@@ -270,7 +273,7 @@ impl Tex {
             resource_type,
             data,
             mip_count: match flags.contains(TextureFlags::HasMipMaps) {
-                true => ((height.max(width).max(depth as u16) as f32).log2().floor() + 1.0) as u32,
+                true => (height.max(width).max(depth as u16).max(1) as u32).ilog2() + 1,
                 false => 1,
             },
         })
@@ -455,6 +458,19 @@ mod tests {
 
         let decoded = tex.decode_mipmap(0).unwrap().into_rgba_image().unwrap();
         assert_eq!(decoded.pixels().next().unwrap().0, [0, 51, 204, 255]);
+    }
+
+    #[test]
+    fn zero_sized_image_errors() {
+        let img = image::RgbaImage::new(0, 0);
+        assert!(matches!(
+            Tex::encode_rgba_image(&img, EncodeOptions::new(Format::Bgra8)),
+            Err(EncodeError::ZeroSizedImage)
+        ));
+        assert!(matches!(
+            Tex::encode_rgba_image(&img, EncodeOptions::new(Format::Bgra8).with_mipmaps()),
+            Err(EncodeError::ZeroSizedImage)
+        ));
     }
 
     #[test]

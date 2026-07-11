@@ -228,9 +228,11 @@ pub fn encode_rgba_with_mipmaps(
     filter: MipmapFilter,
 ) -> Result<(Vec<u8>, u32), EncodeError> {
     let (width, height) = img.dimensions();
+if width == 0 || height == 0 {
+        return Err(EncodeError::ZeroSizedImage);
+    }
 
-    // Calculate mipmap count
-    let mip_count = ((height.max(width) as f32).log2().floor() + 1.0) as u32;
+    let mip_count = height.max(width).ilog2() + 1;
 
     // Generate all mip levels (from full size down to 1x1)
     let mut mip_levels = Vec::new();
@@ -424,4 +426,6 @@ pub enum EncodeError {
     UnsupportedFormat(Format),
     #[error("Invalid pixel data")]
     InvalidPixelData,
+    #[error("Cannot encode a zero-sized image")]
+    ZeroSizedImage,
 }
