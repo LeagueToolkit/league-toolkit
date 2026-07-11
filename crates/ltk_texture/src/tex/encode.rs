@@ -205,6 +205,7 @@ pub fn encode_rgba(
         Format::Bc3 => encode_bc3(width, height, rgba_data),
         Format::Bc7 => encode_bc7(width, height, rgba_data),
         Format::Bgra8 => encode_bgra8(rgba_data),
+        Format::Rgba16Float => encode_rgba16_float(rgba_data),
         _ => Err(EncodeError::UnsupportedFormat(format)),
     }
 }
@@ -389,6 +390,18 @@ mod tests {
 #[cfg(not(feature = "intel-tex"))]
 fn encode_bc3(_width: u32, _height: u32, _rgba_data: &[u8]) -> Result<Vec<u8>, EncodeError> {
     Err(EncodeError::UnsupportedFormat(Format::Bc3))
+}
+
+/// Convert RGBA8 to RGBA16 half-float (uncompressed)
+fn encode_rgba16_float(rgba_data: &[u8]) -> Result<Vec<u8>, EncodeError> {
+    if !rgba_data.len().is_multiple_of(4) {
+        return Err(EncodeError::InvalidPixelData);
+    }
+
+    Ok(rgba_data
+        .iter()
+        .flat_map(|&channel| half::f16::from_f32(channel as f32 / 255.0).to_le_bytes())
+        .collect())
 }
 
 /// Convert RGBA8 to BGRA8 (uncompressed)

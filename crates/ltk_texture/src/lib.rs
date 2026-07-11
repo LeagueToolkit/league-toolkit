@@ -11,6 +11,10 @@ pub use error::*;
 pub use tex::Tex;
 use tex::TexSurface;
 
+/// Re-exported for typed access to [`tex::PixelFormat::Rgba16Float`] surfaces,
+/// e.g. `surface.as_pixels::<[half::f16; 4]>()`.
+pub use half;
+
 /// Represents a texture file
 #[derive(Debug)]
 pub enum Texture {

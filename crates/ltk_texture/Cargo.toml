@@ -12,6 +12,7 @@ workspace = true
 [dependencies]
 bitflags = { workspace = true }
 bytemuck = { workspace = true }
+half = { workspace = true }
 byteorder = { workspace = true }
 thiserror = { workspace = true }
 num_enum = { workspace = true }

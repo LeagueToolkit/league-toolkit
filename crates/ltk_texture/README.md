@@ -21,6 +21,7 @@ Both 2D textures and volume (3D) textures are supported - a handful of map WADs 
 | 13 | BC7 (`BC7_UNORM_SRGB`) | ✅ | ✅ (`intel-tex`) |
 | 14 | BC5 (`BC5_SNORM`) | ✅ | ❌ |
 | 20 | Uncompressed BGRA8 | ✅ | ✅ |
+| 21 | Uncompressed RGBA16 half-float | ✅ | ✅ |
 
 BC5_SNORM is decoded by this crate's own implementation, verified against DirectXTex and the D3D11 functional spec - general-purpose decoders (`image_dds`, `texture2ddecoder`) only implement the unsigned variant, which silently corrupts signed data.
 
@@ -62,6 +63,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 - Color formats (BC1/BC3/BC7) decode to `Rgba8Unorm`; ETC and raw data decode to `Bgra8Unorm`.
 - BC5_SNORM decodes to `Rg8Snorm` with the signed data **intact** - nothing is lost to an RGBA remap.
+- RGBA16F decodes to `Rgba16Float` (little-endian `half::f16` bit patterns; `half` is re-exported). The shipped files are shader textures holding values far outside `[0, 1]`, so use `as_pixels::<[half::f16; 4]>()` when the actual values matter - `into_rgba_image()` clamps.
 
 `into_rgba_image()` is a *presentation* conversion: signed-normalized channels are remapped from `[-1, 1]` to `[0, 255]`, missing channels are filled with 0 (alpha with 255). When you need the real values - normal maps being the typical case - read them directly:
 

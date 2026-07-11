@@ -11,12 +11,14 @@ pub enum PixelFormat {
     Rgba8Unorm,
     /// 8-bit RG, signed normalized (bytes are `i8` bit patterns)
     Rg8Snorm,
+    /// 16-bit RGBA, half-float (channels are little-endian [`half::f16`] bit patterns)
+    Rgba16Float,
 }
 
 impl PixelFormat {
     pub const fn channel_count(self) -> usize {
         match self {
-            PixelFormat::Bgra8Unorm | PixelFormat::Rgba8Unorm => 4,
+            PixelFormat::Bgra8Unorm | PixelFormat::Rgba8Unorm | PixelFormat::Rgba16Float => 4,
             PixelFormat::Rg8Snorm => 2,
         }
     }
@@ -25,6 +27,7 @@ impl PixelFormat {
         match self {
             PixelFormat::Bgra8Unorm | PixelFormat::Rgba8Unorm => 4,
             PixelFormat::Rg8Snorm => 2,
+            PixelFormat::Rgba16Float => 8,
         }
     }
 }
@@ -54,8 +57,9 @@ impl TexSurface<'_> {
     /// Convert the surface to an [image::RgbaImage]
     ///
     /// This is a *presentation* conversion: signed-normalized channels are remapped from
-    /// `[-1, 1]` to `[0, 255]`, and channels missing from the source format are filled
-    /// with 0 (alpha with 255).
+    /// `[-1, 1]` to `[0, 255]`, float channels are clamped to `[0, 1]` before quantizing
+    /// (out-of-range data is lost - use [`Self::as_pixels`] for the real values), and
+    /// channels missing from the source format are filled with 0 (alpha with 255).
     pub fn into_rgba_image(self) -> Result<image::RgbaImage, ToImageError> {
         let rgba: Vec<u8> = match self.format {
             PixelFormat::Rgba8Unorm => self.data.into_owned(),
@@ -78,6 +82,14 @@ impl TexSurface<'_> {
                         0,
                         255,
                     ]
+                })
+                .collect(),
+            PixelFormat::Rgba16Float => self
+                .data
+                .chunks_exact(2)
+                .map(|channel| {
+                    let value = half::f16::from_le_bytes([channel[0], channel[1]]).to_f32();
+                    (value.clamp(0.0, 1.0) * 255.0).round() as u8
                 })
                 .collect(),
         };
