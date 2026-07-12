@@ -1406,24 +1406,20 @@ impl Visitor for TypeChecker<'_> {
             _ => {}
         }
 
-        // match self.current.as_mut() {
-        //     Some((depth, name, value)) => {}
-        //     None => {
-        //         match tree.kind {
-        //             Kind::Entry => {}
-        //             Kind::File => return Visit::Continue,
-        //             kind => {
-        //                 if depth == 2 {
-        //                     self.ctx
-        //                         .diagnostics
-        //                         .push(RootNonEntry.default_span(tree.span));
-        //                 }
-        //                 return Visit::Skip;
-        //             }
-        //         }
-        //
-        //     }
-        // }
+        match self.stack.last() {
+            Some(_) => {}
+            None => match tree.kind {
+                Kind::Entry | Kind::Comment | Kind::File => return Visit::Continue,
+                _ => {
+                    if depth == 2 {
+                        self.ctx
+                            .diagnostics
+                            .push(RootNonEntry.default_span(tree.span));
+                    }
+                    return Visit::Skip;
+                }
+            },
+        }
 
         Visit::Continue
     }
