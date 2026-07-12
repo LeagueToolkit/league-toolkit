@@ -12,7 +12,7 @@ use crate::{
         tokenizer::{self, Token},
         Error, ErrorPropagation, Parser, Span,
     },
-    typecheck::visitor::DiagnosticWithSpan,
+    typecheck::visitor::diagnostics::DiagnosticWithSpan,
 };
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
