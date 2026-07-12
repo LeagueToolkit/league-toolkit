@@ -52,6 +52,7 @@ pub struct PrintConfig<Hashes: HashProvider> {
     /// Config relating to how/when to wrap
     pub wrap: WrapConfig,
 
+    #[cfg_attr(feature = "serde", serde(skip, default))]
     pub hashes: Hashes,
 }
 
