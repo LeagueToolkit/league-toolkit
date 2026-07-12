@@ -1,126 +1,91 @@
 use super::Format;
 
+#[cfg(any(feature = "intel-tex", test))]
+use std::borrow::Cow;
+
 #[cfg(feature = "intel-tex")]
-use intel_tex_2::{bc1, bc3, RgbaSurface};
+use intel_tex_2::{bc7, RgbaSurface};
 
+/// Pad RGBA data out to the 4x4 block grid by replicating edge texels.
 #[cfg(any(feature = "intel-tex", test))]
-#[inline]
-fn clamp01(x: f32) -> f32 {
-    x.clamp(0.0, 1.0)
-}
-
-#[cfg(any(feature = "intel-tex", test))]
-#[inline]
-fn quantize_to_bits(x: f32, bits: u8) -> f32 {
-    debug_assert!((1..=8).contains(&bits));
-    let levels = (1u32 << bits) - 1;
-    (x * levels as f32).round() / levels as f32
-}
-
-/// Dither RGB toward 5/6/5 (BC1/BC3 color endpoint-ish). Alpha is untouched.
-///
-/// Floyd–Steinberg error diffusion with serpentine scan to reduce directional artifacts.
-#[cfg(any(feature = "intel-tex", test))]
-fn floyd_steinberg_dither_rgb565_in_place(width: u32, height: u32, rgba: &mut [u8]) {
-    let w = width as usize;
-    let h = height as usize;
-    if w == 0 || h == 0 {
-        return;
+fn pad_to_block_grid(width: u32, height: u32, rgba: &[u8]) -> (u32, u32, Cow<'_, [u8]>) {
+    let padded_w = width.next_multiple_of(4);
+    let padded_h = height.next_multiple_of(4);
+    if (padded_w == width && padded_h == height) || width == 0 || height == 0 {
+        return (width, height, Cow::Borrowed(rgba));
     }
-    debug_assert_eq!(rgba.len(), w * h * 4);
 
-    // Error buffers for current and next row: per-x accumulated error for RGB.
-    let mut err_curr = vec![[0.0f32; 3]; w];
-    let mut err_next = vec![[0.0f32; 3]; w];
-
-    for y in 0..h {
-        let left_to_right = (y & 1) == 0;
-
-        let (x_start, x_end, step): (isize, isize, isize) = if left_to_right {
-            (0, w as isize, 1)
-        } else {
-            (w as isize - 1, -1, -1)
-        };
-
-        let mut x = x_start;
-        while x != x_end {
-            let xi = x as usize;
-            let idx = (y * w + xi) * 4;
-
-            let r0 = rgba[idx] as f32 / 255.0 + err_curr[xi][0];
-            let g0 = rgba[idx + 1] as f32 / 255.0 + err_curr[xi][1];
-            let b0 = rgba[idx + 2] as f32 / 255.0 + err_curr[xi][2];
-
-            let r = clamp01(r0);
-            let g = clamp01(g0);
-            let b = clamp01(b0);
-
-            // Quantize to 5/6/5
-            let rq = quantize_to_bits(r, 5);
-            let gq = quantize_to_bits(g, 6);
-            let bq = quantize_to_bits(b, 5);
-
-            // Write back (alpha untouched)
-            rgba[idx] = (rq * 255.0).round().clamp(0.0, 255.0) as u8;
-            rgba[idx + 1] = (gq * 255.0).round().clamp(0.0, 255.0) as u8;
-            rgba[idx + 2] = (bq * 255.0).round().clamp(0.0, 255.0) as u8;
-
-            // Error
-            let er = r - rq;
-            let eg = g - gq;
-            let eb = b - bq;
-
-            // Floyd–Steinberg weights:
-            // right 7/16, down-left 3/16, down 5/16, down-right 1/16
-            let xr = x + step; // "right" in scan direction
-            let xl = x - step; // "left" in scan direction
-
-            // right (same row)
-            if xr >= 0 && (xr as usize) < w {
-                let xri = xr as usize;
-                err_curr[xri][0] += er * (7.0 / 16.0);
-                err_curr[xri][1] += eg * (7.0 / 16.0);
-                err_curr[xri][2] += eb * (7.0 / 16.0);
-            }
-
-            // next row
-            if y + 1 < h {
-                // down
-                err_next[xi][0] += er * (5.0 / 16.0);
-                err_next[xi][1] += eg * (5.0 / 16.0);
-                err_next[xi][2] += eb * (5.0 / 16.0);
-
-                // down-left (relative to scan direction)
-                if xl >= 0 && (xl as usize) < w {
-                    let xli = xl as usize;
-                    err_next[xli][0] += er * (3.0 / 16.0);
-                    err_next[xli][1] += eg * (3.0 / 16.0);
-                    err_next[xli][2] += eb * (3.0 / 16.0);
-                }
-
-                // down-right
-                if xr >= 0 && (xr as usize) < w {
-                    let xri = xr as usize;
-                    err_next[xri][0] += er * (1.0 / 16.0);
-                    err_next[xri][1] += eg * (1.0 / 16.0);
-                    err_next[xri][2] += eb * (1.0 / 16.0);
-                }
-            }
-
-            x += step;
+    let (w, pw, ph) = (width as usize, padded_w as usize, padded_h as usize);
+    let mut padded = Vec::with_capacity(pw * ph * 4);
+    for y in 0..ph {
+        let row = &rgba[y.min(height as usize - 1) * w * 4..][..w * 4];
+        padded.extend_from_slice(row);
+        for _ in w..pw {
+            padded.extend_from_slice(&row[(w - 1) * 4..]);
         }
+    }
+    (padded_w, padded_h, Cow::Owned(padded))
+}
 
-        // Rotate error buffers
-        std::mem::swap(&mut err_curr, &mut err_next);
-        err_next.fill([0.0; 3]);
+/// Texture format to encode to, along with any format-specific options
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum EncodeFormat {
+    Bc1 {
+        /// Weigh colour by alpha during the cluster fit. Off by default; enabling
+        /// it can significantly improve perceived quality for textures rendered with
+        /// alpha blending, at the cost of color accuracy in transparent regions.
+        weigh_colour_by_alpha: bool,
+    },
+    Bc3 {
+        /// Weigh colour by alpha during the cluster fit - see [`EncodeFormat::Bc1`]
+        weigh_colour_by_alpha: bool,
+    },
+    Bc7,
+    Bgra8,
+    Rgba16Float,
+    Rgba32Float,
+}
+
+impl From<EncodeFormat> for Format {
+    fn from(format: EncodeFormat) -> Self {
+        match format {
+            EncodeFormat::Bc1 { .. } => Self::Bc1,
+            EncodeFormat::Bc3 { .. } => Self::Bc3,
+            EncodeFormat::Bc7 => Self::Bc7,
+            EncodeFormat::Bgra8 => Self::Bgra8,
+            EncodeFormat::Rgba16Float => Self::Rgba16Float,
+            EncodeFormat::Rgba32Float => Self::Rgba32Float,
+        }
+    }
+}
+
+impl TryFrom<Format> for EncodeFormat {
+    type Error = EncodeError;
+
+    /// Convert a raw tex format into its encode counterpart with default options,
+    /// failing with [`EncodeError::UnsupportedFormat`] if the format cannot be encoded
+    fn try_from(format: Format) -> Result<Self, EncodeError> {
+        Ok(match format {
+            Format::Bc1 => Self::Bc1 {
+                weigh_colour_by_alpha: false,
+            },
+            Format::Bc3 => Self::Bc3 {
+                weigh_colour_by_alpha: false,
+            },
+            Format::Bc7 => Self::Bc7,
+            Format::Bgra8 => Self::Bgra8,
+            Format::Rgba16Float => Self::Rgba16Float,
+            Format::Rgba32Float => Self::Rgba32Float,
+            format => return Err(EncodeError::UnsupportedFormat(format)),
+        })
     }
 }
 
 /// Options for encoding textures
 #[derive(Debug, Clone)]
 pub struct EncodeOptions {
-    /// Texture format to encode to
-    pub format: Format,
+    /// Texture format to encode to, with any format-specific options
+    pub format: EncodeFormat,
     /// Whether to generate mipmaps
     pub generate_mipmaps: bool,
     /// Filter type to use for mipmap generation
@@ -154,7 +119,7 @@ impl MipmapFilter {
 
 impl EncodeOptions {
     /// Create new options with the specified format and no mipmaps
-    pub fn new(format: Format) -> Self {
+    pub fn new(format: EncodeFormat) -> Self {
         Self {
             format,
             generate_mipmaps: false,
@@ -177,35 +142,91 @@ impl EncodeOptions {
 
 impl Default for EncodeOptions {
     fn default() -> Self {
-        Self::new(Format::Bc3)
+        Self::new(EncodeFormat::Bc3 {
+            weigh_colour_by_alpha: false,
+        })
     }
 }
 
-/// Encode an RGBA8 image into the specified format
+/// Encode an RGBA8 image into the format specified by `options`
+///
+/// Dimensions don't need to be multiples of 4 - the encoder will pad the image to a 4x4 block grid by replicating edge texels.
 ///
 /// # Example
 /// ```no_run
-/// use ltk_texture::tex::{encode_rgba, Format};
+/// use ltk_texture::tex::{encode_rgba, EncodeFormat, EncodeOptions};
 ///
 /// let width = 256;
 /// let height = 256;
 /// let rgba_data: Vec<u8> = vec![0; (width * height * 4) as usize];
 ///
 /// // Encode to BC3 format
-/// let compressed = encode_rgba(width, height, &rgba_data, Format::Bc3).unwrap();
+/// let format = EncodeFormat::Bc3 { weigh_colour_by_alpha: false };
+/// let compressed =
+///     encode_rgba(width, height, &rgba_data, &EncodeOptions::new(format)).unwrap();
 /// ```
 pub fn encode_rgba(
     width: u32,
     height: u32,
     rgba_data: &[u8],
-    format: Format,
+    options: &EncodeOptions,
 ) -> Result<Vec<u8>, EncodeError> {
-    match format {
-        Format::Bc1 => encode_bc1(width, height, rgba_data),
-        Format::Bc3 => encode_bc3(width, height, rgba_data),
-        Format::Bgra8 => encode_bgra8(rgba_data),
-        _ => Err(EncodeError::UnsupportedFormat(format)),
+    match options.format {
+        EncodeFormat::Bc1 {
+            weigh_colour_by_alpha,
+        } => encode_texpresso(
+            texpresso::Format::Bc1,
+            width,
+            height,
+            rgba_data,
+            weigh_colour_by_alpha,
+        ),
+        EncodeFormat::Bc3 {
+            weigh_colour_by_alpha,
+        } => encode_texpresso(
+            texpresso::Format::Bc3,
+            width,
+            height,
+            rgba_data,
+            weigh_colour_by_alpha,
+        ),
+        EncodeFormat::Bc7 => encode_bc7(width, height, rgba_data),
+        EncodeFormat::Bgra8 => encode_bgra8(rgba_data),
+        EncodeFormat::Rgba16Float => encode_rgba16_float(rgba_data),
+        EncodeFormat::Rgba32Float => encode_rgba32_float(rgba_data),
     }
+}
+
+/// Encode RGBA8 data to BC1/BC3 via texpresso's cluster fit
+///
+/// texpresso handles non-multiple-of-4 dimensions natively by masking out-of-image texels
+/// in partial edge blocks from the endpoint fit entirely.
+fn encode_texpresso(
+    format: texpresso::Format,
+    width: u32,
+    height: u32,
+    rgba_data: &[u8],
+    weigh_colour_by_alpha: bool,
+) -> Result<Vec<u8>, EncodeError> {
+    let (w, h) = (width as usize, height as usize);
+    if rgba_data.len() != w * h * 4 {
+        return Err(EncodeError::InvalidPixelData);
+    }
+
+    let mut out = vec![0u8; format.compressed_size(w, h)];
+    format.compress(
+        rgba_data,
+        w,
+        h,
+        texpresso::Params {
+            algorithm: texpresso::Algorithm::ClusterFit,
+            weigh_colour_by_alpha,
+            ..Default::default()
+        },
+        &mut out,
+    );
+
+    Ok(out)
 }
 
 /// Encode an RGBA8 image with mipmaps into the specified format
@@ -214,21 +235,24 @@ pub fn encode_rgba(
 ///
 /// # Example
 /// ```no_run
-/// use ltk_texture::tex::{encode_rgba_with_mipmaps, Format, MipmapFilter};
+/// use ltk_texture::tex::{encode_rgba_with_mipmaps, EncodeFormat, EncodeOptions};
 /// use image::RgbaImage;
 ///
 /// let img = RgbaImage::new(256, 256);
-/// let (data, mip_count) = encode_rgba_with_mipmaps(&img, Format::Bc3, MipmapFilter::Triangle).unwrap();
+/// let format = EncodeFormat::Bc3 { weigh_colour_by_alpha: false };
+/// let (data, mip_count) =
+///     encode_rgba_with_mipmaps(&img, &EncodeOptions::new(format)).unwrap();
 /// ```
 pub fn encode_rgba_with_mipmaps(
     img: &image::RgbaImage,
-    format: Format,
-    filter: MipmapFilter,
+    options: &EncodeOptions,
 ) -> Result<(Vec<u8>, u32), EncodeError> {
     let (width, height) = img.dimensions();
+    if width == 0 || height == 0 {
+        return Err(EncodeError::ZeroSizedImage);
+    }
 
-    // Calculate mipmap count
-    let mip_count = ((height.max(width) as f32).log2().floor() + 1.0) as u32;
+    let mip_count = height.max(width).ilog2() + 1;
 
     // Generate all mip levels (from full size down to 1x1)
     let mut mip_levels = Vec::new();
@@ -244,7 +268,7 @@ pub fn encode_rgba_with_mipmaps(
                 &current_img,
                 mip_width,
                 mip_height,
-                filter.to_image_filter(),
+                options.mipmap_filter.to_image_filter(),
             );
         }
 
@@ -258,111 +282,83 @@ pub fn encode_rgba_with_mipmaps(
     for img in mip_levels.iter().rev() {
         let (w, h) = img.dimensions();
         let rgba_data = img.as_raw();
-        let encoded = encode_rgba(w, h, rgba_data, format)?;
+        let encoded = encode_rgba(w, h, rgba_data, options)?;
         encoded_data.extend_from_slice(&encoded);
     }
 
     Ok((encoded_data, mip_count))
 }
 
-/// Encode RGBA8 data to BC1 format
+/// Encode RGBA8 data to BC7 format
 #[cfg(feature = "intel-tex")]
-fn encode_bc1(width: u32, height: u32, rgba_data: &[u8]) -> Result<Vec<u8>, EncodeError> {
+fn encode_bc7(width: u32, height: u32, rgba_data: &[u8]) -> Result<Vec<u8>, EncodeError> {
     let expected_len = width as usize * height as usize * 4;
     if rgba_data.len() != expected_len {
         return Err(EncodeError::InvalidPixelData);
     }
 
-    // Pre-dither toward RGB565 to reduce visible block artifacts in BC1.
-    let mut rgba = rgba_data.to_vec();
-    floyd_steinberg_dither_rgb565_in_place(width, height, &mut rgba);
-
+    let (width, height, rgba) = pad_to_block_grid(width, height, rgba_data);
     let surface = RgbaSurface {
         data: &rgba,
         width,
         height,
         stride: 4 * width,
     };
-    Ok(bc1::compress_blocks(&surface))
+    Ok(bc7::compress_blocks(&bc7::alpha_basic_settings(), &surface))
 }
 
 #[cfg(not(feature = "intel-tex"))]
-fn encode_bc1(_width: u32, _height: u32, _rgba_data: &[u8]) -> Result<Vec<u8>, EncodeError> {
-    Err(EncodeError::UnsupportedFormat(Format::Bc1))
-}
-
-/// Encode RGBA8 data to BC3 format
-#[cfg(feature = "intel-tex")]
-fn encode_bc3(width: u32, height: u32, rgba_data: &[u8]) -> Result<Vec<u8>, EncodeError> {
-    let expected_len = width as usize * height as usize * 4;
-    if rgba_data.len() != expected_len {
-        return Err(EncodeError::InvalidPixelData);
-    }
-
-    // Pre-dither toward RGB565 to reduce visible block artifacts in BC3 (color endpoints).
-    let mut rgba = rgba_data.to_vec();
-    floyd_steinberg_dither_rgb565_in_place(width, height, &mut rgba);
-
-    let surface = RgbaSurface {
-        data: &rgba,
-        width,
-        height,
-        stride: 4 * width,
-    };
-    Ok(bc3::compress_blocks(&surface))
+fn encode_bc7(_width: u32, _height: u32, _rgba_data: &[u8]) -> Result<Vec<u8>, EncodeError> {
+    Err(EncodeError::UnsupportedFormat(Format::Bc7))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn allowed_levels(bits: u8) -> std::collections::HashSet<u8> {
-        let levels = (1u32 << bits) - 1;
-        (0..=levels)
-            .map(|n| {
-                ((n as f32 / levels as f32) * 255.0)
-                    .round()
-                    .clamp(0.0, 255.0) as u8
-            })
-            .collect()
-    }
-
     #[test]
-    fn dither_preserves_alpha_and_quantizes_rgb_to_565_levels() {
-        let (w, h) = (8u32, 4u32);
-        let mut rgba = vec![0u8; (w * h * 4) as usize];
-
-        // Fill with a gradient-ish pattern and varying alpha
-        for y in 0..h as usize {
-            for x in 0..w as usize {
-                let idx = (y * w as usize + x) * 4;
-                rgba[idx] = (x as u8).wrapping_mul(31);
-                rgba[idx + 1] = (y as u8).wrapping_mul(47);
-                rgba[idx + 2] = ((x + y) as u8).wrapping_mul(19);
-                rgba[idx + 3] = (255u8).wrapping_sub((x as u8).wrapping_mul(17));
-            }
+    fn pads_partial_blocks_with_replicated_edges() {
+        // 2x1 image [A, B] -> 4x4 where every row is [A, B, B, B]
+        let a = [1, 2, 3, 4];
+        let b = [5, 6, 7, 8];
+        let pixels = [a, b].concat();
+        let (w, h, padded) = pad_to_block_grid(2, 1, &pixels);
+        assert_eq!((w, h), (4, 4));
+        let expected_row = [a, b, b, b].concat();
+        for row in padded.chunks_exact(4 * 4) {
+            assert_eq!(row, expected_row);
         }
 
-        let alpha_before: Vec<u8> = rgba.chunks_exact(4).map(|p| p[3]).collect();
-        floyd_steinberg_dither_rgb565_in_place(w, h, &mut rgba);
-        let alpha_after: Vec<u8> = rgba.chunks_exact(4).map(|p| p[3]).collect();
-        assert_eq!(alpha_before, alpha_after);
-
-        let allowed_r = allowed_levels(5);
-        let allowed_g = allowed_levels(6);
-        let allowed_b = allowed_levels(5);
-
-        for px in rgba.chunks_exact(4) {
-            assert!(allowed_r.contains(&px[0]));
-            assert!(allowed_g.contains(&px[1]));
-            assert!(allowed_b.contains(&px[2]));
-        }
+        // block-aligned data is passed through without copying
+        let rgba = vec![0u8; 8 * 4 * 4];
+        let (w, h, padded) = pad_to_block_grid(8, 4, &rgba);
+        assert_eq!((w, h), (8, 4));
+        assert!(matches!(padded, Cow::Borrowed(_)));
     }
 }
 
-#[cfg(not(feature = "intel-tex"))]
-fn encode_bc3(_width: u32, _height: u32, _rgba_data: &[u8]) -> Result<Vec<u8>, EncodeError> {
-    Err(EncodeError::UnsupportedFormat(Format::Bc3))
+/// Convert RGBA8 to RGBA16 half-float (uncompressed)
+fn encode_rgba16_float(rgba_data: &[u8]) -> Result<Vec<u8>, EncodeError> {
+    if !rgba_data.len().is_multiple_of(4) {
+        return Err(EncodeError::InvalidPixelData);
+    }
+
+    Ok(rgba_data
+        .iter()
+        .flat_map(|&channel| half::f16::from_f32(channel as f32 / 255.0).to_le_bytes())
+        .collect())
+}
+
+/// Convert RGBA8 to RGBA32 float (uncompressed)
+fn encode_rgba32_float(rgba_data: &[u8]) -> Result<Vec<u8>, EncodeError> {
+    if !rgba_data.len().is_multiple_of(4) {
+        return Err(EncodeError::InvalidPixelData);
+    }
+
+    Ok(rgba_data
+        .iter()
+        .flat_map(|&channel| (channel as f32 / 255.0).to_le_bytes())
+        .collect())
 }
 
 /// Convert RGBA8 to BGRA8 (uncompressed)
@@ -385,4 +381,6 @@ pub enum EncodeError {
     UnsupportedFormat(Format),
     #[error("Invalid pixel data")]
     InvalidPixelData,
+    #[error("Cannot encode a zero-sized image")]
+    ZeroSizedImage,
 }

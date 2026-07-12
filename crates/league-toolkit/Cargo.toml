@@ -45,3 +45,6 @@ ltk_texture = { version = "0.5.1", path = "../ltk_texture", optional = true }
 ltk_wad = { version = "0.3.0", path = "../ltk_wad", optional = true }
 ltk_hash = { version = "0.3.0", path = "../ltk_hash", optional = true }
 ltk_rst = { version = "0.2.0", path = "../ltk_rst", optional = true }
+
+[dev-dependencies]
+image = { version = "0.25.2", default-features = false }

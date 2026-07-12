@@ -4,13 +4,15 @@ version = "0.5.1"
 edition = "2021"
 description = "Texture decoding/encoding utilities for League Toolkit"
 license = "MIT OR Apache-2.0"
-readme = "../../README.md"
+readme = "README.md"
 
 [lints]
 workspace = true
 
 [dependencies]
 bitflags = { workspace = true }
+bytemuck = { workspace = true }
+half = { workspace = true }
 byteorder = { workspace = true }
 thiserror = { workspace = true }
 num_enum = { workspace = true }
@@ -24,6 +26,7 @@ image_dds = { version = "0.6.0", default-features = false, features = [
 ] }
 
 texture2ddecoder = "0.1.2"
+texpresso = { workspace = true }
 intel_tex_2 = { version = "0.5.0", optional = true }
 
 

@@ -1,7 +1,8 @@
 use byteorder::{ReadBytesExt, LE};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use std::{hint::unreachable_unchecked, io};
+use std::{borrow::Cow, io};
 
+mod bc5_snorm;
 mod encode;
 mod error;
 mod format;
@@ -15,13 +16,18 @@ pub use surface::*;
 
 use super::ReadError;
 
+/// Signature of `texture2ddecoder`'s surface decode functions
+type Texture2dDecodeFn = fn(&[u8], usize, usize, &mut [u32]) -> Result<(), &'static str>;
+
 /// League extended texture file (.tex)
 #[derive(Debug)]
 pub struct Tex {
     pub width: u16,
     pub height: u16,
+    /// Number of z-slices; `1` for everything but volume textures.
+    pub depth: u8,
     pub format: Format,
-    pub resource_type: u8,
+    pub resource_type: ResourceType,
     pub flags: TextureFlags,
     pub mip_count: u32,
     data: Vec<u8>,
@@ -40,24 +46,25 @@ impl Tex {
     /// # Example
     /// ```no_run
     /// use ltk_texture::Tex;
-    /// use ltk_texture::tex::{EncodeOptions, Format, MipmapFilter};
+    /// use ltk_texture::tex::{EncodeFormat, EncodeOptions, MipmapFilter};
     /// use image::RgbaImage;
     ///
     /// let img = RgbaImage::new(256, 256);
+    /// let format = EncodeFormat::Bc3 { weigh_colour_by_alpha: false };
     ///
     /// // Without mipmaps
-    /// let tex = Tex::encode_rgba_image(&img, EncodeOptions::new(Format::Bc3)).unwrap();
+    /// let tex = Tex::encode_rgba_image(&img, EncodeOptions::new(format)).unwrap();
     ///
     /// // With mipmaps
     /// let tex_mips = Tex::encode_rgba_image(
     ///     &img,
-    ///     EncodeOptions::new(Format::Bc3).with_mipmaps()
+    ///     EncodeOptions::new(format).with_mipmaps()
     /// ).unwrap();
     ///
     /// // With mipmaps and custom filter
     /// let tex_lanczos = Tex::encode_rgba_image(
     ///     &img,
-    ///     EncodeOptions::new(Format::Bc3)
+    ///     EncodeOptions::new(format)
     ///         .with_mipmaps()
     ///         .with_mipmap_filter(MipmapFilter::Lanczos3)
     /// ).unwrap();
@@ -67,22 +74,25 @@ impl Tex {
         options: EncodeOptions,
     ) -> Result<Self, EncodeError> {
         let (width, height) = img.dimensions();
+        if width == 0 || height == 0 {
+            return Err(EncodeError::ZeroSizedImage);
+        }
 
         let (data, mip_count, flags) = if options.generate_mipmaps {
-            let (mip_data, mip_count) =
-                encode_rgba_with_mipmaps(img, options.format, options.mipmap_filter)?;
+            let (mip_data, mip_count) = encode_rgba_with_mipmaps(img, &options)?;
             (mip_data, mip_count, TextureFlags::HasMipMaps)
         } else {
             let rgba_data = img.as_raw();
-            let encoded = encode_rgba(width, height, rgba_data, options.format)?;
+            let encoded = encode_rgba(width, height, rgba_data, &options)?;
             (encoded, 1, TextureFlags::empty())
         };
 
         Ok(Self {
             width: width as u16,
             height: height as u16,
-            format: options.format,
-            resource_type: 0, // texture
+            depth: 1,
+            format: options.format.into(),
+            resource_type: ResourceType::Texture,
             flags,
             mip_count,
             data,
@@ -94,12 +104,13 @@ impl Tex {
     /// # Example
     /// ```no_run
     /// use ltk_texture::Tex;
-    /// use ltk_texture::tex::{EncodeOptions, Format};
+    /// use ltk_texture::tex::{EncodeFormat, EncodeOptions};
     ///
     /// let img = image::open("texture.png").unwrap();
+    /// let format = EncodeFormat::Bc3 { weigh_colour_by_alpha: false };
     /// let tex = Tex::encode_dynamic_image(
     ///     img,
-    ///     EncodeOptions::new(Format::Bc3).with_mipmaps()
+    ///     EncodeOptions::new(format).with_mipmaps()
     /// ).unwrap();
     /// ```
     pub fn encode_dynamic_image(
@@ -113,71 +124,120 @@ impl Tex {
 impl Tex {
     /// Try to decode a single mipmap, where 0 is full resolution, and [Self::mip_count] is the smallest
     /// mip (1x1).
+    ///
+    /// For volume textures this decodes z-slice 0; use [Self::decode_mipmap_slice] for the rest.
     pub fn decode_mipmap(&self, level: u32) -> Result<TexSurface<'_>, DecodeErr> {
+        self.decode_mipmap_slice(level, 0)
+    }
+
+    /// Try to decode a single z-slice of a mipmap. For 2D textures the only valid slice is 0.
+    ///
+    /// - Mip dimensions halve per level with a floor of 1
+    /// - Mip slices are stored sequentially, matching the D3D volume texture layout
+    /// - Mip levels are stored in reverse order, smallest to largest
+    pub fn decode_mipmap_slice(&self, level: u32, slice: u32) -> Result<TexSurface<'_>, DecodeErr> {
         let level = level.min(self.mip_count - 1);
         let width = self.width as usize;
         let height = self.height as usize;
+        let depth = (self.depth as usize).max(1);
         let (block_w, block_h) = self.format.block_size();
 
-        let mip_dims = |level: u32| ((width >> level).max(1), (height >> level).max(1));
-        let mip_bytes = |dims: (usize, usize)| {
+        let mip_dims = |level: u32| {
+            (
+                (width >> level).max(1),
+                (height >> level).max(1),
+                (depth >> level).max(1),
+            )
+        };
+        // size of a single z-slice of a mip
+        let slice_bytes = |dims: (usize, usize, usize)| {
             (dims.0.div_ceil(block_w)) * (dims.1.div_ceil(block_h)) * self.format.bytes_per_block()
         };
+        let mip_bytes = |dims: (usize, usize, usize)| slice_bytes(dims) * dims.2;
+
+        // size of mip
+        let (w, h, d) = mip_dims(level);
+        if slice as usize >= d {
+            return Err(DecodeErr::SliceOutOfBounds { slice, depth: d });
+        }
 
         // sum all mips before our one
         // (league sorts mips smallest -> largest so our iterator counts up)
         let off = (level + 1..self.mip_count)
             .map(|level| mip_bytes(mip_dims(level)))
-            .sum::<usize>();
+            .sum::<usize>()
+            + slice as usize * slice_bytes((w, h, d));
 
-        // size of mip
-        let (w, h) = mip_dims(level);
+        let mip_data =
+            self.data
+                .get(off..off + slice_bytes((w, h, d)))
+                .ok_or(DecodeErr::MipOutOfBounds {
+                    level,
+                    start: off,
+                    end: off + slice_bytes((w, h, d)),
+                    len: self.data.len(),
+                })?;
 
-        let data = match self.format {
-            Format::Bgra8 => TexSurfaceData::Bgra8Slice(
-                // TODO: test me (this is likely wrong)
-                &self.data[off..off + (w * h * self.format.bytes_per_block())],
+        // decodes a block-compressed mip to RGBA8 via image_dds
+        let decode_image_dds = |image_format| -> Result<Vec<u8>, DecodeErr> {
+            let surface = image_dds::Surface {
+                width: w as u32,
+                height: h as u32,
+                depth: 1,
+                layers: 1,
+                mipmaps: 1,
+                image_format,
+                data: mip_data,
+            };
+            Ok(surface.decode_layers_mipmaps_rgba8(0..1, 0..1)?.data)
+        };
+
+        // decodes a mip to BGRA8 via texture2ddecoder
+        let decode_texture2d = |decode: Texture2dDecodeFn| -> Result<Vec<u8>, DecodeErr> {
+            let mut data = vec![0u32; w * h];
+            decode(mip_data, w, h, &mut data)
+                .map_err(|reason| DecodeErr::Decode(self.format, reason))?;
+            // the u32 pixels are BGRA8 packed as little-endian
+            Ok(data.into_iter().flat_map(u32::to_le_bytes).collect())
+        };
+
+        use image_dds::ImageFormat as IF;
+        let (format, data): (PixelFormat, Cow<'_, [u8]>) = match self.format {
+            // TODO: test me (this is likely wrong)
+            Format::Bgra8 => (PixelFormat::Bgra8Unorm, Cow::Borrowed(mip_data)),
+            Format::Bc1 => (
+                PixelFormat::Rgba8Unorm,
+                decode_image_dds(IF::BC1RgbaUnorm)?.into(),
             ),
-            Format::Bc1 | Format::Bc3 => {
-                let image_format = match self.format {
-                    Format::Bc1 => image_dds::ImageFormat::BC1RgbaUnorm,
-                    Format::Bc3 => image_dds::ImageFormat::BC3RgbaUnorm,
-                    // Safety: outer match guarantees only Bc1/Bc3 reach here
-                    _ => unsafe { unreachable_unchecked() },
-                };
-                let surface = image_dds::Surface {
-                    width: w as u32,
-                    height: h as u32,
-                    depth: 1,
-                    layers: 1,
-                    mipmaps: 1,
-                    image_format,
-                    data: &self.data[off..off + mip_bytes((w, h))],
-                };
-                let rgba8 = surface.decode_layers_mipmaps_rgba8(0..1, 0..1)?;
-                TexSurfaceData::Rgba8Owned(rgba8.data)
-            }
-            _ => {
-                let mut data = vec![0u32; w * h];
-                let i = &self.data[off..off + mip_bytes((w, h))];
-                let o = &mut data;
-                match self.format {
-                    Format::Etc1 => {
-                        texture2ddecoder::decode_etc1(i, w, h, o).map_err(DecodeErr::Etc1)
-                    }
-                    Format::Etc2Eac => {
-                        texture2ddecoder::decode_etc2_rgba8(i, w, h, o).map_err(DecodeErr::Etc2Eac)
-                    }
-                    // Safety: Bgra8/Bc1/Bc3 are handled above
-                    Format::Bgra8 | Format::Bc1 | Format::Bc3 => unsafe { unreachable_unchecked() },
-                }?;
-                TexSurfaceData::Bgra8Owned(data)
-            }
+            Format::Bc3 => (
+                PixelFormat::Rgba8Unorm,
+                decode_image_dds(IF::BC3RgbaUnorm)?.into(),
+            ),
+            Format::Bc7 => (
+                PixelFormat::Rgba8Unorm,
+                decode_image_dds(IF::BC7RgbaUnormSrgb)?.into(),
+            ),
+            // image_dds/texture2ddecoder only decode *unsigned* BC5, so we do it ourselves
+            Format::Bc5Snorm => (
+                PixelFormat::Rg8Snorm,
+                bc5_snorm::decode_bc5_snorm(mip_data, w, h).into(),
+            ),
+            Format::Rgba16Float => (PixelFormat::Rgba16Float, Cow::Borrowed(mip_data)),
+            Format::Rgba32Float => (PixelFormat::Rgba32Float, Cow::Borrowed(mip_data)),
+            Format::Etc1 => (
+                PixelFormat::Bgra8Unorm,
+                decode_texture2d(texture2ddecoder::decode_etc1)?.into(),
+            ),
+            Format::Etc2Eac => (
+                PixelFormat::Bgra8Unorm,
+                decode_texture2d(texture2ddecoder::decode_etc2_rgba8)?.into(),
+            ),
         };
 
         Ok(TexSurface {
             width: w as _,
             height: h as _,
+            format,
             data,
         })
     }
@@ -196,11 +256,9 @@ impl Tex {
     pub fn from_reader_no_magic<R: io::Read + ?Sized>(reader: &mut R) -> Result<Self, Error> {
         let (width, height) = (reader.read_u16::<LE>()?, reader.read_u16::<LE>()?);
 
-        let _is_extended_format = reader.read_u8(); // maybe..
+        let depth = reader.read_u8()?;
         let format = Format::from_u8(reader.read_u8()?)?;
-
-        // (0: texture, 1: cubemap, 2: surface, 3: volumetexture)
-        let resource_type = reader.read_u8()?; // maybe..
+        let resource_type = ResourceType::from_u8(reader.read_u8()?)?;
 
         let flags = reader.read_u8()?;
         let flags = TextureFlags::from_bits(flags).ok_or(Error::InvalidTextureFlags(flags))?;
@@ -211,15 +269,41 @@ impl Tex {
         Ok(Self {
             width,
             height,
+            depth,
             format,
             flags,
             resource_type,
             data,
             mip_count: match flags.contains(TextureFlags::HasMipMaps) {
-                true => ((height.max(width) as f32).log2().floor() + 1.0) as u32,
+                true => (height.max(width).max(depth as u16).max(1) as u32).ilog2() + 1,
                 false => 1,
             },
         })
+    }
+}
+
+/// GPU resource type, as stored in the TEX header.
+/// Only regular and volume textures can be found in live builds of the game.
+#[derive(TryFromPrimitive, IntoPrimitive, Clone, Copy, Debug, Hash, PartialEq, Eq)]
+#[repr(u8)]
+pub enum ResourceType {
+    /// A regular 2D texture (`depth == 1`)
+    Texture = 0,
+    /// Six 2D faces (This resource type is assumed by reverse engineering)
+    Cubemap = 1,
+    /// A bare 2D image (This resource type is assumed by reverse engineering)
+    Surface = 2,
+    /// A 3D texture: [`Tex::depth`] z-slices per mip level, stored sequentially
+    VolumeTexture = 3,
+}
+
+impl ResourceType {
+    pub fn from_u8(resource_type: u8) -> Result<Self, Error> {
+        Self::try_from(resource_type).map_err(|_| Error::UnknownResourceType(resource_type))
+    }
+
+    pub fn to_u8(&self) -> u8 {
+        (*self).into()
     }
 }
 
@@ -246,8 +330,235 @@ pub enum TextureAddress {
     Clamp,
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_new_format_ids() {
+        assert_eq!(Format::from_u8(13).unwrap(), Format::Bc7);
+        assert_eq!(Format::from_u8(14).unwrap(), Format::Bc5Snorm);
+        assert_eq!(Format::from_u8(22).unwrap(), Format::Rgba32Float);
+        assert_eq!(Format::Bc7.to_u8(), 13);
+        assert_eq!(Format::Bc5Snorm.to_u8(), 14);
+        assert_eq!(Format::Rgba32Float.to_u8(), 22);
+    }
+
+    fn tex_file(format: u8, data: &[u8]) -> Vec<u8> {
+        let mut file = Vec::new();
+        file.extend_from_slice(b"TEX\0");
+        file.extend_from_slice(&4u16.to_le_bytes()); // width
+        file.extend_from_slice(&4u16.to_le_bytes()); // height
+        file.push(1); // depth
+        file.push(format);
+        file.push(0); // resource type: texture
+        file.push(0); // flags: no mipmaps
+        file.extend_from_slice(data);
+        file
+    }
+
+    #[test]
+    fn write_roundtrips_header_bytes() {
+        let file = tex_file(20, &[0u8; 64]);
+        let tex = Tex::from_reader(&mut file.as_slice()).unwrap();
+        assert_eq!(tex.depth, 1);
+        assert_eq!(tex.resource_type, ResourceType::Texture);
+
+        let mut out = Vec::new();
+        tex.write(&mut out).unwrap();
+        assert_eq!(out, file);
+    }
+
+    #[test]
+    fn decodes_volume_texture_slices() {
+        // 2x2x2 BGRA8 volume texture, no mips: two sequential 16-byte z-slices
+        let mut file = Vec::new();
+        file.extend_from_slice(b"TEX\0");
+        file.extend_from_slice(&2u16.to_le_bytes()); // width
+        file.extend_from_slice(&2u16.to_le_bytes()); // height
+        file.push(2); // depth
+        file.push(20); // Bgra8
+        file.push(3); // resource type: volume texture
+        file.push(0); // flags: no mipmaps
+        file.extend_from_slice(&[0x11; 16]); // slice 0
+        file.extend_from_slice(&[0x22; 16]); // slice 1
+
+        let tex = Tex::from_reader(&mut file.as_slice()).unwrap();
+        assert_eq!(tex.depth, 2);
+        assert_eq!(tex.resource_type, ResourceType::VolumeTexture);
+
+        assert_eq!(&*tex.decode_mipmap_slice(0, 0).unwrap().data, &[0x11; 16]);
+        assert_eq!(&*tex.decode_mipmap_slice(0, 1).unwrap().data, &[0x22; 16]);
+        // decode_mipmap is slice 0
+        assert_eq!(&*tex.decode_mipmap(0).unwrap().data, &[0x11; 16]);
+        assert!(matches!(
+            tex.decode_mipmap_slice(0, 2),
+            Err(DecodeErr::SliceOutOfBounds { slice: 2, depth: 2 })
+        ));
+    }
+
+    #[test]
+    fn reads_and_decodes_bc5_snorm_tex() {
+        // one BC5 block: red = constant 1.0 (endpoints 127/-127, all indices 0),
+        // green = constant -1.0 (endpoints -127/-127)
+        let mut block = Vec::new();
+        block.extend_from_slice(&[127, 0x81, 0, 0, 0, 0, 0, 0]);
+        block.extend_from_slice(&[0x81, 0x81, 0, 0, 0, 0, 0, 0]);
+        let file = tex_file(14, &block);
+
+        let tex = Tex::from_reader(&mut file.as_slice()).unwrap();
+        assert_eq!(tex.format, Format::Bc5Snorm);
+        assert_eq!(tex.mip_count, 1);
+
+        // the decoded surface preserves the signed data
+        let surface = tex.decode_mipmap(0).unwrap();
+        assert_eq!(surface.format, PixelFormat::Rg8Snorm);
+        assert_eq!(surface.as_pixels::<[i8; 2]>().unwrap(), [[127, -127]; 16]);
+
+        // ...while the image conversion remaps to [0, 255]
+        let img = surface.into_rgba_image().unwrap();
+        assert_eq!(img.dimensions(), (4, 4));
+        for pixel in img.pixels() {
+            assert_eq!(pixel.0, [255, 0, 0, 255]);
+        }
+    }
+
+    #[test]
+    fn reads_and_decodes_rgba16_float_tex() {
+        // 4x4 RGBA16F: every pixel (0.5, -1.0, 2.0, 1.0) — out-of-[0,1] values must
+        // survive decoding intact and only clamp in the image conversion
+        let pixel = [
+            half::f16::from_f32(0.5),
+            half::f16::from_f32(-1.0),
+            half::f16::from_f32(2.0),
+            half::f16::from_f32(1.0),
+        ];
+        let data: Vec<u8> = std::iter::repeat_n(pixel, 16)
+            .flatten()
+            .flat_map(half::f16::to_le_bytes)
+            .collect();
+        let file = tex_file(21, &data);
+
+        let tex = Tex::from_reader(&mut file.as_slice()).unwrap();
+        assert_eq!(tex.format, Format::Rgba16Float);
+
+        let surface = tex.decode_mipmap(0).unwrap();
+        assert_eq!(surface.format, PixelFormat::Rgba16Float);
+        assert_eq!(surface.as_pixels::<[half::f16; 4]>().unwrap(), [pixel; 16]);
+
+        let img = surface.into_rgba_image().unwrap();
+        for p in img.pixels() {
+            assert_eq!(p.0, [128, 0, 255, 255]);
+        }
+    }
+
+    #[test]
+    fn rgba16_float_encode_roundtrips() {
+        let mut img = image::RgbaImage::new(4, 4);
+        img.pixels_mut().for_each(|p| p.0 = [0, 51, 204, 255]);
+
+        let tex =
+            Tex::encode_rgba_image(&img, EncodeOptions::new(EncodeFormat::Rgba16Float)).unwrap();
+        assert_eq!(tex.format, Format::Rgba16Float);
+
+        let decoded = tex.decode_mipmap(0).unwrap().into_rgba_image().unwrap();
+        assert_eq!(decoded.pixels().next().unwrap().0, [0, 51, 204, 255]);
+    }
+
+    #[test]
+    fn reads_and_decodes_rgba32_float_tex() {
+        // 4x4 RGBA32F: every pixel (0.5, -1.0, 2.0, 1.0) — out-of-[0,1] values must
+        // survive decoding intact and only clamp in the image conversion
+        let pixel = [0.5f32, -1.0, 2.0, 1.0];
+        let data: Vec<u8> = std::iter::repeat_n(pixel, 16)
+            .flatten()
+            .flat_map(f32::to_le_bytes)
+            .collect();
+        let file = tex_file(22, &data);
+
+        let tex = Tex::from_reader(&mut file.as_slice()).unwrap();
+        assert_eq!(tex.format, Format::Rgba32Float);
+
+        let surface = tex.decode_mipmap(0).unwrap();
+        assert_eq!(surface.format, PixelFormat::Rgba32Float);
+        assert_eq!(surface.as_pixels::<[f32; 4]>().unwrap(), [pixel; 16]);
+
+        let img = surface.into_rgba_image().unwrap();
+        for p in img.pixels() {
+            assert_eq!(p.0, [128, 0, 255, 255]);
+        }
+    }
+
+    #[test]
+    fn rgba32_float_encode_roundtrips() {
+        let mut img = image::RgbaImage::new(4, 4);
+        img.pixels_mut().for_each(|p| p.0 = [0, 51, 204, 255]);
+
+        let tex =
+            Tex::encode_rgba_image(&img, EncodeOptions::new(EncodeFormat::Rgba32Float)).unwrap();
+        assert_eq!(tex.format, Format::Rgba32Float);
+
+        let decoded = tex.decode_mipmap(0).unwrap().into_rgba_image().unwrap();
+        assert_eq!(decoded.pixels().next().unwrap().0, [0, 51, 204, 255]);
+    }
+
+    /// The texpresso BC1/BC3 backend: a solid color that's exact in RGB565 must
+    /// round-trip unchanged, including through the masked partial blocks and
+    /// non-block-aligned mip levels of a 10x6 NPOT chain.
+    #[test]
+    fn texpresso_bc_encode_roundtrips() {
+        let mut img = image::RgbaImage::new(10, 6);
+        img.pixels_mut().for_each(|p| p.0 = [255, 0, 0, 255]);
+
+        for format in [
+            EncodeFormat::Bc1 {
+                weigh_colour_by_alpha: false,
+            },
+            EncodeFormat::Bc3 {
+                weigh_colour_by_alpha: false,
+            },
+        ] {
+            let tex =
+                Tex::encode_rgba_image(&img, EncodeOptions::new(format).with_mipmaps()).unwrap();
+            assert_eq!(tex.mip_count, 4); // 10x6 -> 5x3 -> 2x1 -> 1x1
+
+            for level in 0..tex.mip_count {
+                let surface = tex.decode_mipmap(level).unwrap();
+                assert_eq!(surface.width, (10 >> level).max(1));
+                assert_eq!(surface.height, (6 >> level).max(1));
+                for p in surface.into_rgba_image().unwrap().pixels() {
+                    assert_eq!(p.0, [255, 0, 0, 255], "{format:?} level {level}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn zero_sized_image_errors() {
+        let img = image::RgbaImage::new(0, 0);
+        assert!(matches!(
+            Tex::encode_rgba_image(&img, EncodeOptions::new(EncodeFormat::Bgra8)),
+            Err(EncodeError::ZeroSizedImage)
+        ));
+        assert!(matches!(
+            Tex::encode_rgba_image(&img, EncodeOptions::new(EncodeFormat::Bgra8).with_mipmaps()),
+            Err(EncodeError::ZeroSizedImage)
+        ));
+    }
+
+    #[test]
+    fn truncated_data_errors_instead_of_panicking() {
+        let file = tex_file(13, &[0; 4]); // BC7 4x4 needs a full 16-byte block
+        let tex = Tex::from_reader(&mut file.as_slice()).unwrap();
+        assert!(matches!(
+            tex.decode_mipmap(0),
+            Err(DecodeErr::MipOutOfBounds { .. })
+        ));
+    }
+}
+
 //#[cfg(test)]
-//mod tests {
+//mod old_tests {
 //    use super::*;
 //    use image::codecs::png::PngEncoder;
 //    use io::BufWriter;

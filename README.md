@@ -41,7 +41,7 @@ Or use individual crates for a smaller dependency footprint:
 ```toml
 [dependencies]
 ltk_wad = "0.2"
-ltk_texture = "0.4"
+ltk_texture = "0.5"
 ltk_mesh = "0.3"
 ```
 
@@ -76,13 +76,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```rust
 use ltk_texture::Tex;
-use std::io::Cursor;
+use std::fs::File;
 
-let tex = Tex::from_reader(&mut cursor)?;
+let tex = Tex::from_reader(&mut File::open("texture.tex")?)?;
 let surface = tex.decode_mipmap(0)?;
-let image = surface.into_rgba_image()?;
-image.save("output.png")?;
+surface.into_rgba_image()?.save("output.png")?;
 ```
+
+See the [`ltk_texture` README](crates/ltk_texture/README.md) for supported formats, raw pixel data access, and encoding.
 
 ### Parsing a Skinned Mesh
 
@@ -164,15 +165,7 @@ For a minimal build, disable defaults and opt-in selectively:
 league-toolkit = { version = "0.2", default-features = false, features = ["wad"] }
 ```
 
-### Texture Encoding with `intel-tex`
-
-BC1/BC3 texture encoding requires the optional `intel-tex` feature on `ltk_texture`:
-
-```toml
-[dependencies]
-league-toolkit = { version = "0.2", features = ["texture"] }
-ltk_texture = { version = "0.4", features = ["intel-tex"] }
-```
+Some crates expose their own feature flags — e.g. texture *encoding* requires `intel-tex` on `ltk_texture` (see the [`ltk_texture` README](crates/ltk_texture/README.md)).
 
 ---
 

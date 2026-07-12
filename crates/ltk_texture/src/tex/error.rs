@@ -7,6 +7,8 @@ pub enum Error {
     UnknownTextureFormat(u8),
     #[error("Unsupported TEX format: {0:?}")]
     UnsupportedTextureFormat(Format),
+    #[error("Unknown TEX resource type: {0}")]
+    UnknownResourceType(u8),
     #[error("Invalid TEX flags: {0:#b}")]
     InvalidTextureFlags(u8),
     #[error("IO Error: {0}")]
@@ -23,14 +25,19 @@ pub enum Error {
 
 #[derive(thiserror::Error, Debug)]
 pub enum DecodeErr {
-    #[error("Could not decode ETC1: {0}")]
-    Etc1(&'static str),
-    #[error("Could not decode ETC2/EAC: {0}")]
-    Etc2Eac(&'static str),
-    #[error("Could not decode BC3: {0}")]
-    Bc3(&'static str),
-    #[error("Could not decode BC1: {0}")]
-    Bc1(&'static str),
+    #[error("Could not decode {0:?}: {1}")]
+    Decode(Format, &'static str),
     #[error("Could not decode: {0}")]
     ImageDds(#[from] image_dds::error::SurfaceError),
+    #[error(
+        "Mip level {level} (bytes {start}..{end}) is out of bounds of the texture data ({len} bytes)"
+    )]
+    MipOutOfBounds {
+        level: u32,
+        start: usize,
+        end: usize,
+        len: usize,
+    },
+    #[error("Slice {slice} is out of bounds of the texture depth ({depth} slices)")]
+    SliceOutOfBounds { slice: u32, depth: usize },
 }
