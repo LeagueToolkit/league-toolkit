@@ -5,6 +5,8 @@
 //!
 //! TODO: better explanation of the type checking impl
 
+pub mod diagnostics;
+pub mod ir;
 pub mod visitor;
 
 #[cfg(test)]

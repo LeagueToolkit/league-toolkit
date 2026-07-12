@@ -18,8 +18,8 @@ use crate::{
         Kind, Node, NodeId, Visitor,
     },
     parse::{Span, Token, TokenKind},
-    typecheck::visitor::{
-        diagnostics::{Diagnostic, DiagnosticWithSpan, MaybeSpanDiag},
+    typecheck::{
+        diagnostics::{self, Diagnostic, DiagnosticWithSpan, MaybeSpanDiag},
         ir::{IrEntry, IrItem, IrListItem},
     },
     Cst, PropertyValueExt as _, RitoType, RitobinName,
@@ -30,9 +30,6 @@ pub enum ClassKind {
     Str(String),
     Hash(u32),
 }
-
-pub mod diagnostics;
-pub mod ir;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum RootKind {
