@@ -11,8 +11,14 @@ use crate::{
 pub enum Diagnostic {
     CustomSpan(&'static str, Span),
 
+    UnexpectedTree {
+        tree: cst::Kind,
+        expected: Option<cst::Kind>,
+        span: Span,
+    },
     MissingTree(cst::Kind),
     EmptyTree(cst::Kind),
+
     MissingToken(TokenKind),
     UnknownType(Span),
     MissingType(Span),
@@ -99,6 +105,7 @@ impl Diagnostic {
             | MissingRootEntry { .. } => None,
             UnknownType(span)
             | UnknownRoot { span }
+            | UnexpectedTree { span, .. }
             | CustomSpan(_, span)
             | SubtypeCountMismatch { span, .. }
             | UnexpectedSubtypes { span, .. }

@@ -1300,18 +1300,15 @@ impl Visitor for TypeChecker<'_> {
                                 v
                             })),
                         ));
-
-                        #[cfg(feature = "debug")]
-                        eprintln!(
-                            "[{}] got {value_type:?} inside {parent_type:?} - {:?}",
-                            tree.kind, &self.ctx.text[tree.span]
-                        );
                     }
                     _parent_type => {
-                        #[cfg(feature = "debug")]
-                        eprintln!(
-                            "[warn] got {_parent_type:?} in {} - {:?}",
-                            tree.kind, &self.ctx.text[tree.span]
+                        self.ctx.diagnostics.push(
+                            UnexpectedTree {
+                                tree: tree.kind,
+                                expected: Some(Kind::Entry),
+                                span: tree.span,
+                            }
+                            .unwrap(),
                         );
                     }
                 }
