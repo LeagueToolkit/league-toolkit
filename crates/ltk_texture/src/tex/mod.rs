@@ -46,24 +46,25 @@ impl Tex {
     /// # Example
     /// ```no_run
     /// use ltk_texture::Tex;
-    /// use ltk_texture::tex::{EncodeOptions, Format, MipmapFilter};
+    /// use ltk_texture::tex::{EncodeFormat, EncodeOptions, MipmapFilter};
     /// use image::RgbaImage;
     ///
     /// let img = RgbaImage::new(256, 256);
+    /// let format = EncodeFormat::Bc3 { weigh_colour_by_alpha: false };
     ///
     /// // Without mipmaps
-    /// let tex = Tex::encode_rgba_image(&img, EncodeOptions::new(Format::Bc3)).unwrap();
+    /// let tex = Tex::encode_rgba_image(&img, EncodeOptions::new(format)).unwrap();
     ///
     /// // With mipmaps
     /// let tex_mips = Tex::encode_rgba_image(
     ///     &img,
-    ///     EncodeOptions::new(Format::Bc3).with_mipmaps()
+    ///     EncodeOptions::new(format).with_mipmaps()
     /// ).unwrap();
     ///
     /// // With mipmaps and custom filter
     /// let tex_lanczos = Tex::encode_rgba_image(
     ///     &img,
-    ///     EncodeOptions::new(Format::Bc3)
+    ///     EncodeOptions::new(format)
     ///         .with_mipmaps()
     ///         .with_mipmap_filter(MipmapFilter::Lanczos3)
     /// ).unwrap();
@@ -90,7 +91,7 @@ impl Tex {
             width: width as u16,
             height: height as u16,
             depth: 1,
-            format: options.format,
+            format: options.format.into(),
             resource_type: ResourceType::Texture,
             flags,
             mip_count,
@@ -103,12 +104,13 @@ impl Tex {
     /// # Example
     /// ```no_run
     /// use ltk_texture::Tex;
-    /// use ltk_texture::tex::{EncodeOptions, Format};
+    /// use ltk_texture::tex::{EncodeFormat, EncodeOptions};
     ///
     /// let img = image::open("texture.png").unwrap();
+    /// let format = EncodeFormat::Bc3 { weigh_colour_by_alpha: false };
     /// let tex = Tex::encode_dynamic_image(
     ///     img,
-    ///     EncodeOptions::new(Format::Bc3).with_mipmaps()
+    ///     EncodeOptions::new(format).with_mipmaps()
     /// ).unwrap();
     /// ```
     pub fn encode_dynamic_image(
@@ -455,7 +457,8 @@ mod tests {
         let mut img = image::RgbaImage::new(4, 4);
         img.pixels_mut().for_each(|p| p.0 = [0, 51, 204, 255]);
 
-        let tex = Tex::encode_rgba_image(&img, EncodeOptions::new(Format::Rgba16Float)).unwrap();
+        let tex =
+            Tex::encode_rgba_image(&img, EncodeOptions::new(EncodeFormat::Rgba16Float)).unwrap();
         assert_eq!(tex.format, Format::Rgba16Float);
 
         let decoded = tex.decode_mipmap(0).unwrap().into_rgba_image().unwrap();
@@ -491,7 +494,8 @@ mod tests {
         let mut img = image::RgbaImage::new(4, 4);
         img.pixels_mut().for_each(|p| p.0 = [0, 51, 204, 255]);
 
-        let tex = Tex::encode_rgba_image(&img, EncodeOptions::new(Format::Rgba32Float)).unwrap();
+        let tex =
+            Tex::encode_rgba_image(&img, EncodeOptions::new(EncodeFormat::Rgba32Float)).unwrap();
         assert_eq!(tex.format, Format::Rgba32Float);
 
         let decoded = tex.decode_mipmap(0).unwrap().into_rgba_image().unwrap();
@@ -506,7 +510,14 @@ mod tests {
         let mut img = image::RgbaImage::new(10, 6);
         img.pixels_mut().for_each(|p| p.0 = [255, 0, 0, 255]);
 
-        for format in [Format::Bc1, Format::Bc3] {
+        for format in [
+            EncodeFormat::Bc1 {
+                weigh_colour_by_alpha: false,
+            },
+            EncodeFormat::Bc3 {
+                weigh_colour_by_alpha: false,
+            },
+        ] {
             let tex =
                 Tex::encode_rgba_image(&img, EncodeOptions::new(format).with_mipmaps()).unwrap();
             assert_eq!(tex.mip_count, 4); // 10x6 -> 5x3 -> 2x1 -> 1x1
@@ -526,11 +537,11 @@ mod tests {
     fn zero_sized_image_errors() {
         let img = image::RgbaImage::new(0, 0);
         assert!(matches!(
-            Tex::encode_rgba_image(&img, EncodeOptions::new(Format::Bgra8)),
+            Tex::encode_rgba_image(&img, EncodeOptions::new(EncodeFormat::Bgra8)),
             Err(EncodeError::ZeroSizedImage)
         ));
         assert!(matches!(
-            Tex::encode_rgba_image(&img, EncodeOptions::new(Format::Bgra8).with_mipmaps()),
+            Tex::encode_rgba_image(&img, EncodeOptions::new(EncodeFormat::Bgra8).with_mipmaps()),
             Err(EncodeError::ZeroSizedImage)
         ));
     }

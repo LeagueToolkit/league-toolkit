@@ -27,19 +27,69 @@ fn pad_to_block_grid(width: u32, height: u32, rgba: &[u8]) -> (u32, u32, Cow<'_,
     (padded_w, padded_h, Cow::Owned(padded))
 }
 
+/// Texture format to encode to, along with any format-specific options
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum EncodeFormat {
+    Bc1 {
+        /// Weigh colour by alpha during the cluster fit. Off by default; enabling
+        /// it can significantly improve perceived quality for textures rendered with
+        /// alpha blending, at the cost of color accuracy in transparent regions.
+        weigh_colour_by_alpha: bool,
+    },
+    Bc3 {
+        /// Weigh colour by alpha during the cluster fit - see [`EncodeFormat::Bc1`]
+        weigh_colour_by_alpha: bool,
+    },
+    Bc7,
+    Bgra8,
+    Rgba16Float,
+    Rgba32Float,
+}
+
+impl From<EncodeFormat> for Format {
+    fn from(format: EncodeFormat) -> Self {
+        match format {
+            EncodeFormat::Bc1 { .. } => Self::Bc1,
+            EncodeFormat::Bc3 { .. } => Self::Bc3,
+            EncodeFormat::Bc7 => Self::Bc7,
+            EncodeFormat::Bgra8 => Self::Bgra8,
+            EncodeFormat::Rgba16Float => Self::Rgba16Float,
+            EncodeFormat::Rgba32Float => Self::Rgba32Float,
+        }
+    }
+}
+
+impl TryFrom<Format> for EncodeFormat {
+    type Error = EncodeError;
+
+    /// Convert a raw tex format into its encode counterpart with default options,
+    /// failing with [`EncodeError::UnsupportedFormat`] if the format cannot be encoded
+    fn try_from(format: Format) -> Result<Self, EncodeError> {
+        Ok(match format {
+            Format::Bc1 => Self::Bc1 {
+                weigh_colour_by_alpha: false,
+            },
+            Format::Bc3 => Self::Bc3 {
+                weigh_colour_by_alpha: false,
+            },
+            Format::Bc7 => Self::Bc7,
+            Format::Bgra8 => Self::Bgra8,
+            Format::Rgba16Float => Self::Rgba16Float,
+            Format::Rgba32Float => Self::Rgba32Float,
+            format => return Err(EncodeError::UnsupportedFormat(format)),
+        })
+    }
+}
+
 /// Options for encoding textures
 #[derive(Debug, Clone)]
 pub struct EncodeOptions {
-    /// Texture format to encode to
-    pub format: Format,
+    /// Texture format to encode to, with any format-specific options
+    pub format: EncodeFormat,
     /// Whether to generate mipmaps
     pub generate_mipmaps: bool,
     /// Filter type to use for mipmap generation
     pub mipmap_filter: MipmapFilter,
-    /// Weigh colour by alpha during BC1/BC3 cluster fit. Off by default; enabling
-    /// it can significantly improve perceived quality for textures rendered with
-    /// alpha blending, at the cost of color accuracy in transparent regions.
-    pub weigh_colour_by_alpha: bool,
 }
 
 /// Filter types for mipmap generation
@@ -69,12 +119,11 @@ impl MipmapFilter {
 
 impl EncodeOptions {
     /// Create new options with the specified format and no mipmaps
-    pub fn new(format: Format) -> Self {
+    pub fn new(format: EncodeFormat) -> Self {
         Self {
             format,
             generate_mipmaps: false,
             mipmap_filter: MipmapFilter::default(),
-            weigh_colour_by_alpha: false,
         }
     }
 
@@ -89,17 +138,13 @@ impl EncodeOptions {
         self.mipmap_filter = filter;
         self
     }
-
-    /// Weigh colour by alpha during BC1/BC3 cluster fit - see [`Self::weigh_colour_by_alpha`]
-    pub fn with_weigh_colour_by_alpha(mut self, enabled: bool) -> Self {
-        self.weigh_colour_by_alpha = enabled;
-        self
-    }
 }
 
 impl Default for EncodeOptions {
     fn default() -> Self {
-        Self::new(Format::Bc3)
+        Self::new(EncodeFormat::Bc3 {
+            weigh_colour_by_alpha: false,
+        })
     }
 }
 
@@ -109,15 +154,16 @@ impl Default for EncodeOptions {
 ///
 /// # Example
 /// ```no_run
-/// use ltk_texture::tex::{encode_rgba, EncodeOptions, Format};
+/// use ltk_texture::tex::{encode_rgba, EncodeFormat, EncodeOptions};
 ///
 /// let width = 256;
 /// let height = 256;
 /// let rgba_data: Vec<u8> = vec![0; (width * height * 4) as usize];
 ///
 /// // Encode to BC3 format
+/// let format = EncodeFormat::Bc3 { weigh_colour_by_alpha: false };
 /// let compressed =
-///     encode_rgba(width, height, &rgba_data, &EncodeOptions::new(Format::Bc3)).unwrap();
+///     encode_rgba(width, height, &rgba_data, &EncodeOptions::new(format)).unwrap();
 /// ```
 pub fn encode_rgba(
     width: u32,
@@ -126,13 +172,28 @@ pub fn encode_rgba(
     options: &EncodeOptions,
 ) -> Result<Vec<u8>, EncodeError> {
     match options.format {
-        Format::Bc1 => encode_texpresso(texpresso::Format::Bc1, width, height, rgba_data, options),
-        Format::Bc3 => encode_texpresso(texpresso::Format::Bc3, width, height, rgba_data, options),
-        Format::Bc7 => encode_bc7(width, height, rgba_data),
-        Format::Bgra8 => encode_bgra8(rgba_data),
-        Format::Rgba16Float => encode_rgba16_float(rgba_data),
-        Format::Rgba32Float => encode_rgba32_float(rgba_data),
-        format => Err(EncodeError::UnsupportedFormat(format)),
+        EncodeFormat::Bc1 {
+            weigh_colour_by_alpha,
+        } => encode_texpresso(
+            texpresso::Format::Bc1,
+            width,
+            height,
+            rgba_data,
+            weigh_colour_by_alpha,
+        ),
+        EncodeFormat::Bc3 {
+            weigh_colour_by_alpha,
+        } => encode_texpresso(
+            texpresso::Format::Bc3,
+            width,
+            height,
+            rgba_data,
+            weigh_colour_by_alpha,
+        ),
+        EncodeFormat::Bc7 => encode_bc7(width, height, rgba_data),
+        EncodeFormat::Bgra8 => encode_bgra8(rgba_data),
+        EncodeFormat::Rgba16Float => encode_rgba16_float(rgba_data),
+        EncodeFormat::Rgba32Float => encode_rgba32_float(rgba_data),
     }
 }
 
@@ -145,7 +206,7 @@ fn encode_texpresso(
     width: u32,
     height: u32,
     rgba_data: &[u8],
-    options: &EncodeOptions,
+    weigh_colour_by_alpha: bool,
 ) -> Result<Vec<u8>, EncodeError> {
     let (w, h) = (width as usize, height as usize);
     if rgba_data.len() != w * h * 4 {
@@ -159,7 +220,7 @@ fn encode_texpresso(
         h,
         texpresso::Params {
             algorithm: texpresso::Algorithm::ClusterFit,
-            weigh_colour_by_alpha: options.weigh_colour_by_alpha,
+            weigh_colour_by_alpha,
             ..Default::default()
         },
         &mut out,
@@ -174,12 +235,13 @@ fn encode_texpresso(
 ///
 /// # Example
 /// ```no_run
-/// use ltk_texture::tex::{encode_rgba_with_mipmaps, EncodeOptions, Format};
+/// use ltk_texture::tex::{encode_rgba_with_mipmaps, EncodeFormat, EncodeOptions};
 /// use image::RgbaImage;
 ///
 /// let img = RgbaImage::new(256, 256);
+/// let format = EncodeFormat::Bc3 { weigh_colour_by_alpha: false };
 /// let (data, mip_count) =
-///     encode_rgba_with_mipmaps(&img, &EncodeOptions::new(Format::Bc3)).unwrap();
+///     encode_rgba_with_mipmaps(&img, &EncodeOptions::new(format)).unwrap();
 /// ```
 pub fn encode_rgba_with_mipmaps(
     img: &image::RgbaImage,

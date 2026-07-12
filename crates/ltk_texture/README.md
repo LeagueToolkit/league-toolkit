@@ -93,14 +93,14 @@ BC1/BC3 encoding always works (texpresso cluster fit, parallelized with rayon); 
 
 ```rust
 use ltk_texture::Tex;
-use ltk_texture::tex::{EncodeOptions, Format, MipmapFilter};
+use ltk_texture::tex::{EncodeFormat, EncodeOptions, MipmapFilter};
 use std::fs::File;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let img = image::open("input.png")?;
     let tex = Tex::encode_dynamic_image(
         img,
-        EncodeOptions::new(Format::Bc3)
+        EncodeOptions::new(EncodeFormat::Bc3 { weigh_colour_by_alpha: false })
             .with_mipmaps()
             .with_mipmap_filter(MipmapFilter::Lanczos3),
     )?;
@@ -110,7 +110,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-For alpha-blended textures, `EncodeOptions::with_weigh_colour_by_alpha(true)` weighs each pixel's contribution to the BC1/BC3 endpoint fit by its alpha, which can significantly improve perceived quality.
+For alpha-blended textures, `EncodeFormat::Bc3 { weigh_colour_by_alpha: true }` weighs each pixel's contribution to the BC1/BC3 endpoint fit by its alpha, which can significantly improve perceived quality.
 
 Input dimensions don't need to be multiples of 4; partial edge blocks are handled correctly and the true dimensions go in the header.
 

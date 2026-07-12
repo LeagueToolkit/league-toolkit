@@ -8,12 +8,13 @@ impl Tex {
     /// # Example
     /// ```no_run
     /// use ltk_texture::Tex;
-    /// use ltk_texture::tex::{EncodeOptions, Format};
+    /// use ltk_texture::tex::{EncodeFormat, EncodeOptions};
     /// use image::RgbaImage;
     /// use std::fs::File;
     ///
     /// let img = RgbaImage::new(256, 256);
-    /// let tex = Tex::encode_rgba_image(&img, EncodeOptions::new(Format::Bc3)).unwrap();
+    /// let format = EncodeFormat::Bc3 { weigh_colour_by_alpha: false };
+    /// let tex = Tex::encode_rgba_image(&img, EncodeOptions::new(format)).unwrap();
     ///
     /// // Write to file
     /// let mut file = File::create("texture.tex").unwrap();
