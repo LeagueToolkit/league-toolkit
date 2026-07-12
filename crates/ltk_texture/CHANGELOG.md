@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_texture-v0.5.1...ltk_texture-v0.6.0) - 2026-07-12
+
+### Added
+
+- *(ltk_texture)* add EncodeFormat
+- *(ltk_texture)* add support for RGBA32Float encoding
+- *(ltk_texture)* use texpresso for encoding bc1/bc3
+- *(ltk_texture)* add zero-sized image error handling
+- *(ltk_texture)* add support for Rgba16Float
+- *(ltk_texture)* add support for volume textures
+- *(ltk_texture)* add support for new formats and handle pixel formats
+
+### Other
+
+- switch to per-crate changelogs
+- update CI configuration and add linting settings for all crates
+
 ## [0.5.1](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_texture-v0.5.0...ltk_texture-v0.5.1) - 2026-04-07
 
 ### Other
