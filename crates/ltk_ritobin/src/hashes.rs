@@ -6,10 +6,10 @@
 //! This module provides traits and implementations for looking up hash values
 //! to convert them back to their original strings.
 
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
+use std::{borrow::Cow, collections::HashMap};
 
 use ltk_hash::BinHash;
 
@@ -18,32 +18,32 @@ use ltk_hash::BinHash;
 /// Implement this trait to provide custom hash lookup behavior when writing ritobin files.
 pub trait HashProvider {
     /// Look up a bin entry path hash (root object paths like "Characters/Aatrox/Skins/Skin0").
-    fn lookup_entry(&self, hash: BinHash) -> Option<&str>;
+    fn lookup_entry(&self, hash: BinHash) -> Option<Cow<'_, str>>;
 
     /// Look up a bin field/property name hash.
-    fn lookup_field(&self, hash: BinHash) -> Option<&str>;
+    fn lookup_field(&self, hash: BinHash) -> Option<Cow<'_, str>>;
 
     /// Look up a bin hash value (hash property type values).
-    fn lookup_hash(&self, hash: BinHash) -> Option<&str>;
+    fn lookup_hash(&self, hash: BinHash) -> Option<Cow<'_, str>>;
 
     /// Look up a bin type/class name hash (for objects, structs, embeds).
-    fn lookup_type(&self, hash: BinHash) -> Option<&str>;
+    fn lookup_type(&self, hash: BinHash) -> Option<Cow<'_, str>>;
 }
 
 impl HashProvider for () {
-    fn lookup_entry(&self, _hash: BinHash) -> Option<&str> {
+    fn lookup_entry(&self, _hash: BinHash) -> Option<Cow<'_, str>> {
         None
     }
 
-    fn lookup_field(&self, _hash: BinHash) -> Option<&str> {
+    fn lookup_field(&self, _hash: BinHash) -> Option<Cow<'_, str>> {
         None
     }
 
-    fn lookup_hash(&self, _hash: BinHash) -> Option<&str> {
+    fn lookup_hash(&self, _hash: BinHash) -> Option<Cow<'_, str>> {
         None
     }
 
-    fn lookup_type(&self, _hash: BinHash) -> Option<&str> {
+    fn lookup_type(&self, _hash: BinHash) -> Option<Cow<'_, str>> {
         None
     }
 }
@@ -176,55 +176,55 @@ impl HashMapProvider {
 }
 
 impl HashProvider for HashMapProvider {
-    fn lookup_entry(&self, hash: BinHash) -> Option<&str> {
-        self.entries.get(&hash).map(|s| s.as_str())
+    fn lookup_entry(&self, hash: BinHash) -> Option<Cow<'_, str>> {
+        self.entries.get(&hash).map(|s| s.as_str().into())
     }
 
-    fn lookup_field(&self, hash: BinHash) -> Option<&str> {
-        self.fields.get(&hash).map(|s| s.as_str())
+    fn lookup_field(&self, hash: BinHash) -> Option<Cow<'_, str>> {
+        self.fields.get(&hash).map(|s| s.as_str().into())
     }
 
-    fn lookup_hash(&self, hash: BinHash) -> Option<&str> {
-        self.hashes.get(&hash).map(|s| s.as_str())
+    fn lookup_hash(&self, hash: BinHash) -> Option<Cow<'_, str>> {
+        self.hashes.get(&hash).map(|s| s.as_str().into())
     }
 
-    fn lookup_type(&self, hash: BinHash) -> Option<&str> {
-        self.types.get(&hash).map(|s| s.as_str())
+    fn lookup_type(&self, hash: BinHash) -> Option<Cow<'_, str>> {
+        self.types.get(&hash).map(|s| s.as_str().into())
     }
 }
 
 impl<T: HashProvider + ?Sized> HashProvider for &T {
-    fn lookup_entry(&self, hash: BinHash) -> Option<&str> {
+    fn lookup_entry(&self, hash: BinHash) -> Option<Cow<'_, str>> {
         (*self).lookup_entry(hash)
     }
 
-    fn lookup_field(&self, hash: BinHash) -> Option<&str> {
+    fn lookup_field(&self, hash: BinHash) -> Option<Cow<'_, str>> {
         (*self).lookup_field(hash)
     }
 
-    fn lookup_hash(&self, hash: BinHash) -> Option<&str> {
+    fn lookup_hash(&self, hash: BinHash) -> Option<Cow<'_, str>> {
         (*self).lookup_hash(hash)
     }
 
-    fn lookup_type(&self, hash: BinHash) -> Option<&str> {
+    fn lookup_type(&self, hash: BinHash) -> Option<Cow<'_, str>> {
         (*self).lookup_type(hash)
     }
 }
 
 impl HashProvider for Box<dyn HashProvider> {
-    fn lookup_entry(&self, hash: BinHash) -> Option<&str> {
+    fn lookup_entry(&self, hash: BinHash) -> Option<Cow<'_, str>> {
         self.as_ref().lookup_entry(hash)
     }
 
-    fn lookup_field(&self, hash: BinHash) -> Option<&str> {
+    fn lookup_field(&self, hash: BinHash) -> Option<Cow<'_, str>> {
         self.as_ref().lookup_field(hash)
     }
 
-    fn lookup_hash(&self, hash: BinHash) -> Option<&str> {
+    fn lookup_hash(&self, hash: BinHash) -> Option<Cow<'_, str>> {
         self.as_ref().lookup_hash(hash)
     }
 
-    fn lookup_type(&self, hash: BinHash) -> Option<&str> {
+    fn lookup_type(&self, hash: BinHash) -> Option<Cow<'_, str>> {
         self.as_ref().lookup_type(hash)
     }
 }
@@ -252,11 +252,20 @@ mod tests {
 
         assert_eq!(
             provider.lookup_entry(0x12345678.into()),
-            Some("Characters/Test/Skin0")
+            Some("Characters/Test/Skin0".into())
         );
-        assert_eq!(provider.lookup_field(0xdeadbeef.into()), Some("skinName"));
-        assert_eq!(provider.lookup_hash(0xcafebabe.into()), Some("some/path"));
-        assert_eq!(provider.lookup_type(0xfeedface.into()), Some("SkinData"));
+        assert_eq!(
+            provider.lookup_field(0xdeadbeef.into()),
+            Some("skinName".into())
+        );
+        assert_eq!(
+            provider.lookup_hash(0xcafebabe.into()),
+            Some("some/path".into())
+        );
+        assert_eq!(
+            provider.lookup_type(0xfeedface.into()),
+            Some("SkinData".into())
+        );
 
         // Unknown hashes return None
         assert_eq!(provider.lookup_entry(0x11111111.into()), None);
