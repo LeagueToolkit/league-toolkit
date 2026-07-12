@@ -57,7 +57,7 @@ mod test {
             r#"
 #PROP_text
 type: string = "my_str" # inline comment
-# version: u32 = 3
+version: u32 = 3
 linked: list[string] = { }
 entries: map[hash, embed] = {
     "foo" = Bar {
@@ -78,6 +78,10 @@ entries: map[hash, embed] = {
     #[test]
     fn naked_class() {
         let text = r#"
+#PROP_text
+type: string = "PROP"
+version: u32 = 3
+linked: list[string] = { }
         entries: map[hash, embed] = {
             "thing" = ClassThing { ooo }
         }
@@ -95,6 +99,9 @@ entries: map[hash, embed] = {
     fn smoke_test() {
         let text = r#"
 #PROP_text
+type: string = "PROP"
+version: u32 = 3
+linked: list[string] = { }
 entries: map[hash, embed] = {
     "foo" = Foo {
         guy: u32 = "asdasd"
@@ -133,6 +140,10 @@ entries: map[hash, embed] = {
     #[test]
     fn writer_test() {
         let text = r#"
+#PROP_text
+type: string = "PROP"
+version: u32 = 3
+linked: list[string] = { }
 entries: map[hash,embed] = {
     "myPath" = VfxEmitter {
         a: string = "hello"
