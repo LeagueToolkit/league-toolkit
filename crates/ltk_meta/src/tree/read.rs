@@ -1,12 +1,11 @@
 use std::io;
 
-use crate::Error;
+use crate::{header::Header, Error};
 
 use super::{Bin, BinObject};
 use byteorder::{ReadBytesExt as _, LE};
 use indexmap::IndexMap;
 use ltk_hash::{BinHash, ReadBytesExt as _};
-use ltk_io_ext::ReaderExt;
 
 impl Bin {
     pub const PROP: u32 = u32::from_le_bytes(*b"PROP");
@@ -20,55 +19,9 @@ impl Bin {
     pub fn from_reader<R: io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
     ) -> Result<Self, Error> {
-        let magic = reader.read_u32::<LE>()?;
-        let is_override = match magic {
-            Self::PROP => false,
-            Self::PTCH => {
-                let override_version = reader.read_u32::<LE>()?;
-                if override_version != 1 {
-                    return Err(Error::InvalidFileVersion(override_version));
-                }
+        let (prop, patch) = Header::from_reader(reader)?.into_parts();
 
-                // It might be possible to create an override property bin
-                // and set the original file as a dependency.
-                // This seems to be the object count of the override section
-                let _maybe_override_object_count = reader.read_u32::<LE>()?;
-
-                let magic = reader.read_u32::<LE>()?;
-                if magic != Self::PROP {
-                    // TODO (alan): repr this in the error
-                    log::error!(
-                        "Expected PROP ({:#x}) section after PTCH ({:#x}), got '{:#x}'",
-                        Self::PROP,
-                        Self::PTCH,
-                        magic
-                    );
-                    return Err(Error::InvalidFileSignature);
-                }
-                true
-            }
-            _ => return Err(Error::InvalidFileSignature),
-        };
-
-        let version = reader.read_u32::<LE>()?;
-        if !matches!(version, 1..=3) {
-            // TODO (alan): distinguish override/non-override version
-            return Err(Error::InvalidFileVersion(version));
-        }
-
-        let dependencies = match version {
-            2.. => {
-                let dep_count = reader.read_u32::<LE>()?;
-                let mut dependencies = Vec::with_capacity(dep_count as _);
-                for _ in 0..dep_count {
-                    dependencies.push(reader.read_sized_string_u16::<LE>()?);
-                }
-                dependencies
-            }
-            _ => Vec::new(),
-        };
-
-        let obj_count = reader.read_u32::<LE>()? as usize;
+        let obj_count = prop.object_count.try_into().unwrap();
         let mut obj_classes = Vec::with_capacity(obj_count);
         for _ in 0..obj_count {
             obj_classes.push(reader.read_bin_hash::<LE>()?);
@@ -84,7 +37,7 @@ impl Bin {
             e => e?,
         }
 
-        let data_overrides = match (is_override, version) {
+        let data_overrides = match (patch.is_some(), prop.version) {
             (true, 3..) => {
                 let count = reader.read_u32::<LE>()?;
                 let mut v = Vec::with_capacity(count as _);
@@ -97,10 +50,15 @@ impl Bin {
         };
 
         Ok(Self {
-            version,
-            is_override,
+            version: prop.version,
+            is_override: patch.is_some(),
             objects,
-            dependencies,
+            dependencies: prop
+                .dependencies
+                .unwrap_or_default()
+                .into_iter()
+                .map(|d| d.into())
+                .collect(),
             data_overrides,
         })
     }
