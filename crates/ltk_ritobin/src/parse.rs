@@ -126,7 +126,6 @@ entries: map[hash, embed] = {
         let mut checker = TypeChecker::new(text);
         cst.walk(&mut checker);
 
-        // let (mut roots, errors) = checker.into_parts();
         let (tree, errors) = checker.collect_to_bin();
 
         eprintln!("{str}\n====== type errors: ======\n");

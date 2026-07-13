@@ -25,12 +25,6 @@ use crate::{
     Cst, PropertyValueExt as _, RitoType, RitobinName,
 };
 
-#[derive(Debug, Clone)]
-pub enum ClassKind {
-    Str(String),
-    Hash(u32),
-}
-
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum RootKind {
     Type,
@@ -145,7 +139,6 @@ pub struct RootEntry {
 pub struct TypeChecker<'a> {
     ctx: Ctx<'a>,
     pub root: IndexMap<RootKindOrUnknown<'a>, RootEntry>,
-    // current: Option<(PropertyValueEnum, PropertyValueEnum)>,
     stack: Vec<(u32, IrItem)>,
     list_queue: Vec<IrListItem>,
     depth: u32,
@@ -163,14 +156,6 @@ impl<'a> TypeChecker<'a> {
             list_queue: Vec::new(),
             depth: 0,
         }
-    }
-    pub fn into_parts(
-        self,
-    ) -> (
-        IndexMap<RootKindOrUnknown<'a>, RootEntry>,
-        Vec<DiagnosticWithSpan>,
-    ) {
-        (self.root, self.ctx.diagnostics)
     }
 }
 
@@ -217,14 +202,6 @@ pub enum ColorOrVec {
 }
 
 use diagnostics::Diagnostic::*;
-
-pub enum Statement {
-    KeyValue {
-        key: Span,
-        value: Span,
-        kind: Option<RitoType>,
-    },
-}
 
 trait TreeIterExt<'a>: Iterator {
     fn expect_tree(&mut self, cst: &'a Cst, kind: cst::Kind) -> Result<&'a Node, Diagnostic>;
@@ -543,8 +520,6 @@ pub fn resolve_value(
     use PropertyKind as K;
     use PropertyValueEnum as P;
 
-    // dbg!(tree, kind_hint);
-
     let Some(child) = tree.children.get(visit_ctx.cst).first() else {
         return Ok(None);
     };
@@ -846,7 +821,6 @@ impl<'a> TypeChecker<'a> {
 
                         if let PropertyValueEnum::Embedded(values::Embedded(struct_val)) = value {
                             let struct_val = struct_val.no_meta();
-                            // eprintln!("struct_val: {struct_val:?}");
                             Some(BinObject {
                                 path_hash: *path_hash,
                                 class_hash: struct_val.class_hash,
@@ -951,7 +925,6 @@ impl<'a> TypeChecker<'a> {
     }
 
     fn merge_ir(&mut self, mut parent: IrItem, child: IrItem) -> IrItem {
-        // eprintln!("\x1b[0;33mmerge {child:?}\n-----> {parent:?}\x1b[0m");
         match &mut parent.value_mut() {
             PropertyValueEnum::Container(list)
             | PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(list)) => {
@@ -997,7 +970,6 @@ impl<'a> TypeChecker<'a> {
 
                 let Some(PropertyValueEnum::Hash(key)) = coerce_type(key, PropertyKind::Hash)
                 else {
-                    // eprintln!("\x1b[41m{other:?} not valid hash\x1b[0m");
                     return parent;
                 };
 
@@ -1011,7 +983,6 @@ impl<'a> TypeChecker<'a> {
                 };
                 let span = *value.meta();
                 let Some(key) = coerce_type(key, map_value.key_kind()) else {
-                    // eprintln!("\x1b[41m{other:?} not valid hash\x1b[0m");
                     return parent;
                 };
                 match map_value.push(key, value) {
@@ -1222,10 +1193,7 @@ fn populate_vec_or_color(
                     }
                     _ => return Ok(None),
                 },
-                _ => {
-                    return Ok(None);
-                    // unreachable!("non-empty list queue with non color/vec type receiver?");
-                }
+                _ => return Ok(None),
             }))
         };
 
@@ -1334,8 +1302,6 @@ impl Visitor for TypeChecker<'_> {
                 let color_vec_type = get_color_vec_type(parent_type.base)
                     .or(parent_type.value_subtype().and_then(get_color_vec_type));
 
-                // dbg!(color_vec_type, parent_type);
-
                 let value_hint = color_vec_type
                     .or(parent_type.value_subtype())
                     .map(RitoType::simple);
@@ -1390,7 +1356,6 @@ impl Visitor for TypeChecker<'_> {
                 .map_err(|e| e.fallback(tree.span))
                 {
                     Ok(entry) => {
-                        // eprintln!("{indent}  push {entry:?}");
                         self.stack.push((depth, IrItem::Entry(entry)));
                     }
                     Err(e) => self.ctx.diagnostics.push(e),
@@ -1457,12 +1422,9 @@ impl Visitor for TypeChecker<'_> {
                 }
 
                 if !self.list_queue.is_empty() {
-                    // let (d, mut ir) = &mut ir;
                     if let Err(e) = populate_vec_or_color(&mut ir.1, &mut self.list_queue) {
                         self.ctx.diagnostics.push(e.fallback(*ir.1.value().meta()));
                     }
-                    // self.stack.push((d, ir));
-                    // return Visit::Continue;
                 }
 
                 match self.stack.pop() {
@@ -1472,11 +1434,8 @@ impl Visitor for TypeChecker<'_> {
                     }
                     None => {
                         if depth != 2 {
-                            // eprintln!("ERROR: depth not 2??? - {depth}");
-                            // eprintln!("{ir:?}");
                             return Visit::Continue;
                         }
-                        // assert_eq!(depth, 2);
                         let IrItem::Entry(IrEntry {
                             key: key @ PropertyValueEnum::String(values::String { .. }),
                             value,
@@ -1507,9 +1466,7 @@ impl Visitor for TypeChecker<'_> {
                     }
                 }
             }
-            _ => {
-                // eprintln!("exit tree with no current?");
-            }
+            _ => {}
         }
 
         Visit::Continue
