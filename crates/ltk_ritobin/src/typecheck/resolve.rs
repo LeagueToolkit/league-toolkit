@@ -128,20 +128,18 @@ fn resolve_rito_type(
                 })
                 .collect::<Vec<_>>();
 
-            if subtypes.len() > expected.into() {
-                return Err(SubtypeCountMismatch {
-                    span: subtypes[expected as _..]
+            if subtypes.len() != expected.into() {
+                let span = if subtypes.len() > expected.into() {
+                    subtypes[expected as _..]
                         .iter()
                         .map(|s| s.1)
                         .reduce(|acc, s| Span::new(acc.start, s.end))
-                        .unwrap_or(subtypes_span),
-                    got: subtypes.len() as u8,
-                    expected,
-                });
-            }
-            if subtypes.len() < expected.into() {
+                        .unwrap_or(subtypes_span)
+                } else {
+                    subtypes.last().map(|s| s.1).unwrap_or(subtypes_span)
+                };
                 return Err(SubtypeCountMismatch {
-                    span: subtypes.last().map(|s| s.1).unwrap_or(subtypes_span),
+                    span,
                     got: subtypes.len() as u8,
                     expected,
                 });
