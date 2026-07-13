@@ -39,7 +39,10 @@ fn resolve_u8(n: PropertyValueEnum<Span>) -> Result<u8, MaybeSpanDiag> {
     }
 }
 
-fn get_next(span: &mut Span, items: &mut Drain<'_, IrListItem>) -> Result<PropertyValueEnum<Span>, Diagnostic> {
+fn get_next(
+    span: &mut Span,
+    items: &mut Drain<'_, IrListItem>,
+) -> Result<PropertyValueEnum<Span>, Diagnostic> {
     let item = items
         .next()
         .ok_or(NotEnoughItems {

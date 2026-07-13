@@ -293,60 +293,57 @@ impl Visitor for TypeChecker<'_> {
             return Visit::Continue;
         }
 
-        match self.stack.pop() {
-            Some(mut ir) => {
-                self.trace_popped(depth, ir.0);
-                if ir.0 != depth {
-                    self.stack.push(ir);
-                    return Visit::Continue;
-                }
+        if let Some(mut ir) = self.stack.pop() {
+            self.trace_popped(depth, ir.0);
+            if ir.0 != depth {
+                self.stack.push(ir);
+                return Visit::Continue;
+            }
 
-                if !self.list_queue.is_empty() {
-                    if let Err(e) = populate_vec_or_color(&mut ir.1, &mut self.list_queue) {
-                        self.ctx.diagnostics.push(e.fallback(*ir.1.value().meta()));
-                    }
+            if !self.list_queue.is_empty() {
+                if let Err(e) = populate_vec_or_color(&mut ir.1, &mut self.list_queue) {
+                    self.ctx.diagnostics.push(e.fallback(*ir.1.value().meta()));
                 }
+            }
 
-                match self.stack.pop() {
-                    Some((d, parent)) => {
-                        let parent = self.merge_ir(parent, ir.1);
-                        self.stack.push((d, parent));
+            match self.stack.pop() {
+                Some((d, parent)) => {
+                    let parent = self.merge_ir(parent, ir.1);
+                    self.stack.push((d, parent));
+                }
+                None => {
+                    if depth != 2 {
+                        return Visit::Continue;
                     }
-                    None => {
-                        if depth != 2 {
-                            return Visit::Continue;
-                        }
-                        let IrItem::Entry(IrEntry {
-                            key: key @ PropertyValueEnum::String(values::String { .. }),
+                    let IrItem::Entry(IrEntry {
+                        key: key @ PropertyValueEnum::String(values::String { .. }),
+                        value,
+                    }) = ir.1
+                    else {
+                        self.ctx
+                            .diagnostics
+                            .push(RootNonEntry.default_span(tree.span));
+                        return Visit::Continue;
+                    };
+                    let key_span = *key.meta();
+                    if let Some(existing) = self.root.insert(
+                        RootKindOrUnknown::from_value(self.ctx.text, &key),
+                        RootEntry {
+                            key,
+                            type_span: key_span,
                             value,
-                        }) = ir.1
-                        else {
-                            self.ctx
-                                .diagnostics
-                                .push(RootNonEntry.default_span(tree.span));
-                            return Visit::Continue;
-                        };
-                        let key_span = *key.meta();
-                        if let Some(existing) = self.root.insert(
-                            RootKindOrUnknown::from_value(self.ctx.text, &key),
-                            RootEntry {
-                                key,
-                                type_span: key_span,
-                                value,
-                            }, // FIXME: get real type span in here
-                        ) {
-                            self.ctx.diagnostics.push(
-                                ShadowedEntry {
-                                    shadowee: *existing.key.meta(),
-                                    shadower: key_span,
-                                }
-                                .unwrap(),
-                            );
-                        }
+                        }, // FIXME: get real type span in here
+                    ) {
+                        self.ctx.diagnostics.push(
+                            ShadowedEntry {
+                                shadowee: *existing.key.meta(),
+                                shadower: key_span,
+                            }
+                            .unwrap(),
+                        );
                     }
                 }
             }
-            _ => {}
         }
 
         Visit::Continue
