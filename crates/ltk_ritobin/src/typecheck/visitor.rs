@@ -5,8 +5,8 @@ use std::{
 };
 
 use glam::Vec4;
-use indexmap::IndexMap;
-use ltk_hash::{BinHash, Hash, WadHash};
+use indexmap::{Equivalent, IndexMap};
+use ltk_hash::{BinHash, Hash as _, WadHash};
 use ltk_meta::{
     property::values, traits::PropertyExt, Bin, BinObject, PropertyKind, PropertyValueEnum,
 };
@@ -18,6 +18,10 @@ use crate::{
         Kind, Node, NodeId, Visitor,
     },
     parse::{Span, Token, TokenKind},
+    typecheck::{
+        diagnostics::{self, Diagnostic, DiagnosticWithSpan, MaybeSpanDiag},
+        ir::{IrEntry, IrItem, IrListItem},
+    },
     Cst, PropertyValueExt as _, RitoType, RitobinName,
 };
 
@@ -27,64 +31,120 @@ pub enum ClassKind {
     Hash(u32),
 }
 
-#[derive(Debug, Clone)]
-pub struct IrEntry {
-    pub key: PropertyValueEnum<Span>,
-    pub value: PropertyValueEnum<Span>,
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub enum RootKind {
+    Type,
+    Version,
+    Linked,
+    Entries,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RootKindOrUnknown<'a> {
+    Known(RootKind),
+    Unknown(Cow<'a, str>),
+}
+
+impl std::hash::Hash for RootKindOrUnknown<'_> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            RootKindOrUnknown::Known(root_kind) => root_kind.hash(state),
+            RootKindOrUnknown::Unknown(cow) => cow.hash(state),
+        }
+    }
+}
+
+impl Equivalent<RootKindOrUnknown<'_>> for RootKind {
+    #[inline(always)]
+    fn equivalent(&self, key: &RootKindOrUnknown<'_>) -> bool {
+        match key {
+            RootKindOrUnknown::Known(root_kind) => self == root_kind,
+            RootKindOrUnknown::Unknown(_) => false,
+        }
+    }
+}
+impl Equivalent<RootKindOrUnknown<'_>> for Cow<'_, str> {
+    #[inline(always)]
+    fn equivalent(&self, key: &RootKindOrUnknown<'_>) -> bool {
+        match key {
+            RootKindOrUnknown::Known(_) => false,
+            RootKindOrUnknown::Unknown(cow) => self == cow,
+        }
+    }
+}
+impl Equivalent<RootKindOrUnknown<'_>> for str {
+    #[inline(always)]
+    fn equivalent(&self, key: &RootKindOrUnknown<'_>) -> bool {
+        match key {
+            RootKindOrUnknown::Known(_) => false,
+            RootKindOrUnknown::Unknown(cow) => self == cow,
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::typecheck::visitor::{RootKind, RootKindOrUnknown};
+
+    #[test]
+    fn root_kind_eq() {
+        let mut root: IndexMap<RootKindOrUnknown<'static>, ()> = Default::default();
+
+        root.insert(RootKind::Version.into(), ());
+        root.insert(RootKind::Entries.into(), ());
+        root.insert(RootKindOrUnknown::Unknown("foo".into()), ());
+        root.insert(RootKindOrUnknown::Unknown("bar".into()), ());
+
+        assert!(root.swap_remove(&RootKind::Version).is_some());
+        assert!(root.swap_remove(&RootKind::Entries).is_some());
+        assert!(root
+            .swap_remove(&RootKindOrUnknown::Unknown("bar".into()))
+            .is_some());
+
+        assert_eq!(root.len(), 1);
+    }
+}
+
+impl<'a> RootKindOrUnknown<'a> {
+    pub fn from_value(src: &'a str, value: &PropertyValueEnum<Span>) -> Self {
+        let PropertyValueEnum::String(string) = value else {
+            return Self::Unknown(src[*value.meta()].into());
+        };
+
+        match string.as_str() {
+            "type" => RootKind::Type.into(),
+            "version" => RootKind::Version.into(),
+            "linked" => RootKind::Linked.into(),
+            "entries" => RootKind::Entries.into(),
+            _ => Self::Unknown(src[*value.meta()].into()),
+        }
+    }
+}
+
+impl From<RootKind> for RootKindOrUnknown<'_> {
+    #[inline(always)]
+    fn from(value: RootKind) -> Self {
+        Self::Known(value)
+    }
+}
+impl<'a> From<Cow<'a, str>> for RootKindOrUnknown<'a> {
+    #[inline(always)]
+    fn from(value: Cow<'a, str>) -> Self {
+        Self::Unknown(value)
+    }
 }
 
 #[derive(Debug, Clone)]
-pub struct IrListItem(pub PropertyValueEnum<Span>);
-
-#[derive(Debug, Clone)]
-pub enum IrItem {
-    Entry(IrEntry),
-    ListItem(IrListItem),
-}
-
-impl IrItem {
-    pub fn is_entry(&self) -> bool {
-        matches!(self, Self::Entry { .. })
-    }
-
-    pub fn as_entry(&self) -> Option<&IrEntry> {
-        match self {
-            IrItem::Entry(i) => Some(i),
-            _ => None,
-        }
-    }
-    pub fn is_list_item(&self) -> bool {
-        matches!(self, Self::ListItem { .. })
-    }
-    pub fn as_list_item(&self) -> Option<&IrListItem> {
-        match self {
-            IrItem::ListItem(i) => Some(i),
-            _ => None,
-        }
-    }
-    pub fn value(&self) -> &PropertyValueEnum<Span> {
-        match self {
-            IrItem::Entry(i) => &i.value,
-            IrItem::ListItem(i) => &i.0,
-        }
-    }
-    pub fn value_mut(&mut self) -> &mut PropertyValueEnum<Span> {
-        match self {
-            IrItem::Entry(i) => &mut i.value,
-            IrItem::ListItem(i) => &mut i.0,
-        }
-    }
-    pub fn into_value(self) -> PropertyValueEnum<Span> {
-        match self {
-            IrItem::Entry(i) => i.value,
-            IrItem::ListItem(i) => i.0,
-        }
-    }
+pub struct RootEntry {
+    key: PropertyValueEnum<Span>,
+    type_span: Span,
+    value: PropertyValueEnum<Span>,
 }
 
 pub struct TypeChecker<'a> {
     ctx: Ctx<'a>,
-    pub root: IndexMap<String, PropertyValueEnum<Span>>,
+    pub root: IndexMap<RootKindOrUnknown<'a>, RootEntry>,
     // current: Option<(PropertyValueEnum, PropertyValueEnum)>,
     stack: Vec<(u32, IrItem)>,
     list_queue: Vec<IrListItem>,
@@ -107,7 +167,7 @@ impl<'a> TypeChecker<'a> {
     pub fn into_parts(
         self,
     ) -> (
-        IndexMap<String, PropertyValueEnum<Span>>,
+        IndexMap<RootKindOrUnknown<'a>, RootEntry>,
         Vec<DiagnosticWithSpan>,
     ) {
         (self.root, self.ctx.diagnostics)
@@ -156,147 +216,7 @@ pub enum ColorOrVec {
     Mat44,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum Diagnostic {
-    CustomSpan(&'static str, Span),
-
-    MissingTree(cst::Kind),
-    EmptyTree(cst::Kind),
-    MissingToken(TokenKind),
-    UnknownType(Span),
-    MissingType(Span),
-
-    MissingEntriesMap,
-    InvalidEntriesMap {
-        span: Span,
-        got: RitoType,
-    },
-    InvalidDependenciesEntry {
-        span: Span,
-        got: RitoType,
-    },
-
-    TypeMismatch {
-        span: Span,
-        expected: RitoType,
-        expected_span: Option<Span>,
-        got: RitoTypeOrVirtual,
-    },
-
-    UnexpectedContainerItem {
-        span: Span,
-        expected: RitoType,
-        expected_span: Option<Span>,
-    },
-
-    ResolveLiteral,
-    ParseNumericError {
-        expected: PropertyKind,
-        error: Option<std::num::IntErrorKind>,
-        span: Span,
-    },
-    AmbiguousNumeric(Span),
-
-    NotEnoughItems {
-        span: Span,
-        got: u8,
-        expected: ColorOrVec,
-    },
-    TooManyItems {
-        span: Span,
-        extra: u8,
-        expected: ColorOrVec,
-    },
-
-    RootNonEntry,
-    ShadowedEntry {
-        shadowee: Span,
-        shadower: Span,
-    },
-
-    InvalidHash(Span),
-
-    SubtypeCountMismatch {
-        span: Span,
-        got: u8,
-        expected: u8,
-    },
-    /// Subtypes found on a type that has no subtypes
-    UnexpectedSubtypes {
-        span: Span,
-        base_type: Span,
-    },
-}
-
-impl Diagnostic {
-    pub fn span(&self) -> Option<&Span> {
-        match self {
-            MissingTree(_) | EmptyTree(_) | MissingToken(_) | RootNonEntry | ResolveLiteral
-            | MissingEntriesMap => None,
-            UnknownType(span)
-            | CustomSpan(_, span)
-            | SubtypeCountMismatch { span, .. }
-            | UnexpectedSubtypes { span, .. }
-            | UnexpectedContainerItem { span, .. }
-            | MissingType(span)
-            | TypeMismatch { span, .. }
-            | ShadowedEntry { shadower: span, .. }
-            | InvalidHash(span)
-            | AmbiguousNumeric(span)
-            | ParseNumericError { span, .. }
-            | NotEnoughItems { span, .. }
-            | TooManyItems { span, .. }
-            | InvalidDependenciesEntry { span, .. }
-            | InvalidEntriesMap { span, .. } => Some(span),
-        }
-    }
-
-    pub fn default_span(self, span: Span) -> DiagnosticWithSpan {
-        DiagnosticWithSpan {
-            span: self.span().copied().unwrap_or(span),
-            diagnostic: self,
-        }
-    }
-
-    pub fn unwrap(self) -> DiagnosticWithSpan {
-        DiagnosticWithSpan {
-            span: self.span().copied().unwrap(),
-            diagnostic: self,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct DiagnosticWithSpan {
-    pub diagnostic: Diagnostic,
-    pub span: Span,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct MaybeSpanDiag {
-    pub diagnostic: Diagnostic,
-    pub span: Option<Span>,
-}
-
-impl MaybeSpanDiag {
-    pub fn fallback(self, span: Span) -> DiagnosticWithSpan {
-        DiagnosticWithSpan {
-            span: self.span.unwrap_or(span),
-            diagnostic: self.diagnostic,
-        }
-    }
-}
-
-impl From<Diagnostic> for MaybeSpanDiag {
-    fn from(diagnostic: Diagnostic) -> Self {
-        Self {
-            span: diagnostic.span().copied(),
-            diagnostic,
-        }
-    }
-}
-
-use Diagnostic::*;
+use diagnostics::Diagnostic::*;
 
 pub enum Statement {
     KeyValue {
@@ -339,63 +259,43 @@ pub fn coerce_type<M: Debug + Default>(
 
         PropertyKind::Optional => Some(values::Optional::try_from(value).ok()?.into()),
 
-        PropertyKind::Hash => Some(match value {
+        PropertyKind::Hash => match value {
             PropertyValueEnum::String(str) => {
-                values::Hash::new_with_meta(BinHash::hash_str(&str), str.meta).into()
+                Some(values::Hash::new_with_meta(BinHash::hash_str(&str), str.meta).into())
             }
-            _other => {
-                #[cfg(feature = "debug")]
-                eprintln!("\x1b[41mcannot coerce {_other:?} to {to:?}\x1b[0m");
-                return None;
-            }
-        }),
-        PropertyKind::ObjectLink => Some(match value {
+            _ => None,
+        },
+        PropertyKind::ObjectLink => match value {
             PropertyValueEnum::Hash(hash) => {
-                values::ObjectLink::new_with_meta(*hash, hash.meta).into()
+                Some(values::ObjectLink::new_with_meta(*hash, hash.meta).into())
             }
             PropertyValueEnum::String(str) => {
-                values::ObjectLink::new_with_meta(BinHash::hash_str(&str), str.meta).into()
+                Some(values::ObjectLink::new_with_meta(BinHash::hash_str(&str), str.meta).into())
             }
-            _other => {
-                #[cfg(feature = "debug")]
-                eprintln!("\x1b[41mcannot coerce {_other:?} to {to:?}\x1b[0m");
-                return None;
-            }
-        }),
-        PropertyKind::WadChunkLink => Some(match value {
-            PropertyValueEnum::Hash(hash) => {
-                values::WadChunkLink::new_with_meta(WadHash((**hash).into()), hash.meta).into()
-            }
-            PropertyValueEnum::String(str) => {
+            _ => None,
+        },
+        PropertyKind::WadChunkLink => match value {
+            PropertyValueEnum::Hash(hash) => Some(
+                values::WadChunkLink::new_with_meta(WadHash((**hash).into()), hash.meta).into(),
+            ),
+            PropertyValueEnum::String(str) => Some(
                 values::WadChunkLink::new_with_meta(WadHash::hash_str(str.as_str()), str.meta)
-                    .into()
-            }
-            _other => {
-                #[cfg(feature = "debug")]
-                eprintln!("\x1b[41mcannot coerce {_other:?} to {to:?}\x1b[0m");
-                return None;
-            }
-        }),
-        PropertyKind::BitBool => Some(match value {
+                    .into(),
+            ),
+            _ => None,
+        },
+        PropertyKind::BitBool => match value {
             PropertyValueEnum::Bool(bool) => {
-                values::BitBool::new_with_meta(*bool, bool.meta).into()
+                Some(values::BitBool::new_with_meta(*bool, bool.meta).into())
             }
-            _other => {
-                #[cfg(feature = "debug")]
-                eprintln!("\x1b[41mcannot coerce {_other:?} to {to:?}\x1b[0m");
-                return None;
-            }
-        }),
-        PropertyKind::Bool => Some(match value {
+            _ => None,
+        },
+        PropertyKind::Bool => match value {
             PropertyValueEnum::BitBool(bool) => {
-                values::Bool::new_with_meta(*bool, bool.meta).into()
+                Some(values::Bool::new_with_meta(*bool, bool.meta).into())
             }
-            _other => {
-                #[cfg(feature = "debug")]
-                eprintln!("\x1b[41mcannot coerce {_other:?} to {to:?}\x1b[0m");
-                return None;
-            }
-        }),
+            _ => None,
+        },
         _ => None,
     }
 }
@@ -812,7 +712,20 @@ pub fn resolve_entry(
 
     let kind = kind.or(parent_value_kind);
 
-    let resolved_val = resolve_value(ctx, visit_ctx, value, kind)?.map(|value| match kind {
+    let resolved_val = match resolve_value(ctx, visit_ctx, value, kind) {
+        Ok(v) => v,
+        Err(e) => Some(match kind {
+            Some(kind) => {
+                ctx.diagnostics.push(e.default_span(tree.span));
+                kind.make_default(value.span)
+            }
+            None => {
+                return Err(e.into());
+            }
+        }),
+    };
+
+    let resolved_val = resolved_val.map(|value| match kind {
         Some(kind) if value.kind() == kind.base => value,
         Some(kind) => coerce_type(value.clone(), kind.base).unwrap_or(value),
         None => value,
@@ -841,12 +754,30 @@ pub fn resolve_entry(
 
 impl<'a> TypeChecker<'a> {
     pub fn collect_to_bin(mut self) -> (Bin, Vec<DiagnosticWithSpan>) {
-        let dependencies = self.root.swap_remove("linked").and_then(|v| {
-            let PropertyValueEnum::Container(list) = v else {
+        let dependencies = self
+            .root
+            .swap_remove(&RootKindOrUnknown::Known(RootKind::Linked));
+
+        if dependencies.is_none() {
+            self.ctx.diagnostics.push(
+                MissingRootEntry {
+                    root_kind: RootKind::Linked,
+                }
+                .unwrap(),
+            );
+        }
+
+        let dependencies = dependencies.and_then(|e| {
+            let PropertyValueEnum::Container(list) = e.value else {
                 self.ctx.diagnostics.push(
-                    InvalidDependenciesEntry {
-                        span: *v.meta(),
-                        got: RitoType::simple(v.kind()),
+                    InvalidRootEntryType {
+                        root_kind: RootKind::Linked,
+
+                        key_span: *e.key.meta(),
+                        type_span: e.type_span,
+
+                        expected: RitoType::simple(PropertyKind::Container),
+                        got: RitoType::simple(e.value.kind()),
                     }
                     .unwrap(),
                 );
@@ -878,47 +809,143 @@ impl<'a> TypeChecker<'a> {
 
         let objects = self
             .root
-            .swap_remove("entries")
-            .and_then(|v| {
-                let PropertyValueEnum::Map(map) = v else {
+            .swap_remove(&RootKindOrUnknown::Known(RootKind::Entries));
+
+        if objects.is_none() {
+            self.ctx.diagnostics.push(
+                MissingRootEntry {
+                    root_kind: RootKind::Entries,
+                }
+                .unwrap(),
+            );
+        }
+
+        let objects = objects.and_then(|e| {
+            let PropertyValueEnum::Map(map) = e.value else {
+                self.ctx.diagnostics.push(
+                    InvalidRootEntryType {
+                        root_kind: RootKind::Entries,
+                        key_span: *e.key.meta(),
+                        type_span: *e.key.meta(),
+                        got: RitoType::simple(e.value.kind()),
+                        expected: RitoType::simple(PropertyKind::Map),
+                    }
+                    .unwrap(),
+                );
+                return None;
+            };
+            Some(
+                map.into_entries()
+                    .into_iter()
+                    .filter_map(|(key, value)| {
+                        let PropertyValueEnum::Hash(path_hash) =
+                            coerce_type(key, PropertyKind::Hash)?
+                        else {
+                            return None;
+                        };
+
+                        if let PropertyValueEnum::Embedded(values::Embedded(struct_val)) = value {
+                            let struct_val = struct_val.no_meta();
+                            // eprintln!("struct_val: {struct_val:?}");
+                            Some(BinObject {
+                                path_hash: *path_hash,
+                                class_hash: struct_val.class_hash,
+                                properties: struct_val.properties,
+                            })
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>(),
+            )
+        });
+
+        match self.root.swap_remove(&RootKind::Type) {
+            Some(bin_type) => {
+                if let PropertyValueEnum::String(type_value) = bin_type.value {
+                    match type_value.as_str() {
+                        "PROP" => {}
+                        "PTCH" => {
+                            self.ctx.diagnostics.push(
+                                CustomSpan("Patch bins are not supported yet", *type_value.meta())
+                                    .unwrap(),
+                            );
+                        }
+                        _other => {
+                            self.ctx
+                                .diagnostics
+                                .push(CustomSpan("Unknown bin type", *type_value.meta()).unwrap());
+                        }
+                    }
+                } else {
                     self.ctx.diagnostics.push(
-                        InvalidEntriesMap {
-                            span: *v.meta(),
-                            got: RitoType::simple(v.kind()),
+                        InvalidRootEntryType {
+                            root_kind: RootKind::Version,
+                            key_span: *bin_type.key.meta(),
+                            type_span: *bin_type.key.meta(),
+                            got: RitoType::simple(bin_type.value.kind()),
+                            expected: RitoType::simple(PropertyKind::String),
                         }
                         .unwrap(),
                     );
-                    return None;
-                };
-                Some(
-                    map.into_entries()
-                        .into_iter()
-                        .filter_map(|(key, value)| {
-                            let PropertyValueEnum::Hash(path_hash) =
-                                coerce_type(key, PropertyKind::Hash)?
-                            else {
-                                return None;
-                            };
+                }
+            }
+            None => {
+                self.ctx.diagnostics.push(
+                    MissingRootEntry {
+                        root_kind: RootKind::Version,
+                    }
+                    .default_span(Span::default()),
+                );
+            }
+        }
+        match self.root.swap_remove(&RootKind::Version) {
+            Some(version) => {
+                if let PropertyValueEnum::U32(version) = version.value {
+                    match *version {
+                        3 => {}
+                        _other => {
+                            self.ctx.diagnostics.push(
+                                CustomSpan("Bin version should be '3'", *version.meta()).unwrap(),
+                            );
+                        }
+                    }
+                } else {
+                    self.ctx.diagnostics.push(
+                        InvalidRootEntryType {
+                            root_kind: RootKind::Version,
+                            key_span: *version.key.meta(),
+                            type_span: *version.key.meta(),
+                            got: RitoType::simple(version.value.kind()),
+                            expected: RitoType::simple(PropertyKind::U32),
+                        }
+                        .unwrap(),
+                    );
+                }
+            }
+            None => {
+                self.ctx.diagnostics.push(
+                    MissingRootEntry {
+                        root_kind: RootKind::Version,
+                    }
+                    .default_span(Span::default()),
+                );
+            }
+        }
 
-                            if let PropertyValueEnum::Embedded(values::Embedded(struct_val)) = value
-                            {
-                                let struct_val = struct_val.no_meta();
-                                // eprintln!("struct_val: {struct_val:?}");
-                                Some(BinObject {
-                                    path_hash: *path_hash,
-                                    class_hash: struct_val.class_hash,
-                                    properties: struct_val.properties,
-                                })
-                            } else {
-                                None
-                            }
-                        })
-                        .collect::<Vec<_>>(),
-                )
-            })
-            .unwrap_or_default();
+        for (_key, unknown) in self.root {
+            self.ctx.diagnostics.push(
+                UnknownRoot {
+                    span: *unknown.key.meta(),
+                }
+                .default_span(Span::default()),
+            );
+        }
 
-        let tree = Bin::new(objects, dependencies.unwrap_or_default());
+        let tree = Bin::new(
+            objects.unwrap_or_default(),
+            dependencies.unwrap_or_default(),
+        );
 
         (tree, self.ctx.diagnostics)
     }
@@ -1273,18 +1300,15 @@ impl Visitor for TypeChecker<'_> {
                                 v
                             })),
                         ));
-
-                        #[cfg(feature = "debug")]
-                        eprintln!(
-                            "[{}] got {value_type:?} inside {parent_type:?} - {:?}",
-                            tree.kind, &self.ctx.text[tree.span]
-                        );
                     }
                     _parent_type => {
-                        #[cfg(feature = "debug")]
-                        eprintln!(
-                            "[warn] got {_parent_type:?} in {} - {:?}",
-                            tree.kind, &self.ctx.text[tree.span]
+                        self.ctx.diagnostics.push(
+                            UnexpectedTree {
+                                tree: tree.kind,
+                                expected: Some(Kind::Entry),
+                                span: tree.span,
+                            }
+                            .unwrap(),
                         );
                     }
                 }
@@ -1376,24 +1400,20 @@ impl Visitor for TypeChecker<'_> {
             _ => {}
         }
 
-        // match self.current.as_mut() {
-        //     Some((depth, name, value)) => {}
-        //     None => {
-        //         match tree.kind {
-        //             Kind::Entry => {}
-        //             Kind::File => return Visit::Continue,
-        //             kind => {
-        //                 if depth == 2 {
-        //                     self.ctx
-        //                         .diagnostics
-        //                         .push(RootNonEntry.default_span(tree.span));
-        //                 }
-        //                 return Visit::Skip;
-        //             }
-        //         }
-        //
-        //     }
-        // }
+        match self.stack.last() {
+            Some(_) => {}
+            None => match tree.kind {
+                Kind::Entry | Kind::Comment | Kind::File => return Visit::Continue,
+                _ => {
+                    if depth == 2 {
+                        self.ctx
+                            .diagnostics
+                            .push(RootNonEntry.default_span(tree.span));
+                    }
+                    return Visit::Skip;
+                }
+            },
+        }
 
         Visit::Continue
     }
@@ -1458,11 +1478,7 @@ impl Visitor for TypeChecker<'_> {
                         }
                         // assert_eq!(depth, 2);
                         let IrItem::Entry(IrEntry {
-                            key:
-                                PropertyValueEnum::String(values::String {
-                                    value: key,
-                                    meta: key_span,
-                                }),
+                            key: key @ PropertyValueEnum::String(values::String { .. }),
                             value,
                         }) = ir.1
                         else {
@@ -1471,10 +1487,18 @@ impl Visitor for TypeChecker<'_> {
                                 .push(RootNonEntry.default_span(tree.span));
                             return Visit::Continue;
                         };
-                        if let Some(existing) = self.root.insert(key, value) {
+                        let key_span = *key.meta();
+                        if let Some(existing) = self.root.insert(
+                            RootKindOrUnknown::from_value(self.ctx.text, &key),
+                            RootEntry {
+                                key,
+                                type_span: key_span,
+                                value,
+                            }, // FIXME: get real type span in here
+                        ) {
                             self.ctx.diagnostics.push(
                                 ShadowedEntry {
-                                    shadowee: *existing.meta(),
+                                    shadowee: *existing.key.meta(),
                                     shadower: key_span,
                                 }
                                 .unwrap(),
@@ -1482,7 +1506,6 @@ impl Visitor for TypeChecker<'_> {
                         }
                     }
                 }
-                // TODO: warn when shadowed
             }
             _ => {
                 // eprintln!("exit tree with no current?");
