@@ -854,7 +854,7 @@ impl<'a> TypeChecker<'a> {
                 } else {
                     self.ctx.diagnostics.push(
                         InvalidRootEntryType {
-                            root_kind: RootKind::Version,
+                            root_kind: RootKind::Type,
                             key_span: *bin_type.key.meta(),
                             type_span: *bin_type.key.meta(),
                             got: RitoType::simple(bin_type.value.kind()),
@@ -867,7 +867,7 @@ impl<'a> TypeChecker<'a> {
             None => {
                 self.ctx.diagnostics.push(
                     MissingRootEntry {
-                        root_kind: RootKind::Version,
+                        root_kind: RootKind::Type,
                     }
                     .default_span(Span::default()),
                 );
