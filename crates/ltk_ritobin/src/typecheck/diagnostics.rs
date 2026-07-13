@@ -1,11 +1,62 @@
+use std::fmt::Display;
+
 use ltk_meta::PropertyKind;
 
 use crate::{
     cst,
     parse::{Span, TokenKind},
-    typecheck::visitor::{ColorOrVec, RitoTypeOrVirtual, RootKind},
     RitoType,
 };
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub enum RootKind {
+    Type,
+    Version,
+    Linked,
+    Entries,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum RitoTypeOrVirtual {
+    RitoType(RitoType),
+    Numeric,
+    StructOrEmbedded,
+    Token(TokenKind),
+    Tree(cst::Kind),
+}
+
+impl RitoTypeOrVirtual {
+    pub fn numeric() -> Self {
+        Self::Numeric
+    }
+}
+
+impl From<RitoType> for RitoTypeOrVirtual {
+    fn from(value: RitoType) -> Self {
+        RitoTypeOrVirtual::RitoType(value)
+    }
+}
+
+impl Display for RitoTypeOrVirtual {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::RitoType(rito_type) => Display::fmt(rito_type, f),
+            Self::Numeric => f.write_str("numeric type"),
+            Self::StructOrEmbedded => f.write_str("struct/embedded"),
+            Self::Token(kind) => Display::fmt(kind, f),
+            Self::Tree(kind) => Display::fmt(kind, f),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ColorOrVec {
+    Color,
+    Vec2,
+    Vec3,
+    Vec4,
+    Mat44,
+}
 
 #[derive(Debug, Clone, Copy)]
 pub enum Diagnostic {

@@ -18,10 +18,7 @@ mod test {
     };
 
     use crate::{
-        typecheck::{
-            diagnostics::{Diagnostic, DiagnosticWithSpan},
-            visitor::RootKind,
-        },
+        typecheck::diagnostics::{Diagnostic, DiagnosticWithSpan, RootKind},
         Cst,
     };
 

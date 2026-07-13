@@ -1,8 +1,4 @@
-use std::{
-    borrow::Cow,
-    fmt::{Debug, Display},
-    vec::Drain,
-};
+use std::{borrow::Cow, fmt::Debug, vec::Drain};
 
 use glam::Vec4;
 use indexmap::{Equivalent, IndexMap};
@@ -19,19 +15,14 @@ use crate::{
     },
     parse::{Span, Token, TokenKind},
     typecheck::{
-        diagnostics::{self, Diagnostic, DiagnosticWithSpan, MaybeSpanDiag},
+        diagnostics::{
+            self, ColorOrVec, Diagnostic, DiagnosticWithSpan, MaybeSpanDiag, RitoTypeOrVirtual,
+            RootKind,
+        },
         ir::{IrEntry, IrItem, IrListItem},
     },
     Cst, PropertyValueExt as _, RitoType, RitobinName,
 };
-
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub enum RootKind {
-    Type,
-    Version,
-    Linked,
-    Entries,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RootKindOrUnknown<'a> {
@@ -79,7 +70,6 @@ impl Equivalent<RootKindOrUnknown<'_>> for str {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::typecheck::visitor::{RootKind, RootKindOrUnknown};
 
     #[test]
     fn root_kind_eq() {
@@ -157,48 +147,6 @@ impl<'a> TypeChecker<'a> {
             depth: 0,
         }
     }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum RitoTypeOrVirtual {
-    RitoType(RitoType),
-    Numeric,
-    StructOrEmbedded,
-    Token(TokenKind),
-    Tree(Kind),
-}
-
-impl RitoTypeOrVirtual {
-    pub fn numeric() -> Self {
-        Self::Numeric
-    }
-}
-
-impl From<RitoType> for RitoTypeOrVirtual {
-    fn from(value: RitoType) -> Self {
-        RitoTypeOrVirtual::RitoType(value)
-    }
-}
-
-impl Display for RitoTypeOrVirtual {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::RitoType(rito_type) => Display::fmt(rito_type, f),
-            Self::Numeric => f.write_str("numeric type"),
-            Self::StructOrEmbedded => f.write_str("struct/embedded"),
-            Self::Token(kind) => Display::fmt(kind, f),
-            Self::Tree(kind) => Display::fmt(kind, f),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum ColorOrVec {
-    Color,
-    Vec2,
-    Vec3,
-    Vec4,
-    Mat44,
 }
 
 use diagnostics::Diagnostic::*;
