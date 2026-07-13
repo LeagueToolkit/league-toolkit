@@ -6,6 +6,7 @@ use crate::{
         visitor::{Visit, VisitCtx},
         Kind, NodeId, Visitor,
     },
+    parse::Span,
     typecheck::{
         diagnostics::{self, RitoTypeOrVirtual},
         ir::{IrEntry, IrItem, IrListItem},
@@ -23,6 +24,26 @@ use super::{
 use diagnostics::Diagnostic::*;
 
 impl<'a> TypeChecker<'a> {
+    fn handle_container_res(&mut self, span: Span, result: Result<(), ltk_meta::Error>) {
+        match result {
+            Ok(()) => {}
+            Err(ltk_meta::Error::MismatchedContainerTypes { expected, got }) => {
+                self.ctx.diagnostics.push(
+                    TypeMismatch {
+                        span,
+                        expected: RitoType::simple(expected),
+                        expected_span: None, // TODO: would be nice here
+                        got: RitoType::simple(got).into(),
+                    }
+                    .unwrap(),
+                );
+            }
+            Err(_e) => {
+                todo!("handle unexpected error");
+            }
+        }
+    }
+
     fn merge_ir(&mut self, mut parent: IrItem, child: IrItem) -> IrItem {
         match &mut parent.value_mut() {
             PropertyValueEnum::Container(list)
@@ -34,23 +55,8 @@ impl<'a> TypeChecker<'a> {
                         }
 
                         let span = *value.meta();
-                        match list.push(value) {
-                            Ok(_) => {}
-                            Err(ltk_meta::Error::MismatchedContainerTypes { expected, got }) => {
-                                self.ctx.diagnostics.push(
-                                    TypeMismatch {
-                                        span,
-                                        expected: RitoType::simple(expected),
-                                        expected_span: None, // TODO: would be nice here
-                                        got: RitoType::simple(got).into(),
-                                    }
-                                    .unwrap(),
-                                );
-                            }
-                            Err(_e) => {
-                                todo!("handle unexpected error");
-                            }
-                        }
+                        let result = list.push(value);
+                        self.handle_container_res(span, result);
                     }
                     IrItem::Entry(IrEntry { key: _, value: _ }) => {
                         trace!("\x1b[41mlist item must be list item\x1b[0m");
@@ -81,23 +87,8 @@ impl<'a> TypeChecker<'a> {
                 let Some(key) = coerce_type(key, map_value.key_kind()) else {
                     return parent;
                 };
-                match map_value.push(key, value) {
-                    Ok(()) => {}
-                    Err(ltk_meta::Error::MismatchedContainerTypes { expected, got }) => {
-                        self.ctx.diagnostics.push(
-                            TypeMismatch {
-                                span,
-                                expected: RitoType::simple(expected),
-                                expected_span: None, // TODO: would be nice here
-                                got: RitoType::simple(got).into(),
-                            }
-                            .unwrap(),
-                        );
-                    }
-                    Err(_e) => {
-                        todo!("handle unexpected err");
-                    }
-                }
+                let result = map_value.push(key, value);
+                self.handle_container_res(span, result);
             }
             PropertyValueEnum::Optional(option) => {
                 let IrItem::ListItem(IrListItem(child)) = child else {
