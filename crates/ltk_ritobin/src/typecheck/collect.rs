@@ -10,12 +10,43 @@ use crate::{
 
 use super::{
     resolve::coerce_type,
-    state::{RootKindOrUnknown, TypeChecker},
+    state::{RootEntry, RootKindOrUnknown, TypeChecker},
 };
 
 use diagnostics::Diagnostic::*;
 
 impl<'a> TypeChecker<'a> {
+    /// Pops `entry`'s value out if `extract` succeeds; otherwise pushes an
+    /// `InvalidRootEntryType` diagnostic (using `extract`'s returned value to report what was
+    /// actually found) and returns `None`. Does not handle the "entry is absent" case - callers
+    /// do that themselves before calling this.
+    fn take_root_value<T>(
+        &mut self,
+        root_kind: RootKind,
+        entry: RootEntry,
+        type_span: Span,
+        expected: PropertyKind,
+        extract: impl FnOnce(PropertyValueEnum<Span>) -> Result<T, PropertyValueEnum<Span>>,
+    ) -> Option<T> {
+        let key_span = *entry.key.meta();
+        match extract(entry.value) {
+            Ok(v) => Some(v),
+            Err(got) => {
+                self.ctx.diagnostics.push(
+                    InvalidRootEntryType {
+                        root_kind,
+                        key_span,
+                        type_span,
+                        got: RitoType::simple(got.kind()),
+                        expected: RitoType::simple(expected),
+                    }
+                    .unwrap(),
+                );
+                None
+            }
+        }
+    }
+
     pub fn collect_to_bin(mut self) -> (Bin, Vec<diagnostics::DiagnosticWithSpan>) {
         let dependencies = self
             .root
@@ -30,24 +61,21 @@ impl<'a> TypeChecker<'a> {
             );
         }
 
-        let dependencies = dependencies.and_then(|e| {
-            let PropertyValueEnum::Container(list) = e.value else {
-                self.ctx.diagnostics.push(
-                    InvalidRootEntryType {
-                        root_kind: RootKind::Linked,
-
-                        key_span: *e.key.meta(),
-                        type_span: e.type_span,
-
-                        expected: RitoType::simple(PropertyKind::Container),
-                        got: RitoType::simple(e.value.kind()),
-                    }
-                    .unwrap(),
-                );
-                return None;
-            };
-
-            Some(
+        let dependencies = dependencies
+            .and_then(|e| {
+                let type_span = e.type_span;
+                self.take_root_value(
+                    RootKind::Linked,
+                    e,
+                    type_span,
+                    PropertyKind::Container,
+                    |value| match value {
+                        PropertyValueEnum::Container(list) => Ok(list),
+                        other => Err(other),
+                    },
+                )
+            })
+            .map(|list| {
                 list.into_items()
                     .filter_map(|value| {
                         let span = *value.meta();
@@ -66,9 +94,8 @@ impl<'a> TypeChecker<'a> {
                         };
                         Some(dependency.value)
                     })
-                    .collect::<Vec<_>>(),
-            )
-        });
+                    .collect::<Vec<_>>()
+            });
 
         let objects = self
             .root
@@ -83,21 +110,21 @@ impl<'a> TypeChecker<'a> {
             );
         }
 
-        let objects = objects.and_then(|e| {
-            let PropertyValueEnum::Map(map) = e.value else {
-                self.ctx.diagnostics.push(
-                    InvalidRootEntryType {
-                        root_kind: RootKind::Entries,
-                        key_span: *e.key.meta(),
-                        type_span: *e.key.meta(),
-                        got: RitoType::simple(e.value.kind()),
-                        expected: RitoType::simple(PropertyKind::Map),
-                    }
-                    .unwrap(),
-                );
-                return None;
-            };
-            Some(
+        let objects = objects
+            .and_then(|e| {
+                let type_span = *e.key.meta();
+                self.take_root_value(
+                    RootKind::Entries,
+                    e,
+                    type_span,
+                    PropertyKind::Map,
+                    |value| match value {
+                        PropertyValueEnum::Map(map) => Ok(map),
+                        other => Err(other),
+                    },
+                )
+            })
+            .map(|map| {
                 map.into_entries()
                     .into_iter()
                     .filter_map(|(key, value)| {
@@ -118,13 +145,22 @@ impl<'a> TypeChecker<'a> {
                             None
                         }
                     })
-                    .collect::<Vec<_>>(),
-            )
-        });
+                    .collect::<Vec<_>>()
+            });
 
         match self.root.swap_remove(&RootKind::Type) {
             Some(bin_type) => {
-                if let PropertyValueEnum::String(type_value) = bin_type.value {
+                let type_span = *bin_type.key.meta();
+                if let Some(type_value) = self.take_root_value(
+                    RootKind::Type,
+                    bin_type,
+                    type_span,
+                    PropertyKind::String,
+                    |value| match value {
+                        PropertyValueEnum::String(s) => Ok(s),
+                        other => Err(other),
+                    },
+                ) {
                     match type_value.as_str() {
                         "PROP" => {}
                         "PTCH" => {
@@ -139,17 +175,6 @@ impl<'a> TypeChecker<'a> {
                                 .push(CustomSpan("Unknown bin type", *type_value.meta()).unwrap());
                         }
                     }
-                } else {
-                    self.ctx.diagnostics.push(
-                        InvalidRootEntryType {
-                            root_kind: RootKind::Type,
-                            key_span: *bin_type.key.meta(),
-                            type_span: *bin_type.key.meta(),
-                            got: RitoType::simple(bin_type.value.kind()),
-                            expected: RitoType::simple(PropertyKind::String),
-                        }
-                        .unwrap(),
-                    );
                 }
             }
             None => {
@@ -163,26 +188,26 @@ impl<'a> TypeChecker<'a> {
         }
         match self.root.swap_remove(&RootKind::Version) {
             Some(version) => {
-                if let PropertyValueEnum::U32(version) = version.value {
-                    match *version {
+                let type_span = *version.key.meta();
+                if let Some(version_value) = self.take_root_value(
+                    RootKind::Version,
+                    version,
+                    type_span,
+                    PropertyKind::U32,
+                    |value| match value {
+                        PropertyValueEnum::U32(v) => Ok(v),
+                        other => Err(other),
+                    },
+                ) {
+                    match *version_value {
                         3 => {}
                         _other => {
                             self.ctx.diagnostics.push(
-                                CustomSpan("Bin version should be '3'", *version.meta()).unwrap(),
+                                CustomSpan("Bin version should be '3'", *version_value.meta())
+                                    .unwrap(),
                             );
                         }
                     }
-                } else {
-                    self.ctx.diagnostics.push(
-                        InvalidRootEntryType {
-                            root_kind: RootKind::Version,
-                            key_span: *version.key.meta(),
-                            type_span: *version.key.meta(),
-                            got: RitoType::simple(version.value.kind()),
-                            expected: RitoType::simple(PropertyKind::U32),
-                        }
-                        .unwrap(),
-                    );
                 }
             }
             None => {
