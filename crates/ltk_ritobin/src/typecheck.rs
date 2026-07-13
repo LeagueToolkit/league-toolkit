@@ -11,6 +11,7 @@ pub mod state;
 
 mod collect;
 mod resolve;
+mod trace;
 mod vecmath;
 mod walk;
 

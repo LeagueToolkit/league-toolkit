@@ -16,6 +16,7 @@ use crate::{
 use super::{
     resolve::{coerce_type, resolve_entry, resolve_value},
     state::{RootEntry, RootKindOrUnknown, TypeChecker},
+    trace::trace,
     vecmath::populate_vec_or_color,
 };
 
@@ -52,8 +53,7 @@ impl<'a> TypeChecker<'a> {
                         }
                     }
                     IrItem::Entry(IrEntry { key: _, value: _ }) => {
-                        #[cfg(feature = "debug")]
-                        eprintln!("\x1b[41mlist item must be list item\x1b[0m");
+                        trace!("\x1b[41mlist item must be list item\x1b[0m");
                         return parent;
                     }
                 }
@@ -61,8 +61,7 @@ impl<'a> TypeChecker<'a> {
             PropertyValueEnum::Struct(struct_val)
             | PropertyValueEnum::Embedded(values::Embedded(struct_val)) => {
                 let IrItem::Entry(IrEntry { key, value }) = child else {
-                    #[cfg(feature = "debug")]
-                    eprintln!("\x1b[41mstruct item must be entry\x1b[0m");
+                    trace!("\x1b[41mstruct item must be entry\x1b[0m");
                     return parent;
                 };
 
@@ -75,8 +74,7 @@ impl<'a> TypeChecker<'a> {
             }
             PropertyValueEnum::Map(map_value) => {
                 let IrItem::Entry(IrEntry { key, value }) = child else {
-                    #[cfg(feature = "debug")]
-                    eprintln!("map item must be entry");
+                    trace!("map item must be entry");
                     return parent;
                 };
                 let span = *value.meta();
@@ -103,8 +101,7 @@ impl<'a> TypeChecker<'a> {
             }
             PropertyValueEnum::Optional(option) => {
                 let IrItem::ListItem(IrListItem(child)) = child else {
-                    #[cfg(feature = "debug")]
-                    eprintln!("\x1b[41moptional value must be list item\x1b[0m");
+                    trace!("\x1b[41moptional value must be list item\x1b[0m");
                     return parent;
                 };
                 if child.kind() != option.item_kind() {
@@ -137,8 +134,7 @@ impl<'a> TypeChecker<'a> {
                     .unwrap(),
                 );
 
-                #[cfg(feature = "debug")]
-                eprintln!("cant inject into {:?}", other.kind())
+                trace!("cant inject into {:?}", other.kind());
             }
         }
         parent
@@ -151,23 +147,7 @@ impl Visitor for TypeChecker<'_> {
         self.depth += 1;
         let depth = self.depth;
 
-        #[cfg(feature = "debug")]
-        let indent = "  ".repeat(depth.saturating_sub(1) as _);
-
-        #[cfg(feature = "debug")]
-        {
-            if std::env::var("RB_STACK").is_ok() {
-                eprintln!("{indent}> d:{} | {:?}", depth, tree.kind);
-                eprint!("{indent}  stack: ");
-                if self.stack.is_empty() {
-                    eprint!("empty")
-                }
-                eprintln!();
-                for s in &self.stack {
-                    eprintln!("{indent}    - {}: {:?}", s.0, s.1);
-                }
-            }
-        }
+        self.trace_stack(depth, ">", tree.kind);
 
         let parent = self.stack.last();
 
@@ -239,8 +219,7 @@ impl Visitor for TypeChecker<'_> {
 
                 match resolve_value(&mut self.ctx, ctx, tree, value_hint) {
                     Ok(Some(item)) => {
-                        #[cfg(feature = "debug")]
-                        eprintln!("{indent}  list item {item:?}");
+                        trace!("  list item {item:?}");
                         if color_vec_type.is_some() {
                             self.list_queue.push(IrListItem(item));
                         } else {
@@ -248,8 +227,7 @@ impl Visitor for TypeChecker<'_> {
                         }
                     }
                     Ok(None) => {
-                        #[cfg(feature = "debug")]
-                        eprintln!("{indent}  ERROR empty item");
+                        trace!("  ERROR empty item");
                         for child in tree.children.get(ctx.cst).iter() {
                             let (got, span) = match child {
                                 cst::Child::Token(token_id) => {
@@ -319,34 +297,14 @@ impl Visitor for TypeChecker<'_> {
         let depth = self.depth;
         self.depth -= 1;
 
-        #[cfg(feature = "debug")]
-        let indent = "  ".repeat(depth.saturating_sub(1) as _);
-        #[cfg(feature = "debug")]
-        {
-            if std::env::var("RB_STACK").is_ok() {
-                eprintln!("{indent}< d:{} | {:?}", depth, tree.kind);
-                eprint!("{indent}  stack: ");
-                if self.stack.is_empty() {
-                    eprint!("empty")
-                }
-                eprintln!();
-                for s in &self.stack {
-                    eprintln!("{indent}    - {}: {:?}", s.0, s.1);
-                }
-            }
-        }
+        self.trace_stack(depth, "<", tree.kind);
         if tree.kind == cst::Kind::ErrorTree {
             return Visit::Continue;
         }
 
         match self.stack.pop() {
             Some(mut ir) => {
-                #[cfg(feature = "debug")]
-                {
-                    if std::env::var("RB_STACK").is_ok() {
-                        eprintln!("{indent}< popped {}", ir.0);
-                    }
-                }
+                self.trace_popped(depth, ir.0);
                 if ir.0 != depth {
                     self.stack.push(ir);
                     return Visit::Continue;

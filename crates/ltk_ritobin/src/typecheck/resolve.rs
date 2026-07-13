@@ -13,7 +13,7 @@ use crate::{
     Cst, PropertyValueExt as _, RitoType, RitobinName,
 };
 
-use super::state::Ctx;
+use super::{state::Ctx, trace::trace};
 
 use diagnostics::Diagnostic::*;
 
@@ -385,8 +385,7 @@ pub(crate) fn resolve_value(
                     properties: Default::default(),
                 })),
                 other => {
-                    #[cfg(feature = "debug")]
-                    eprintln!("can't create class value from kind {other:?}");
+                    trace!("can't create class value from kind {other:?}");
                     return Err(TypeMismatch {
                         span: class.span,
                         expected: RitoType::simple(other),
