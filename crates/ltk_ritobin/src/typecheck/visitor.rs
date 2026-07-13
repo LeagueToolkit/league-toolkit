@@ -738,7 +738,7 @@ impl<'a> TypeChecker<'a> {
                 MissingRootEntry {
                     root_kind: RootKind::Linked,
                 }
-                .unwrap(),
+                .default_span(Span::default()),
             );
         }
 
@@ -791,7 +791,7 @@ impl<'a> TypeChecker<'a> {
                 MissingRootEntry {
                     root_kind: RootKind::Entries,
                 }
-                .unwrap(),
+                .default_span(Span::default()),
             );
         }
 
