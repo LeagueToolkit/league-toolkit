@@ -26,7 +26,7 @@ use crate::cst;
 #[cfg(test)]
 mod test {
 
-    use crate::{cst::Cst, print::CstPrinter, typecheck::visitor::TypeChecker};
+    use crate::{cst::Cst, print::CstPrinter, typecheck::TypeChecker};
 
     fn assert_success(text: &str) -> Cst {
         let cst = Cst::parse(text);

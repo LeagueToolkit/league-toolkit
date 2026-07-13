@@ -7,7 +7,14 @@
 
 pub mod diagnostics;
 pub mod ir;
-pub mod visitor;
+pub mod state;
+
+mod collect;
+mod resolve;
+mod vecmath;
+mod walk;
+
+pub use state::TypeChecker;
 
 #[cfg(test)]
 mod test {
