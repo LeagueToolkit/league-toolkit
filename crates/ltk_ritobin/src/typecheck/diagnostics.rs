@@ -1,11 +1,87 @@
+use std::fmt::Display;
+
 use ltk_meta::PropertyKind;
 
 use crate::{
     cst,
     parse::{Span, TokenKind},
-    typecheck::visitor::{ColorOrVec, RitoTypeOrVirtual, RootKind},
     RitoType,
 };
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub enum RootKind {
+    Type,
+    Version,
+    Linked,
+    Entries,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum RitoTypeOrVirtual {
+    RitoType(RitoType),
+    Numeric,
+    StructOrEmbedded,
+    Token(TokenKind),
+    Tree(cst::Kind),
+}
+
+impl RitoTypeOrVirtual {
+    pub fn numeric() -> Self {
+        Self::Numeric
+    }
+}
+
+impl From<RitoType> for RitoTypeOrVirtual {
+    fn from(value: RitoType) -> Self {
+        RitoTypeOrVirtual::RitoType(value)
+    }
+}
+
+impl Display for RitoTypeOrVirtual {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::RitoType(rito_type) => Display::fmt(rito_type, f),
+            Self::Numeric => f.write_str("numeric type"),
+            Self::StructOrEmbedded => f.write_str("struct/embedded"),
+            Self::Token(kind) => Display::fmt(kind, f),
+            Self::Tree(kind) => Display::fmt(kind, f),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ListLike {
+    Color,
+    Vec2,
+    Vec3,
+    Vec4,
+    Mat44,
+}
+
+impl ListLike {
+    pub fn needed_children(&self) -> u8 {
+        match self {
+            ListLike::Color => 4,
+            ListLike::Vec2 => 2,
+            ListLike::Vec3 => 3,
+            ListLike::Vec4 => 4,
+            ListLike::Mat44 => 16,
+        }
+    }
+}
+
+impl Display for ListLike {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        RitoType::simple(match self {
+            ListLike::Color => PropertyKind::Color,
+            ListLike::Vec2 => PropertyKind::Vector2,
+            ListLike::Vec3 => PropertyKind::Vector3,
+            ListLike::Vec4 => PropertyKind::Vector4,
+            ListLike::Mat44 => PropertyKind::Matrix44,
+        })
+        .fmt(f)
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 pub enum Diagnostic {
@@ -59,12 +135,12 @@ pub enum Diagnostic {
     NotEnoughItems {
         span: Span,
         got: u8,
-        expected: ColorOrVec,
+        expected: ListLike,
     },
     TooManyItems {
         span: Span,
         extra: u8,
-        expected: ColorOrVec,
+        expected: ListLike,
     },
 
     /// Root entry is not a valid entry (key: type = value)

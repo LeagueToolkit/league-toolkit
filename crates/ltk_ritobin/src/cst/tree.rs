@@ -199,7 +199,7 @@ impl Cst {
     /// Construct a best-effort [`Bin`] from this tree, returning any errors. If there are any
     /// errors returned, the [`Bin`] may only be partially constructed.
     pub fn build_bin(&self, text: &str) -> (Bin, Vec<DiagnosticWithSpan>) {
-        let mut checker = crate::typecheck::visitor::TypeChecker::new(text);
+        let mut checker = crate::typecheck::TypeChecker::new(text);
         self.walk(&mut checker);
         checker.collect_to_bin()
     }

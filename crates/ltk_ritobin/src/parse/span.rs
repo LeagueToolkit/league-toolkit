@@ -54,3 +54,18 @@ impl std::ops::Index<&Span> for str {
         &self[start..end.min(self.len())]
     }
 }
+
+impl std::ops::Index<Span> for String {
+    type Output = str;
+
+    fn index(&self, index: Span) -> &Self::Output {
+        &self.as_str()[index]
+    }
+}
+impl std::ops::Index<&Span> for String {
+    type Output = str;
+
+    fn index(&self, index: &Span) -> &Self::Output {
+        &self[*index]
+    }
+}

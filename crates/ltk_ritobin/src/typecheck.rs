@@ -7,7 +7,15 @@
 
 pub mod diagnostics;
 pub mod ir;
-pub mod visitor;
+pub mod state;
+
+mod collect;
+mod listlikes;
+mod resolve;
+mod trace;
+mod walk;
+
+pub use state::TypeChecker;
 
 #[cfg(test)]
 mod test {
@@ -17,10 +25,13 @@ mod test {
         Bin, BinObject, ObjectBuilder, PropertyKind,
     };
 
-    use crate::Cst;
+    use crate::{
+        typecheck::diagnostics::{Diagnostic, DiagnosticWithSpan, RootKind},
+        Cst,
+    };
 
-    fn assert<F: Fn(ObjectBuilder) -> ObjectBuilder>(input: &str, is: F) {
-        let input = format!(
+    fn wrap(input: &str) -> String {
+        format!(
             r#"
 #PROP_text
 type: string = "PROP"
@@ -31,7 +42,11 @@ entries: map[hash,embed] = {{
         {input}
     }}
 }}"#
-        );
+        )
+    }
+
+    fn assert<F: Fn(ObjectBuilder) -> ObjectBuilder>(input: &str, is: F) {
+        let input = wrap(input);
 
         let cst = Cst::parse(&input);
         let mut str = String::new();
@@ -45,6 +60,16 @@ entries: map[hash,embed] = {{
 
         let obj = (is)(BinObject::<NoMeta>::builder(0xDEADBEEF, 0x1234123)).build();
         pretty_assertions::assert_eq!(bin, Bin::builder().object(obj).build());
+    }
+
+    /// Builds a full object body (see [`wrap`]) from `input` and returns the
+    /// typecheck diagnostics without asserting they're empty - for exercising
+    /// error paths.
+    fn build_errs(input: &str) -> Vec<DiagnosticWithSpan> {
+        let input = wrap(input);
+        let cst = Cst::parse(&input);
+        let (_, errs) = cst.build_bin(&input);
+        errs
     }
 
     #[test]
@@ -127,6 +152,185 @@ entries: map[hash,embed] = {{
                     ])),
                 )
             },
+        );
+    }
+
+    #[test]
+    fn numeric_parse_error() {
+        let errs = build_errs("0x1: u8 = 999999");
+        assert_eq!(errs.len(), 1, "{errs:#?}");
+        assert!(
+            matches!(
+                errs[0].diagnostic,
+                Diagnostic::ParseNumericError {
+                    expected: PropertyKind::U8,
+                    ..
+                }
+            ),
+            "{:#?}",
+            errs[0]
+        );
+    }
+
+    #[test]
+    fn subtype_count_mismatch_too_many() {
+        // Container/list takes exactly 1 subtype
+        let errs = build_errs("0x1: list[u8,u8] = {}");
+        assert_eq!(errs.len(), 1, "{errs:#?}");
+        assert!(
+            matches!(
+                errs[0].diagnostic,
+                Diagnostic::SubtypeCountMismatch {
+                    expected: 1,
+                    got: 2,
+                    ..
+                }
+            ),
+            "{:#?}",
+            errs[0]
+        );
+    }
+
+    #[test]
+    fn subtype_count_mismatch_too_few() {
+        // Map takes exactly 2 subtypes
+        let errs = build_errs("0x1: map[u8] = {}");
+        assert_eq!(errs.len(), 1, "{errs:#?}");
+        assert!(
+            matches!(
+                errs[0].diagnostic,
+                Diagnostic::SubtypeCountMismatch {
+                    expected: 2,
+                    got: 1,
+                    ..
+                }
+            ),
+            "{:#?}",
+            errs[0]
+        );
+    }
+
+    #[test]
+    fn missing_linked_root_entry_reports_diagnostic_without_panicking() {
+        let input = r#"
+type: string = "PROP"
+version: u32 = 3
+entries: map[hash,embed] = {}
+"#;
+        let cst = Cst::parse(input);
+        let (_, errs) = cst.build_bin(input);
+        assert!(
+            errs.iter().any(|e| matches!(
+                e.diagnostic,
+                Diagnostic::MissingRootEntry {
+                    root_kind: RootKind::Linked
+                }
+            )),
+            "{errs:#?}"
+        );
+    }
+
+    #[test]
+    fn missing_entries_root_entry_reports_diagnostic_without_panicking() {
+        let input = r#"
+type: string = "PROP"
+version: u32 = 3
+linked: list[string] = {}
+"#;
+        let cst = Cst::parse(input);
+        let (_, errs) = cst.build_bin(input);
+        assert!(
+            errs.iter().any(|e| matches!(
+                e.diagnostic,
+                Diagnostic::MissingRootEntry {
+                    root_kind: RootKind::Entries
+                }
+            )),
+            "{errs:#?}"
+        );
+    }
+
+    #[test]
+    fn missing_type_root_entry_reports_type_not_version() {
+        let input = r#"
+version: u32 = 3
+linked: list[string] = {}
+entries: map[hash,embed] = {}
+"#;
+        let cst = Cst::parse(input);
+        let (_, errs) = cst.build_bin(input);
+        assert!(
+            errs.iter().any(|e| matches!(
+                e.diagnostic,
+                Diagnostic::MissingRootEntry {
+                    root_kind: RootKind::Type
+                }
+            )),
+            "{errs:#?}"
+        );
+    }
+
+    #[test]
+    fn invalid_type_root_entry_reports_type_not_version() {
+        let input = r#"
+type: u32 = 3
+version: u32 = 3
+linked: list[string] = {}
+entries: map[hash,embed] = {}
+"#;
+        let cst = Cst::parse(input);
+        let (_, errs) = cst.build_bin(input);
+        assert!(
+            errs.iter().any(|e| matches!(
+                e.diagnostic,
+                Diagnostic::InvalidRootEntryType {
+                    root_kind: RootKind::Type,
+                    ..
+                }
+            )),
+            "{errs:#?}"
+        );
+    }
+
+    #[test]
+    fn empty_vec3_reports_not_enough_items() {
+        let errs = build_errs("0x1: vec3 = {}");
+        assert_eq!(errs.len(), 1, "{errs:#?}");
+        assert!(
+            matches!(
+                errs[0].diagnostic,
+                Diagnostic::NotEnoughItems { got: 0, .. }
+            ),
+            "{:#?}",
+            errs[0]
+        );
+    }
+
+    #[test]
+    fn empty_color_reports_not_enough_items() {
+        let errs = build_errs("0x1: rgba = {}");
+        assert_eq!(errs.len(), 1, "{errs:#?}");
+        assert!(
+            matches!(
+                errs[0].diagnostic,
+                Diagnostic::NotEnoughItems { got: 0, .. }
+            ),
+            "{:#?}",
+            errs[0]
+        );
+    }
+
+    #[test]
+    fn empty_mtx44_reports_not_enough_items() {
+        let errs = build_errs("0x1: mtx44 = {}");
+        assert_eq!(errs.len(), 1, "{errs:#?}");
+        assert!(
+            matches!(
+                errs[0].diagnostic,
+                Diagnostic::NotEnoughItems { got: 0, .. }
+            ),
+            "{:#?}",
+            errs[0]
         );
     }
 }
