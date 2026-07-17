@@ -50,12 +50,37 @@ impl Display for RitoTypeOrVirtual {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum ColorOrVec {
+pub enum ListLike {
     Color,
     Vec2,
     Vec3,
     Vec4,
     Mat44,
+}
+
+impl ListLike {
+    pub fn needed_children(&self) -> u8 {
+        match self {
+            ListLike::Color => 4,
+            ListLike::Vec2 => 2,
+            ListLike::Vec3 => 3,
+            ListLike::Vec4 => 4,
+            ListLike::Mat44 => 16,
+        }
+    }
+}
+
+impl Display for ListLike {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        RitoType::simple(match self {
+            ListLike::Color => PropertyKind::Color,
+            ListLike::Vec2 => PropertyKind::Vector2,
+            ListLike::Vec3 => PropertyKind::Vector3,
+            ListLike::Vec4 => PropertyKind::Vector4,
+            ListLike::Mat44 => PropertyKind::Matrix44,
+        })
+        .fmt(f)
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -110,12 +135,12 @@ pub enum Diagnostic {
     NotEnoughItems {
         span: Span,
         got: u8,
-        expected: ColorOrVec,
+        expected: ListLike,
     },
     TooManyItems {
         span: Span,
         extra: u8,
-        expected: ColorOrVec,
+        expected: ListLike,
     },
 
     /// Root entry is not a valid entry (key: type = value)

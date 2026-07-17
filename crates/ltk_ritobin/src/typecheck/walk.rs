@@ -18,7 +18,7 @@ use super::{
     resolve::{coerce_type, resolve_entry, resolve_value},
     state::{RootEntry, RootKindOrUnknown, TypeChecker},
     trace::trace,
-    vecmath::populate_vec_or_color,
+    vecmath::try_populate_listlike,
 };
 
 use diagnostics::Diagnostic::*;
@@ -300,10 +300,8 @@ impl Visitor for TypeChecker<'_> {
                 return Visit::Continue;
             }
 
-            if !self.list_queue.is_empty() {
-                if let Err(e) = populate_vec_or_color(&mut ir.1, &mut self.list_queue) {
-                    self.ctx.diagnostics.push(e.fallback(*ir.1.value().meta()));
-                }
+            if let Err(e) = try_populate_listlike(&mut ir.1, &mut self.list_queue) {
+                self.ctx.diagnostics.push(e.fallback(*ir.1.value().meta()));
             }
 
             match self.stack.pop() {
