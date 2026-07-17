@@ -1,5 +1,3 @@
-use std::vec::Drain;
-
 use ltk_meta::{property::values, traits::PropertyExt, PropertyKind, PropertyValueEnum};
 
 use crate::{
@@ -39,105 +37,122 @@ fn resolve_u8(n: PropertyValueEnum<Span>) -> Result<u8, MaybeSpanDiag> {
     }
 }
 
-fn get_next(
-    expected: ListLike,
-    span: &mut Span,
-    items: &mut Drain<'_, IrListItem>,
-) -> Result<PropertyValueEnum<Span>, Diagnostic> {
-    let item = items
-        .next()
-        .ok_or(NotEnoughItems {
-            span: *span,
-            got: 0,
-            expected,
-        })?
-        .0;
-    *span = *item.meta();
-    Ok(item)
+struct ListIter<I: Iterator<Item = IrListItem>> {
+    items: I,
+    span: Span,
+    count: u8,
 }
 
-fn read_floats<const N: usize>(
-    expected: ListLike,
-    span: &mut Span,
-    items: &mut Drain<'_, IrListItem>,
-) -> Result<[f32; N], MaybeSpanDiag> {
-    let mut out = [0.0f32; N];
-    for slot in &mut out {
-        *slot = resolve_f32(get_next(expected, span, items)?)?;
+impl<I: Iterator<Item = IrListItem>> ListIter<I> {
+    fn new(span: Span, items: I) -> Self {
+        Self {
+            items,
+            span,
+            count: 0,
+        }
     }
-    Ok(out)
-}
 
-fn read_u8s<const N: usize>(
-    expected: ListLike,
-    span: &mut Span,
-    items: &mut Drain<'_, IrListItem>,
-) -> Result<[u8; N], MaybeSpanDiag> {
-    let mut out = [0u8; N];
-    for slot in &mut out {
-        *slot = resolve_u8(get_next(expected, span, items)?)?;
+    fn next(&mut self) -> Option<IrListItem> {
+        let item = self.items.next();
+        if item.is_some() {
+            self.count += 1;
+        }
+        item
     }
-    Ok(out)
-}
 
-fn inject_vec2(
-    v: &mut values::Vector2<Span>,
-    span: &mut Span,
-    items: &mut Drain<'_, IrListItem>,
-) -> Result<ListLike, MaybeSpanDiag> {
-    let expect = ListLike::Vec2;
-    v.value = read_floats::<2>(expect, span, items)?.into();
-    Ok(expect)
-}
+    fn into_inner(self) -> I {
+        self.items
+    }
 
-fn inject_vec3(
-    v: &mut values::Vector3<Span>,
-    span: &mut Span,
-    items: &mut Drain<'_, IrListItem>,
-) -> Result<ListLike, MaybeSpanDiag> {
-    let expect = ListLike::Vec3;
-    v.value = read_floats::<3>(expect, span, items)?.into();
-    Ok(expect)
-}
+    fn expect_next(&mut self, expected: ListLike) -> Result<PropertyValueEnum<Span>, Diagnostic> {
+        let item = self
+            .next()
+            .ok_or(NotEnoughItems {
+                span: self.span,
+                got: self.count,
+                expected,
+            })?
+            .0;
+        self.span = *item.meta();
+        Ok(item)
+    }
+    fn read_floats<const N: usize>(
+        &mut self,
+        expected: ListLike,
+    ) -> Result<[f32; N], MaybeSpanDiag> {
+        let mut out = [0.0f32; N];
+        for slot in &mut out {
+            *slot = resolve_f32(self.expect_next(expected)?)?;
+        }
+        Ok(out)
+    }
+    fn read_u8s<const N: usize>(&mut self, expected: ListLike) -> Result<[u8; N], MaybeSpanDiag> {
+        let mut out = [0u8; N];
+        for slot in &mut out {
+            *slot = resolve_u8(self.expect_next(expected)?)?;
+        }
+        Ok(out)
+    }
 
-fn inject_vec4(
-    v: &mut values::Vector4<Span>,
-    span: &mut Span,
-    items: &mut Drain<'_, IrListItem>,
-) -> Result<ListLike, MaybeSpanDiag> {
-    let expect = ListLike::Vec4;
-    v.value = read_floats::<4>(expect, span, items)?.into();
-    Ok(expect)
-}
+    fn inject_vec2(
+        &mut self,
+        v: &mut values::Vector2<Span>,
+        expected: ListLike,
+    ) -> Result<ListLike, MaybeSpanDiag> {
+        let expect = ListLike::Vec2;
+        v.value = self.read_floats::<2>(expected)?.into();
+        Ok(expect)
+    }
 
-fn inject_color(
-    v: &mut values::Color<Span>,
-    span: &mut Span,
-    items: &mut Drain<'_, IrListItem>,
-) -> Result<ListLike, MaybeSpanDiag> {
-    let expect = ListLike::Color;
-    let [r, g, b, a] = read_u8s(expect, span, items)?;
-    let values::Color { value: color, .. } = v;
-    color.r = r;
-    color.g = g;
-    color.b = b;
-    color.a = a;
-    Ok(expect)
-}
+    fn inject_vec3(
+        &mut self,
+        v: &mut values::Vector3<Span>,
+        expected: ListLike,
+    ) -> Result<ListLike, MaybeSpanDiag> {
+        let expect = ListLike::Vec3;
+        v.value = self.read_floats::<3>(expected)?.into();
+        Ok(expect)
+    }
 
-fn inject_mat44(
-    v: &mut values::Matrix44<Span>,
-    span: &mut Span,
-    items: &mut Drain<'_, IrListItem>,
-) -> Result<ListLike, MaybeSpanDiag> {
-    let expect = ListLike::Mat44;
-    let values::Matrix44 { value: mat, .. } = v;
-    mat.x_axis = read_floats::<4>(expect, span, items)?.into();
-    mat.y_axis = read_floats::<4>(expect, span, items)?.into();
-    mat.z_axis = read_floats::<4>(expect, span, items)?.into();
-    mat.w_axis = read_floats::<4>(expect, span, items)?.into();
-    *mat = mat.transpose();
-    Ok(expect)
+    fn inject_vec4(
+        &mut self,
+        v: &mut values::Vector4<Span>,
+        expected: ListLike,
+    ) -> Result<ListLike, MaybeSpanDiag> {
+        let expect = ListLike::Vec4;
+        v.value = self.read_floats::<4>(expected)?.into();
+        Ok(expect)
+    }
+
+    fn inject_color(
+        &mut self,
+        v: &mut values::Color<Span>,
+        expected: ListLike,
+    ) -> Result<ListLike, MaybeSpanDiag> {
+        let expect = ListLike::Color;
+        let [r, g, b, a] = self.read_u8s(expected)?;
+        let values::Color { value: color, .. } = v;
+        color.r = r;
+        color.g = g;
+        color.b = b;
+        color.a = a;
+        Ok(expect)
+    }
+
+    fn inject_mat44(
+        &mut self,
+        v: &mut values::Matrix44<Span>,
+        expected: ListLike,
+    ) -> Result<ListLike, MaybeSpanDiag> {
+        let expect = ListLike::Mat44;
+        let values::Matrix44 { value: mat, .. } = v;
+        mat.x_axis = self.read_floats::<4>(expected)?.into();
+        mat.y_axis = self.read_floats::<4>(expected)?.into();
+        mat.z_axis = self.read_floats::<4>(expected)?.into();
+        mat.w_axis = self.read_floats::<4>(expected)?.into();
+        *mat = mat.transpose();
+        Ok(expect)
+    }
 }
 
 /// Try populate a listlike type (vec, mtx44, rgba, option[listlike])
@@ -152,32 +167,32 @@ pub(crate) fn try_populate_listlike(
         return Ok(());
     }
 
-    let mut items = items.drain(..);
-    let mut span = *target.value().meta(); // TODO: is this the right span to start with?
+    // TODO: is this the right span to start with?
+    let mut items = ListIter::new(*target.value().meta(), items.drain(..));
 
     let mut inject =
         |target: &mut PropertyValueEnum<Span>| -> Result<Option<ListLike>, MaybeSpanDiag> {
             Ok(Some(match target {
-                V::Vector2(v) => inject_vec2(v, &mut span, &mut items)?,
-                V::Vector3(v) => inject_vec3(v, &mut span, &mut items)?,
-                V::Vector4(v) => inject_vec4(v, &mut span, &mut items)?,
-                V::Color(v) => inject_color(v, &mut span, &mut items)?,
-                V::Matrix44(v) => inject_mat44(v, &mut span, &mut items)?,
+                V::Vector2(v) => items.inject_vec2(v, ListLike::Vec2)?,
+                V::Vector3(v) => items.inject_vec3(v, ListLike::Vec3)?,
+                V::Vector4(v) => items.inject_vec4(v, ListLike::Vec4)?,
+                V::Color(v) => items.inject_color(v, ListLike::Color)?,
+                V::Matrix44(v) => items.inject_mat44(v, ListLike::Mat44)?,
                 V::Optional(opt) => match opt {
                     values::Optional::Vector2 { value, .. } => {
-                        inject_vec2(value.get_or_insert_default(), &mut span, &mut items)?
+                        items.inject_vec2(value.get_or_insert_default(), ListLike::Vec2)?
                     }
                     values::Optional::Vector3 { value, .. } => {
-                        inject_vec3(value.get_or_insert_default(), &mut span, &mut items)?
+                        items.inject_vec3(value.get_or_insert_default(), ListLike::Vec3)?
                     }
                     values::Optional::Vector4 { value, .. } => {
-                        inject_vec4(value.get_or_insert_default(), &mut span, &mut items)?
+                        items.inject_vec4(value.get_or_insert_default(), ListLike::Vec4)?
                     }
                     values::Optional::Color { value, .. } => {
-                        inject_color(value.get_or_insert_default(), &mut span, &mut items)?
+                        items.inject_color(value.get_or_insert_default(), ListLike::Color)?
                     }
                     values::Optional::Matrix44 { value, .. } => {
-                        inject_mat44(value.get_or_insert_default(), &mut span, &mut items)?
+                        items.inject_mat44(value.get_or_insert_default(), ListLike::Mat44)?
                     }
                     _ => return Ok(None),
                 },
@@ -191,7 +206,7 @@ pub(crate) fn try_populate_listlike(
     };
 
     if let Some(extra) = items.next() {
-        let count = 1 + items.count();
+        let count = 1 + items.into_inner().count();
         return Err(TooManyItems {
             span: *extra.0.meta(),
             extra: count as _,
