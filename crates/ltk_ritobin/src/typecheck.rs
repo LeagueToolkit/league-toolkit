@@ -291,4 +291,46 @@ entries: map[hash,embed] = {}
             "{errs:#?}"
         );
     }
+
+    #[test]
+    fn empty_vec3_reports_not_enough_items() {
+        let errs = build_errs("0x1: vec3 = {}");
+        assert_eq!(errs.len(), 1, "{errs:#?}");
+        assert!(
+            matches!(
+                errs[0].diagnostic,
+                Diagnostic::NotEnoughItems { got: 0, .. }
+            ),
+            "{:#?}",
+            errs[0]
+        );
+    }
+
+    #[test]
+    fn empty_color_reports_not_enough_items() {
+        let errs = build_errs("0x1: rgba = {}");
+        assert_eq!(errs.len(), 1, "{errs:#?}");
+        assert!(
+            matches!(
+                errs[0].diagnostic,
+                Diagnostic::NotEnoughItems { got: 0, .. }
+            ),
+            "{:#?}",
+            errs[0]
+        );
+    }
+
+    #[test]
+    fn empty_mtx44_reports_not_enough_items() {
+        let errs = build_errs("0x1: mtx44 = {}");
+        assert_eq!(errs.len(), 1, "{errs:#?}");
+        assert!(
+            matches!(
+                errs[0].diagnostic,
+                Diagnostic::NotEnoughItems { got: 0, .. }
+            ),
+            "{:#?}",
+            errs[0]
+        );
+    }
 }
