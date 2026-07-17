@@ -10,9 +10,9 @@ pub mod ir;
 pub mod state;
 
 mod collect;
+mod listlikes;
 mod resolve;
 mod trace;
-mod vecmath;
 mod walk;
 
 pub use state::TypeChecker;

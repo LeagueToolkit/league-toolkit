@@ -15,10 +15,10 @@ use crate::{
 };
 
 use super::{
+    listlikes::try_populate_listlike,
     resolve::{coerce_type, resolve_entry, resolve_value},
     state::{RootEntry, RootKindOrUnknown, TypeChecker},
     trace::trace,
-    vecmath::try_populate_listlike,
 };
 
 use diagnostics::Diagnostic::*;
