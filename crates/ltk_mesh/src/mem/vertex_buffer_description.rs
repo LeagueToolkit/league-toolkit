@@ -28,8 +28,6 @@ bitflags! {
         const Texcoord5 = 1 << (ElementName::Texcoord5 as u32);
         const Texcoord6 = 1 << (ElementName::Texcoord6 as u32);
         const LightmapUV = 1 << (ElementName::Texcoord7 as u32);
-
-        const Tangent = 1 << (ElementName::Tangent as u32);
     }
 }
 

@@ -35,4 +35,22 @@ lazy_static! {
             VertexElement::TANGENT,
         ],
     );
+    /// Extended vertex type 3 (104 bytes): 4 extra float2 UV channels (Texcoord1-4)
+    /// inserted after Texcoord0; color and tangent follow at +84/+88.
+    pub static ref EXT: VertexBufferDescription = VertexBufferDescription::new(
+        VertexBufferUsage::Static,
+        vec![
+            VertexElement::POSITION,
+            VertexElement::BLEND_INDEX,
+            VertexElement::BLEND_WEIGHT,
+            VertexElement::NORMAL,
+            VertexElement::TEXCOORD_0,
+            VertexElement::TEXCOORD_1,
+            VertexElement::TEXCOORD_2,
+            VertexElement::TEXCOORD_3,
+            VertexElement::TEXCOORD_4,
+            VertexElement::PRIMARY_COLOR,
+            VertexElement::TANGENT,
+        ],
+    );
 }

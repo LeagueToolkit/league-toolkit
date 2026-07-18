@@ -79,6 +79,7 @@ pub enum SkinnedMeshVertexType {
     Basic,
     Color,
     Tangent,
+    Ext,
 }
 
 impl From<SkinnedMeshVertexType> for VertexBufferDescription {
@@ -87,6 +88,7 @@ impl From<SkinnedMeshVertexType> for VertexBufferDescription {
             SkinnedMeshVertexType::Basic => vertex::BASIC.clone(),
             SkinnedMeshVertexType::Color => vertex::COLOR.clone(),
             SkinnedMeshVertexType::Tangent => vertex::TANGENT.clone(),
+            SkinnedMeshVertexType::Ext => vertex::EXT.clone(),
         }
     }
 }
