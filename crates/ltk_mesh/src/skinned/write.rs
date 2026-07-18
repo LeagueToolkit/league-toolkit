@@ -27,6 +27,7 @@ impl SkinnedMesh {
             d if d == &*vertex::BASIC => SkinnedMeshVertexType::Basic.into(),
             d if d == &*vertex::COLOR => SkinnedMeshVertexType::Color.into(),
             d if d == &*vertex::TANGENT => SkinnedMeshVertexType::Tangent.into(),
+            d if d == &*vertex::EXT => SkinnedMeshVertexType::Ext.into(),
             _ => panic!("FIXME: unhandled mesh vertex type"),
         })?;
 

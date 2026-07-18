@@ -61,6 +61,7 @@ impl SkinnedMesh {
                     (52, SkinnedMeshVertexType::Basic) => vertex::BASIC.clone(),
                     (56, SkinnedMeshVertexType::Color) => vertex::COLOR.clone(),
                     (72, SkinnedMeshVertexType::Tangent) => vertex::TANGENT.clone(),
+                    (104, SkinnedMeshVertexType::Ext) => vertex::EXT.clone(),
                     _ => {
                         return Err(ParseError::InvalidField(
                             "vertex type/size",
