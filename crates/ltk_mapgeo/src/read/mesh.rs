@@ -167,6 +167,11 @@ impl EnvironmentMesh {
             }
         }
 
+        // Unshipped versions add more per-mesh data here: v19 a single dead
+        // u8, v20 a length-prefixed MapGeoExtension reflection blob. The game
+        // client parses and discards both, so we don't read them — see the
+        // module docs in `read/version.rs` for the full layout.
+
         Ok(EnvironmentMeshBuilder::default()
             .name(name)
             .vertex_count(vertex_count)

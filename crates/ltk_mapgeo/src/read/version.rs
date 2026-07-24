@@ -1,4 +1,29 @@
 //! Version-dependent feature flags
+//!
+//! # Known but unsupported versions: v19 (0x13) and v20 (0x14)
+//!
+//! The live game client's parser accepts up to v20, but no map has ever
+//! shipped above v18 (current Summoner's Rift), and the client throws away
+//! the extra data both versions add — so this crate intentionally does not
+//! parse them. For future reference, the deltas (reversed from the live
+//! client, 2026-07) are:
+//!
+//! - **v19**: one extra `u8` per mesh, immediately after the baked paint
+//!   scale/bias (default 1). The client reads it into the mesh record but no
+//!   code path ever consumes it — a dead byte.
+//! - **v20**: each mesh record is followed by a `u32` byte-length prefix and
+//!   a reflection-serialized `MapGeoExtension` meta object (FNV1a-32 class
+//!   hash `0xD3F07247`): a named parameter-override bag of three
+//!   string-keyed maps — `map<string, bool>`, `map<string, Vec4>`, and
+//!   `map<string, MapGeoTextureOverride>` where `MapGeoTextureOverride`
+//!   (class hash `0x32902D31`) is `{ texturePath: string, two unresolved
+//!   u32 fields }`. It is the reflection-based successor to the v17
+//!   shader/mesh texture override mechanism, but the client parses the
+//!   object and immediately destroys it — never stored on the mesh, never
+//!   handed to the renderer. The length prefix makes the blob skippable.
+//!
+//! If either version ever ships with the data actually consumed, support
+//! belongs here as `has_*` flags plus reads in `read/mesh.rs`.
 
 /// Helper struct for tracking file version capabilities
 #[derive(Debug, Clone, Copy)]
