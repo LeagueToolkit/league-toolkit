@@ -39,6 +39,9 @@ pub struct EnvironmentMesh {
     /// Hash of the visibility controller path (scene graph)
     visibility_controller_path_hash: u32,
 
+    /// Hash of a region placeable this mesh is anchored to (version >= 18)
+    region_path_hash: u32,
+
     /// Whether to disable backface culling
     disable_backface_culling: bool,
 
@@ -158,6 +161,20 @@ impl EnvironmentMesh {
     #[inline]
     pub fn visibility_controller_path_hash(&self) -> u32 {
         self.visibility_controller_path_hash
+    }
+
+    /// Hash of a map region placeable this mesh is anchored to (version >= 18).
+    ///
+    /// This is the container-key ("path") hash of an item in the map's
+    /// `MapPlaceableContainer` (materials.bin) — the same referencing scheme as
+    /// [`visibility_controller_path_hash`](Self::visibility_controller_path_hash).
+    /// When non-zero, the game positions this mesh via the referenced region
+    /// entity instead of the static world origin, and may substitute `|flipped`
+    /// material variants for mirrored placement. `0` means the mesh is not
+    /// anchored to a region.
+    #[inline]
+    pub fn region_path_hash(&self) -> u32 {
+        self.region_path_hash
     }
 
     /// Whether backface culling is disabled
@@ -352,6 +369,7 @@ pub(crate) struct EnvironmentMeshBuilder {
     base_vertex_declaration_id: usize,
     submeshes: Vec<EnvironmentSubmesh>,
     visibility_controller_path_hash: u32,
+    region_path_hash: u32,
     disable_backface_culling: bool,
     bounding_box: AABB,
     transform: Mat4,
@@ -378,6 +396,7 @@ impl Default for EnvironmentMeshBuilder {
             base_vertex_declaration_id: 0,
             submeshes: Vec::new(),
             visibility_controller_path_hash: 0,
+            region_path_hash: 0,
             disable_backface_culling: false,
             bounding_box: AABB::default(),
             transform: Mat4::IDENTITY,
@@ -433,6 +452,11 @@ impl EnvironmentMeshBuilder {
 
     pub fn visibility_controller_path_hash(mut self, hash: u32) -> Self {
         self.visibility_controller_path_hash = hash;
+        self
+    }
+
+    pub fn region_path_hash(mut self, hash: u32) -> Self {
+        self.region_path_hash = hash;
         self
     }
 
@@ -511,6 +535,7 @@ impl EnvironmentMeshBuilder {
             base_vertex_declaration_id: self.base_vertex_declaration_id,
             submeshes: self.submeshes,
             visibility_controller_path_hash: self.visibility_controller_path_hash,
+            region_path_hash: self.region_path_hash,
             disable_backface_culling: self.disable_backface_culling,
             bounding_box: self.bounding_box,
             transform: self.transform,

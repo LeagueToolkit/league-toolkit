@@ -305,13 +305,13 @@ impl EnvironmentAsset {
         version: MapGeoVersion,
     ) -> Result<Vec<BucketedGeometry>> {
         if !version.has_multiple_scene_graphs() {
-            return Ok(vec![BucketedGeometry::read(reader, true)?]);
+            return Ok(vec![BucketedGeometry::read(reader, true, version)?]);
         }
 
         let count = reader.read_u32::<LE>()? as usize;
         let mut graphs = Vec::with_capacity(count);
         for _ in 0..count {
-            graphs.push(BucketedGeometry::read(reader, false)?);
+            graphs.push(BucketedGeometry::read(reader, false, version)?);
         }
         Ok(graphs)
     }

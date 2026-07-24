@@ -304,7 +304,13 @@ for scene_graph in asset.scene_graphs() {
 }
 ```
 
-**Supported Versions**: 5, 6, 7, 9, 11, 12, 13, 14, 15, 17
+**Supported Versions**: 5, 6, 7, 9, 11, 12, 13, 14, 15, 17, 18
+
+Versions 19 and 20 are known (the game client's parser accepts them) but have
+never shipped, and the client discards the extra data they add — a dead byte
+per mesh in v19, a parsed-then-destroyed `MapGeoExtension` reflection blob per
+mesh in v20 — so they are intentionally unsupported. The format deltas are
+documented in `crates/ltk_mapgeo/src/read/version.rs`.
 
 ---
 
@@ -484,7 +490,7 @@ use glam::{Vec2, Vec3, Vec4, Mat4, Quat};
 - All crates follow semantic versioning
 - The umbrella `league-toolkit` crate versions independently from sub-crates
 - Breaking changes in sub-crates cause major version bumps
-- File format version support is documented per-crate (e.g., mapgeo supports versions 5-17)
+- File format version support is documented per-crate (e.g., mapgeo supports versions 5-18)
 
 ---
 

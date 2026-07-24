@@ -57,7 +57,12 @@ pub(crate) mod read;
 pub const MAGIC: &[u8; 4] = b"OEGM";
 
 /// Supported file format versions
-pub const SUPPORTED_VERSIONS: &[u32] = &[5, 6, 7, 9, 11, 12, 13, 14, 15, 17];
+///
+/// The game client's parser also accepts v19 and v20, but no map has ever
+/// shipped above v18 and the client discards the extra data both versions
+/// add, so they are intentionally unsupported. The format deltas are
+/// documented in `src/read/version.rs`.
+pub const SUPPORTED_VERSIONS: &[u32] = &[5, 6, 7, 9, 11, 12, 13, 14, 15, 17, 18];
 
 /// Result type alias for this crate
 pub type Result<T> = std::result::Result<T, ParseError>;

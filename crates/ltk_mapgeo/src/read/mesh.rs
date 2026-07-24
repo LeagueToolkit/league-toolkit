@@ -47,6 +47,14 @@ impl EnvironmentMesh {
             visibility = EnvironmentVisibility::from_bits_truncate(reader.read_u8()?);
         }
 
+        // Read region path hash (version >= 18); references a region placeable
+        // in the map's MapPlaceableContainer by container-key hash
+        let region_path_hash = if version.has_region_path_hash() {
+            reader.read_u32::<LE>()?
+        } else {
+            0
+        };
+
         // Read visibility controller path hash (version >= 15)
         let visibility_controller_path_hash = if version.has_visibility_controller_path_hash() {
             reader.read_u32::<LE>()?
@@ -159,6 +167,11 @@ impl EnvironmentMesh {
             }
         }
 
+        // Unshipped versions add more per-mesh data here: v19 a single dead
+        // u8, v20 a length-prefixed MapGeoExtension reflection blob. The game
+        // client parses and discards both, so we don't read them — see the
+        // module docs in `read/version.rs` for the full layout.
+
         Ok(EnvironmentMeshBuilder::default()
             .name(name)
             .vertex_count(vertex_count)
@@ -168,6 +181,7 @@ impl EnvironmentMesh {
             .base_vertex_declaration_id(base_vertex_declaration_id)
             .submeshes(submeshes)
             .visibility_controller_path_hash(visibility_controller_path_hash)
+            .region_path_hash(region_path_hash)
             .disable_backface_culling(disable_backface_culling)
             .bounding_box(bounding_box)
             .transform(transform)
