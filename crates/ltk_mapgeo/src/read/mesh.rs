@@ -47,6 +47,14 @@ impl EnvironmentMesh {
             visibility = EnvironmentVisibility::from_bits_truncate(reader.read_u8()?);
         }
 
+        // Read region path hash (version >= 18); references a region placeable
+        // in the map's MapPlaceableContainer by container-key hash
+        let region_path_hash = if version.has_region_path_hash() {
+            reader.read_u32::<LE>()?
+        } else {
+            0
+        };
+
         // Read visibility controller path hash (version >= 15)
         let visibility_controller_path_hash = if version.has_visibility_controller_path_hash() {
             reader.read_u32::<LE>()?
@@ -168,6 +176,7 @@ impl EnvironmentMesh {
             .base_vertex_declaration_id(base_vertex_declaration_id)
             .submeshes(submeshes)
             .visibility_controller_path_hash(visibility_controller_path_hash)
+            .region_path_hash(region_path_hash)
             .disable_backface_culling(disable_backface_culling)
             .bounding_box(bounding_box)
             .transform(transform)

@@ -57,7 +57,7 @@ pub(crate) mod read;
 pub const MAGIC: &[u8; 4] = b"OEGM";
 
 /// Supported file format versions
-pub const SUPPORTED_VERSIONS: &[u32] = &[5, 6, 7, 9, 11, 12, 13, 14, 15, 17];
+pub const SUPPORTED_VERSIONS: &[u32] = &[5, 6, 7, 9, 11, 12, 13, 14, 15, 17, 18];
 
 /// Result type alias for this crate
 pub type Result<T> = std::result::Result<T, ParseError>;

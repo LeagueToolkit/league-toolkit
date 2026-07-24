@@ -5,6 +5,7 @@ use std::io::Read;
 use byteorder::{ReadBytesExt, LE};
 use ltk_io_ext::ReaderExt;
 
+use super::MapGeoVersion;
 use crate::{
     scene_graph::{BucketedGeometryBuilder, BucketedGeometryFlags},
     BucketedGeometry, EnvironmentVisibility, GeometryBucket, Result,
@@ -12,7 +13,16 @@ use crate::{
 
 impl BucketedGeometry {
     /// Reads a bucketed geometry from a binary stream
-    pub(crate) fn read<R: Read>(reader: &mut R, legacy: bool) -> Result<Self> {
+    pub(crate) fn read<R: Read>(
+        reader: &mut R,
+        legacy: bool,
+        version: MapGeoVersion,
+    ) -> Result<Self> {
+        let region_path_hash = if !legacy && version.has_region_path_hash() {
+            reader.read_u32::<LE>()?
+        } else {
+            0
+        };
         let visibility_controller_path_hash = if legacy { 0 } else { reader.read_u32::<LE>()? };
 
         let min_x = reader.read_f32::<LE>()?;
@@ -35,6 +45,7 @@ impl BucketedGeometry {
 
         if is_disabled {
             return Ok(BucketedGeometryBuilder::default()
+                .region_path_hash(region_path_hash)
                 .visibility_controller_path_hash(visibility_controller_path_hash)
                 .bounds(min_x, min_z, max_x, max_z)
                 .max_stick_out(max_stick_out_x, max_stick_out_z)
@@ -74,6 +85,7 @@ impl BucketedGeometry {
             };
 
         Ok(BucketedGeometryBuilder::default()
+            .region_path_hash(region_path_hash)
             .visibility_controller_path_hash(visibility_controller_path_hash)
             .bounds(min_x, min_z, max_x, max_z)
             .max_stick_out(max_stick_out_x, max_stick_out_z)

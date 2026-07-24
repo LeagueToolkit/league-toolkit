@@ -27,6 +27,9 @@ use super::GeometryBucket;
 /// ```
 #[derive(Debug, Clone)]
 pub struct BucketedGeometry {
+    /// Hash of a region placeable this graph is anchored to (version >= 18)
+    region_path_hash: u32,
+
     /// Hash of the visibility controller path
     visibility_controller_path_hash: u32,
 
@@ -85,6 +88,7 @@ impl BucketedGeometry {
     /// Creates a new empty (disabled) bucketed geometry
     pub fn empty() -> Self {
         Self {
+            region_path_hash: 0,
             visibility_controller_path_hash: 0,
             min_x: 0.0,
             min_z: 0.0,
@@ -108,6 +112,18 @@ impl BucketedGeometry {
     #[inline]
     pub fn visibility_controller_path_hash(&self) -> u32 {
         self.visibility_controller_path_hash
+    }
+
+    /// Hash of a map region placeable this graph is anchored to (version >= 18).
+    ///
+    /// Container-key ("path") hash of an item in the map's
+    /// `MapPlaceableContainer` (materials.bin), like
+    /// [`visibility_controller_path_hash`](Self::visibility_controller_path_hash).
+    /// When non-zero, the game positions the graph's bounds via the referenced
+    /// region entity instead of the static world origin. `0` means not anchored.
+    #[inline]
+    pub fn region_path_hash(&self) -> u32 {
+        self.region_path_hash
     }
 
     /// Minimum bounds of the grid (X, Z)
@@ -201,6 +217,7 @@ impl BucketedGeometry {
 /// Builder for constructing [`BucketedGeometry`] instances
 #[derive(Default)]
 pub(crate) struct BucketedGeometryBuilder {
+    region_path_hash: u32,
     visibility_controller_path_hash: u32,
     min_x: f32,
     min_z: f32,
@@ -222,6 +239,11 @@ pub(crate) struct BucketedGeometryBuilder {
 impl BucketedGeometryBuilder {
     pub fn visibility_controller_path_hash(mut self, hash: u32) -> Self {
         self.visibility_controller_path_hash = hash;
+        self
+    }
+
+    pub fn region_path_hash(mut self, hash: u32) -> Self {
+        self.region_path_hash = hash;
         self
     }
 
@@ -282,6 +304,7 @@ impl BucketedGeometryBuilder {
 
     pub fn build(self) -> BucketedGeometry {
         BucketedGeometry {
+            region_path_hash: self.region_path_hash,
             visibility_controller_path_hash: self.visibility_controller_path_hash,
             min_x: self.min_x,
             min_z: self.min_z,

@@ -102,6 +102,12 @@ impl MapGeoVersion {
         self.0 >= 17
     }
 
+    /// Version has a region path hash on meshes and scene graphs
+    #[inline]
+    pub fn has_region_path_hash(&self) -> bool {
+        self.0 >= 18
+    }
+
     /// Version has first shader texture override (sampler index 0)
     #[inline]
     pub fn has_first_shader_override(&self) -> bool {
