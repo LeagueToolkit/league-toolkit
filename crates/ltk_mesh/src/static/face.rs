@@ -4,8 +4,8 @@ use ltk_io_ext::{ReaderExt, WriterExt};
 use ltk_primitives::Color;
 use std::io::{BufRead, Read, Write};
 
-/// A face (triangle) in a static mesh
-#[derive(Debug, Clone)]
+/// A face (triangle) in a static mesh.
+#[derive(Debug, Clone, PartialEq)]
 pub struct StaticMeshFace {
     /// Material name for this face
     pub material: String,

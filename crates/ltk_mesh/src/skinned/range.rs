@@ -4,16 +4,24 @@ use ltk_io_ext::WriterExt;
 use std::io;
 use std::io::{Read, Write};
 
+/// One submesh: the slice of the shared buffers it owns, and the material it draws with.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SkinnedMeshRange {
+    /// Material name this submesh draws with.
     pub material: String,
+    /// First vertex of this submesh in the shared vertex buffer.
     pub start_vertex: i32,
+    /// Number of vertices this submesh owns.
     pub vertex_count: i32,
+    /// First index of this submesh in the shared index buffer.
     pub start_index: i32,
+    /// Number of indices this submesh owns.
     pub index_count: i32,
 }
 
 impl SkinnedMeshRange {
+    /// Creates a submesh spanning the given slices of the shared buffers.
+    #[must_use]
     pub fn new<S: Into<String>>(
         material: S,
         start_vertex: i32,
@@ -30,6 +38,12 @@ impl SkinnedMeshRange {
         }
     }
 
+    /// Reads a submesh entry.
+    ///
+    /// # Errors
+    /// Returns [`ParseError::IOError`](crate::error::ParseError::IOError) on a short read, or
+    /// [`ParseError::Utf8Error`](crate::error::ParseError::Utf8Error) if the material name is
+    /// not valid UTF-8.
     pub fn from_reader<R: Read>(reader: &mut R) -> super::Result<Self> {
         Ok(Self {
             material: reader.read_padded_string::<LE, 64>()?,
@@ -40,6 +54,10 @@ impl SkinnedMeshRange {
         })
     }
 
+    /// Writes a submesh entry.
+    ///
+    /// # Errors
+    /// Returns the writer's error.
     pub fn to_writer<W: Write>(&self, writer: &mut W) -> io::Result<()> {
         writer.write_padded_string::<64>(&self.material)?;
         writer.write_i32::<LE>(self.start_vertex)?;

@@ -1,13 +1,19 @@
+//! Static meshes - the `.scb` (binary) and `.sco` (ascii) formats.
+//!
+//! Private: every item here is re-exported at the crate root, which is its only public path.
+//! User facing documentation lives on [`StaticMesh`] itself.
 use glam::Vec3;
 use ltk_primitives::{Color, AABB};
 
-pub use face::*;
+#[doc(inline)]
+pub use face::StaticMeshFace;
 
 mod face;
 mod read;
 mod write;
 
-pub const MAGIC: &[u8] = b"r3d2Mesh";
+/// First eight bytes of every `.scb` file, useful for sniffing one out of a WAD.
+pub const SCB_MAGIC: &[u8] = b"r3d2Mesh";
 
 bitflags::bitflags! {
     /// Flags for static mesh features
@@ -20,8 +26,15 @@ bitflags::bitflags! {
     }
 }
 
-/// A static (non-skinned) mesh
-#[derive(Clone, Debug)]
+/// A static (non-skinned) mesh, as stored in a `.scb` or `.sco` file.
+///
+/// Environment geometry: named vertices and faces with per-face UVs, and optionally a colour
+/// per face vertex. There is no skinning data and no submesh table, so a static mesh is a
+/// single drawable rather than a set of ranges.
+///
+/// [`StaticMesh::from_reader`] and [`StaticMesh::to_writer`] handle the binary `.scb` form;
+/// [`StaticMesh::from_ascii`] and [`StaticMesh::to_ascii`] handle the text `.sco` form.
+#[derive(Clone, Debug, PartialEq)]
 pub struct StaticMesh {
     name: String,
     vertices: Vec<Vec3>,

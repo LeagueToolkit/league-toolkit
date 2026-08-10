@@ -127,26 +127,105 @@ ltk_texture = { version = "0.4", features = ["intel-tex"] }
 - `StaticMesh` — Static environment mesh
 - `VertexBuffer`, `IndexBuffer` — GPU-ready buffer abstractions
 - `SkinnedMeshRange` — Submesh range (material assignment)
+- `SkinnedMeshVertexType` — `Basic` (52 B), `Color` (56 B), `Tangent` (72 B), `Ext` (104 B)
+- `SkinnedMeshFlags` — v4 header flags, see below
 
 **Skinned Mesh (.skn)**:
 ```rust
 use ltk_mesh::{SkinnedMesh, mem::vertex::ElementName};
-use std::fs::File;
+use std::{fs::File, io::BufReader};
 
-let mut file = File::open("champion.skn")?;
-let mesh = SkinnedMesh::from_reader(&mut file)?;
+// Buffer the file — the header and submesh table are read in small pieces
+let mesh = SkinnedMesh::from_reader(&mut BufReader::new(File::open("champion.skn")?))?;
 
-// Access vertex data
-let positions = mesh.vertex_buffer().accessor::<glam::Vec3>(ElementName::Position)?;
+// Resolve accessors ONCE and reuse them — each one costs a map lookup, so building one
+// per vertex is the easiest way to make this slow
+let positions = mesh.vertex_buffer().accessor::<glam::Vec3>(ElementName::Position)
+    .expect("skinned meshes always carry positions");
+
+// Whole-buffer pass: iter() sweeps every vertex
 for pos in positions.iter() {
     println!("Vertex: {:?}", pos);
 }
 
-// Submesh ranges (for materials)
+// Indexed pass: range_indices() gives absolute indices, get() does the random access
 for range in mesh.ranges() {
-    println!("Submesh: {} - material: {}", range.name(), range.material());
+    println!("Submesh material: {}", range.material);
+
+    let mut indices = mesh.range_indices(range);
+    while let (Some(a), Some(b), Some(c)) = (indices.next(), indices.next(), indices.next()) {
+        let _triangle = [a, b, c].map(|i| positions.get(i as usize));
+    }
 }
 ```
+
+A runnable version lives at `crates/ltk_mesh/examples/skinned_mesh.rs`:
+
+```bash
+cargo run -p ltk_mesh --example skinned_mesh -- champion.skn
+```
+
+**Vertex elements**: position, blend indices, blend weights, normal and `Texcoord0` exist in
+every layout; colour, tangent (`Texcoord6`) and `Texcoord1-4` only in some, which is why
+`accessor()` returns `Option`. Read each as the type matching its format — `Vec3` for
+position/normal, `Vec2` for a UV, `Vec4` for blend weights and tangent, `[u8; 4]` for blend
+indices and colour.
+
+**GPU upload** — the cheapest path, and what normalized indices are for. Nothing is touched
+per index: hand over both buffers verbatim and issue one indexed draw per range with
+`start_vertex` as the base vertex.
+
+```rust
+upload(mesh.vertex_buffer().as_bytes());   // interleaved, no conversion
+upload(mesh.index_buffer().as_bytes());    // u16, no conversion
+
+for range in mesh.ranges() {
+    draw_indexed(range.index_count, range.start_index, range.start_vertex);
+}
+```
+
+**Index normalization**: on disk, indices are absolute into the shared vertex buffer unless
+the file says otherwise. `from_reader` rebases them per range (`index -= start_vertex`),
+exactly as the game does on load, so `mesh.index_buffer()` is **always normalized** —
+consumers never branch on the flag. `mesh.range_indices(range)` adds `start_vertex` back in
+32 bits when you want absolute ones. `to_writer` restores whichever form the flag asks for,
+so a load/save round trip is byte exact.
+
+- `SkinnedMesh::new` expects an already normalized index buffer
+- `SkinnedMesh::from_absolute_indices` normalizes one for you
+
+**Accepted versions**: `0.1`, `1.1`, `2.1` and `4.1`. The game compares the whole version
+dword, so `3.x` and any non-`1` minor are rejected. Only `4.1` carries the flags word,
+vertex type and stored bounds; older versions have their bounds computed from the vertex
+buffer, and `0.1` gets a single synthesised unnamed range spanning the whole mesh.
+`to_writer` always emits `4.1`.
+
+**Flags** (`SkinnedMeshFlags`, v4 only, both added during patch 16):
+
+| flag | meaning |
+| --- | --- |
+| `DIRECT_BLEND_INDICES` | Blend indices are used as-is — the game skips both the rig influence remap and the bone palette lookup. Such a file also carries an opaque `u16`-length-prefixed block between the header and the index buffer, exposed as `direct_blend_index_block()`. |
+| `NORMALIZED_INDICES` | The indices *on disk* are already normalized, so no rebase happens on load. This also lifts the `MAX_VERTEX_COUNT` (65536) limit, since indices resolve as `start_vertex + index` in 32 bits. |
+
+Both are named after what the file *contains*, not after a behaviour to opt into — setting
+one without laying out the buffers accordingly corrupts the mesh rather than enabling a
+feature.
+
+```rust
+use ltk_mesh::SkinnedMeshFlags;
+
+// Only affects the on-disk form: in memory the indices are normalized either way
+if mesh.stores_normalized_indices() { /* written without expanding back to absolute */ }
+
+// The block's presence is what drives DIRECT_BLEND_INDICES; set_flags cannot claim one
+let mut mesh = mesh;
+mesh.set_direct_blend_index_block(Some(vec![0; 8]));
+assert!(mesh.flags().contains(SkinnedMeshFlags::DIRECT_BLEND_INDICES));
+```
+
+`to_writer` fails rather than emitting a file the game refuses: a vertex buffer layout that
+matches no `SkinnedMeshVertexType`, more than `MAX_VERTEX_COUNT` vertices without
+`NORMALIZED_INDICES`, or a block over `u16::MAX` bytes.
 
 **Static Mesh (.scb)**:
 ```rust

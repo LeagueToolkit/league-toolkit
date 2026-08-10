@@ -1,10 +1,14 @@
-use crate::{r#static::MAGIC, StaticMesh, StaticMeshFlags};
+use crate::{r#static::SCB_MAGIC, StaticMesh, StaticMeshFlags};
 use byteorder::{WriteBytesExt, LE};
 use ltk_io_ext::WriterExt;
 use std::io::Write;
 
 impl StaticMesh {
-    /// Writes the static mesh to a binary stream
+    /// Writes the static mesh as a binary `.scb`.
+    ///
+    /// # Errors
+    /// Returns [`ParseError::IOError`](crate::error::ParseError::IOError) if the writer
+    /// fails.
     pub fn to_writer<W: Write>(&self, writer: &mut W) -> crate::Result<()> {
         let aabb = self.bounding_box();
 
@@ -16,7 +20,7 @@ impl StaticMesh {
         }
 
         // Write header
-        writer.write_all(MAGIC)?;
+        writer.write_all(SCB_MAGIC)?;
         writer.write_u16::<LE>(3)?; // major version
         writer.write_u16::<LE>(2)?; // minor version
         writer.write_padded_string::<128>(&self.name)?;
@@ -60,7 +64,11 @@ impl StaticMesh {
         Ok(())
     }
 
-    /// Writes the static mesh to an ASCII stream (.sco format)
+    /// Writes the static mesh as an ASCII `.sco`.
+    ///
+    /// # Errors
+    /// Returns [`ParseError::IOError`](crate::error::ParseError::IOError) if the writer
+    /// fails.
     pub fn to_ascii<W: Write>(&self, writer: &mut W) -> crate::Result<()> {
         let central_point = self.bounding_box().center();
 
