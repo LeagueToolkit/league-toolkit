@@ -1,6 +1,6 @@
 /// A span in the source text (offset and length).
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Span {
     pub start: u32,
     pub end: u32,
