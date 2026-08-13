@@ -58,6 +58,10 @@ struct StackItem {
     idx: NodeId,
     children: SmallVec<[Child; 4]>,
     errors: SmallVec<[Error; 1]>,
+
+    /// Tracks whether the start of this node's span is known yet.
+    /// If not, the next token will set the start of the span.
+    start_known: bool,
 }
 
 impl<'a> Parser<'a> {
@@ -93,12 +97,9 @@ impl<'a> Parser<'a> {
 
         let mut stack = Vec::new();
         let mut last_span = Span::default();
-        let mut just_opened = false;
         for event in events.into_iter() {
             match event {
                 Event::Open { kind } => {
-                    just_opened = true;
-
                     stack.push(StackItem {
                         idx: cst.push_node(Node {
                             span: Span::new(last_span.end, 0),
@@ -108,6 +109,7 @@ impl<'a> Parser<'a> {
                         }),
                         children: SmallVec::new(),
                         errors: SmallVec::new(),
+                        start_known: false,
                     });
                 }
                 Event::Close => {
@@ -127,7 +129,13 @@ impl<'a> Parser<'a> {
                             cur_node.span.end = cur_node.span.start;
                         }
 
-                        parent_node.span.end = cur_node.span.end.max(parent_node.span.end); // update our parent tree's span
+                        // update parent span to cover child
+                        parent_node.span.end = cur_node.span.end.max(parent_node.span.end);
+                        if cur.start_known {
+                            parent_node.span.start =
+                                cur_node.span.start.min(parent_node.span.start);
+                            parent.start_known = true;
+                        }
                         parent.children.push(Child::Tree(cur.idx));
 
                         match error_propagation {
@@ -143,15 +151,15 @@ impl<'a> Parser<'a> {
                     let token = tokens.next().unwrap();
                     let last = stack.last_mut().unwrap();
                     {
-                        let last = cst.node_mut(last.idx).unwrap();
+                        let node = cst.node_mut(last.idx).unwrap();
 
-                        if just_opened {
+                        if !last.start_known {
                             // first token of the tree
-                            last.span.start = token.span.start;
+                            node.span.start = token.span.start;
+                            last.start_known = true;
                         }
-                        just_opened = false;
 
-                        last.span.end = token.span.end;
+                        node.span.end = token.span.end;
                         last_span = token.span;
                     }
                     let token = Child::Token(cst.push_token(token));
