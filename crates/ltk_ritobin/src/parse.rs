@@ -26,7 +26,11 @@ use crate::cst;
 #[cfg(test)]
 mod test {
 
-    use crate::{cst::Cst, print::CstPrinter, typecheck::TypeChecker};
+    use crate::{
+        cst::{Cst, Kind},
+        print::CstPrinter,
+        typecheck::TypeChecker,
+    };
 
     fn assert_success(text: &str) -> Cst {
         let cst = Cst::parse(text);
@@ -37,7 +41,26 @@ mod test {
         println!("{buf}");
 
         assert!(cst.errors.is_empty(), "Parse errors: {:#?}", cst.errors);
+        assert_spans_nested(&cst);
         cst
+    }
+
+    /// Asserts that every node's span covers the spans of all of its children.
+    fn assert_spans_nested(cst: &Cst) {
+        for node in &cst.nodes {
+            for child in node.children.get(cst) {
+                let span = child.span(cst);
+                assert!(
+                    node.span.start <= span.start && span.end <= node.span.end,
+                    "{:?} ({}..{}) does not cover its child ({}..{})",
+                    node.kind,
+                    node.span.start,
+                    node.span.end,
+                    span.start,
+                    span.end,
+                );
+            }
+        }
     }
 
     #[allow(unused, reason = "tests will use this")]
@@ -67,6 +90,40 @@ entries: map[hash, embed] = {
 }
         "#,
         );
+    }
+
+    #[test]
+    fn inline_block_spans() {
+        let text = "a: list[pointer] = { B { x: f32 = 1 } }";
+        let cst = assert_success(text);
+
+        let block = class_block(&cst).expect("class block");
+        assert_eq!(&text[block.span], "{ x: f32 = 1 }");
+    }
+
+    #[test]
+    fn nested_inline_block_spans() {
+        let text = r#"loadscreen: embed = CensoredImage {
+    image: embed = Image { src: string = "val" }
+}"#;
+        let cst = assert_success(text);
+
+        let block = class_block(&cst).expect("class block");
+        assert_eq!(
+            &text[block.span],
+            "{\n    image: embed = Image { src: string = \"val\" }\n}"
+        );
+    }
+
+    /// The [`Kind::Block`] of the first [`Kind::Class`] in the tree.
+    fn class_block(cst: &Cst) -> Option<&crate::cst::Node> {
+        let class = cst.nodes.iter().find(|n| n.kind == Kind::Class)?;
+        class
+            .children
+            .get(cst)
+            .iter()
+            .find_map(|c| c.tree(cst))
+            .filter(|n| n.kind == Kind::Block)
     }
 
     #[test]
