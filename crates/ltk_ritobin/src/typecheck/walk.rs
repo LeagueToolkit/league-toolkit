@@ -8,7 +8,7 @@ use crate::{
     },
     parse::Span,
     typecheck::{
-        diagnostics::{self, RitoTypeOrVirtual},
+        diagnostics::{self, ItemShape, RitoTypeOrVirtual},
         ir::{IrEntry, IrItem, IrListItem},
     },
     PropertyValueExt as _, RitoType,
@@ -44,7 +44,34 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
+    /// Reports a child whose shape its parent does not accept.
+    fn report_wrong_item_shape(&mut self, child: &IrItem, parent: RitoType, expected: ItemShape) {
+        self.ctx.diagnostics.push(
+            UnexpectedItem {
+                span: child.shape_span(),
+                parent,
+                expected,
+            }
+            .unwrap(),
+        );
+    }
+
+    /// Reports an entry key that cannot become the key type its parent needs.
+    fn report_bad_entry_key(&mut self, span: Span, got: RitoType, expected: PropertyKind) {
+        self.ctx.diagnostics.push(
+            TypeMismatch {
+                span,
+                expected: RitoType::simple(expected),
+                expected_span: None, // TODO: would be nice here
+                got: got.into(),
+            }
+            .unwrap(),
+        );
+    }
+
     fn merge_ir(&mut self, mut parent: IrItem, child: IrItem) -> IrItem {
+        let parent_type = parent.value().rito_type();
+
         match &mut parent.value_mut() {
             PropertyValueEnum::Container(list)
             | PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(list)) => {
@@ -58,42 +85,60 @@ impl<'a> TypeChecker<'a> {
                         let result = list.push(value);
                         self.handle_container_res(span, result);
                     }
-                    IrItem::Entry(IrEntry { key: _, value: _ }) => {
+                    child @ IrItem::Entry(_) => {
                         trace!("\x1b[41mlist item must be list item\x1b[0m");
+                        self.report_wrong_item_shape(&child, parent_type, ItemShape::Value);
                         return parent;
                     }
                 }
             }
             PropertyValueEnum::Struct(struct_val)
             | PropertyValueEnum::Embedded(values::Embedded(struct_val)) => {
-                let IrItem::Entry(IrEntry { key, value }) = child else {
-                    trace!("\x1b[41mstruct item must be entry\x1b[0m");
-                    return parent;
+                let IrEntry { key, value } = match child {
+                    IrItem::Entry(entry) => entry,
+                    child => {
+                        trace!("\x1b[41mstruct item must be entry\x1b[0m");
+                        self.report_wrong_item_shape(&child, parent_type, ItemShape::Entry);
+                        return parent;
+                    }
                 };
 
+                let (key_span, key_type) = (*key.meta(), key.rito_type());
                 let Some(PropertyValueEnum::Hash(key)) = coerce_type(key, PropertyKind::Hash)
                 else {
+                    self.report_bad_entry_key(key_span, key_type, PropertyKind::Hash);
                     return parent;
                 };
 
                 struct_val.properties.insert(*key, value);
             }
             PropertyValueEnum::Map(map_value) => {
-                let IrItem::Entry(IrEntry { key, value }) = child else {
-                    trace!("map item must be entry");
-                    return parent;
+                let IrEntry { key, value } = match child {
+                    IrItem::Entry(entry) => entry,
+                    child => {
+                        trace!("map item must be entry");
+                        self.report_wrong_item_shape(&child, parent_type, ItemShape::Entry);
+                        return parent;
+                    }
                 };
                 let span = *value.meta();
-                let Some(key) = coerce_type(key, map_value.key_kind()) else {
+                let key_kind = map_value.key_kind();
+                let (key_span, key_type) = (*key.meta(), key.rito_type());
+                let Some(key) = coerce_type(key, key_kind) else {
+                    self.report_bad_entry_key(key_span, key_type, key_kind);
                     return parent;
                 };
                 let result = map_value.push(key, value);
                 self.handle_container_res(span, result);
             }
             PropertyValueEnum::Optional(option) => {
-                let IrItem::ListItem(IrListItem(child)) = child else {
-                    trace!("\x1b[41moptional value must be list item\x1b[0m");
-                    return parent;
+                let IrListItem(child) = match child {
+                    IrItem::ListItem(item) => item,
+                    child => {
+                        trace!("\x1b[41moptional value must be list item\x1b[0m");
+                        self.report_wrong_item_shape(&child, parent_type, ItemShape::Value);
+                        return parent;
+                    }
                 };
                 if child.kind() != option.item_kind() {
                     self.ctx.diagnostics.push(
@@ -161,6 +206,16 @@ impl Visitor for TypeChecker<'_> {
                         let value_type = parent_type
                             .value_subtype()
                             .expect("container must have value_subtype");
+
+                        if matches!(value_type, K::Struct | K::Embedded) {
+                            self.ctx.diagnostics.push(
+                                MissingClassName {
+                                    span: tree.open_brace_span(ctx.cst),
+                                    expected: RitoType::simple(value_type),
+                                }
+                                .unwrap(),
+                            );
+                        }
 
                         self.stack.push((
                             depth,

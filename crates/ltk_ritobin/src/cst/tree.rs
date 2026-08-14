@@ -10,7 +10,7 @@ use crate::{
     parse::{
         impls,
         tokenizer::{self, Token},
-        Error, ErrorPropagation, Parser, Span,
+        Error, ErrorPropagation, Parser, Span, TokenKind,
     },
     typecheck::diagnostics::DiagnosticWithSpan,
 };
@@ -129,6 +129,20 @@ pub struct Node {
     /// [`ErrorPropagation`] the parser was using.
     #[cfg_attr(feature = "serde", serde(skip_deserializing))]
     pub errors: ErrorRange,
+}
+
+impl Node {
+    /// Span of the node's opening brace, falling back to the node's own span.
+    ///
+    /// Use this when you want to point a diagnostic at the block opening, or at the node itself if it doesn't have one.
+    pub fn open_brace_span(&self, cst: &Cst) -> Span {
+        self.children
+            .get(cst)
+            .first()
+            .and_then(|c| c.token(cst))
+            .filter(|t| t.kind == TokenKind::LCurly)
+            .map_or(self.span, |t| t.span)
+    }
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

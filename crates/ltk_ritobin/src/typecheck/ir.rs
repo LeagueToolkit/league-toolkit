@@ -1,4 +1,4 @@
-use ltk_meta::PropertyValueEnum;
+use ltk_meta::{traits::PropertyExt as _, PropertyValueEnum};
 
 use crate::parse::Span;
 
@@ -49,6 +49,15 @@ impl IrItem {
             IrItem::ListItem(i) => &mut i.0,
         }
     }
+
+    /// Span to the source of the item's shape.
+    pub fn shape_span(&self) -> Span {
+        match self {
+            IrItem::Entry(IrEntry { key, .. }) => *key.meta(),
+            IrItem::ListItem(IrListItem(value)) => *value.meta(),
+        }
+    }
+
     pub fn into_value(self) -> PropertyValueEnum<Span> {
         match self {
             IrItem::Entry(i) => i.value,

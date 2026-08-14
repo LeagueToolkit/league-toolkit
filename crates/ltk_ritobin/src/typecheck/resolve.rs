@@ -360,6 +360,26 @@ pub(crate) fn resolve_value(
                 }
             }
         }
+
+        // Matches a block with no class name - { .. }
+        Some(
+            block @ Node {
+                kind: Kind::Block, ..
+            },
+        ) => {
+            let Some(kind_hint) = kind_hint else {
+                return Ok(None);
+            };
+            if !matches!(kind_hint.base, K::Struct | K::Embedded) {
+                return Ok(None);
+            }
+
+            // Structs and embedded values must have a class name before the block
+            return Err(MissingClassName {
+                span: block.open_brace_span(visit_ctx.cst),
+                expected: kind_hint,
+            });
+        }
         Some(Node {
             kind: Kind::Literal,
             children,
@@ -398,10 +418,27 @@ pub(crate) fn resolve_entry(
         Some(Token {
             kind: TokenKind::String,
             span,
-        }) => PropertyValueEnum::from(values::String::new_with_meta(
-            ctx.text[Span::new(span.start + 1, span.end - 1)].into(),
-            *span,
-        )),
+        }) => {
+            // We can support quoted property names by just hashing the string
+            // The original ritobin compiler has no support for it and we prefer
+            // unquoted names - emit diagnostic
+            if let Some(parent) = parent_value_kind
+                .filter(|p| matches!(p.base, PropertyKind::Struct | PropertyKind::Embedded))
+            {
+                ctx.diagnostics.push(
+                    QuotedPropertyName {
+                        span: *span,
+                        parent,
+                    }
+                    .unwrap(),
+                );
+            }
+
+            PropertyValueEnum::from(values::String::new_with_meta(
+                ctx.text[Span::new(span.start + 1, span.end - 1)].into(),
+                *span,
+            ))
+        }
         Some(Token {
             kind: TokenKind::HexLit,
             span,
