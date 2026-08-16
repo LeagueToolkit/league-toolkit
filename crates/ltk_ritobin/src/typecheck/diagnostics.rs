@@ -5,7 +5,7 @@ use ltk_meta::PropertyKind;
 use crate::{
     cst,
     parse::{Span, TokenKind},
-    RitoType,
+    ItemShape, RitoType,
 };
 
 /// One of the four entries every ritobin file has at its root.
@@ -65,27 +65,6 @@ impl Display for RitoTypeOrVirtual {
             Self::Token(kind) => Display::fmt(kind, f),
             Self::Tree(kind) => Display::fmt(kind, f),
         }
-    }
-}
-
-/// The shape an item must have to be accepted by its parent.
-///
-/// Which one a parent wants is a property of the parent's type: class bodies and maps take
-/// [`Entry`](ItemShape::Entry)s, lists and options take [`Value`](ItemShape::Value)s.
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub enum ItemShape {
-    /// `key: type = value` (or `key = value`)
-    Entry,
-    /// a bare value
-    Value,
-}
-
-impl Display for ItemShape {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            ItemShape::Entry => "an entry ('name: type = value')",
-            ItemShape::Value => "a value",
-        })
     }
 }
 

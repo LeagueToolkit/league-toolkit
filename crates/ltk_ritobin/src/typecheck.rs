@@ -27,8 +27,8 @@ mod test {
     };
 
     use crate::{
-        typecheck::diagnostics::{Diagnostic, DiagnosticWithSpan, ItemShape, RootKind},
-        Cst, RitoType,
+        typecheck::diagnostics::{Diagnostic, DiagnosticWithSpan, RootKind},
+        Cst, ItemShape, RitoType,
     };
 
     fn wrap(input: &str) -> String {
@@ -448,6 +448,138 @@ entries: map[hash,embed] = {}
                     }
                 )
             },
+        );
+    }
+
+    #[test]
+    fn a_type_mismatch_blames_the_type_expression_that_set_it() {
+        // the LSP renders `expected_span` as "due to this type expression", so it has to point
+        // at an actual type expression - not at the container's braces, and not at all when the
+        // expectation was not written down anywhere
+        let blamed = |input: &str| {
+            let text = wrap(input);
+            let (_, errs) = Cst::parse(&text).build_bin(&text);
+            errs.into_iter()
+                .find_map(|e| match e.diagnostic {
+                    Diagnostic::TypeMismatch { expected_span, .. } => Some(expected_span),
+                    _ => None,
+                })
+                .expect("expected a TypeMismatch")
+                .map(|span| text[span].to_owned())
+        };
+
+        assert_eq!(
+            blamed(r#"0x1: list[u32] = { "a" }"#).as_deref(),
+            Some("list[u32]")
+        );
+        assert_eq!(
+            blamed(r#"0x1: map[u32,u32] = { "5" = 1 }"#).as_deref(),
+            Some("map[u32,u32]")
+        );
+        assert_eq!(
+            blamed(r#"0x1: option[u32] = { "a" }"#).as_deref(),
+            Some("option[u32]")
+        );
+        // a numeric literal resolved against a hint that takes no number
+        assert_eq!(blamed(r#"0x1: string = 5"#).as_deref(), Some("string"));
+        // listlike components answer to the type that made them components
+        assert_eq!(
+            blamed(r#"0x1: vec3 = { 1, "a", 3 }"#).as_deref(),
+            Some("vec3")
+        );
+        assert_eq!(
+            blamed(r#"0x1: rgba = { 1, "a", 3, 4 }"#).as_deref(),
+            Some("rgba")
+        );
+        // ... and a listlike written as a list item falls back to the container's subtype
+        assert_eq!(
+            blamed(r#"0x1: list[vec3] = { { 1, "a", 3 } }"#).as_deref(),
+            Some("list[vec3]")
+        );
+        // a property name is a hash because it is a property name - no type expression said so
+        assert_eq!(blamed("true: u32 = 3").as_deref(), None);
+    }
+
+    #[test]
+    fn a_wrong_shaped_item_is_underlined_whole() {
+        // a parent rejects the item, not a part of it - from the list's point of view the whole
+        // 'key: u32 = 1' is the mistake, even though '1' on its own would be a fine list item
+        let underlined = |input: &str| {
+            let err = assert_one_err(input, |d| matches!(d, Diagnostic::UnexpectedItem { .. }));
+            wrap(input)[err.span].to_owned()
+        };
+
+        assert_eq!(
+            underlined(r#"0x1: list[u32] = { key: u32 = 1 }"#),
+            "key: u32 = 1"
+        );
+        assert_eq!(
+            underlined(r#"0x1: list[u32] = { 0xdead = 1 }"#),
+            "0xdead = 1"
+        );
+        assert_eq!(
+            underlined(r#"0x1: list[u32] = { "key" = 1 }"#),
+            r#""key" = 1"#
+        );
+        assert_eq!(
+            underlined(r#"0x1: option[u32] = { key: u32 = 1 }"#),
+            "key: u32 = 1"
+        );
+        assert_eq!(underlined(r#"0x1: map[hash,u32] = { 5 }"#), "5");
+    }
+
+    #[test]
+    fn an_unexpected_item_names_the_shape_its_parent_wants() {
+        let is_shape = |d: &Diagnostic| matches!(d, Diagnostic::UnexpectedItem { .. });
+
+        let map = assert_one_err(r#"0x1: map[hash,u32] = { 5 }"#, is_shape);
+        assert_eq!(
+            map.diagnostic.to_string(),
+            "map[hash,u32] takes an entry ('name: type = value')"
+        );
+
+        let class = assert_one_err(
+            r#"
+        name: string = "A"
+        ""
+        flags: u32 = 1
+        "#,
+            is_shape,
+        );
+        assert_eq!(
+            class.diagnostic.to_string(),
+            "embed takes an entry ('name: type = value')"
+        );
+
+        let list = assert_one_err(r#"0x1: list[u32] = { key: u32 = 1 }"#, is_shape);
+        assert_eq!(list.diagnostic.to_string(), "list[u32] takes a value");
+    }
+
+    /// A map entry takes its value type from the map's subtype, but writing it out is allowed -
+    /// it just has to agree with what the map declared.
+    #[test]
+    fn a_map_entry_may_declare_its_value_type() {
+        assert(r#"0x1: map[hash,u32] = { 0xdead: u32 = 1 }"#, |obj| {
+            obj.property(
+                0x1,
+                values::Map::new(
+                    PropertyKind::Hash,
+                    PropertyKind::U32,
+                    vec![(
+                        values::Hash::from(BinHash::from(0xdeadu32)).into(),
+                        values::U32::from(1u32).into(),
+                    )],
+                )
+                .unwrap(),
+            )
+        });
+
+        let err = assert_one_err(r#"0x1: map[hash,u32] = { 0xdead: string = "a" }"#, |d| {
+            matches!(d, Diagnostic::TypeMismatch { .. })
+        });
+        assert_eq!(
+            err.diagnostic.to_string(),
+            "Type mismatch - expected u32, got string"
         );
     }
 

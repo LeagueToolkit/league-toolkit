@@ -189,10 +189,22 @@ fn parse_int<T: std::str::FromStr<Err = std::num::ParseIntError>>(
         })
 }
 
+/// Resolves a single literal token into the value it spells.
+///
+/// - `ctx` - typecheck state; diagnostics found along the way are pushed here
+/// - `token` - the literal to resolve
+/// - `kind_hint` - the type to read the literal as. A number, `true` or a string can be several
+///   types, so without a hint an ambiguous literal cannot be resolved at all
+/// - `kind_hint_span` - where `kind_hint` was written, so a mismatch can point at it
+///
+/// # Errors
+/// If the literal does not fit `kind_hint`, or if it is ambiguous and there is no hint to pick
+/// with - a bare `5` on its own has no type.
 fn resolve_literal(
     ctx: &mut Ctx,
     token: &Token,
     kind_hint: Option<RitoType>,
+    kind_hint_span: Option<Span>,
 ) -> Result<Option<PropertyValueEnum<Span>>, Diagnostic> {
     use PropertyKind as K;
     use PropertyValueEnum as P;
@@ -275,7 +287,7 @@ fn resolve_literal(
                     return Err(TypeMismatch {
                         span: *span,
                         expected: RitoType::simple(kind_hint),
-                        expected_span: None, // TODO: would be nice here
+                        expected_span: kind_hint_span,
                         got: RitoTypeOrVirtual::numeric(),
                     });
                 }
@@ -285,11 +297,28 @@ fn resolve_literal(
     }))
 }
 
+/// Resolves an `EntryValue` or `ListItem` tree into the value it describes.
+///
+/// - `ctx` - typecheck state; diagnostics found along the way are pushed here
+/// - `visit_ctx` - the CST being walked
+/// - `tree` - the tree holding the value
+/// - `kind_hint` - the type the value is expected to have, used to resolve literals that cannot
+///   type themselves - a bare `5` is only a `u8` because something said so
+/// - `kind_hint_span` - where `kind_hint` was written, so a mismatch can point at it
+///
+/// # Returns
+/// `Ok(None)` when the tree holds nothing resolvable, which the caller reports in its own terms -
+/// an empty list item is a different mistake from an empty entry.
+///
+/// # Errors
+/// If the value cannot be read as `kind_hint` - a literal of the wrong type, a number that does
+/// not fit, or an ambiguous literal with no hint to resolve it against.
 pub(crate) fn resolve_value(
     ctx: &mut Ctx,
     visit_ctx: &VisitCtx,
     tree: &Node,
     kind_hint: Option<RitoType>,
+    kind_hint_span: Option<Span>,
 ) -> Result<Option<PropertyValueEnum<Span>>, Diagnostic> {
     use PropertyKind as K;
     use PropertyValueEnum as P;
@@ -388,17 +417,37 @@ pub(crate) fn resolve_value(
             let Some(child) = children.get(visit_ctx.cst).first() else {
                 return Ok(None);
             };
-            return resolve_literal(ctx, child.token(visit_ctx.cst).unwrap(), kind_hint);
+            return resolve_literal(
+                ctx,
+                child.token(visit_ctx.cst).unwrap(),
+                kind_hint,
+                kind_hint_span,
+            );
         }
         _ => return Ok(None),
     }))
 }
 
+/// Resolves an `Entry` tree into the key/value pair it describes.
+///
+/// - `ctx` - typecheck state; diagnostics found along the way are pushed here
+/// - `visit_ctx` - the CST being walked
+/// - `tree` - the `Entry` tree to resolve
+/// - `parent_value_kind` - the type the enclosing container gives its values, so an entry that
+///   wrote no `: type` can still be resolved. `None` at the root
+/// - `parent_type_span` - where that type was written, so a mismatch can point at it. `None` at
+///   the root, and for a container that took its type from a subtype rather than a type expression
+///
+/// # Errors
+/// If the tree is not a well-formed entry - no key, no value, or a key that is not a hash.
+/// A well-formed entry that fails to type-check resolves to a default value instead, so the walk
+/// keeps going and the diagnostic lands in `ctx`.
 pub(crate) fn resolve_entry(
     ctx: &mut Ctx,
     visit_ctx: &VisitCtx,
     tree: &Node,
     parent_value_kind: Option<RitoType>,
+    parent_type_span: Option<Span>,
 ) -> Result<IrEntry, MaybeSpanDiag> {
     let mut c = tree.children.get(visit_ctx.cst).iter();
 
@@ -449,6 +498,7 @@ pub(crate) fn resolve_entry(
             parent_value_kind
                 .and_then(|k| k.subtypes[0])
                 .map(RitoType::simple),
+            parent_type_span,
         )?
         .ok_or(CustomSpan("erm idk bad literal", key.span))?,
         _ => {
@@ -482,13 +532,15 @@ pub(crate) fn resolve_entry(
                     TypeMismatch {
                         span: kind_span,
                         expected: *parent,
-                        expected_span: None, // TODO: would be nice here
+                        expected_span: parent_type_span,
                         got: (*kind).into(),
                     }
                     .unwrap(),
                 );
                 return Ok(IrEntry {
                     key,
+                    // we fell back to the parent's type, so that is what declared this value
+                    type_span: parent_type_span,
                     value: parent.make_default(value.span),
                 });
             }
@@ -496,8 +548,9 @@ pub(crate) fn resolve_entry(
     }
 
     let kind = kind.or(parent_value_kind);
+    let type_span = kind_span.or(parent_type_span);
 
-    let resolved_val = match resolve_value(ctx, visit_ctx, value, kind) {
+    let resolved_val = match resolve_value(ctx, visit_ctx, value, kind, type_span) {
         Ok(v) => v,
         Err(e) => Some(match kind {
             Some(kind) => {
@@ -534,5 +587,9 @@ pub(crate) fn resolve_entry(
         (Some(kind), _) => kind.make_default(value_span),
     };
 
-    Ok(IrEntry { key, value })
+    Ok(IrEntry {
+        key,
+        value,
+        type_span,
+    })
 }
