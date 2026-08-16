@@ -373,6 +373,10 @@ entries: map[hash,embed] = {}
         );
         // points at the `{` the class name should precede, not the whole block
         assert_eq!(err.span.len(), 1);
+        assert_eq!(
+            err.diagnostic.to_string(),
+            "Missing class name - embed values are written 'ClassName { .. }'"
+        );
     }
 
     #[test]
@@ -637,7 +641,7 @@ entries: map[hash,embed] = {}
     /// A key that can't become a hash was dropped silently by `merge_ir`.
     #[test]
     fn a_property_name_that_cannot_be_hashed_is_reported() {
-        assert_one_err(r#"true: u32 = 3"#, |d| {
+        let err = assert_one_err(r#"true: u32 = 3"#, |d| {
             matches!(
                 d,
                 Diagnostic::TypeMismatch {
@@ -649,6 +653,10 @@ entries: map[hash,embed] = {}
                 }
             )
         });
+        assert_eq!(
+            err.diagnostic.to_string(),
+            "Type mismatch - expected hash, got bool"
+        );
     }
 
     #[test]
@@ -667,7 +675,7 @@ entries: map[hash,embed] = {}
     /// Quoted property names are hashed as written - `""` becomes `hash("")`.
     #[test]
     fn a_quoted_property_name_is_reported() {
-        assert_one_err(r#""": u32 = 1"#, |d| {
+        let err = assert_one_err(r#""": u32 = 1"#, |d| {
             matches!(
                 d,
                 Diagnostic::QuotedPropertyName {
@@ -679,6 +687,11 @@ entries: map[hash,embed] = {}
                 }
             )
         });
+        assert_eq!(
+            err.diagnostic.to_string(),
+            "Quoted property name - embed bodies take 'name: type = value', with the name \
+             unquoted or a '0x..' hash"
+        );
     }
 
     #[test]
@@ -763,33 +776,6 @@ entries: map[hash,embed] = {}
                 )
                 .build()
         );
-    }
-
-    /// `Display` is what the user reads, so check the ones this change added render as
-    /// sentences rather than as their `Debug` shape.
-    #[test]
-    fn new_diagnostics_render_a_message() {
-        let cases = [
-            (
-                "paramValues: list[embed] = { { name: string = \"A\" } }",
-                "Missing class name - embed values are written 'ClassName { .. }'",
-            ),
-            (
-                "name: string = \"A\"\n\"\"",
-                "embed takes an entry ('name: type = value')",
-            ),
-            (
-                "\"\": u32 = 1",
-                "Quoted property name - embed bodies take 'name: type = value', with the name \
-                 unquoted or a '0x..' hash",
-            ),
-            ("true: u32 = 3", "Type mismatch - expected hash, got bool"),
-        ];
-        for (input, expected) in cases {
-            let errs = build_errs(input);
-            assert_eq!(errs.len(), 1, "{input}: {errs:#?}");
-            assert_eq!(errs[0].diagnostic.to_string(), expected, "{input}");
-        }
     }
 
     /// The root `entries` map is the one every file has - its keys are quoted paths.

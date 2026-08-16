@@ -120,7 +120,6 @@ impl<'a> TypeChecker<'a> {
                         self.handle_container_res(span, expected_span, result);
                     }
                     child @ IrItem::Entry(_) => {
-                        trace!("\x1b[41mlist item must be list item\x1b[0m");
                         self.report_wrong_item_shape(&child, parent_type);
                         return parent;
                     }
@@ -131,7 +130,6 @@ impl<'a> TypeChecker<'a> {
                 let IrEntry { key, value, .. } = match child {
                     IrItem::Entry(entry) => entry,
                     child => {
-                        trace!("\x1b[41mstruct item must be entry\x1b[0m");
                         self.report_wrong_item_shape(&child, parent_type);
                         return parent;
                     }
@@ -150,7 +148,6 @@ impl<'a> TypeChecker<'a> {
                 let IrEntry { key, value, .. } = match child {
                     IrItem::Entry(entry) => entry,
                     child => {
-                        trace!("map item must be entry");
                         self.report_wrong_item_shape(&child, parent_type);
                         return parent;
                     }
@@ -169,7 +166,6 @@ impl<'a> TypeChecker<'a> {
                 let IrListItem(child) = match child {
                     IrItem::ListItem(item) => item,
                     child => {
-                        trace!("\x1b[41moptional value must be list item\x1b[0m");
                         self.report_wrong_item_shape(&child, parent_type);
                         return parent;
                     }
