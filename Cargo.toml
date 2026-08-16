@@ -49,6 +49,8 @@ criterion = {version = "0.8",  features = ["html_reports"] }
 warnings = "warn"
 
 [workspace.lints.clippy]
+unwrap_used = "warn"
+
 correctness = { level = "deny", priority = -1 }
 suspicious  = { level = "deny", priority = -1 }
 perf        = { level = "warn", priority = -1 }
