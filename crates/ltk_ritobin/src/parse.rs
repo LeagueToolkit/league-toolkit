@@ -153,6 +153,16 @@ entries: map[hash, embed] = {
         assert_success(r#"mVelMultiplier: f32 = 0 # asd"#);
     }
 
+    #[test]
+    fn unterminated_string_value() {
+        let text = "name: string = \"\n";
+        let cst = Cst::parse(text);
+        assert!(!cst.errors.is_empty());
+
+        // used to panic on the error tree left behind by the tokenizer
+        let (_bin, _errors) = cst.build_bin(text);
+    }
+
     #[ignore = "Nice to have"]
     #[test]
     fn naked_class() {
