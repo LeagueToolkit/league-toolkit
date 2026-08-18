@@ -24,7 +24,17 @@ use super::{
 use diagnostics::Diagnostic::*;
 
 impl<'a> TypeChecker<'a> {
-    fn handle_container_res(&mut self, span: Span, result: Result<(), ltk_meta::Error>) {
+    /// Reports whatever a container had to say about the value just pushed into it.
+    ///
+    /// - `span` - the value that was pushed, to underline
+    /// - `expected_span` - where the container's type was written, so a rejection can point at it
+    /// - `result` - what the push returned
+    fn handle_container_res(
+        &mut self,
+        span: Span,
+        expected_span: Option<Span>,
+        result: Result<(), ltk_meta::Error>,
+    ) {
         match result {
             Ok(()) => {}
             Err(ltk_meta::Error::MismatchedContainerTypes { expected, got }) => {
@@ -32,7 +42,7 @@ impl<'a> TypeChecker<'a> {
                     TypeMismatch {
                         span,
                         expected: RitoType::simple(expected),
-                        expected_span: None, // TODO: would be nice here
+                        expected_span,
                         got: RitoType::simple(got).into(),
                     }
                     .unwrap(),
@@ -44,7 +54,58 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
+    /// Reports a child whose shape its parent does not accept.
+    ///
+    /// - `child` - the offending item, underlined whole because that is what the parent rejected
+    /// - `parent` - the type that rejected it, which also fixes the shape it wanted
+    ///
+    /// # Panics
+    /// If `parent` has no body to hold items. Only the arms of [`Self::merge_ir`] that accept
+    /// children reach this - anything else lands in its catch-all as an `UnexpectedContainerItem`.
+    fn report_wrong_item_shape(&mut self, child: &IrItem, parent: RitoType) {
+        let expected = parent
+            .item_shape()
+            .expect("only a parent with a body can reject an item shape");
+
+        self.ctx.diagnostics.push(
+            UnexpectedItem {
+                span: child.span(),
+                parent,
+                expected,
+            }
+            .unwrap(),
+        );
+    }
+
+    /// Reports an entry key that cannot become the key type its parent needs.
+    ///
+    /// - `span` - the key, to underline
+    /// - `got` - the type the key resolved to
+    /// - `expected` - the key type the parent needs
+    /// - `expected_span` - where that type was written, or `None` when nothing wrote it - a
+    ///   property name is a hash because it is a property name, not because of a type expression
+    fn report_bad_entry_key(
+        &mut self,
+        span: Span,
+        got: RitoType,
+        expected: PropertyKind,
+        expected_span: Option<Span>,
+    ) {
+        self.ctx.diagnostics.push(
+            TypeMismatch {
+                span,
+                expected: RitoType::simple(expected),
+                expected_span,
+                got: got.into(),
+            }
+            .unwrap(),
+        );
+    }
+
     fn merge_ir(&mut self, mut parent: IrItem, child: IrItem) -> IrItem {
+        let parent_type = parent.value().rito_type();
+        let expected_span = parent.type_span();
+
         match &mut parent.value_mut() {
             PropertyValueEnum::Container(list)
             | PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(list)) => {
@@ -56,51 +117,65 @@ impl<'a> TypeChecker<'a> {
 
                         let span = *value.meta();
                         let result = list.push(value);
-                        self.handle_container_res(span, result);
+                        self.handle_container_res(span, expected_span, result);
                     }
-                    IrItem::Entry(IrEntry { key: _, value: _ }) => {
-                        trace!("\x1b[41mlist item must be list item\x1b[0m");
+                    child @ IrItem::Entry(_) => {
+                        self.report_wrong_item_shape(&child, parent_type);
                         return parent;
                     }
                 }
             }
             PropertyValueEnum::Struct(struct_val)
             | PropertyValueEnum::Embedded(values::Embedded(struct_val)) => {
-                let IrItem::Entry(IrEntry { key, value }) = child else {
-                    trace!("\x1b[41mstruct item must be entry\x1b[0m");
-                    return parent;
+                let IrEntry { key, value, .. } = match child {
+                    IrItem::Entry(entry) => entry,
+                    child => {
+                        self.report_wrong_item_shape(&child, parent_type);
+                        return parent;
+                    }
                 };
 
+                let (key_span, key_type) = (*key.meta(), key.rito_type());
                 let Some(PropertyValueEnum::Hash(key)) = coerce_type(key, PropertyKind::Hash)
                 else {
+                    self.report_bad_entry_key(key_span, key_type, PropertyKind::Hash, None);
                     return parent;
                 };
 
                 struct_val.properties.insert(*key, value);
             }
             PropertyValueEnum::Map(map_value) => {
-                let IrItem::Entry(IrEntry { key, value }) = child else {
-                    trace!("map item must be entry");
-                    return parent;
+                let IrEntry { key, value, .. } = match child {
+                    IrItem::Entry(entry) => entry,
+                    child => {
+                        self.report_wrong_item_shape(&child, parent_type);
+                        return parent;
+                    }
                 };
                 let span = *value.meta();
-                let Some(key) = coerce_type(key, map_value.key_kind()) else {
+                let key_kind = map_value.key_kind();
+                let (key_span, key_type) = (*key.meta(), key.rito_type());
+                let Some(key) = coerce_type(key, key_kind) else {
+                    self.report_bad_entry_key(key_span, key_type, key_kind, expected_span);
                     return parent;
                 };
                 let result = map_value.push(key, value);
-                self.handle_container_res(span, result);
+                self.handle_container_res(span, expected_span, result);
             }
             PropertyValueEnum::Optional(option) => {
-                let IrItem::ListItem(IrListItem(child)) = child else {
-                    trace!("\x1b[41moptional value must be list item\x1b[0m");
-                    return parent;
+                let IrListItem(child) = match child {
+                    IrItem::ListItem(item) => item,
+                    child => {
+                        self.report_wrong_item_shape(&child, parent_type);
+                        return parent;
+                    }
                 };
                 if child.kind() != option.item_kind() {
                     self.ctx.diagnostics.push(
                         TypeMismatch {
                             span: *child.meta(),
                             expected: RitoType::simple(option.item_kind()),
-                            expected_span: None, // TODO: would be nice here
+                            expected_span,
                             got: child.rito_type().into(),
                         }
                         .unwrap(),
@@ -162,6 +237,16 @@ impl Visitor for TypeChecker<'_> {
                             .value_subtype()
                             .expect("container must have value_subtype");
 
+                        if matches!(value_type, K::Struct | K::Embedded) {
+                            self.ctx.diagnostics.push(
+                                MissingClassName {
+                                    span: tree.open_brace_span(ctx.cst),
+                                    expected: RitoType::simple(value_type),
+                                }
+                                .unwrap(),
+                            );
+                        }
+
                         self.stack.push((
                             depth,
                             IrItem::ListItem(IrListItem({
@@ -208,7 +293,9 @@ impl Visitor for TypeChecker<'_> {
                     .or(parent_type.value_subtype())
                     .map(RitoType::simple);
 
-                match resolve_value(&mut self.ctx, ctx, tree, value_hint) {
+                let type_span = parent.type_span();
+
+                match resolve_value(&mut self.ctx, ctx, tree, value_hint, type_span) {
                     Ok(Some(item)) => {
                         trace!("  list item {item:?}");
                         if color_vec_type.is_some() {
@@ -236,7 +323,7 @@ impl Visitor for TypeChecker<'_> {
                                     got,
                                     expected: value_hint
                                         .unwrap_or(RitoType::simple(PropertyKind::None)),
-                                    expected_span: None,
+                                    expected_span: type_span,
                                 }
                                 .unwrap(),
                             );
@@ -252,6 +339,7 @@ impl Visitor for TypeChecker<'_> {
                     ctx,
                     tree,
                     parent.map(|p| p.1.value().rito_type()),
+                    parent.and_then(|p| p.1.type_span()),
                 )
                 .map_err(|e| e.fallback(tree.span))
                 {
@@ -300,7 +388,12 @@ impl Visitor for TypeChecker<'_> {
                 return Visit::Continue;
             }
 
-            if let Err(e) = try_populate_listlike(&mut ir.1, &mut self.list_queue) {
+            // a listlike written as a list item declares no type of its own
+            let type_span =
+                ir.1.type_span()
+                    .or_else(|| self.stack.last().and_then(|(_, parent)| parent.type_span()));
+
+            if let Err(e) = try_populate_listlike(&mut ir.1, &mut self.list_queue, type_span) {
                 self.ctx.diagnostics.push(e.fallback(*ir.1.value().meta()));
             }
 
@@ -316,6 +409,7 @@ impl Visitor for TypeChecker<'_> {
                     let IrItem::Entry(IrEntry {
                         key: key @ PropertyValueEnum::String(values::String { .. }),
                         value,
+                        ..
                     }) = ir.1
                     else {
                         self.ctx

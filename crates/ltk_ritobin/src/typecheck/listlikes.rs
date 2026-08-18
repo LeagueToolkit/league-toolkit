@@ -11,26 +11,32 @@ use crate::{
 
 use diagnostics::Diagnostic::*;
 
-fn resolve_f32(n: PropertyValueEnum<Span>) -> Result<f32, MaybeSpanDiag> {
+fn resolve_f32(
+    n: PropertyValueEnum<Span>,
+    expected_span: Option<Span>,
+) -> Result<f32, MaybeSpanDiag> {
     match n {
         PropertyValueEnum::F32(values::F32 { value: n, .. }) => Ok(n),
         _ => Err(TypeMismatch {
             span: *n.meta(),
             expected: RitoType::simple(PropertyKind::F32),
-            expected_span: None, // TODO: would be nice
+            expected_span,
             got: RitoTypeOrVirtual::RitoType(RitoType::simple(n.kind())),
         }
         .into()),
     }
 }
 
-fn resolve_u8(n: PropertyValueEnum<Span>) -> Result<u8, MaybeSpanDiag> {
+fn resolve_u8(
+    n: PropertyValueEnum<Span>,
+    expected_span: Option<Span>,
+) -> Result<u8, MaybeSpanDiag> {
     match n {
         PropertyValueEnum::U8(values::U8 { value: n, .. }) => Ok(n),
         _ => Err(TypeMismatch {
             span: *n.meta(),
             expected: RitoType::simple(PropertyKind::U8),
-            expected_span: None, // TODO: would be nice
+            expected_span,
             got: RitoTypeOrVirtual::RitoType(RitoType::simple(n.kind())),
         }
         .into()),
@@ -40,14 +46,17 @@ fn resolve_u8(n: PropertyValueEnum<Span>) -> Result<u8, MaybeSpanDiag> {
 struct ListIter<I: Iterator<Item = IrListItem>> {
     items: I,
     span: Span,
+    /// span of the type expression that made this a listlike, to blame component types on
+    type_span: Option<Span>,
     count: u8,
 }
 
 impl<I: Iterator<Item = IrListItem>> ListIter<I> {
-    fn new(span: Span, items: I) -> Self {
+    fn new(span: Span, type_span: Option<Span>, items: I) -> Self {
         Self {
             items,
             span,
+            type_span,
             count: 0,
         }
     }
@@ -82,14 +91,14 @@ impl<I: Iterator<Item = IrListItem>> ListIter<I> {
     ) -> Result<[f32; N], MaybeSpanDiag> {
         let mut out = [0.0f32; N];
         for slot in &mut out {
-            *slot = resolve_f32(self.expect_next(expected)?)?;
+            *slot = resolve_f32(self.expect_next(expected)?, self.type_span)?;
         }
         Ok(out)
     }
     fn read_u8s<const N: usize>(&mut self, expected: ListLike) -> Result<[u8; N], MaybeSpanDiag> {
         let mut out = [0u8; N];
         for slot in &mut out {
-            *slot = resolve_u8(self.expect_next(expected)?)?;
+            *slot = resolve_u8(self.expect_next(expected)?, self.type_span)?;
         }
         Ok(out)
     }
@@ -155,10 +164,26 @@ impl<I: Iterator<Item = IrListItem>> ListIter<I> {
     }
 }
 
-/// Try populate a listlike type (vec, mtx44, rgba, option[listlike])
+/// Fills a listlike (vec, mtx44, rgba, option[listlike]) from the items collected for it.
+///
+/// A listlike spells its components out as bare values, so they arrive as ordinary list items and
+/// have to be folded back into one value once the block closes.
+///
+/// - `target` - the value to fill; left alone when it turns out not to be a listlike
+/// - `items` - the queued list items, drained into `target`
+/// - `type_span` - where `target`'s type was written, so a component of the wrong type can point
+///   at the `vec3`/`rgba`/... that decided what its components had to be
+///
+/// # Returns
+/// `Ok(())` when `target` is not a listlike, so callers can hand every value to it.
+///
+/// # Errors
+/// If `target` is a listlike and `items` does not fill it - too few components, too many, or one
+/// that is not the `f32`/`u8` the shape needs.
 pub(crate) fn try_populate_listlike(
     target: &mut IrItem,
     items: &mut Vec<IrListItem>,
+    type_span: Option<Span>,
 ) -> Result<(), MaybeSpanDiag> {
     use PropertyValueEnum as V;
 
@@ -168,7 +193,7 @@ pub(crate) fn try_populate_listlike(
     }
 
     // TODO: is this the right span to start with?
-    let mut items = ListIter::new(*target.value().meta(), items.drain(..));
+    let mut items = ListIter::new(*target.value().meta(), type_span, items.drain(..));
 
     let mut inject =
         |target: &mut PropertyValueEnum<Span>| -> Result<Option<ListLike>, MaybeSpanDiag> {

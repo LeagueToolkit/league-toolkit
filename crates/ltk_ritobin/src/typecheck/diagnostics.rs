@@ -1,19 +1,38 @@
-use std::fmt::Display;
+use std::{fmt::Display, num::IntErrorKind};
 
 use ltk_meta::PropertyKind;
 
 use crate::{
     cst,
     parse::{Span, TokenKind},
-    RitoType,
+    ItemShape, RitoType,
 };
 
+/// One of the four entries every ritobin file has at its root.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum RootKind {
     Type,
     Version,
     Linked,
     Entries,
+}
+
+impl RootKind {
+    /// The name this root entry is written with in a ritobin file.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            RootKind::Type => "type",
+            RootKind::Version => "version",
+            RootKind::Linked => "linked",
+            RootKind::Entries => "entries",
+        }
+    }
+}
+
+impl Display for RootKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -83,7 +102,11 @@ impl Display for ListLike {
     }
 }
 
+/// Something the type checker found wrong with a tree.
+///
+/// Each variant carries the spans needed to point at the offending source. Use [`Display`] to render the user-facing message.
 #[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
 pub enum Diagnostic {
     CustomSpan(&'static str, Span),
 
@@ -122,6 +145,38 @@ pub enum Diagnostic {
         span: Span,
         expected: RitoType,
         expected_span: Option<Span>,
+    },
+
+    /// A value needing a class name was written as a bare block.
+    ///
+    /// `pointer` and `embed` values are `ClassName { .. }`; without the name there is
+    /// nothing to resolve the class from, and the value defaults to class hash 0.
+    MissingClassName {
+        /// span of the `{` the class name should have preceded
+        span: Span,
+        /// the type that requires the class name
+        expected: RitoType,
+    },
+
+    /// An item has the wrong shape for its parent.
+    ///
+    /// A bare value in a class body, an entry in a list, and so on. The item cannot be
+    /// merged into the parent, so it is missing from the bin.
+    UnexpectedItem {
+        /// span of the offending item
+        span: Span,
+        /// the parent that rejected it
+        parent: RitoType,
+        /// the shape `parent` needs
+        expected: ItemShape,
+    },
+
+    /// A property name was written with quotes.
+    QuotedPropertyName {
+        /// span of the quoted key, quotes included
+        span: Span,
+        /// the parent class
+        parent: RitoType,
     },
 
     ResolveLiteral,
@@ -169,6 +224,109 @@ pub enum Diagnostic {
     },
 }
 
+impl Display for Diagnostic {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use Diagnostic::*;
+        match self {
+            CustomSpan(msg, _) => f.write_str(msg),
+
+            UnexpectedTree {
+                tree,
+                expected: Some(expected),
+                ..
+            } => write!(f, "Unexpected {tree}, expected {expected}"),
+            UnexpectedTree {
+                tree,
+                expected: None,
+                ..
+            } => write!(f, "Unexpected {tree}"),
+            MissingTree(kind) => write!(f, "Missing {kind}"),
+            EmptyTree(kind) => write!(f, "Empty {kind}"),
+            MissingToken(kind) => write!(f, "Missing {kind}"),
+
+            UnknownType(_) => f.write_str("Unknown type"),
+            MissingType(_) => {
+                f.write_str("Missing type - entries are written 'name: type = value'")
+            }
+
+            MissingRootEntry { root_kind } => write!(f, "Missing root entry '{root_kind}'"),
+            InvalidRootEntryType {
+                root_kind,
+                got,
+                expected,
+                ..
+            } => write!(f, "Root entry '{root_kind}' must be {expected}, got {got}"),
+
+            TypeMismatch { expected, got, .. } => {
+                write!(f, "Type mismatch - expected {expected}, got {got}")
+            }
+            UnexpectedContainerItem { expected, .. } => write!(
+                f,
+                "{expected} does not accept container items / blocks - remove the curly \
+                 braces around the value"
+            ),
+            MissingClassName { expected, .. } => write!(
+                f,
+                "Missing class name - {expected} values are written 'ClassName {{ .. }}'"
+            ),
+            UnexpectedItem {
+                parent, expected, ..
+            } => write!(f, "{parent} takes {expected}"),
+            QuotedPropertyName { parent, .. } => write!(
+                f,
+                "Quoted property name - {parent} bodies take 'name: type = value', with the \
+                 name unquoted or a '0x..' hash"
+            ),
+
+            ResolveLiteral => f.write_str("Could not resolve literal"),
+            ParseNumericError {
+                expected, error, ..
+            } => {
+                let reason = match error {
+                    Some(IntErrorKind::Empty) => "cannot parse integer from empty literal",
+                    Some(IntErrorKind::InvalidDigit) => "invalid digit found in literal",
+                    Some(IntErrorKind::PosOverflow) => "number too large to fit in target type",
+                    Some(IntErrorKind::NegOverflow) => "number too small to fit in target type",
+                    Some(IntErrorKind::Zero) => "number would be zero",
+                    _ => "invalid literal",
+                };
+                write!(
+                    f,
+                    "Could not parse {} - {reason}",
+                    RitoType::simple(*expected)
+                )
+            }
+            AmbiguousNumeric(_) => {
+                f.write_str("Ambiguous numeric literal - it needs a type to be resolved against")
+            }
+
+            NotEnoughItems { got, expected, .. } => write!(
+                f,
+                "{expected} needs {} items - got {got}",
+                expected.needed_children()
+            ),
+            TooManyItems {
+                extra, expected, ..
+            } => write!(
+                f,
+                "{expected} needs {} items - got {extra} too many",
+                expected.needed_children()
+            ),
+
+            RootNonEntry => f.write_str("Top-level bin entries are written 'name: type = value'"),
+            UnknownRoot { .. } => f.write_str("Unknown root entry"),
+            ShadowedEntry { .. } => f.write_str("Entry shadows a previous entry with the same key"),
+
+            InvalidHash(_) => f.write_str("Invalid hash"),
+
+            SubtypeCountMismatch { got, expected, .. } => {
+                write!(f, "Expected {expected} type parameters, got {got}")
+            }
+            UnexpectedSubtypes { .. } => f.write_str("This type does not accept type parameters"),
+        }
+    }
+}
+
 impl Diagnostic {
     pub fn span(&self) -> Option<&Span> {
         use Diagnostic::*;
@@ -186,6 +344,9 @@ impl Diagnostic {
             | SubtypeCountMismatch { span, .. }
             | UnexpectedSubtypes { span, .. }
             | UnexpectedContainerItem { span, .. }
+            | MissingClassName { span, .. }
+            | UnexpectedItem { span, .. }
+            | QuotedPropertyName { span, .. }
             | MissingType(span)
             | TypeMismatch { span, .. }
             | ShadowedEntry { shadower: span, .. }

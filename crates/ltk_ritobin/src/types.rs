@@ -133,6 +133,27 @@ impl RitoType {
         self.subtypes[1].or(self.subtypes[0])
     }
 
+    /// Whether this type's `{ .. }` block holds entries or bare values.
+    ///
+    /// `None` for the types that are never written with a block at all.
+    ///
+    /// ```text
+    /// Entry   pointer, embed, map        Foo { bar: u32 = 1 }    map[hash,u32] = { 0x1 = 1 }
+    /// Value   list, list2, option        list[u32] = { 1, 2 }    option[u32] = { 1 }
+    /// Value   vec2/3/4, rgba, mtx44      vec3 = { 1, 2, 3 }
+    /// None    everything else            u32 = 1                 string = "a"
+    /// ```
+    pub fn item_shape(&self) -> Option<ItemShape> {
+        use PropertyKind as K;
+        Some(match self.base {
+            K::Struct | K::Embedded | K::Map => ItemShape::Entry,
+            K::Container | K::UnorderedContainer | K::Optional => ItemShape::Value,
+            // a listlike spells its components out as bare values, `vec3 = { 1, 2, 3 }`
+            K::Vector2 | K::Vector3 | K::Vector4 | K::Color | K::Matrix44 => ItemShape::Value,
+            _ => return None,
+        })
+    }
+
     pub fn make_default<M: Default>(&self, span: M) -> PropertyValueEnum<M> {
         let mut value = match self.base {
             PropertyKind::Map => {
@@ -154,6 +175,26 @@ impl RitoType {
         };
         *value.meta_mut() = span;
         value
+    }
+}
+
+/// The shape an item must have to sit inside a type's `{ .. }` block.
+///
+/// Which one a type wants is fixed by its base kind - see [`RitoType::item_shape`].
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub enum ItemShape {
+    /// `key: type = value` (or `key = value`)
+    Entry,
+    /// a bare value
+    Value,
+}
+
+impl Display for ItemShape {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            ItemShape::Entry => "an entry ('name: type = value')",
+            ItemShape::Value => "a value",
+        })
     }
 }
 
