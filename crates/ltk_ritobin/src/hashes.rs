@@ -6,47 +6,45 @@
 //! This module provides traits and implementations for looking up hash values
 //! to convert them back to their original strings.
 
-use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::{borrow::Cow, collections::HashMap};
+use std::{fs::File, str::FromStr};
 
-use ltk_hash::BinHash;
+use ltk_hash::{BinHash, WadHash};
 
 /// Trait for looking up hash values to get their original string representation.
 ///
 /// Implement this trait to provide custom hash lookup behavior when writing ritobin files.
+#[allow(unused)]
 pub trait HashProvider {
     /// Look up a bin entry path hash (root object paths like "Characters/Aatrox/Skins/Skin0").
-    fn lookup_entry(&self, hash: BinHash) -> Option<Cow<'_, str>>;
+    fn lookup_entry(&self, hash: BinHash) -> Option<Cow<'_, str>> {
+        None
+    }
 
     /// Look up a bin field/property name hash.
-    fn lookup_field(&self, hash: BinHash) -> Option<Cow<'_, str>>;
+    fn lookup_field(&self, hash: BinHash) -> Option<Cow<'_, str>> {
+        None
+    }
 
     /// Look up a bin hash value (hash property type values).
-    fn lookup_hash(&self, hash: BinHash) -> Option<Cow<'_, str>>;
+    fn lookup_hash(&self, hash: BinHash) -> Option<Cow<'_, str>> {
+        None
+    }
 
     /// Look up a bin type/class name hash (for objects, structs, embeds).
-    fn lookup_type(&self, hash: BinHash) -> Option<Cow<'_, str>>;
-}
-
-impl HashProvider for () {
-    fn lookup_entry(&self, _hash: BinHash) -> Option<Cow<'_, str>> {
+    fn lookup_type(&self, hash: BinHash) -> Option<Cow<'_, str>> {
         None
     }
 
-    fn lookup_field(&self, _hash: BinHash) -> Option<Cow<'_, str>> {
-        None
-    }
-
-    fn lookup_hash(&self, _hash: BinHash) -> Option<Cow<'_, str>> {
-        None
-    }
-
-    fn lookup_type(&self, _hash: BinHash) -> Option<Cow<'_, str>> {
+    /// Look up a wad path hash (for WadChunkLink)
+    fn lookup_wad(&self, hash: WadHash) -> Option<Cow<'_, str>> {
         None
     }
 }
+
+impl HashProvider for () {}
 
 /// A hash provider backed by HashMaps for each hash category.
 ///
@@ -61,6 +59,8 @@ pub struct HashMapProvider {
     pub hashes: HashMap<BinHash, String>,
     /// Hashes for bin type/class names.
     pub types: HashMap<BinHash, String>,
+    /// Hashes for wad paths
+    pub wads: HashMap<WadHash, String>,
 }
 
 impl HashMapProvider {
@@ -72,7 +72,9 @@ impl HashMapProvider {
     ///
     /// Hash values are expected to be raw hex without "0x" prefix (e.g., "deadbeef SomeName").
     /// Lines starting with '#' are treated as comments and skipped.
-    fn load_file(path: impl AsRef<Path>) -> std::io::Result<HashMap<BinHash, String>> {
+    fn load_file<H: ltk_hash::Hash + FromStr>(
+        path: impl AsRef<Path>,
+    ) -> std::io::Result<HashMap<H, String>> {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
         let mut map = HashMap::new();
@@ -88,7 +90,7 @@ impl HashMapProvider {
 
             // Parse "{hex} {string}" format (hex without 0x prefix)
             if let Some((hash_str, value)) = line.split_once(' ') {
-                if let Ok(hash) = BinHash::from_str_radix(hash_str, 16) {
+                if let Ok(hash) = H::from_str(hash_str) {
                     map.insert(hash, value.to_string());
                 }
             }
@@ -118,6 +120,12 @@ impl HashMapProvider {
     /// Load bin type/class hashes from a file (hashes.bintypes.txt).
     pub fn load_types(&mut self, path: impl AsRef<Path>) -> std::io::Result<&mut Self> {
         self.types = Self::load_file(path)?;
+        Ok(self)
+    }
+
+    /// Load wad hashes from a file (hashes.game.txt).
+    pub fn load_wads(&mut self, path: impl AsRef<Path>) -> std::io::Result<&mut Self> {
+        self.wads = Self::load_file(path)?;
         Ok(self)
     }
 
@@ -169,6 +177,11 @@ impl HashMapProvider {
         self
     }
 
+    pub fn insert_wad(&mut self, hash: impl Into<WadHash>, value: impl Into<String>) -> &mut Self {
+        self.wads.insert(hash.into(), value.into());
+        self
+    }
+
     /// The total number of loaded hashes across all categories.
     pub fn total_count(&self) -> usize {
         self.entries.len() + self.fields.len() + self.hashes.len() + self.types.len()
@@ -191,6 +204,9 @@ impl HashProvider for HashMapProvider {
     fn lookup_type(&self, hash: BinHash) -> Option<Cow<'_, str>> {
         self.types.get(&hash).map(|s| s.as_str().into())
     }
+    fn lookup_wad(&self, hash: WadHash) -> Option<Cow<'_, str>> {
+        self.wads.get(&hash).map(|s| s.as_str().into())
+    }
 }
 
 impl<T: HashProvider + ?Sized> HashProvider for &T {
@@ -208,6 +224,9 @@ impl<T: HashProvider + ?Sized> HashProvider for &T {
 
     fn lookup_type(&self, hash: BinHash) -> Option<Cow<'_, str>> {
         (*self).lookup_type(hash)
+    }
+    fn lookup_wad(&self, hash: WadHash) -> Option<Cow<'_, str>> {
+        (*self).lookup_wad(hash)
     }
 }
 
@@ -227,6 +246,10 @@ impl HashProvider for Box<dyn HashProvider> {
     fn lookup_type(&self, hash: BinHash) -> Option<Cow<'_, str>> {
         self.as_ref().lookup_type(hash)
     }
+
+    fn lookup_wad(&self, hash: WadHash) -> Option<Cow<'_, str>> {
+        self.as_ref().lookup_wad(hash)
+    }
 }
 
 #[cfg(test)]
@@ -240,6 +263,7 @@ mod tests {
         assert_eq!(provider.lookup_field(0x12345678.into()), None);
         assert_eq!(provider.lookup_hash(0x12345678.into()), None);
         assert_eq!(provider.lookup_type(0x12345678.into()), None);
+        assert_eq!(provider.lookup_wad(0x12345678.into()), None);
     }
 
     #[test]
@@ -249,6 +273,7 @@ mod tests {
         provider.insert_field(0xdeadbeef, "skinName");
         provider.insert_hash(0xcafebabe, "some/path");
         provider.insert_type(0xfeedface, "SkinData");
+        provider.insert_wad(0xfeedface, "SkinDataWad");
 
         assert_eq!(
             provider.lookup_entry(0x12345678.into()),
@@ -265,6 +290,10 @@ mod tests {
         assert_eq!(
             provider.lookup_type(0xfeedface.into()),
             Some("SkinData".into())
+        );
+        assert_eq!(
+            provider.lookup_wad(0xfeedface.into()),
+            Some("SkinDataWad".into())
         );
 
         // Unknown hashes return None
