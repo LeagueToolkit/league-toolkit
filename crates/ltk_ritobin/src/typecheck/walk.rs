@@ -1,22 +1,16 @@
 use ltk_meta::{property::values, traits::PropertyExt, PropertyKind, PropertyValueEnum};
 
 use crate::{
-    cst::{
-        self,
-        visitor::{Visit, VisitCtx},
-        Kind, NodeId, Visitor,
+    PropertyValueExt as _, RitoType, cst::{
+        self, Kind, NodeId, Visitor, visitor::{Visit, VisitCtx},
+    }, parse::Span, typecheck::{
+        diagnostics::{self, RitoTypeOrVirtual}, ir::{IrEntry, IrItem, IrListItem}, resolve::CoerceFrom,
     },
-    parse::Span,
-    typecheck::{
-        diagnostics::{self, RitoTypeOrVirtual},
-        ir::{IrEntry, IrItem, IrListItem},
-    },
-    PropertyValueExt as _, RitoType,
 };
 
 use super::{
     listlikes::try_populate_listlike,
-    resolve::{coerce_type, resolve_entry, resolve_value},
+    resolve::{resolve_entry, resolve_value},
     state::{RootEntry, RootKindOrUnknown, TypeChecker},
     trace::trace,
 };
@@ -112,7 +106,7 @@ impl<'a> TypeChecker<'a> {
                 match child {
                     IrItem::ListItem(IrListItem(mut value)) => {
                         if value.kind() != list.item_kind() {
-                            value = coerce_type(value.clone(), list.item_kind()).unwrap_or(value);
+                            value = list.item_kind().coerce_from(value.clone()).unwrap_or(value);
                         }
 
                         let span = *value.meta();
@@ -136,7 +130,7 @@ impl<'a> TypeChecker<'a> {
                 };
 
                 let (key_span, key_type) = (*key.meta(), key.rito_type());
-                let Some(PropertyValueEnum::Hash(key)) = coerce_type(key, PropertyKind::Hash)
+                let Some(PropertyValueEnum::Hash(key)) = PropertyKind::Hash.coerce_from(key)
                 else {
                     self.report_bad_entry_key(key_span, key_type, PropertyKind::Hash, None);
                     return parent;
@@ -155,7 +149,7 @@ impl<'a> TypeChecker<'a> {
                 let span = *value.meta();
                 let key_kind = map_value.key_kind();
                 let (key_span, key_type) = (*key.meta(), key.rito_type());
-                let Some(key) = coerce_type(key, key_kind) else {
+                let Some(key) = key_kind.coerce_from(key) else {
                     self.report_bad_entry_key(key_span, key_type, key_kind, expected_span);
                     return parent;
                 };
@@ -170,18 +164,20 @@ impl<'a> TypeChecker<'a> {
                         return parent;
                     }
                 };
-                if child.kind() != option.item_kind() {
+                let child_span = *child.meta();
+                let child_type = child.rito_type();
+                let Some(child) = option.item_kind().coerce_from(child) else {
                     self.ctx.diagnostics.push(
                         TypeMismatch {
-                            span: *child.meta(),
+                            span: child_span,
                             expected: RitoType::simple(option.item_kind()),
                             expected_span,
-                            got: child.rito_type().into(),
+                            got: child_type.into(),
                         }
                         .unwrap(),
                     );
                     return parent;
-                }
+                };
 
                 *option = values::Optional::new_with_meta(
                     option.item_kind(),

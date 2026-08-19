@@ -3,13 +3,10 @@ use ltk_meta::{
 };
 
 use crate::{
-    parse::Span,
-    typecheck::diagnostics::{self, RootKind},
-    RitoType,
+    RitoType, parse::Span, typecheck::{diagnostics::{self, RootKind}, resolve::CoerceFrom},
 };
 
 use super::{
-    resolve::coerce_type,
     state::{RootEntry, RootKindOrUnknown, TypeChecker},
 };
 
@@ -80,7 +77,7 @@ impl<'a> TypeChecker<'a> {
                     .filter_map(|value| {
                         let span = *value.meta();
                         let PropertyValueEnum::String(dependency) =
-                            coerce_type(value, PropertyKind::String)?
+                            PropertyKind::String.coerce_from(value)?
                         else {
                             self.ctx.diagnostics.push(
                                 UnexpectedContainerItem {
@@ -129,7 +126,7 @@ impl<'a> TypeChecker<'a> {
                     .into_iter()
                     .filter_map(|(key, value)| {
                         let PropertyValueEnum::Hash(path_hash) =
-                            coerce_type(key, PropertyKind::Hash)?
+                            PropertyKind::Hash.coerce_from(key)?
                         else {
                             return None;
                         };
