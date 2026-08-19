@@ -11,7 +11,7 @@ pub mod state;
 
 mod collect;
 mod listlikes;
-mod resolve;
+pub mod resolve;
 mod trace;
 mod walk;
 

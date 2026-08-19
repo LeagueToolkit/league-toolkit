@@ -136,7 +136,7 @@ impl<'a> TypeChecker<'a> {
     }
 }
 
-pub(crate) struct Ctx<'a> {
-    pub(crate) text: &'a str,
-    pub(crate) diagnostics: Vec<DiagnosticWithSpan>,
+pub struct Ctx<'a> {
+    pub text: &'a str,
+    pub diagnostics: Vec<DiagnosticWithSpan>,
 }

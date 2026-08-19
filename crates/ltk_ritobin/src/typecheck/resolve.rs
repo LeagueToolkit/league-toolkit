@@ -131,7 +131,7 @@ impl CoerceFrom for PropertyKind {
     }
 }
 
-fn resolve_rito_type(
+pub fn resolve_rito_type(
     ctx: &mut Ctx<'_>,
     visit_ctx: &VisitCtx,
     tree: &Node,
