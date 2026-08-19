@@ -145,6 +145,7 @@ impl HashMapProvider {
         let _ = self.load_fields(dir.join("hashes.binfields.txt"));
         let _ = self.load_hashes(dir.join("hashes.binhashes.txt"));
         let _ = self.load_types(dir.join("hashes.bintypes.txt"));
+        let _ = self.load_wads(dir.join("hashes.game.txt"));
 
         self
     }
