@@ -570,7 +570,7 @@ pub(crate) fn resolve_entry(
     // }
     if let Some(parent) = parent_value_kind.as_ref() {
         if let Some((kind, kind_span)) = kind.as_ref().zip(kind_span) {
-            if parent != kind {
+            if !parent.can_coerce(*kind) {
                 ctx.diagnostics.push(
                     TypeMismatch {
                         span: kind_span,
