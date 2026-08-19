@@ -3,17 +3,20 @@ pub use builder::Builder;
 
 mod object;
 use ltk_hash::BinHash;
+use ltk_primitives::PrefixString;
 pub use object::{BinObject, Builder as ObjectBuilder};
 
 mod read;
 mod write;
+
+pub use write::*;
 
 #[cfg(test)]
 mod tests;
 
 use indexmap::IndexMap;
 
-use crate::property::NoMeta;
+use crate::{header::PropHeader, property::NoMeta};
 
 /// The complete contents of a League of Legends property bin file.
 ///
@@ -56,7 +59,7 @@ pub struct Bin<M = NoMeta> {
     ///
     /// Property bins can depend on other property bins in a similar fashion
     /// to importing code libraries.
-    pub dependencies: Vec<String>,
+    pub dependencies: Vec<PrefixString<u16>>,
 
     /// Data overrides (currently not fully implemented).
     data_overrides: Vec<()>,
@@ -91,10 +94,10 @@ impl<M> Bin<M> {
     /// ```
     pub fn new(
         objects: impl IntoIterator<Item = BinObject<M>>,
-        dependencies: impl IntoIterator<Item = impl Into<String>>,
+        dependencies: impl IntoIterator<Item = impl Into<PrefixString<u16>>>,
     ) -> Self {
         Self {
-            version: 3,
+            version: PropHeader::LATEST_VERSION,
             is_override: false,
             objects: objects
                 .into_iter()
@@ -168,7 +171,7 @@ impl<M> Bin<M> {
     }
 
     /// Adds a dependency to the tree.
-    pub fn add_dependency(&mut self, dependency: impl Into<String>) {
+    pub fn add_dependency(&mut self, dependency: impl Into<PrefixString<u16>>) {
         self.dependencies.push(dependency.into());
     }
 

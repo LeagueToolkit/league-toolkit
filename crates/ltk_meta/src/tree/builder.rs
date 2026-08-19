@@ -1,3 +1,5 @@
+use ltk_primitives::PrefixString;
+
 use super::BinObject;
 use crate::Bin;
 
@@ -19,7 +21,7 @@ use crate::Bin;
 pub struct Builder<M> {
     is_override: bool,
     objects: Vec<BinObject<M>>,
-    dependencies: Vec<String>,
+    dependencies: Vec<PrefixString<u16>>,
 }
 
 impl<M> Builder<M> {
@@ -40,13 +42,16 @@ impl<M> Builder<M> {
     }
 
     /// Adds a single dependency.
-    pub fn dependency(mut self, dep: impl Into<String>) -> Self {
+    pub fn dependency(mut self, dep: impl Into<PrefixString<u16>>) -> Self {
         self.dependencies.push(dep.into());
         self
     }
 
     /// Adds multiple dependencies.
-    pub fn dependencies(mut self, deps: impl IntoIterator<Item = impl Into<String>>) -> Self {
+    pub fn dependencies(
+        mut self,
+        deps: impl IntoIterator<Item = impl Into<PrefixString<u16>>>,
+    ) -> Self {
         self.dependencies.extend(deps.into_iter().map(Into::into));
         self
     }

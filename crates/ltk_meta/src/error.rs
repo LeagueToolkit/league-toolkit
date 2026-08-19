@@ -1,5 +1,7 @@
 use miette::Diagnostic;
 
+use crate::header::ReadHeaderError;
+
 use super::property::Kind;
 
 #[derive(Debug, thiserror::Error, Diagnostic)]
@@ -14,6 +16,9 @@ pub enum Error {
     InvalidPropertyTypePrimitive(#[from] num_enum::TryFromPrimitiveError<Kind>),
     #[error("Invalid size - expected {0}, got {1} bytes")]
     InvalidSize(u64, u64),
+
+    #[error("Error reading header - {0}")]
+    ReadHeaderError(#[from] ReadHeaderError),
 
     #[error("Container type {0:?} cannot be nested!")]
     InvalidNesting(Kind),
