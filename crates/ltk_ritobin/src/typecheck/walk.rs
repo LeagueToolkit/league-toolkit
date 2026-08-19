@@ -1,11 +1,18 @@
 use ltk_meta::{property::values, traits::PropertyExt, PropertyKind, PropertyValueEnum};
 
 use crate::{
-    PropertyValueExt as _, RitoType, cst::{
-        self, Kind, NodeId, Visitor, visitor::{Visit, VisitCtx},
-    }, parse::Span, typecheck::{
-        diagnostics::{self, RitoTypeOrVirtual}, ir::{IrEntry, IrItem, IrListItem}, resolve::CoerceFrom,
+    cst::{
+        self,
+        visitor::{Visit, VisitCtx},
+        Kind, NodeId, Visitor,
     },
+    parse::Span,
+    typecheck::{
+        diagnostics::{self, RitoTypeOrVirtual},
+        ir::{IrEntry, IrItem, IrListItem},
+        resolve::CoerceFrom,
+    },
+    PropertyValueExt as _, RitoType,
 };
 
 use super::{
@@ -130,8 +137,7 @@ impl<'a> TypeChecker<'a> {
                 };
 
                 let (key_span, key_type) = (*key.meta(), key.rito_type());
-                let Some(PropertyValueEnum::Hash(key)) = PropertyKind::Hash.coerce_from(key)
-                else {
+                let Some(PropertyValueEnum::Hash(key)) = PropertyKind::Hash.coerce_from(key) else {
                     self.report_bad_entry_key(key_span, key_type, PropertyKind::Hash, None);
                     return parent;
                 };

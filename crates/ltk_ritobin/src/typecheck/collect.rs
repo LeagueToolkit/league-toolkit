@@ -3,12 +3,15 @@ use ltk_meta::{
 };
 
 use crate::{
-    RitoType, parse::Span, typecheck::{diagnostics::{self, RootKind}, resolve::CoerceFrom},
+    parse::Span,
+    typecheck::{
+        diagnostics::{self, RootKind},
+        resolve::CoerceFrom,
+    },
+    RitoType,
 };
 
-use super::{
-    state::{RootEntry, RootKindOrUnknown, TypeChecker},
-};
+use super::state::{RootEntry, RootKindOrUnknown, TypeChecker};
 
 use diagnostics::Diagnostic::*;
 

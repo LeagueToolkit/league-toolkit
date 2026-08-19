@@ -69,7 +69,9 @@ impl CanCoerce for RitoType {
             return false;
         }
         for i in 0..1 {
-            if (self.subtypes[i].zip(from.subtypes[i])).is_some_and(|(to, from)| !to.can_coerce(from)) {
+            if (self.subtypes[i].zip(from.subtypes[i]))
+                .is_some_and(|(to, from)| !to.can_coerce(from))
+            {
                 return false;
             }
         }
