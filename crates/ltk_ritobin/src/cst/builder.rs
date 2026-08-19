@@ -3,7 +3,7 @@ use std::{
     iter::once,
 };
 
-use ltk_hash::BinHash;
+use ltk_hash::{BinHash, WadHash};
 use ltk_meta::{property::values, Bin, BinObject, PropertyKind, PropertyValueEnum};
 
 use crate::{
@@ -169,6 +169,12 @@ impl<H: HashProvider> Builder<H> {
             None => self.spanned_hexlit(h),
         }
     }
+    fn hash_wad_lit(&mut self, h: WadHash) -> Child {
+        match self.hashes.lookup_wad(h).map(|h| format!("\"{h}\"")) {
+            Some(h) => self.spanned_token(Tok::String, h),
+            None => self.spanned_hexlit(h),
+        }
+    }
 
     fn block(&mut self, children: Vec<Child>) -> Child {
         let lcurly = self.token(Tok::LCurly);
@@ -276,7 +282,7 @@ impl<H: HashProvider> Builder<H> {
 
             // hash/hash-likes
             PropertyValueEnum::Hash(h) => self.hash_hash_lit(**h),
-            PropertyValueEnum::WadChunkLink(h) => self.spanned_hexlit(**h),
+            PropertyValueEnum::WadChunkLink(h) => self.hash_wad_lit(**h),
             PropertyValueEnum::ObjectLink(h) => self.hash_hash_lit(**h),
 
             PropertyValueEnum::Container(container)
