@@ -1,0 +1,22 @@
+[package]
+name = "ltk_lua"
+version = "0.1.0"
+edition = "2021"
+description = "Lua script utilities"
+license = "MIT OR Apache-2.0"
+readme = "../../README.md"
+
+[lints]
+workspace = true
+
+[features]
+serde = ["dep:serde"]
+
+[dependencies]
+thiserror = { workspace = true }
+byteorder = { workspace = true }
+ltk_io_ext = { version = "0.4.4", path = "../ltk_io_ext" }
+num_enum = { workspace = true }
+xxhash-rust = { workspace = true }
+
+serde = { workspace = true, optional = true }

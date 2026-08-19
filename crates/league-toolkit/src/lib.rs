@@ -24,3 +24,6 @@ pub use ltk_hash as hash;
 
 #[cfg(feature = "rst")]
 pub use ltk_rst as rst;
+
+#[cfg(feature = "lua")]
+pub use ltk_lua as lua;

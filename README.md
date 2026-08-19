@@ -132,6 +132,7 @@ let tree = BinTree::builder()
 | [`ltk_meta`](https://crates.io/crates/ltk_meta) | Property bin files | `.bin` |
 | [`ltk_ritobin`](https://crates.io/crates/ltk_ritobin) | Human-readable bin format | ritobin text |
 | [`ltk_mapgeo`](https://crates.io/crates/ltk_mapgeo) | Map environment geometry | `.mapgeo` |
+| [`ltk_lua`](https://crates.io/crates/ltk_lua) | Lua utilities and tooling | `all_lua_files.manifest` |
 | [`ltk_file`](https://crates.io/crates/ltk_file) | File type detection | — |
 | [`ltk_hash`](https://crates.io/crates/ltk_hash) | Hash functions (FNV-1a, ELF) | — |
 | [`ltk_shader`](https://crates.io/crates/ltk_shader) | Shader path utilities | — |
@@ -224,6 +225,7 @@ league-toolkit/
 │   ├── ltk_meta/          # Property bins
 │   ├── ltk_ritobin/       # Ritobin text format
 │   ├── ltk_mapgeo/        # Map geometry
+│   ├── ltk_lua/           # Lua utilities and tooling
 │   ├── ltk_file/          # File detection
 │   ├── ltk_hash/          # Hashing
 │   ├── ltk_shader/        # Shader utilities
