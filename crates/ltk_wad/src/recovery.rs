@@ -23,16 +23,17 @@
 //! # Example
 //!
 //! ```no_run
+//! use std::collections::HashMap;
 //! use std::fs::File;
-//! use ltk_wad::{HashMapPathResolver, NameRecovery, Wad, WadExtractor};
+//! use ltk_wad::{NameRecovery, Wad, WadExtractor};
 //!
 //! let mut wad = Wad::mount(File::open("archive.wad.client")?)?;
-//! let resolver = HashMapPathResolver::default();
+//! let names: HashMap<u64, String> = HashMap::new();
 //!
-//! let recovered = NameRecovery::new().run(&mut wad, &resolver)?;
+//! let recovered = NameRecovery::new().run(&mut wad, &names)?;
 //! println!("{} names from {} bins", recovered.len(), recovered.bins_scanned);
 //!
-//! let layered = recovered.over(&resolver);
+//! let layered = recovered.over(&names);
 //! WadExtractor::new(&layered).extract_all(&mut wad, "/output/path")?;
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
@@ -40,6 +41,7 @@
 use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
+    fmt,
     io::{Read, Seek},
     num::NonZeroUsize,
     sync::{
@@ -53,7 +55,7 @@ use ltk_file::LeagueFileKind;
 use xxhash_rust::xxh64::xxh64;
 
 use crate::{
-    extractor::{default_workers, lock},
+    extractor::{default_workers, hex_name, lock},
     ChunkDecoder, PathResolver, Wad, WadChunk, WadError,
 };
 
@@ -86,6 +88,9 @@ pub fn hash_wad_path(path: &str) -> u64 {
 }
 
 /// Names recovered from the `.bin` files of one archive.
+///
+/// It is a [`PathResolver`] over the names it holds, and
+/// [`over`](Self::over) layers it on top of another resolver.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct RecoveredNames {
@@ -114,7 +119,7 @@ impl RecoveredNames {
     }
 
     /// A resolver that answers with a recovered name first and asks `fallback` for the rest.
-    pub fn over<'a, R: PathResolver>(&'a self, fallback: &'a R) -> LayeredResolver<'a, R> {
+    pub fn over<'a>(&'a self, fallback: &'a dyn PathResolver) -> LayeredResolver<'a> {
         LayeredResolver {
             names: self,
             fallback,
@@ -122,25 +127,42 @@ impl RecoveredNames {
     }
 }
 
+impl PathResolver for RecoveredNames {
+    fn resolve(&self, path_hash: u64) -> Option<Cow<'_, str>> {
+        self.get(path_hash).map(Cow::Borrowed)
+    }
+
+    fn is_known(&self, path_hash: u64) -> bool {
+        self.names.contains_key(&path_hash)
+    }
+}
+
 /// Recovered names over another resolver.
 ///
 /// Built by [`RecoveredNames::over`].
-#[derive(Debug)]
-pub struct LayeredResolver<'a, R: PathResolver> {
+pub struct LayeredResolver<'a> {
     names: &'a RecoveredNames,
-    fallback: &'a R,
+    fallback: &'a dyn PathResolver,
 }
 
-impl<R: PathResolver> PathResolver for LayeredResolver<'_, R> {
-    fn resolve(&self, path_hash: u64) -> Cow<'_, str> {
+impl fmt::Debug for LayeredResolver<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LayeredResolver")
+            .field("names", &self.names)
+            .finish_non_exhaustive()
+    }
+}
+
+impl PathResolver for LayeredResolver<'_> {
+    fn resolve(&self, path_hash: u64) -> Option<Cow<'_, str>> {
         match self.names.get(path_hash) {
-            Some(name) => Cow::Borrowed(name),
+            Some(name) => Some(Cow::Borrowed(name)),
             None => self.fallback.resolve(path_hash),
         }
     }
 
     fn is_known(&self, path_hash: u64) -> bool {
-        self.names.names.contains_key(&path_hash) || self.fallback.is_known(path_hash)
+        self.names.is_known(path_hash) || self.fallback.is_known(path_hash)
     }
 }
 
@@ -177,9 +199,10 @@ impl<'a> NameRecovery<'a> {
     ///
     /// # Errors
     ///
-    /// Fails when the archive cannot be read. A bin that does not decompress
-    /// is skipped, because one bad bin is no reason to lose the names in the rest.
-    pub fn run<S: Read + Seek, R: PathResolver>(
+    /// Fails when the archive cannot be read, with a [`WadError::Chunk`] that
+    /// names the bin. A bin that does not decompress is skipped, because one
+    /// bad bin is no reason to lose the names in the rest.
+    pub fn run<S: Read + Seek, R: PathResolver + ?Sized>(
         &self,
         wad: &mut Wad<S>,
         resolver: &R,
@@ -187,14 +210,17 @@ impl<'a> NameRecovery<'a> {
         let chunks: Vec<WadChunk> = wad.chunks().iter().copied().collect();
 
         let mut unknown = HashSet::new();
-        let mut bins = Vec::new();
+        let mut bins: Vec<(WadChunk, String)> = Vec::new();
         for chunk in &chunks {
-            if resolver.is_known(chunk.path_hash) {
-                if is_bin_name(resolver.resolve(chunk.path_hash).as_ref()) {
-                    bins.push(*chunk);
+            match resolver.resolve(chunk.path_hash) {
+                Some(path) => {
+                    if is_bin_name(&path) {
+                        bins.push((*chunk, path.into_owned()));
+                    }
                 }
-            } else {
-                unknown.insert(chunk.path_hash);
+                None => {
+                    unknown.insert(chunk.path_hash);
+                }
             }
         }
 
@@ -213,7 +239,7 @@ impl<'a> NameRecovery<'a> {
             }
             recovered.chunks_sniffed += 1;
             if sniff_is_bin(wad, chunk, &mut decoder) {
-                bins.push(*chunk);
+                bins.push((*chunk, hex_name(chunk.path_hash)));
             }
         }
         if bins.is_empty() {
@@ -235,11 +261,13 @@ impl<'a> NameRecovery<'a> {
             let sender = sender.take().expect("the sender is taken once");
 
             let mut scanned = 0;
-            for chunk in &bins {
+            for (chunk, path) in &bins {
                 if self.cancelled() || lock(&found).len() == unknown.len() {
                     break;
                 }
-                let raw = wad.load_chunk_raw(chunk)?;
+                let raw = wad
+                    .load_chunk_raw(chunk)
+                    .map_err(|error| WadError::chunk(chunk.path_hash, path, error))?;
                 scanned += 1;
                 if sender.send((*chunk, raw)).is_err() {
                     break;
@@ -374,10 +402,7 @@ mod tests {
     use camino::Utf8Path;
 
     use super::*;
-    use crate::{
-        ExtractLayout, HashMapPathResolver, HexPathResolver, WadBuilder, WadChunkBuilder,
-        WadExtractor,
-    };
+    use crate::{ExtractLayout, NoResolver, WadBuilder, WadChunkBuilder, WadExtractor};
 
     fn collect_candidates(data: &[u8]) -> Vec<String> {
         let mut out = Vec::new();
@@ -385,6 +410,14 @@ mod tests {
             out.push(String::from_utf8_lossy(candidate).into_owned());
         });
         out
+    }
+
+    /// A resolver that names the given paths, by their WAD hashes.
+    fn names(paths: &[&str]) -> HashMap<u64, String> {
+        paths
+            .iter()
+            .map(|path| (hash_wad_path(path), (*path).to_owned()))
+            .collect()
     }
 
     /// A string as a bin writes it: a little-endian `u16` length and the bytes.
@@ -461,9 +494,7 @@ mod tests {
             ("data/test.bin", bin_with(&["assets/a.dds"])),
             ("assets/a.dds", vec![0xab; 16]),
         ]);
-        let mut resolver = HashMapPathResolver::default();
-        resolver.insert(hash_wad_path("data/test.bin"), "data/test.bin".into());
-        resolver.insert(hash_wad_path("assets/a.dds"), "assets/a.dds".into());
+        let resolver = names(&["data/test.bin", "assets/a.dds"]);
 
         let recovered = NameRecovery::new().run(&mut wad, &resolver).unwrap();
 
@@ -477,8 +508,7 @@ mod tests {
             ("data/test.bin", bin_with(&[asset])),
             (asset, vec![0xab; 32]),
         ]);
-        let mut resolver = HashMapPathResolver::default();
-        resolver.insert(hash_wad_path("data/test.bin"), "data/test.bin".into());
+        let resolver = names(&["data/test.bin"]);
 
         let recovered = NameRecovery::new().run(&mut wad, &resolver).unwrap();
 
@@ -500,7 +530,7 @@ mod tests {
             (asset, vec![0xee; 16]),
         ]);
 
-        let recovered = NameRecovery::new().run(&mut wad, &HexPathResolver).unwrap();
+        let recovered = NameRecovery::new().run(&mut wad, &NoResolver).unwrap();
 
         assert_eq!(recovered.get(hash_wad_path(asset)), Some(asset));
         assert_eq!(recovered.chunks_sniffed, 2);
@@ -517,7 +547,7 @@ mod tests {
 
         let recovered = NameRecovery::new()
             .with_cancel_flag(&flag)
-            .run(&mut wad, &HexPathResolver)
+            .run(&mut wad, &NoResolver)
             .unwrap();
 
         assert!(recovered.is_empty());
@@ -528,14 +558,20 @@ mod tests {
     fn the_layered_resolver_reads_recovered_names_first() {
         let mut recovered = RecoveredNames::default();
         recovered.names.insert(0x1234, "assets/found.dds".into());
-        let mut fallback = HashMapPathResolver::default();
+        let mut fallback: HashMap<u64, String> = HashMap::new();
         fallback.insert(0x5678, "assets/known.dds".into());
+
+        assert_eq!(
+            recovered.resolve(0x1234).as_deref(),
+            Some("assets/found.dds")
+        );
+        assert_eq!(recovered.resolve(0x5678), None);
 
         let layered = recovered.over(&fallback);
 
-        assert_eq!(layered.resolve(0x1234), "assets/found.dds");
-        assert_eq!(layered.resolve(0x5678), "assets/known.dds");
-        assert_eq!(layered.resolve(0x9abc), "0000000000009abc");
+        assert_eq!(layered.resolve(0x1234).as_deref(), Some("assets/found.dds"));
+        assert_eq!(layered.resolve(0x5678).as_deref(), Some("assets/known.dds"));
+        assert_eq!(layered.resolve(0x9abc), None);
         assert!(layered.is_known(0x1234));
         assert!(layered.is_known(0x5678));
         assert!(!layered.is_known(0x9abc));
@@ -551,8 +587,7 @@ mod tests {
             ("data/test.bin", bin_with(&[asset])),
             (asset, vec![0xab; 32]),
         ]);
-        let mut resolver = HashMapPathResolver::default();
-        resolver.insert(hash_wad_path("data/test.bin"), "data/test.bin".into());
+        let resolver = names(&["data/test.bin"]);
 
         let report = WadExtractor::new(&resolver)
             .with_name_recovery()
@@ -561,7 +596,8 @@ mod tests {
             .unwrap();
 
         assert_eq!(report.extracted, 2);
-        assert_eq!(report.recovered_names.len(), 1);
+        assert_eq!(report.recovered.len(), 1);
+        assert_eq!(report.recovered.bins_scanned, 1);
         assert!(temp_dir.path().join(asset).exists());
         assert!(temp_dir.path().join("data/test.bin").exists());
     }

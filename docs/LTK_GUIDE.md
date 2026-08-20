@@ -64,24 +64,28 @@ if let Some(chunk) = chunks.get(&0x1234567890abcdef) {
 
 **Example: Extracting with Progress**
 ```rust
-use ltk_wad::{Wad, WadExtractor, HashMapPathResolver};
+use std::collections::HashMap;
+use ltk_wad::{Wad, WadExtractor};
 
 let mut wad = Wad::mount(File::open("archive.wad.client")?)?;
-let resolver = HashMapPathResolver::new(load_hashtable()?);
+// A `HashMap<u64, String>` is a resolver. `NoResolver` names nothing.
+let names: HashMap<u64, String> = load_hashtable()?;
 
-let extractor = WadExtractor::new(&resolver)
-    .on_progress(|p| println!("{:.0}% - {}", p.percent() * 100.0, p.current_path()));
+let mut extractor = WadExtractor::new(&names)
+    .with_filter(|path| path.starts_with("assets/"))
+    .on_progress(|p| println!("{:.0}% - {}", p.fraction() * 100.0, p.path()));
 
 let report = extractor.extract_all(&mut wad, "./output")?;
-println!("{} chunks, {} bytes", report.extracted, report.bytes_written);
+println!("{report}");
 ```
 
-`extract_chunks` takes a slice of the archive's chunks instead of all of them.
-`with_layout(ExtractLayout::Flat)` drops the directories, and
-`with_existing_file_policy(ExistingFilePolicy::Skip)` leaves files that exist.
-`with_name_recovery()` reads the archive's `.bin` files for the names of chunks the
-hash table lacks, before anything is written. `NameRecovery` runs the same scan on
-its own.
+`extract_chunks` takes path hashes instead of every chunk, and lists the hashes
+the archive lacks under `report.missing`. `with_layout(ExtractLayout::Flat)`
+drops the directories, and `with_existing_file_policy(ExistingFilePolicy::Skip)`
+leaves files that exist. `with_name_recovery()` reads the archive's `.bin` files
+for the names of chunks the hash table lacks, before anything is written.
+`NameRecovery` runs the same scan on its own. A failure names its chunk through
+`WadError::Chunk`.
 
 **Compression Types**:
 - `None` - Uncompressed
@@ -652,7 +656,7 @@ use glam::{Vec2, Vec3, Vec4, Mat4, Quat};
 
 ```rust
 use std::fs::File;
-use ltk_wad::{Wad, WadExtractor, HashMapPathResolver};
+use ltk_wad::{Wad, WadExtractor};
 use ltk_file::LeagueFileKind;
 use ltk_texture::Texture;
 use ltk_mesh::SkinnedMesh;
