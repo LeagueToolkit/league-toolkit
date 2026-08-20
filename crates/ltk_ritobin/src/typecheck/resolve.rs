@@ -358,7 +358,7 @@ fn resolve_literal(
 /// # Errors
 /// If the value cannot be read as `kind_hint` - a literal of the wrong type, a number that does
 /// not fit, or an ambiguous literal with no hint to resolve it against.
-pub(crate) fn resolve_value(
+pub fn resolve_value(
     ctx: &mut Ctx,
     visit_ctx: &VisitCtx,
     tree: &Node,
