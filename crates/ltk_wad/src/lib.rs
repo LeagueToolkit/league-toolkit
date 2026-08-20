@@ -32,8 +32,8 @@
 //! let extractor = WadExtractor::new(&HexPathResolver)
 //!     .on_progress(|p| println!("{:.0}%", p.percent() * 100.0));
 //!
-//! let count = extractor.extract_all(&mut wad, "/output/path")?;
-//! println!("Extracted {count} chunks");
+//! let report = extractor.extract_all(&mut wad, "/output/path")?;
+//! println!("Extracted {} chunks ({} bytes)", report.extracted, report.bytes_written);
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!

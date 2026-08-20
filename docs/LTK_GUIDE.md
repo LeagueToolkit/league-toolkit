@@ -72,9 +72,13 @@ let resolver = HashMapPathResolver::new(load_hashtable()?);
 let extractor = WadExtractor::new(&resolver)
     .on_progress(|p| println!("{:.0}% - {}", p.percent() * 100.0, p.current_path()));
 
-let (mut decoder, chunks) = wad.decode();
-extractor.extract_all(&mut decoder, chunks, "./output")?;
+let report = extractor.extract_all(&mut wad, "./output")?;
+println!("{} chunks, {} bytes", report.extracted, report.bytes_written);
 ```
+
+`extract_chunks` takes a slice of the archive's chunks instead of all of them.
+`with_layout(ExtractLayout::Flat)` drops the directories, and
+`with_existing_file_policy(ExistingFilePolicy::Skip)` leaves files that exist.
 
 **Compression Types**:
 - `None` - Uncompressed
