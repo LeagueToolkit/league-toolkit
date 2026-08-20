@@ -78,6 +78,10 @@
 //! - A name the file system refuses as too long falls back to `<hash>.<ext>` in
 //!   the output directory itself.
 //!
+//! A chunk no resolver names can still get its name from the archive itself.
+//! [`WadExtractor::with_name_recovery`] reads the `.bin` files for it first.
+//! Read [`NameRecovery`] for how.
+//!
 //! # Parallelism
 //!
 //! [`extract_all`](WadExtractor::extract_all) and
@@ -104,7 +108,7 @@ use std::{
 use camino::{Utf8Path, Utf8PathBuf};
 use ltk_file::LeagueFileKind;
 
-use crate::{decompress_raw, Wad, WadChunk, WadError};
+use crate::{ChunkDecoder, NameRecovery, RecoveredNames, Wad, WadChunk, WadError};
 
 /// A trait for resolving path hashes to human-readable paths.
 ///
@@ -115,6 +119,15 @@ pub trait PathResolver {
     /// If the hash cannot be resolved, implementations should return the hash
     /// formatted as a hex string (e.g., `format!("{:016x}", path_hash)`).
     fn resolve(&self, path_hash: u64) -> Cow<'_, str>;
+
+    /// Whether the resolver names this hash, rather than falling back to the hex string.
+    ///
+    /// The default reads [`resolve`](Self::resolve) and reports a name that is
+    /// not sixteen hex digits. A resolver that can answer without building the
+    /// string should override it.
+    fn is_known(&self, path_hash: u64) -> bool {
+        !is_hex_chunk_path(Utf8Path::new(self.resolve(path_hash).as_ref()))
+    }
 }
 
 /// A trait for filtering chunks by path pattern.
@@ -134,6 +147,10 @@ pub struct HexPathResolver;
 impl PathResolver for HexPathResolver {
     fn resolve(&self, path_hash: u64) -> Cow<'_, str> {
         Cow::Owned(format!("{:016x}", path_hash))
+    }
+
+    fn is_known(&self, _path_hash: u64) -> bool {
+        false
     }
 }
 
@@ -171,6 +188,10 @@ impl PathResolver for HashMapPathResolver {
             .get(&path_hash)
             .map(|s| Cow::Borrowed(s.as_str()))
             .unwrap_or_else(|| Cow::Owned(format!("{:016x}", path_hash)))
+    }
+
+    fn is_known(&self, path_hash: u64) -> bool {
+        self.paths.contains_key(&path_hash)
     }
 }
 
@@ -268,6 +289,9 @@ pub struct ExtractReport {
     pub by_kind: BTreeMap<LeagueFileKind, usize>,
     /// The cancel flag was set, so some chunks were never read.
     pub cancelled: bool,
+    /// Names that [`with_name_recovery`](WadExtractor::with_name_recovery) read
+    /// out of the archive's bins, by path hash. Empty when recovery was off.
+    pub recovered_names: HashMap<u64, String>,
 }
 
 impl ExtractReport {
@@ -325,6 +349,7 @@ pub struct WadExtractor<'a, R: PathResolver, F: PathFilter = NoFilter> {
     existing: ExistingFilePolicy,
     cancel: Option<&'a AtomicBool>,
     workers: Option<NonZeroUsize>,
+    recover_names: bool,
     /* The names the flat layout has handed out, so a second chunk of one name
     can tell. Behind a mutex because the workers claim names concurrently. */
     flat_names: Mutex<HashSet<String>>,
@@ -352,6 +377,7 @@ impl<'a, R: PathResolver> WadExtractor<'a, R, NoFilter> {
             existing: ExistingFilePolicy::default(),
             cancel: None,
             workers: None,
+            recover_names: false,
             flat_names: Mutex::default(),
         }
     }
@@ -371,6 +397,7 @@ impl<'a, R: PathResolver, F: PathFilter> WadExtractor<'a, R, F> {
             existing: self.existing,
             cancel: self.cancel,
             workers: self.workers,
+            recover_names: self.recover_names,
             flat_names: self.flat_names,
         }
     }
@@ -425,6 +452,17 @@ impl<'a, R: PathResolver, F: PathFilter> WadExtractor<'a, R, F> {
         self
     }
 
+    /// Read the archive's `.bin` files for the names of chunks the resolver
+    /// cannot name, before anything is written.
+    ///
+    /// Read [`NameRecovery`] for what it costs and what it finds. The names
+    /// land in [`ExtractReport::recovered_names`], and the extraction uses the
+    /// same workers and cancel flag for the read.
+    pub fn with_name_recovery(mut self) -> Self {
+        self.recover_names = true;
+        self
+    }
+
     /// Extract every chunk of `wad` into `output_dir`.
     ///
     /// # Errors
@@ -458,6 +496,17 @@ impl<'a, R: PathResolver, F: PathFilter> WadExtractor<'a, R, F> {
         let output_dir = output_dir.as_ref();
         let workers = self.workers.map_or_else(default_workers, NonZeroUsize::get);
 
+        let recovered = if self.recover_names {
+            NameRecovery {
+                workers: self.workers,
+                cancel: self.cancel,
+            }
+            .run(wad, self.resolver)?
+        } else {
+            RecoveredNames::default()
+        };
+        let resolver = recovered.over(self.resolver);
+
         let shared = Shared {
             writer: self.writer(output_dir),
             report: Mutex::default(),
@@ -474,7 +523,7 @@ impl<'a, R: PathResolver, F: PathFilter> WadExtractor<'a, R, F> {
                 scope.spawn(|| shared.run_worker(&receiver));
             }
             let sender = sender.take().expect("the sender is taken once");
-            self.read_chunks(wad, chunks, &sender, &shared)
+            self.read_chunks(wad, chunks, &sender, &shared, &resolver)
         })?;
 
         if let Some(error) = shared
@@ -489,6 +538,7 @@ impl<'a, R: PathResolver, F: PathFilter> WadExtractor<'a, R, F> {
             .into_inner()
             .unwrap_or_else(PoisonError::into_inner);
         report.cancelled = cancelled;
+        report.recovered_names = recovered.names;
         Ok(report)
     }
 
@@ -526,6 +576,7 @@ impl<'a, R: PathResolver, F: PathFilter> WadExtractor<'a, R, F> {
         chunks: &[WadChunk],
         sender: &mpsc::SyncSender<Job>,
         shared: &Shared<'_>,
+        resolver: &impl PathResolver,
     ) -> Result<bool, WadError> {
         let total = chunks.len();
         for (index, chunk) in chunks.iter().enumerate() {
@@ -536,7 +587,7 @@ impl<'a, R: PathResolver, F: PathFilter> WadExtractor<'a, R, F> {
                 return Ok(false);
             }
 
-            let chunk_path = self.resolver.resolve(chunk.path_hash);
+            let chunk_path = resolver.resolve(chunk.path_hash);
 
             if let Some(callback) = &self.progress_callback {
                 callback(ExtractProgress {
@@ -569,11 +620,11 @@ impl<'a, R: PathResolver, F: PathFilter> WadExtractor<'a, R, F> {
     }
 }
 
-fn default_workers() -> usize {
+pub(crate) fn default_workers() -> usize {
     thread::available_parallelism().map_or(1, |count| count.get().min(DEFAULT_WORKER_CAP))
 }
 
-fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+pub(crate) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
@@ -601,6 +652,7 @@ impl Shared<'_> {
     /// After a failure the jobs are drained and dropped rather than written,
     /// so a reader blocked on a full channel gets to see the failure too.
     fn run_worker(&self, receiver: &Mutex<mpsc::Receiver<Job>>) {
+        let mut decoder = ChunkDecoder::new();
         loop {
             let Ok(job) = lock(receiver).recv() else {
                 return;
@@ -608,7 +660,7 @@ impl Shared<'_> {
             if self.failed() {
                 continue;
             }
-            match self.writer.write(&job) {
+            match self.writer.write(&job, &mut decoder) {
                 Ok(outcome) => lock(&self.report).record(outcome),
                 Err(error) => {
                     let mut failure = lock(&self.failure);
@@ -635,8 +687,8 @@ struct ChunkWriter<'s> {
 }
 
 impl ChunkWriter<'_> {
-    fn write(&self, job: &Job) -> Result<ChunkOutcome, WadError> {
-        let data = decompress_raw(
+    fn write(&self, job: &Job, decoder: &mut ChunkDecoder) -> Result<ChunkOutcome, WadError> {
+        let data = decoder.decompress(
             &job.raw,
             job.chunk.compression_type,
             job.chunk.uncompressed_size,

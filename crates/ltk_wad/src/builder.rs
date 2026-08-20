@@ -4,7 +4,7 @@ use byteorder::{WriteBytesExt, LE};
 use flate2::read::GzEncoder;
 use itertools::Itertools;
 use ltk_io_ext::measure;
-use xxhash_rust::{xxh3, xxh64};
+use xxhash_rust::xxh3;
 
 use ltk_file::LeagueFileKind;
 
@@ -265,7 +265,7 @@ impl WadChunkBuilder {
     ///
     /// If you already have the hash itself, see [`with_hash`](Self::with_hash).
     pub fn with_path(mut self, path: impl AsRef<str>) -> Self {
-        self.path = xxh64::xxh64(path.as_ref().to_lowercase().as_bytes(), 0);
+        self.path = crate::hash_wad_path(path.as_ref());
         self
     }
 
@@ -326,8 +326,8 @@ mod tests {
         let toc_sha256: [u8; 32] = Sha256::digest(toc).into();
         assert_eq!(wad.toc_sha256().unwrap(), toc_sha256);
 
-        let chunk = wad.chunks().get(xxh64::xxh64(b"test1", 0)).unwrap();
-        assert_eq!(chunk.path_hash, xxh64::xxh64(b"test1", 0));
+        let chunk = wad.chunks().get(crate::hash_wad_path("test1")).unwrap();
+        assert_eq!(chunk.path_hash, crate::hash_wad_path("test1"));
         assert_eq!(chunk.compressed_size, 17);
         assert_eq!(chunk.uncompressed_size, 100);
         assert_eq!(chunk.compression_type, WadChunkCompression::Zstd);
