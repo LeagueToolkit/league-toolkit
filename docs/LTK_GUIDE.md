@@ -79,6 +79,9 @@ println!("{} chunks, {} bytes", report.extracted, report.bytes_written);
 `extract_chunks` takes a slice of the archive's chunks instead of all of them.
 `with_layout(ExtractLayout::Flat)` drops the directories, and
 `with_existing_file_policy(ExistingFilePolicy::Skip)` leaves files that exist.
+`with_name_recovery()` reads the archive's `.bin` files for the names of chunks the
+hash table lacks, before anything is written. `NameRecovery` runs the same scan on
+its own.
 
 **Compression Types**:
 - `None` - Uncompressed

@@ -92,6 +92,7 @@ mod decoder;
 mod error;
 mod extractor;
 mod file_ext;
+mod recovery;
 
 pub use builder::*;
 pub use chunk::*;
@@ -100,6 +101,7 @@ pub use decoder::*;
 pub use error::*;
 pub use extractor::*;
 pub use file_ext::*;
+pub use recovery::*;
 
 use std::io::{BufReader, Read, Seek, SeekFrom};
 
@@ -221,6 +223,24 @@ impl<TSource: Read + Seek> Wad<TSource> {
     /// Reads the raw (compressed) bytes of a chunk from the source.
     pub fn load_chunk_raw(&mut self, chunk: &WadChunk) -> Result<Box<[u8]>, WadError> {
         let mut data = vec![0; chunk.compressed_size];
+
+        self.source
+            .seek(SeekFrom::Start(chunk.data_offset as u64))?;
+        self.source.read_exact(&mut data)?;
+
+        Ok(data.into_boxed_slice())
+    }
+
+    /// Reads at most `max_len` of the raw (compressed) bytes of a chunk, from its start.
+    ///
+    /// Enough of a gzip or zstd stream to decode its first block, which is what
+    /// [`decompress_prefix`] wants to read a chunk's first bytes without the rest.
+    pub fn load_chunk_raw_prefix(
+        &mut self,
+        chunk: &WadChunk,
+        max_len: usize,
+    ) -> Result<Box<[u8]>, WadError> {
+        let mut data = vec![0; chunk.compressed_size.min(max_len)];
 
         self.source
             .seek(SeekFrom::Start(chunk.data_offset as u64))?;
