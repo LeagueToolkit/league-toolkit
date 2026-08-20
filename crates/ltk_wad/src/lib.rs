@@ -24,16 +24,17 @@
 //!
 //! ```no_run
 //! use std::fs::File;
-//! use ltk_wad::{Wad, WadExtractor, HexPathResolver};
+//! use ltk_wad::{Wad, WadExtractor, NoResolver};
 //!
 //! let file = File::open("archive.wad.client")?;
 //! let mut wad = Wad::mount(file)?;
 //!
-//! let extractor = WadExtractor::new(&HexPathResolver)
-//!     .on_progress(|p| println!("{:.0}%", p.percent() * 100.0));
+//! // Any `HashMap<u64, String>` names the chunks. `NoResolver` names none.
+//! let mut extractor = WadExtractor::new(&NoResolver)
+//!     .on_progress(|p| println!("{:.0}%", p.fraction() * 100.0));
 //!
 //! let report = extractor.extract_all(&mut wad, "/output/path")?;
-//! println!("Extracted {} chunks ({} bytes)", report.extracted, report.bytes_written);
+//! println!("{report}");
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
@@ -145,6 +146,8 @@ pub struct Wad<TSource: Read + Seek> {
     checksum: u64,
     #[cfg_attr(feature = "serde", serde(skip))]
     source: TSource,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    decoder: ChunkDecoder,
 }
 
 impl<TSource: Read + Seek> Wad<TSource> {
@@ -208,6 +211,7 @@ impl<TSource: Read + Seek> Wad<TSource> {
             checksum,
             chunks,
             source,
+            decoder: ChunkDecoder::new(),
         })
     }
 
@@ -250,9 +254,13 @@ impl<TSource: Read + Seek> Wad<TSource> {
     }
 
     /// Reads and decompresses a chunk from the source.
+    ///
+    /// The decoder is kept between calls, so a run of chunks pays for one
+    /// zstd context and not one per chunk.
     pub fn load_chunk_decompressed(&mut self, chunk: &WadChunk) -> Result<Box<[u8]>, WadError> {
         let raw_data = self.load_chunk_raw(chunk)?;
-        decompress_raw(&raw_data, chunk.compression_type, chunk.uncompressed_size)
+        self.decoder
+            .decompress(&raw_data, chunk.compression_type, chunk.uncompressed_size)
     }
 
     /// Returns embedded checksum verbatim.

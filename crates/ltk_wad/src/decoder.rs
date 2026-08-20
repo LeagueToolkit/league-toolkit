@@ -1,4 +1,7 @@
-use std::io::{Cursor, Read};
+use std::{
+    fmt,
+    io::{Cursor, Read},
+};
 
 use super::{WadChunkCompression, WadError};
 use flate2::read::GzDecoder;
@@ -62,7 +65,6 @@ fn decompress_zstd_multi(raw_data: &[u8], uncompressed_size: usize) -> Result<Bo
 
     let zstd_magic_offset =
         memmem::find(raw_data, &ZSTD_MAGIC).ok_or(WadError::DecompressionFailure {
-            path_hash: 0,
             reason: String::from("failed to find zstd magic"),
         })?;
 
@@ -137,7 +139,6 @@ fn zstd_reader(raw_data: &[u8]) -> Result<impl Read + '_, WadError> {
 fn zstd_reader(raw_data: &[u8]) -> Result<impl Read + '_, WadError> {
     ruzstd::decoding::StreamingDecoder::new(Cursor::new(raw_data)).map_err(|error| {
         WadError::DecompressionFailure {
-            path_hash: 0,
             reason: error.to_string(),
         }
     })
@@ -162,6 +163,12 @@ pub struct ChunkDecoder {
     zstd: Option<zstd::zstd_safe::DCtx<'static>>,
 }
 
+impl fmt::Debug for ChunkDecoder {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ChunkDecoder").finish_non_exhaustive()
+    }
+}
+
 impl ChunkDecoder {
     /// A decoder with nothing built yet. The first zstd chunk builds the context.
     pub fn new() -> Self {
@@ -183,7 +190,6 @@ impl ChunkDecoder {
             WadChunkCompression::ZstdMulti => {
                 let frame_at = memmem::find(raw_data, &ZSTD_MAGIC).ok_or_else(|| {
                     WadError::DecompressionFailure {
-                        path_hash: 0,
                         reason: String::from("failed to find zstd magic"),
                     }
                 })?;
@@ -230,7 +236,6 @@ impl ChunkDecoder {
         let written = self.stream_into(&raw_data[frame_at..], &mut data[copied..])?;
         if copied + written != uncompressed_size {
             return Err(WadError::DecompressionFailure {
-                path_hash: 0,
                 reason: format!(
                     "decompressed {} bytes, expected {uncompressed_size}",
                     copied + written
@@ -290,7 +295,6 @@ impl ChunkDecoder {
 #[cfg(feature = "zstd")]
 fn zstd_error(code: zstd::zstd_safe::ErrorCode) -> WadError {
     WadError::DecompressionFailure {
-        path_hash: 0,
         reason: zstd::zstd_safe::get_error_name(code).to_owned(),
     }
 }
