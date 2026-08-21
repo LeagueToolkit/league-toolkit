@@ -4,18 +4,19 @@
 //!
 //! ```no_run
 //! use std::fs::File;
-//! use ltk_wad::Wad;
+//! use ltk_hash::Hash as _;
+//! use ltk_wad::{Wad, WadHash};
 //!
 //! let file = File::open("archive.wad.client")?;
 //! let mut wad = Wad::mount(file)?;
 //!
 //! // Iterate chunks in path-hash order
 //! for chunk in wad.chunks() {
-//!     println!("{:#016x} ({} bytes)", chunk.path_hash(), chunk.uncompressed_size());
+//!     println!("{:016x} ({} bytes)", chunk.path_hash(), chunk.uncompressed_size());
 //! }
 //!
 //! // Read and decompress a specific chunk
-//! let chunk = *wad.chunks().get(0x1234567890abcdef).unwrap();
+//! let chunk = *wad.chunks().get(WadHash::hash_str("assets/some/file.dds")).unwrap();
 //! let data = wad.load_chunk_decompressed(&chunk)?;
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
@@ -29,7 +30,7 @@
 //! let file = File::open("archive.wad.client")?;
 //! let mut wad = Wad::mount(file)?;
 //!
-//! // Any `HashMap<u64, String>` names the chunks. `NoResolver` names none.
+//! // Any `HashMap<WadHash, String>` names the chunks. `NoResolver` names none.
 //! let mut extractor = WadExtractor::new(&NoResolver)
 //!     .on_progress(|p| println!("{:.0}%", p.fraction() * 100.0));
 //!
@@ -103,6 +104,14 @@ pub use error::*;
 pub use extractor::*;
 pub use file_ext::*;
 pub use recovery::*;
+
+/// A chunk's key: the xxh64 of its lower-case path.
+///
+/// Re-exported from `ltk_hash`, where the bin tooling takes the same type
+/// for a `WadChunkLink`, so a link read out of a bin looks a chunk up as is.
+/// To hash a path, bring `ltk_hash::Hash` into scope and call
+/// `WadHash::hash_str`.
+pub use ltk_hash::WadHash;
 
 use std::io::{BufReader, Read, Seek, SeekFrom};
 

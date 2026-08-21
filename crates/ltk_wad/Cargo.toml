@@ -12,7 +12,7 @@ workspace = true
 [features]
 default = ["zstd"]
 
-serde = ["dep:serde"]
+serde = ["dep:serde", "ltk_hash/serde"]
 rust_backend = ["flate2/rust_backend", "ruzstd"]
 
 zstd = ["dep:zstd"]
@@ -37,6 +37,7 @@ serde = { workspace = true, optional = true }
 
 ltk_io_ext = { version = "0.4.4", path = "../ltk_io_ext" }
 ltk_file = { version = "0.2.10", path = "../ltk_file" }
+ltk_hash = { version = "0.4.0", path = "../ltk_hash" }
 
 camino = { workspace = true }
 

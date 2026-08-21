@@ -2,6 +2,7 @@ use std::io::{BufReader, Read};
 use std::{fmt, io};
 
 use byteorder::{ReadBytesExt as _, WriteBytesExt as _, LE};
+use ltk_hash::WadHash;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 use super::WadError;
@@ -33,7 +34,7 @@ impl fmt::Display for WadChunkCompression {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// A single wad chunk
 pub struct WadChunk {
-    pub path_hash: u64,
+    pub path_hash: WadHash,
     pub data_offset: usize,
     pub compressed_size: usize,
     pub uncompressed_size: usize,
@@ -46,7 +47,7 @@ pub struct WadChunk {
 
 impl WadChunk {
     pub fn read_v3_1<R: Read>(reader: &mut BufReader<R>) -> Result<WadChunk, WadError> {
-        let path_hash = reader.read_u64::<LE>()?;
+        let path_hash = WadHash(reader.read_u64::<LE>()?);
         let data_offset = reader.read_u32::<LE>()? as usize;
         let compressed_size = reader.read_i32::<LE>()? as usize;
         let uncompressed_size = reader.read_i32::<LE>()? as usize;
@@ -76,7 +77,7 @@ impl WadChunk {
     }
 
     pub fn read_v3_4<R: Read>(reader: &mut BufReader<R>) -> Result<WadChunk, WadError> {
-        let path_hash = reader.read_u64::<LE>()?;
+        let path_hash = WadHash(reader.read_u64::<LE>()?);
         let data_offset = reader.read_u32::<LE>()? as usize;
         let compressed_size = reader.read_u32::<LE>()? as usize;
         let uncompressed_size = reader.read_u32::<LE>()? as usize;
@@ -106,7 +107,7 @@ impl WadChunk {
     }
 
     pub fn write_v3_4<W: io::Write>(&self, writer: &mut W) -> Result<(), WadError> {
-        writer.write_u64::<LE>(self.path_hash)?;
+        writer.write_u64::<LE>(self.path_hash.0)?;
         writer.write_u32::<LE>(self.data_offset as u32)?;
         writer.write_u32::<LE>(self.compressed_size as u32)?;
         writer.write_u32::<LE>(self.uncompressed_size as u32)?;
@@ -121,7 +122,7 @@ impl WadChunk {
         Ok(())
     }
 
-    pub fn path_hash(&self) -> u64 {
+    pub fn path_hash(&self) -> WadHash {
         self.path_hash
     }
     pub fn data_offset(&self) -> usize {
