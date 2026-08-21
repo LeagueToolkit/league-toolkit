@@ -5,6 +5,49 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_ritobin-v0.5.0...ltk_ritobin-v0.6.0) - 2026-08-21
+
+### Added
+
+- *(ritobin)* look up WadChunkLinks when building CST
+- *(ritobin)* add wad hashes to HashProvider
+- *(ritobin)* actually set count in NotEnoughItems
+- *(ritobin)* error on empty listlikes w/ needed count
+- *(ritobin)* impl Index<Span> for String
+- *(ritobin)* add more typecheck tests
+- *(ritobin)* error when unexpected ListItemBlock in non block-like parent
+- *(ritobin)* [**breaking**] unnest things from typecheck::visitor module
+- *(ritobin)* bring back strict root non entry errors
+- *(ritobin)* nicer root entry related diagnostics
+
+### Fixed
+
+- *(ritobin)* account for coercion when injecting into optionals
+- *(ritobin)* get rid of diagnostic traces
+- *(ritobin)* [**breaking**] point item and type diagnostics at the right source
+- *(ritobin)* [**breaking**] report items the typechecker silently dropped
+- *(ritobin)* derive equality traits for Token/Span
+- *(ritobin)* rename vecmath -> listlikes
+- *(ritobin)* add NotEnoughItems tests for empty listlikes
+- *(ritobin)* dedupe root entry err handling
+- *(ritobin)* dedupe numeric parsing
+- *(ritobin)* misreported InvalidRootEntryType RootKind
+- *(ritobin)* panic on MissingRootEntry construction
+
+### Other
+
+- fmt
+- *(ritobin)* turn coerce_type into a CoerceFrom trait, add CanCoerce trait
+- Merge pull request #164 from LeagueToolkit/fix-163
+- clippy + fmt
+- *(ritobin)* dedupe some container push err handling
+- *(ritobin)* clean up vecmath module
+- *(ritobin)* code cleanup
+- *(ritobin)* extract debug stuff
+- *(ritobin)* more moving
+- *(ritobin)* move some things around
+- add proper root entries to some tests
+
 ## [0.5.0](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_ritobin-v0.4.0...ltk_ritobin-v0.5.0) - 2026-07-12
 
 ### Added

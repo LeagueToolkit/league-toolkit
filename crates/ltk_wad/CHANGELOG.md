@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_wad-v0.3.1...ltk_wad-v0.4.0) - 2026-08-21
+
+### Added
+
+- *(wad)* [**breaking**] reshape the extractor API
+- *(wad)* recover chunk names from the archive's bin files
+- *(wad)* [**breaking**] extract a chunk subset, with layout, skip policy and report
+
 ## [0.3.1](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_wad-v0.3.0...ltk_wad-v0.3.1) - 2026-07-12
 
 ### Added
