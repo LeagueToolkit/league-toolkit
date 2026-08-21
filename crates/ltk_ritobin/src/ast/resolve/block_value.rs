@@ -2,17 +2,17 @@ use ltk_meta::{traits::PropertyExt as _, PropertyKind, PropertyValueEnum};
 
 use crate::{
     ast::{
-        build::{BuildCtx, ChildrenExt as _},
+        build::BuildCtx,
         AstProperty, AstValue, Spanned,
     },
     cst::Kind,
     literals::CoerceFrom as _,
-    parse::{Span, TokenKind},
+    parse::Span,
     typecheck::diagnostics::{
-        Diagnostic::{self, *},
-        MaybeSpanDiag, RitoTypeOrVirtual,
+        Diagnostic::*,
+        MaybeSpanDiag,
     },
-    Node, PropertyValueExt as _, RitoType, RitobinName as _,
+    Node, PropertyValueExt as _, RitoType,
 };
 
 impl<'a> BuildCtx<'a> {

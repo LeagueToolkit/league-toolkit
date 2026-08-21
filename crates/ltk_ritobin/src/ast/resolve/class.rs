@@ -3,17 +3,15 @@ use ltk_meta::{traits::PropertyExt as _, PropertyKind, PropertyValueEnum};
 
 use crate::{
     ast::{
-        build::{BuildCtx, ChildrenExt as _},
-        AstProperty, AstStruct, AstValue, Spanned,
+        build::{BuildCtx, ChildrenExt as _}, AstStruct, AstValue, Spanned,
     },
     cst::Kind,
-    literals::{self, CoerceFrom as _},
-    parse::{Span, Token, TokenKind},
+    literals::{self},
+    parse::{Token, TokenKind},
     typecheck::diagnostics::{
-        Diagnostic::{self, *},
-        MaybeSpanDiag, RitoTypeOrVirtual,
+        Diagnostic::{self, *}, RitoTypeOrVirtual,
     },
-    Node, PropertyValueExt as _, RitoType, RitobinName as _,
+    Node, PropertyValueExt as _, RitoType,
 };
 
 impl<'a> BuildCtx<'a> {

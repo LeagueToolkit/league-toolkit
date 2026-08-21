@@ -1,20 +1,19 @@
 use indexmap::IndexMap;
-use ltk_hash::{BinHash, Hash as _};
-use ltk_meta::{property::values, traits::PropertyExt as _, PropertyKind, PropertyValueEnum};
+use ltk_hash::BinHash;
+use ltk_meta::{traits::PropertyExt as _, PropertyKind, PropertyValueEnum};
 
 use crate::{
     ast::{
-        nodes::{AstProperty, AstStruct, Ptr, Spanned},
+        nodes::{AstStruct, Ptr, Spanned},
         AstValue,
     },
     cst::{Child, Cst, Kind, Node},
-    literals::{eval, eval_unknown_hash, CanCoerce as _, CoerceFrom as _},
     parse::{Span, Token, TokenKind},
     typecheck::{
-        diagnostics::{Diagnostic, DiagnosticWithSpan, MaybeSpanDiag, RitoTypeOrVirtual, RootKind},
+        diagnostics::{Diagnostic, DiagnosticWithSpan, RootKind},
         state::RootKindOrUnknown,
     },
-    PropertyValueExt as _, RitoType, RitobinName as _,
+    RitoType,
 };
 
 use Diagnostic::*;
@@ -43,7 +42,7 @@ impl Ast {
     }
 }
 
-struct RawRootEntry {
+pub(super) struct RawRootEntry {
     key: PropertyValueEnum<Span>,
     type_span: Span,
     value: AstValue,
