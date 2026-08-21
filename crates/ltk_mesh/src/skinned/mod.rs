@@ -21,14 +21,11 @@ mod read;
 mod vertex;
 mod write;
 
-/// First four bytes of every `.skn` file, useful for sniffing one out of a WAD.
+/// Magic bytes of every `.skn` file.
 pub const SKN_MAGIC: u32 = 0x0011_2233;
 
-/// The largest vertex count the game accepts, unless
-/// [`SkinnedMeshFlags::NORMALIZED_INDICES`] is set.
-///
-/// Indices are `u16` on disk, so an absolute index cannot name a vertex past 65535. The
-/// loader rejects the file outright rather than truncating.
+/// Max number of vertices for the whole mesh.
+/// Enabling [`SkinnedMeshFlags::NORMALIZED_INDICES`] lifts the limit and makes the mesh use normalized indices per range.
 pub const MAX_VERTEX_COUNT: u32 = 0x10000;
 
 /// The 12 byte tail carried by every `major >= 2` file. Read last, after the vertex buffer.
@@ -36,22 +33,16 @@ pub const END_TAB_SIZE: usize = 12;
 
 bitflags::bitflags! {
     /// The `flags` word of the v4 `.skn` header.
-    ///
-    /// Both bits were added during patch 16. They are named after what the file *contains*,
-    /// not after what a loader should do with them - setting a bit without laying out the
-    /// buffers accordingly silently corrupts the mesh rather than enabling a feature.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub struct SkinnedMeshFlags: u32 {
-        /// Blend indices are used as-is. The game skips both indirections a blend index
-        /// normally passes through - the influence table remap applied when binding to a rig,
-        /// and the per-partition bone palette lookup - and draws the mesh as a single
-        /// skinning partition.
+        /// Blend indices are used as-is, skipping the influence table remap normally applied when binding to a rig.
+        /// Draws the mesh as a single skinning partition.
         ///
         /// A file with this bit also carries an extra `u16` length prefixed block between the
         /// header and the index buffer, see [`SkinnedMesh::direct_blend_index_block`].
         const DIRECT_BLEND_INDICES = 1;
-        /// The indices *on disk* are already normalized - relative to their range's
-        /// `start_vertex` - so the game skips the rebase it otherwise performs on load.
+
+        /// The index buffer is stored normalized, with every index relative to the `start_vertex` of the range that owns it.
         ///
         /// This also lifts [`MAX_VERTEX_COUNT`], since a normalized `u16` index is resolved as
         /// `start_vertex + index` in 32 bits. Every range must still be 65536 vertices or
@@ -251,10 +242,7 @@ impl SkinnedMesh {
     /// Whether [`SkinnedMesh::to_writer`] keeps the normalized indices as they are, rather
     /// than expanding them back to absolute ones.
     ///
-    /// This is purely an on-disk choice - the in-memory buffer is normalized either way.
-    /// Every shipped file bar one is written absolute, which is also what clients older than
-    /// 16.14 require; writing normalized is only necessary past [`MAX_VERTEX_COUNT`]
-    /// vertices, where an absolute `u16` index cannot reach.
+    /// Writing normalized is only necessary past [`MAX_VERTEX_COUNT`] vertices, where an absolute `u16` index cannot reach.
     pub fn stores_normalized_indices(&self) -> bool {
         self.flags.contains(SkinnedMeshFlags::NORMALIZED_INDICES)
     }
@@ -263,9 +251,7 @@ impl SkinnedMesh {
     /// as `u16 size` followed by `size` bytes, positioned between the header and the index
     /// buffer.
     ///
-    /// Its payload is opaque. The game allocates it, keeps it for the asset's lifetime and
-    /// frees it, but as of 16.15 nothing reads it and no shipped `.skn` sets the bit, so it
-    /// is preserved as is rather than interpreted.
+    /// Its payload is opaque. Presumably used as data for a shader.
     pub fn direct_blend_index_block(&self) -> Option<&[u8]> {
         self.direct_blend_index_block.as_deref()
     }
