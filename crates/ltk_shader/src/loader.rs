@@ -58,12 +58,11 @@ impl ShaderLoader {
 
         let path_hash = xxh64(full_shader_object_path.as_bytes(), 0);
 
-        let chunk =
-            *wad.chunks()
-                .get(path_hash)
-                .ok_or_else(|| ShaderError::ShaderObjectNotFound {
-                    path: full_shader_object_path.clone(),
-                })?;
+        let chunk = *wad.chunks().get(path_hash.into()).ok_or_else(|| {
+            ShaderError::ShaderObjectNotFound {
+                path: full_shader_object_path.clone(),
+            }
+        })?;
 
         let shader_object_data = wad.load_chunk_decompressed(&chunk)?;
         let mut shader_object_reader = Cursor::new(shader_object_data);
@@ -112,7 +111,7 @@ impl ShaderLoader {
             create_shader_bundle_path(full_shader_object_path, shader_bundle_id);
 
         let bundle_path_hash = xxh64(shader_bundle_path.as_bytes(), 0);
-        let bundle_chunk = *wad.chunks().get(bundle_path_hash).ok_or_else(|| {
+        let bundle_chunk = *wad.chunks().get(bundle_path_hash.into()).ok_or_else(|| {
             ShaderError::ShaderBundleNotFound {
                 path: shader_bundle_path.clone(),
             }

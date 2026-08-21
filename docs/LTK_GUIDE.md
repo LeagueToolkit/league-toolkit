@@ -39,8 +39,9 @@ ltk_texture = "0.4"
 - `WadBuilder` — Creates new WAD archives
 - `WadExtractor` — Extracts chunks to disk with progress callbacks
 - `PathResolver` trait — Maps path hashes to human-readable paths
+- `WadHash` — A chunk's key, re-exported from `ltk_hash`
 
-**WAD Path Hashing**: Files in WAD archives are identified by 64-bit path hashes (XXHash64 of lowercase path). Use a "hashtable" (hash→path mapping) to resolve paths.
+**WAD Path Hashing**: A 64-bit path hash (XXHash64 of the lowercase path), typed as `ltk_hash::WadHash`, identifies each file in a WAD archive. `WadHash::hash_str(path)` hashes a path (bring `ltk_hash::Hash` into scope), and a `WadChunkLink` read out of a bin holds the same type. Use a "hashtable" (hash→path mapping) to resolve paths.
 
 **Example: Reading a WAD**
 ```rust
@@ -64,17 +65,28 @@ if let Some(chunk) = chunks.get(&0x1234567890abcdef) {
 
 **Example: Extracting with Progress**
 ```rust
-use ltk_wad::{Wad, WadExtractor, HashMapPathResolver};
+use std::collections::HashMap;
+use ltk_wad::{Wad, WadExtractor, WadHash};
 
 let mut wad = Wad::mount(File::open("archive.wad.client")?)?;
-let resolver = HashMapPathResolver::new(load_hashtable()?);
+// A `HashMap<WadHash, String>` is a resolver. `NoResolver` names nothing.
+let names: HashMap<WadHash, String> = load_hashtable()?;
 
-let extractor = WadExtractor::new(&resolver)
-    .on_progress(|p| println!("{:.0}% - {}", p.percent() * 100.0, p.current_path()));
+let mut extractor = WadExtractor::new(&names)
+    .with_filter(|path| path.starts_with("assets/"))
+    .on_progress(|p| println!("{:.0}% - {}", p.fraction() * 100.0, p.path()));
 
-let (mut decoder, chunks) = wad.decode();
-extractor.extract_all(&mut decoder, chunks, "./output")?;
+let report = extractor.extract_all(&mut wad, "./output")?;
+println!("{report}");
 ```
+
+`extract_chunks` takes path hashes instead of every chunk, and lists the hashes
+the archive lacks under `report.missing`. `with_layout(ExtractLayout::Flat)`
+drops the directories, and `with_existing_file_policy(ExistingFilePolicy::Skip)`
+leaves files that exist. `with_name_recovery()` reads the archive's `.bin` files
+for the names of chunks the hash table lacks, before it writes anything.
+`NameRecovery` runs the same scan on its own. A failure names its chunk through
+`WadError::Chunk`.
 
 **Compression Types**:
 - `None` — Uncompressed
@@ -518,7 +530,7 @@ use glam::{Vec2, Vec3, Vec4, Mat4, Quat};
 
 ```rust
 use std::fs::File;
-use ltk_wad::{Wad, WadExtractor, HashMapPathResolver};
+use ltk_wad::{Wad, WadExtractor};
 use ltk_file::LeagueFileKind;
 use ltk_texture::Texture;
 use ltk_mesh::SkinnedMesh;

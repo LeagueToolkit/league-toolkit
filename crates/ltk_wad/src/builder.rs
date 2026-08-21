@@ -4,9 +4,10 @@ use byteorder::{WriteBytesExt, LE};
 use flate2::read::GzEncoder;
 use itertools::Itertools;
 use ltk_io_ext::measure;
-use xxhash_rust::{xxh3, xxh64};
+use xxhash_rust::xxh3;
 
 use ltk_file::LeagueFileKind;
+use ltk_hash::{Hash as _, WadHash};
 
 use crate::FileExt as _;
 
@@ -95,7 +96,7 @@ impl WadBuilder {
     /// * `provide_chunk_data` - A function that provides the rawdata for each chunk.
     pub fn build_to_writer<
         TWriter: io::Write + io::Seek,
-        TChunkDataProvider: Fn(u64, &mut Cursor<Vec<u8>>) -> Result<(), WadBuilderError>,
+        TChunkDataProvider: Fn(WadHash, &mut Cursor<Vec<u8>>) -> Result<(), WadBuilderError>,
     >(
         self,
         writer: &mut TWriter,
@@ -253,8 +254,7 @@ impl WadBuilder {
 /// ```
 #[derive(Debug, Clone, Copy, Default)]
 pub struct WadChunkBuilder {
-    /// The path hash of the chunk. Hashed using xxhash64.
-    path: u64,
+    path: WadHash,
 
     /// If provided, the chunk will be compressed using the given compression type, otherwise the ideal compression will be used.
     force_compression: Option<WadChunkCompression>,
@@ -265,15 +265,15 @@ impl WadChunkBuilder {
     ///
     /// If you already have the hash itself, see [`with_hash`](Self::with_hash).
     pub fn with_path(mut self, path: impl AsRef<str>) -> Self {
-        self.path = xxh64::xxh64(path.as_ref().to_lowercase().as_bytes(), 0);
+        self.path = WadHash::hash_str(path);
         self
     }
 
     /// Set the chunk path hash directly.
     ///
     /// If you have the actual path instead of the hash, see [`with_path`](Self::with_path)
-    pub fn with_hash(mut self, hash: u64) -> Self {
-        self.path = hash;
+    pub fn with_hash(mut self, hash: impl Into<WadHash>) -> Self {
+        self.path = hash.into();
         self
     }
 
@@ -326,8 +326,8 @@ mod tests {
         let toc_sha256: [u8; 32] = Sha256::digest(toc).into();
         assert_eq!(wad.toc_sha256().unwrap(), toc_sha256);
 
-        let chunk = wad.chunks().get(xxh64::xxh64(b"test1", 0)).unwrap();
-        assert_eq!(chunk.path_hash, xxh64::xxh64(b"test1", 0));
+        let chunk = wad.chunks().get(WadHash::hash_str("test1")).unwrap();
+        assert_eq!(chunk.path_hash, WadHash::hash_str("test1"));
         assert_eq!(chunk.compressed_size, 17);
         assert_eq!(chunk.uncompressed_size, 100);
         assert_eq!(chunk.compression_type, WadChunkCompression::Zstd);

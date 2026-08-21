@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use ltk_hash::WadHash;
+
 use super::WadChunk;
 
 /// An ordered collection of WAD chunks, sorted by path hash.
@@ -10,7 +12,7 @@ pub struct WadChunks {
     chunks: Vec<WadChunk>,
     /// Maps `path_hash` to index in `chunks`.
     #[cfg_attr(feature = "serde", serde(skip))]
-    index: HashMap<u64, usize>,
+    index: HashMap<WadHash, usize>,
 }
 
 impl WadChunks {
@@ -41,7 +43,7 @@ impl WadChunks {
     }
 
     /// Look up a chunk by its path hash.
-    pub fn get(&self, path_hash: u64) -> Option<&WadChunk> {
+    pub fn get(&self, path_hash: WadHash) -> Option<&WadChunk> {
         self.index.get(&path_hash).map(|&i| &self.chunks[i])
     }
 
@@ -56,7 +58,7 @@ impl WadChunks {
     }
 
     /// Returns `true` if a chunk with the given path hash exists.
-    pub fn contains(&self, path_hash: u64) -> bool {
+    pub fn contains(&self, path_hash: WadHash) -> bool {
         self.index.contains_key(&path_hash)
     }
 }
