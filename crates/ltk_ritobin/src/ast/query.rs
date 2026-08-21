@@ -1,69 +1,117 @@
-use crate::ast::{
-    build::{Ast, AstObject},
-    nodes::{AstProperty, AstStruct},
-    AstValue,
+use ltk_hash::BinHash;
+
+use crate::{
+    ast::{
+        build::{Ast, AstObject},
+        nodes::{AstProperty, AstStruct, Spanned},
+        AstValue,
+    },
+    parse::Span,
 };
 
-pub enum Located<'a> {
+/// Any node in an [`Ast`].
+#[derive(Clone, Copy)]
+pub enum Node<'a> {
     Object(&'a AstObject),
+    Struct(&'a AstStruct),
     Property(&'a AstProperty),
     Value(&'a AstValue),
 }
 
-impl Ast {
-    /// Finds the most specific node covering `offset`, descending from objects into properties
-    /// into nested values. `None` if `offset` falls outside every object (e.g. in the root
-    /// `type`/`version`/`linked` entries, or between objects).
-    pub fn locate(&self, offset: u32) -> Option<Located<'_>> {
-        let obj = self
-            .objects
-            .iter()
-            .find(|o| o.object.span.contains(offset) || o.path_hash.span.contains(offset))?;
-        Some(obj.object.locate(offset).unwrap_or(Located::Object(obj)))
-    }
-}
-
-impl AstStruct {
-    pub fn locate(&self, offset: u32) -> Option<Located<'_>> {
-        let prop = self.properties.iter().find(|p| p.span().contains(offset))?;
-        Some(prop.locate(offset).unwrap_or(Located::Property(prop)))
-    }
-}
-
-impl AstProperty {
-    pub fn locate(&self, offset: u32) -> Option<Located<'_>> {
-        if self.name.span.contains(offset) {
-            return None;
+impl<'a> Node<'a> {
+    pub fn span(&self) -> Span {
+        match self {
+            // TODO: don't do this
+            Node::Object(o) => Span::new(
+                o.path_hash.span.start.min(o.object.span.start),
+                o.object.span.end.max(o.path_hash.span.end),
+            ),
+            Node::Struct(s) => s.span,
+            Node::Property(p) => p.span(),
+            Node::Value(v) => v.span(),
         }
-        self.value.locate(offset)
+    }
+
+    /// This node's own class, if it's an object or struct.
+    pub fn class_hash(&self) -> Option<Spanned<BinHash>> {
+        match self {
+            Node::Object(o) => Some(o.object.class_hash),
+            Node::Struct(s) => Some(s.class_hash),
+            Node::Property(_) | Node::Value(_) => None,
+        }
+    }
+
+    fn children(&self) -> Box<dyn Iterator<Item = Node<'a>> + 'a> {
+        match self {
+            Node::Object(o) => Box::new(std::iter::once(Node::Struct(&o.object))),
+            Node::Struct(s) => Box::new(s.properties.iter().map(Node::Property)),
+            Node::Property(p) => Box::new(std::iter::once(Node::Value(&p.value))),
+            Node::Value(v) => v.children(),
+        }
+    }
+
+    /// The chain of nodes on the way to `offset`, including this node.
+    pub fn path_to(&self, offset: u32) -> AstPathIter<'a> {
+        AstPathIter {
+            next: self.span().contains(offset).then_some(*self),
+            offset,
+        }
+    }
+}
+
+/// Iterator of every [`Node`] on the way to a given offset, from the top level.
+///
+/// Use [`Ast::path_to`] to construct this iterator.
+pub struct AstPathIter<'a> {
+    next: Option<Node<'a>>,
+    offset: u32,
+}
+
+impl<'a> Iterator for AstPathIter<'a> {
+    type Item = Node<'a>;
+
+    fn next(&mut self) -> Option<Node<'a>> {
+        let current = self.next.take()?;
+        self.next = current.children().find(|c| c.span().contains(self.offset));
+        Some(current)
     }
 }
 
 impl AstValue {
-    pub fn locate(&self, offset: u32) -> Option<Located<'_>> {
-        if !self.span().contains(offset) {
-            return None;
-        }
+    fn children(&self) -> Box<dyn Iterator<Item = Node<'_>> + '_> {
         match self {
             AstValue::Struct(s) | AstValue::Embedded(s) => {
-                Some(s.locate(offset).unwrap_or(Located::Value(self)))
+                Box::new(std::iter::once(Node::Struct(s)))
             }
-            AstValue::Container { items, .. } | AstValue::UnorderedContainer { items, .. } => Some(
-                items
-                    .iter()
-                    .find_map(|i| i.locate(offset))
-                    .unwrap_or(Located::Value(self)),
-            ),
-            AstValue::Map { entries, .. } => Some(
+            AstValue::Container { items, .. } | AstValue::UnorderedContainer { items, .. } => {
+                Box::new(items.iter().map(Node::Value))
+            }
+            AstValue::Map { entries, .. } => Box::new(
                 entries
                     .iter()
-                    .find_map(|(k, val)| k.locate(offset).or_else(|| val.locate(offset)))
-                    .unwrap_or(Located::Value(self)),
+                    .flat_map(|(k, v)| [Node::Value(k), Node::Value(v)]),
             ),
             AstValue::Optional {
                 value: Some(inner), ..
-            } => Some(inner.locate(offset).unwrap_or(Located::Value(self))),
-            _ => Some(Located::Value(self)),
+            } => Box::new(std::iter::once(Node::Value(inner))),
+            _ => Box::new(std::iter::empty()),
         }
+    }
+}
+
+impl Ast {
+    /// The chain of nodes on the way to `offset`, outermost first
+    pub fn path_to(&self, offset: u32) -> AstPathIter<'_> {
+        let next = self
+            .objects
+            .iter()
+            .find(|o| o.object.span.contains(offset) || o.path_hash.span.contains(offset))
+            .map(Node::Object);
+        AstPathIter { next, offset }
+    }
+
+    /// The most specific node containing `offset`. See [`Self::path_to`] if you need the full path.
+    pub fn find_node(&self, offset: u32) -> Option<Node<'_>> {
+        self.path_to(offset).last()
     }
 }

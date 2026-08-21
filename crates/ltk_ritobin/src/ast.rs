@@ -11,5 +11,5 @@ mod tests;
 
 pub use build::{Ast, AstObject};
 pub use nodes::{AstProperty, AstStruct, Spanned};
-pub use query::Located;
+pub use query::{AstPathIter, Node};
 pub use value::AstValue;
