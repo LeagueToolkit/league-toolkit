@@ -30,7 +30,7 @@ required-features = ["ast"]
 workspace = true
 
 [features]
-default = []
+default = ["ast"]
 debug = []
 serde = ["dep:serde", "ltk_meta/serde"]
 ast = []
