@@ -108,7 +108,7 @@ pub use recovery::*;
 /// A chunk's key: the xxh64 of its lower-case path.
 ///
 /// Re-exported from `ltk_hash`, where the bin tooling takes the same type
-/// for a `WadChunkLink`, so a link read out of a bin looks a chunk up as is.
+/// for a `WadChunkLink`, so a link read out of a bin finds its chunk as is.
 /// To hash a path, bring `ltk_hash::Hash` into scope and call
 /// `WadHash::hash_str`.
 pub use ltk_hash::WadHash;
@@ -246,8 +246,8 @@ impl<TSource: Read + Seek> Wad<TSource> {
 
     /// Reads at most `max_len` of the raw (compressed) bytes of a chunk, from its start.
     ///
-    /// Enough of a gzip or zstd stream to decode its first block, which is what
-    /// [`decompress_prefix`] wants to read a chunk's first bytes without the rest.
+    /// Enough of a gzip or zstd stream decodes its first block, which is all
+    /// [`decompress_prefix`] needs for a chunk's first bytes.
     pub fn load_chunk_raw_prefix(
         &mut self,
         chunk: &WadChunk,
@@ -264,8 +264,8 @@ impl<TSource: Read + Seek> Wad<TSource> {
 
     /// Reads and decompresses a chunk from the source.
     ///
-    /// The decoder is kept between calls, so a run of chunks pays for one
-    /// zstd context and not one per chunk.
+    /// The archive keeps the decoder between calls, so a run of chunks pays for
+    /// one zstd context and not one per chunk.
     pub fn load_chunk_decompressed(&mut self, chunk: &WadChunk) -> Result<Box<[u8]>, WadError> {
         let raw_data = self.load_chunk_raw(chunk)?;
         self.decoder
