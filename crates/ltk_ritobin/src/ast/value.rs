@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use ltk_hash::BinHash;
 use ltk_meta::{property::values, traits::PropertyExt as _, PropertyKind, PropertyValueEnum};
 
@@ -55,6 +57,53 @@ pub enum AstValue {
         value: Option<Box<AstValue>>,
         span: Span,
     },
+}
+
+impl Display for AstValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AstValue::None(_) => f.write_str("null"),
+            AstValue::Bool(v) => v.fmt(f),
+            AstValue::BitBool(v) => v.fmt(f),
+            AstValue::I8(v) => v.fmt(f),
+            AstValue::U8(v) => v.fmt(f),
+            AstValue::I16(v) => v.fmt(f),
+            AstValue::U16(v) => v.fmt(f),
+            AstValue::I32(v) => v.fmt(f),
+            AstValue::U32(v) => v.fmt(f),
+            AstValue::I64(v) => v.fmt(f),
+            AstValue::U64(v) => v.fmt(f),
+            AstValue::F32(v) => v.fmt(f),
+            AstValue::Vector2(v) => v.fmt(f),
+            AstValue::Vector3(v) => v.fmt(f),
+            AstValue::Vector4(v) => v.fmt(f),
+            AstValue::Matrix44(v) => v.fmt(f),
+            AstValue::Color(v) => write!(f, "r: {}, g: {}, b: {}, a: {}", v.r, v.g, v.b, v.a),
+            AstValue::String(v) => v.fmt(f),
+            AstValue::Hash(v) => v.fmt(f),
+            AstValue::WadChunkLink(v) => v.fmt(f),
+            AstValue::ObjectLink(v) => v.fmt(f),
+            AstValue::Struct(_) => f.write_str("{ ... }"),
+            AstValue::Embedded(_) => f.write_str("{ ... }"),
+            AstValue::Container { items, .. } | AstValue::UnorderedContainer { items, .. } => {
+                f.write_str("[")?;
+                let len = items.len();
+                for (i, item) in items.iter().enumerate() {
+                    item.fmt(f)?;
+                    if i + 1 < len {
+                        f.write_str(", ")?;
+                    }
+                }
+                f.write_str("]")?;
+                Ok(())
+            }
+            AstValue::Map { .. } => f.write_str("{ ... }"),
+            AstValue::Optional { value, .. } => match value {
+                Some(v) => v.fmt(f),
+                None => f.write_str("{}"),
+            },
+        }
+    }
 }
 
 impl AstValue {
