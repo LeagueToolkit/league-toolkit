@@ -1,5 +1,6 @@
 use std::io;
 
+use ltk_hash::WadHash;
 use thiserror::Error;
 
 /// What can go wrong with a WAD archive.
@@ -19,8 +20,8 @@ pub enum WadError {
     InvalidChunkCompression { compression: u8 },
 
     /// Two chunks share one path hash.
-    #[error("duplicate chunk: {path_hash:#08x}")]
-    DuplicateChunk { path_hash: u64 },
+    #[error("duplicate chunk: {path_hash:016x}")]
+    DuplicateChunk { path_hash: WadHash },
 
     /// A chunk's bytes do not decompress.
     #[error("failed to decompress chunk: {reason}")]
@@ -37,7 +38,7 @@ pub enum WadError {
     /// path is the resolver's, or the hash as sixteen hex digits.
     #[error("chunk {path_hash:016x} ({path}): {source}")]
     Chunk {
-        path_hash: u64,
+        path_hash: WadHash,
         path: String,
         #[source]
         source: Box<WadError>,
@@ -50,7 +51,7 @@ pub enum WadError {
 
 impl WadError {
     /// `source`, as the failure of the chunk at `path`.
-    pub(crate) fn chunk(path_hash: u64, path: &str, source: WadError) -> Self {
+    pub(crate) fn chunk(path_hash: WadHash, path: &str, source: WadError) -> Self {
         Self::Chunk {
             path_hash,
             path: path.to_owned(),

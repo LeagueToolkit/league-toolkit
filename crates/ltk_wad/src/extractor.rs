@@ -7,13 +7,13 @@
 //! ```no_run
 //! use std::collections::HashMap;
 //! use std::fs::File;
-//! use ltk_wad::{Wad, WadExtractor};
+//! use ltk_wad::{Wad, WadExtractor, WadHash};
 //!
 //! let file = File::open("archive.wad.client")?;
 //! let mut wad = Wad::mount(file)?;
 //!
-//! // Any `HashMap<u64, String>` is a resolver. Load a hash table into one.
-//! let names: HashMap<u64, String> = HashMap::new();
+//! // Any `HashMap<WadHash, String>` is a resolver. Load a hash table into one.
+//! let names: HashMap<WadHash, String> = HashMap::new();
 //!
 //! let mut extractor = WadExtractor::new(&names).on_progress(|progress| {
 //!     println!("{:.1}% {}", progress.fraction() * 100.0, progress.path());
@@ -31,12 +31,12 @@
 //!
 //! ```no_run
 //! use std::fs::File;
-//! use ltk_wad::{Wad, WadExtractor, NoResolver, ExtractLayout, ExistingFilePolicy};
+//! use ltk_wad::{Wad, WadExtractor, WadHash, NoResolver, ExtractLayout, ExistingFilePolicy};
 //!
 //! let file = File::open("archive.wad.client")?;
 //! let mut wad = Wad::mount(file)?;
 //!
-//! let wanted = [0x1234567890abcdef_u64, 0xfedcba0987654321];
+//! let wanted = [WadHash(0x1234567890abcdef), WadHash(0xfedcba0987654321)];
 //! let mut extractor = WadExtractor::new(&NoResolver)
 //!     .with_layout(ExtractLayout::Flat)
 //!     .with_existing_file_policy(ExistingFilePolicy::Skip);
@@ -88,6 +88,7 @@ use std::{
 
 use camino::{Utf8Path, Utf8PathBuf};
 use ltk_file::LeagueFileKind;
+use ltk_hash::WadHash;
 
 use crate::{ChunkDecoder, NameRecovery, RecoveredNames, Wad, WadChunk, WadError};
 
@@ -98,58 +99,58 @@ use crate::{ChunkDecoder, NameRecovery, RecoveredNames, Wad, WadChunk, WadError}
 /// `None` for a hash it has no name for. Such a chunk is written under its
 /// hash as sixteen hex digits.
 ///
-/// Every `HashMap<u64, String>` is a resolver, and so is a reference, a `Box`
+/// Every `HashMap<WadHash, String>` is a resolver, and so is a reference, a `Box`
 /// or an `Arc` of any resolver.
 pub trait PathResolver {
     /// The path of `path_hash`, or `None` when the resolver has no name for it.
-    fn resolve(&self, path_hash: u64) -> Option<Cow<'_, str>>;
+    fn resolve(&self, path_hash: WadHash) -> Option<Cow<'_, str>>;
 
     /// Whether the resolver names `path_hash`.
     ///
     /// The default calls [`resolve`](Self::resolve). A resolver that can
     /// answer without building the string should override it.
-    fn is_known(&self, path_hash: u64) -> bool {
+    fn is_known(&self, path_hash: WadHash) -> bool {
         self.resolve(path_hash).is_some()
     }
 }
 
 impl<R: PathResolver + ?Sized> PathResolver for &R {
-    fn resolve(&self, path_hash: u64) -> Option<Cow<'_, str>> {
+    fn resolve(&self, path_hash: WadHash) -> Option<Cow<'_, str>> {
         (**self).resolve(path_hash)
     }
 
-    fn is_known(&self, path_hash: u64) -> bool {
+    fn is_known(&self, path_hash: WadHash) -> bool {
         (**self).is_known(path_hash)
     }
 }
 
 impl<R: PathResolver + ?Sized> PathResolver for Box<R> {
-    fn resolve(&self, path_hash: u64) -> Option<Cow<'_, str>> {
+    fn resolve(&self, path_hash: WadHash) -> Option<Cow<'_, str>> {
         (**self).resolve(path_hash)
     }
 
-    fn is_known(&self, path_hash: u64) -> bool {
+    fn is_known(&self, path_hash: WadHash) -> bool {
         (**self).is_known(path_hash)
     }
 }
 
 impl<R: PathResolver + ?Sized> PathResolver for Arc<R> {
-    fn resolve(&self, path_hash: u64) -> Option<Cow<'_, str>> {
+    fn resolve(&self, path_hash: WadHash) -> Option<Cow<'_, str>> {
         (**self).resolve(path_hash)
     }
 
-    fn is_known(&self, path_hash: u64) -> bool {
+    fn is_known(&self, path_hash: WadHash) -> bool {
         (**self).is_known(path_hash)
     }
 }
 
-impl<S: BuildHasher> PathResolver for HashMap<u64, String, S> {
-    fn resolve(&self, path_hash: u64) -> Option<Cow<'_, str>> {
+impl<S: BuildHasher> PathResolver for HashMap<WadHash, String, S> {
+    fn resolve(&self, path_hash: WadHash) -> Option<Cow<'_, str>> {
         self.get(&path_hash)
             .map(|path| Cow::Borrowed(path.as_str()))
     }
 
-    fn is_known(&self, path_hash: u64) -> bool {
+    fn is_known(&self, path_hash: WadHash) -> bool {
         self.contains_key(&path_hash)
     }
 }
@@ -159,17 +160,17 @@ impl<S: BuildHasher> PathResolver for HashMap<u64, String, S> {
 pub struct NoResolver;
 
 impl PathResolver for NoResolver {
-    fn resolve(&self, _path_hash: u64) -> Option<Cow<'_, str>> {
+    fn resolve(&self, _path_hash: WadHash) -> Option<Cow<'_, str>> {
         None
     }
 
-    fn is_known(&self, _path_hash: u64) -> bool {
+    fn is_known(&self, _path_hash: WadHash) -> bool {
         false
     }
 }
 
 /// A path hash as the sixteen hex digits a nameless chunk is written under.
-pub(crate) fn hex_name(path_hash: u64) -> String {
+pub(crate) fn hex_name(path_hash: WadHash) -> String {
     format!("{path_hash:016x}")
 }
 
@@ -178,7 +179,7 @@ pub(crate) fn hex_name(path_hash: u64) -> String {
 pub struct ExtractProgress<'a> {
     done: usize,
     total: usize,
-    path_hash: u64,
+    path_hash: WadHash,
     path: &'a str,
     result: ExtractResult,
     bytes: u64,
@@ -207,7 +208,7 @@ impl ExtractProgress<'_> {
     }
 
     /// The chunk's path hash.
-    pub fn path_hash(&self) -> u64 {
+    pub fn path_hash(&self) -> WadHash {
         self.path_hash
     }
 
@@ -282,7 +283,7 @@ pub struct ExtractReport {
     pub skipped_by_filter: usize,
     /// Path hashes given to [`extract_chunks`](WadExtractor::extract_chunks)
     /// that the archive holds no chunk for.
-    pub missing: Vec<u64>,
+    pub missing: Vec<WadHash>,
     /// Bytes written, after decompression.
     pub bytes_written: u64,
     /// Written chunks, by the kind their bytes identify as.
@@ -519,7 +520,7 @@ impl<'a> WadExtractor<'a> {
     pub fn extract_chunks<S: Read + Seek>(
         &mut self,
         wad: &mut Wad<S>,
-        path_hashes: impl IntoIterator<Item = u64>,
+        path_hashes: impl IntoIterator<Item = WadHash>,
         output_dir: impl AsRef<Utf8Path>,
     ) -> Result<ExtractReport, WadError> {
         let mut seen = HashSet::new();
@@ -541,7 +542,7 @@ impl<'a> WadExtractor<'a> {
         &mut self,
         wad: &mut Wad<S>,
         chunks: Vec<WadChunk>,
-        missing: Vec<u64>,
+        missing: Vec<WadHash>,
         output_dir: &Utf8Path,
     ) -> Result<ExtractReport, WadError> {
         let workers = self.workers.map_or_else(default_workers, NonZeroUsize::get);
@@ -639,7 +640,7 @@ struct Job {
 
 /// One chunk on its way back from a worker, for the progress callback.
 struct Done {
-    path_hash: u64,
+    path_hash: WadHash,
     path: String,
     outcome: ChunkOutcome,
 }
@@ -1067,7 +1068,7 @@ mod tests {
     /// Create a test chunk with uncompressed data.
     fn create_uncompressed_chunk(path_hash: u64, data_offset: usize, data: &[u8]) -> WadChunk {
         WadChunk {
-            path_hash,
+            path_hash: WadHash(path_hash),
             data_offset,
             compressed_size: data.len(),
             uncompressed_size: data.len(),
@@ -1087,7 +1088,7 @@ mod tests {
         uncompressed_size: usize,
     ) -> WadChunk {
         WadChunk {
-            path_hash,
+            path_hash: WadHash(path_hash),
             data_offset,
             compressed_size,
             uncompressed_size,
@@ -1100,10 +1101,10 @@ mod tests {
     }
 
     /// A resolver over the given names.
-    fn names(entries: &[(u64, &str)]) -> HashMap<u64, String> {
+    fn names(entries: &[(u64, &str)]) -> HashMap<WadHash, String> {
         entries
             .iter()
-            .map(|(hash, path)| (*hash, (*path).to_owned()))
+            .map(|(hash, path)| (WadHash(*hash), (*path).to_owned()))
             .collect()
     }
 
@@ -1112,7 +1113,7 @@ mod tests {
         path_hash: u64,
         path: &str,
         data: &[u8],
-    ) -> (Wad<MockWadSource>, HashMap<u64, String>) {
+    ) -> (Wad<MockWadSource>, HashMap<WadHash, String>) {
         let mut source = MockWadSource::new();
         let offset = source.write_at(1000, data);
         let chunks = WadChunks::from_iter([create_uncompressed_chunk(path_hash, offset, data)]);
@@ -1162,18 +1163,21 @@ mod tests {
 
     #[test]
     fn no_resolver_names_nothing() {
-        assert_eq!(NoResolver.resolve(0x0123456789abcdef), None);
-        assert!(!NoResolver.is_known(0x0123456789abcdef));
+        assert_eq!(NoResolver.resolve(WadHash(0x0123456789abcdef)), None);
+        assert!(!NoResolver.is_known(WadHash(0x0123456789abcdef)));
     }
 
     #[test]
     fn a_hash_map_is_a_resolver() {
         let resolver = names(&[(0x1234, "assets/test.bin")]);
 
-        assert_eq!(resolver.resolve(0x1234).as_deref(), Some("assets/test.bin"));
-        assert_eq!(resolver.resolve(0x5678), None);
-        assert!(resolver.is_known(0x1234));
-        assert!(!resolver.is_known(0x5678));
+        assert_eq!(
+            resolver.resolve(WadHash(0x1234)).as_deref(),
+            Some("assets/test.bin")
+        );
+        assert_eq!(resolver.resolve(WadHash(0x5678)), None);
+        assert!(resolver.is_known(WadHash(0x1234)));
+        assert!(!resolver.is_known(WadHash(0x5678)));
     }
 
     #[test]
@@ -1185,9 +1189,9 @@ mod tests {
 
         let resolvers: [&dyn PathResolver; 3] = [&by_ref, &boxed, &shared];
         for resolver in resolvers {
-            assert_eq!(resolver.resolve(0x1).as_deref(), Some("one"));
-            assert!(resolver.is_known(0x1));
-            assert!(!resolver.is_known(0x2));
+            assert_eq!(resolver.resolve(WadHash(0x1)).as_deref(), Some("one"));
+            assert!(resolver.is_known(WadHash(0x1)));
+            assert!(!resolver.is_known(WadHash(0x2)));
         }
     }
 
@@ -1224,7 +1228,7 @@ mod tests {
         ExtractProgress {
             done,
             total,
-            path_hash: 0x1234,
+            path_hash: WadHash(0x1234),
             path: "test/path.bin",
             result: ExtractResult::Extracted,
             bytes: 42,
@@ -1245,7 +1249,7 @@ mod tests {
 
         assert_eq!(progress.done(), 1);
         assert_eq!(progress.total(), 2);
-        assert_eq!(progress.path_hash(), 0x1234);
+        assert_eq!(progress.path_hash(), WadHash(0x1234));
         assert_eq!(progress.path(), "test/path.bin");
         assert_eq!(progress.result(), ExtractResult::Extracted);
         assert_eq!(progress.bytes(), 42);
@@ -1502,7 +1506,7 @@ mod tests {
     const PNG_MAGIC: [u8; 12] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0];
 
     /// Three uncompressed text chunks, each under a directory of its own.
-    fn three_file_wad() -> (Wad<MockWadSource>, HashMap<u64, String>) {
+    fn three_file_wad() -> (Wad<MockWadSource>, HashMap<WadHash, String>) {
         let mut source = MockWadSource::new();
         let offset1 = source.write_at(1000, b"File one content");
         let offset2 = source.write_at(2000, b"File two content");
@@ -1563,7 +1567,7 @@ mod tests {
             bytes_written: 40,
             skipped_existing: 1,
             skipped_by_filter: 3,
-            missing: vec![0x9999],
+            missing: vec![WadHash(0x9999)],
             cancelled: true,
             ..Default::default()
         };
@@ -1581,7 +1585,7 @@ mod tests {
         let (mut wad, resolver) = three_file_wad();
 
         let report = WadExtractor::new(&resolver)
-            .extract_chunks(&mut wad, [0x1111, 0x3333], output_path)
+            .extract_chunks(&mut wad, [WadHash(0x1111), WadHash(0x3333)], output_path)
             .unwrap();
 
         assert_eq!(report.extracted, 2);
@@ -1600,13 +1604,14 @@ mod tests {
         let mut extractor = WadExtractor::new(&resolver).on_progress(|progress| {
             totals.push(progress.total());
         });
+        let wanted = [WadHash(0x1111), WadHash(0x9999), WadHash(0x1111)];
         let report = extractor
-            .extract_chunks(&mut wad, [0x1111, 0x9999, 0x1111], output_path)
+            .extract_chunks(&mut wad, wanted, output_path)
             .unwrap();
         drop(extractor);
 
         assert_eq!(report.extracted, 1);
-        assert_eq!(report.missing, vec![0x9999]);
+        assert_eq!(report.missing, vec![WadHash(0x9999)]);
         assert_eq!(totals, vec![1]);
     }
 
@@ -1793,7 +1798,7 @@ mod tests {
         assert!(
             matches!(
                 &error,
-                WadError::Chunk { path_hash: 0x1111, path, .. } if path == "dir1/file1.txt"
+                WadError::Chunk { path_hash: WadHash(0x1111), path, .. } if path == "dir1/file1.txt"
             ),
             "{error:?}"
         );

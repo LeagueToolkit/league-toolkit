@@ -25,10 +25,10 @@
 //! ```no_run
 //! use std::collections::HashMap;
 //! use std::fs::File;
-//! use ltk_wad::{NameRecovery, Wad, WadExtractor};
+//! use ltk_wad::{NameRecovery, Wad, WadExtractor, WadHash};
 //!
 //! let mut wad = Wad::mount(File::open("archive.wad.client")?)?;
-//! let names: HashMap<u64, String> = HashMap::new();
+//! let names: HashMap<WadHash, String> = HashMap::new();
 //!
 //! let recovered = NameRecovery::new().run(&mut wad, &names)?;
 //! println!("{} names from {} bins", recovered.len(), recovered.bins_scanned);
@@ -52,7 +52,7 @@ use std::{
 };
 
 use ltk_file::LeagueFileKind;
-use xxhash_rust::xxh64::xxh64;
+use ltk_hash::{Hash as _, WadHash};
 
 use crate::{
     extractor::{default_workers, hex_name, lock},
@@ -82,11 +82,6 @@ const MIN_CANDIDATE_LEN: usize = 4;
 /// A chunk and its raw bytes, on the way from the reader to a worker.
 type RawChunk = (WadChunk, Box<[u8]>);
 
-/// The WAD path hash of `path`: xxh64 of the path in lower case, with seed 0.
-pub fn hash_wad_path(path: &str) -> u64 {
-    xxh64(path.to_lowercase().as_bytes(), 0)
-}
-
 /// Names recovered from the `.bin` files of one archive.
 ///
 /// It is a [`PathResolver`] over the names it holds, and
@@ -95,7 +90,7 @@ pub fn hash_wad_path(path: &str) -> u64 {
 #[non_exhaustive]
 pub struct RecoveredNames {
     /// Path hash to the path a bin named it by, for chunks the resolver could not name.
-    pub names: HashMap<u64, String>,
+    pub names: HashMap<WadHash, String>,
     /// Bins read for the names.
     pub bins_scanned: usize,
     /// Chunks whose first bytes were read because nothing named them.
@@ -104,7 +99,7 @@ pub struct RecoveredNames {
 
 impl RecoveredNames {
     /// The recovered path of a chunk, if a bin named it.
-    pub fn get(&self, path_hash: u64) -> Option<&str> {
+    pub fn get(&self, path_hash: WadHash) -> Option<&str> {
         self.names.get(&path_hash).map(String::as_str)
     }
 
@@ -128,11 +123,11 @@ impl RecoveredNames {
 }
 
 impl PathResolver for RecoveredNames {
-    fn resolve(&self, path_hash: u64) -> Option<Cow<'_, str>> {
+    fn resolve(&self, path_hash: WadHash) -> Option<Cow<'_, str>> {
         self.get(path_hash).map(Cow::Borrowed)
     }
 
-    fn is_known(&self, path_hash: u64) -> bool {
+    fn is_known(&self, path_hash: WadHash) -> bool {
         self.names.contains_key(&path_hash)
     }
 }
@@ -154,14 +149,14 @@ impl fmt::Debug for LayeredResolver<'_> {
 }
 
 impl PathResolver for LayeredResolver<'_> {
-    fn resolve(&self, path_hash: u64) -> Option<Cow<'_, str>> {
+    fn resolve(&self, path_hash: WadHash) -> Option<Cow<'_, str>> {
         match self.names.get(path_hash) {
             Some(name) => Some(Cow::Borrowed(name)),
             None => self.fallback.resolve(path_hash),
         }
     }
 
-    fn is_known(&self, path_hash: u64) -> bool {
+    fn is_known(&self, path_hash: WadHash) -> bool {
         self.names.is_known(path_hash) || self.fallback.is_known(path_hash)
     }
 }
@@ -289,10 +284,9 @@ impl<'a> NameRecovery<'a> {
 /// Decompress each bin and claim every string in it that names an unknown chunk.
 fn scan_bins(
     receiver: &Mutex<mpsc::Receiver<RawChunk>>,
-    unknown: &HashSet<u64>,
-    found: &Mutex<HashMap<u64, String>>,
+    unknown: &HashSet<WadHash>,
+    found: &Mutex<HashMap<WadHash, String>>,
 ) {
-    let mut lower = Vec::new();
     let mut decoder = ChunkDecoder::new();
     loop {
         let Ok((chunk, raw)) = lock(receiver).recv() else {
@@ -308,11 +302,11 @@ fn scan_bins(
         }
 
         for_each_candidate(&data, |candidate| {
-            let hash = hash_lower(candidate, &mut lower);
+            let hash = WadHash::hash_str(candidate);
             if unknown.contains(&hash) {
                 lock(found)
                     .entry(hash)
-                    .or_insert_with(|| String::from_utf8_lossy(candidate).into_owned());
+                    .or_insert_with(|| candidate.to_owned());
             }
         });
     }
@@ -356,7 +350,7 @@ fn is_printable(byte: u8) -> bool {
     (0x20..=0x7e).contains(&byte)
 }
 
-/// Visit every string a bin holds, as the bytes between its length prefix and its end.
+/// Visit every string a bin holds, as the text between its length prefix and its end.
 ///
 /// The format writes a string as a little-endian `u16` length and the bytes,
 /// with no terminator. A path is printable ASCII and its length's high byte is
@@ -364,7 +358,7 @@ fn is_printable(byte: u8) -> bool {
 /// the two bytes in front of the run are its length. The length then bounds
 /// the string exactly, however many printable bytes follow it, such as the low
 /// byte of the next string's length.
-fn for_each_candidate(data: &[u8], mut visit: impl FnMut(&[u8])) {
+fn for_each_candidate(data: &[u8], mut visit: impl FnMut(&str)) {
     let mut start = 0;
     while start < data.len() {
         if !is_printable(data[start]) {
@@ -381,18 +375,15 @@ fn for_each_candidate(data: &[u8], mut visit: impl FnMut(&[u8])) {
             if len >= MIN_CANDIDATE_LEN && start + len <= end {
                 let candidate = &data[start..start + len];
                 if candidate.iter().any(|&byte| byte == b'/' || byte == b'.') {
-                    visit(candidate);
+                    /* Printable ASCII, so this cannot fail. */
+                    if let Ok(candidate) = std::str::from_utf8(candidate) {
+                        visit(candidate);
+                    }
                 }
             }
         }
         start = end;
     }
-}
-
-fn hash_lower(bytes: &[u8], buffer: &mut Vec<u8>) -> u64 {
-    buffer.clear();
-    buffer.extend(bytes.iter().map(u8::to_ascii_lowercase));
-    xxh64(buffer, 0)
 }
 
 #[cfg(test)]
@@ -406,17 +397,15 @@ mod tests {
 
     fn collect_candidates(data: &[u8]) -> Vec<String> {
         let mut out = Vec::new();
-        for_each_candidate(data, |candidate| {
-            out.push(String::from_utf8_lossy(candidate).into_owned());
-        });
+        for_each_candidate(data, |candidate| out.push(candidate.to_owned()));
         out
     }
 
     /// A resolver that names the given paths, by their WAD hashes.
-    fn names(paths: &[&str]) -> HashMap<u64, String> {
+    fn names(paths: &[&str]) -> HashMap<WadHash, String> {
         paths
             .iter()
-            .map(|path| (hash_wad_path(path), (*path).to_owned()))
+            .map(|path| (WadHash::hash_str(path), (*path).to_owned()))
             .collect()
     }
 
@@ -450,7 +439,7 @@ mod tests {
             .build_to_writer(&mut buffer, |path_hash, cursor| {
                 let (_, bytes) = chunks
                     .iter()
-                    .find(|(path, _)| hash_wad_path(path) == path_hash)
+                    .find(|(path, _)| WadHash::hash_str(path) == path_hash)
                     .expect("every hash is one of the chunks");
                 cursor.write_all(bytes)?;
                 Ok(())
@@ -458,12 +447,6 @@ mod tests {
             .unwrap();
         buffer.set_position(0);
         Wad::mount(buffer).unwrap()
-    }
-
-    #[test]
-    fn hash_wad_path_is_xxh64_of_the_lower_case_path() {
-        assert_eq!(hash_wad_path("ASSETS/X.dds"), xxh64(b"assets/x.dds", 0));
-        assert_eq!(hash_wad_path("assets/x.dds"), xxh64(b"assets/x.dds", 0));
     }
 
     #[test]
@@ -512,14 +495,14 @@ mod tests {
 
         let recovered = NameRecovery::new().run(&mut wad, &resolver).unwrap();
 
-        assert_eq!(recovered.get(hash_wad_path(asset)), Some(asset));
+        assert_eq!(recovered.get(WadHash::hash_str(asset)), Some(asset));
         assert_eq!(recovered.len(), 1);
         assert_eq!(recovered.bins_scanned, 1);
         /* The asset was sniffed, and the named bin was not. */
         assert_eq!(recovered.chunks_sniffed, 1);
         assert!(!recovered
             .names
-            .contains_key(&hash_wad_path("data/test.bin")));
+            .contains_key(&WadHash::hash_str("data/test.bin")));
     }
 
     #[test]
@@ -532,7 +515,7 @@ mod tests {
 
         let recovered = NameRecovery::new().run(&mut wad, &NoResolver).unwrap();
 
-        assert_eq!(recovered.get(hash_wad_path(asset)), Some(asset));
+        assert_eq!(recovered.get(WadHash::hash_str(asset)), Some(asset));
         assert_eq!(recovered.chunks_sniffed, 2);
         assert_eq!(recovered.bins_scanned, 1);
     }
@@ -556,25 +539,26 @@ mod tests {
 
     #[test]
     fn the_layered_resolver_reads_recovered_names_first() {
+        let (found, known, neither) = (WadHash(0x1234), WadHash(0x5678), WadHash(0x9abc));
         let mut recovered = RecoveredNames::default();
-        recovered.names.insert(0x1234, "assets/found.dds".into());
-        let mut fallback: HashMap<u64, String> = HashMap::new();
-        fallback.insert(0x5678, "assets/known.dds".into());
+        recovered.names.insert(found, "assets/found.dds".into());
+        let mut fallback: HashMap<WadHash, String> = HashMap::new();
+        fallback.insert(known, "assets/known.dds".into());
 
         assert_eq!(
-            recovered.resolve(0x1234).as_deref(),
+            recovered.resolve(found).as_deref(),
             Some("assets/found.dds")
         );
-        assert_eq!(recovered.resolve(0x5678), None);
+        assert_eq!(recovered.resolve(known), None);
 
         let layered = recovered.over(&fallback);
 
-        assert_eq!(layered.resolve(0x1234).as_deref(), Some("assets/found.dds"));
-        assert_eq!(layered.resolve(0x5678).as_deref(), Some("assets/known.dds"));
-        assert_eq!(layered.resolve(0x9abc), None);
-        assert!(layered.is_known(0x1234));
-        assert!(layered.is_known(0x5678));
-        assert!(!layered.is_known(0x9abc));
+        assert_eq!(layered.resolve(found).as_deref(), Some("assets/found.dds"));
+        assert_eq!(layered.resolve(known).as_deref(), Some("assets/known.dds"));
+        assert_eq!(layered.resolve(neither), None);
+        assert!(layered.is_known(found));
+        assert!(layered.is_known(known));
+        assert!(!layered.is_known(neither));
     }
 
     #[test]

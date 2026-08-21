@@ -39,8 +39,9 @@ ltk_texture = "0.4"
 - `WadBuilder` - Creates new WAD archives
 - `WadExtractor` - Extracts chunks to disk with progress callbacks
 - `PathResolver` trait - Maps path hashes to human-readable paths
+- `WadHash` - A chunk's key, re-exported from `ltk_hash`
 
-**WAD Path Hashing**: Files in WAD archives are identified by 64-bit path hashes (XXHash64 of lowercase path). Use a "hashtable" (hash→path mapping) to resolve paths.
+**WAD Path Hashing**: Files in WAD archives are identified by 64-bit path hashes (XXHash64 of lowercase path), typed as `ltk_hash::WadHash`. `WadHash::hash_str(path)` hashes a path (bring `ltk_hash::Hash` into scope), and a `WadChunkLink` read out of a bin holds the same type. Use a "hashtable" (hash→path mapping) to resolve paths.
 
 **Example: Reading a WAD**
 ```rust
@@ -65,11 +66,11 @@ if let Some(chunk) = chunks.get(&0x1234567890abcdef) {
 **Example: Extracting with Progress**
 ```rust
 use std::collections::HashMap;
-use ltk_wad::{Wad, WadExtractor};
+use ltk_wad::{Wad, WadExtractor, WadHash};
 
 let mut wad = Wad::mount(File::open("archive.wad.client")?)?;
-// A `HashMap<u64, String>` is a resolver. `NoResolver` names nothing.
-let names: HashMap<u64, String> = load_hashtable()?;
+// A `HashMap<WadHash, String>` is a resolver. `NoResolver` names nothing.
+let names: HashMap<WadHash, String> = load_hashtable()?;
 
 let mut extractor = WadExtractor::new(&names)
     .with_filter(|path| path.starts_with("assets/"))
