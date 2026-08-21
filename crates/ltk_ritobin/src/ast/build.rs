@@ -18,6 +18,7 @@ use crate::{
 
 use Diagnostic::*;
 
+#[derive(Debug, Clone)]
 pub struct Ast {
     pub bin_type: Option<Span>,
     pub version: Option<Spanned<u32>>,
@@ -26,6 +27,7 @@ pub struct Ast {
     pub diagnostics: Vec<DiagnosticWithSpan>,
 }
 
+#[derive(Debug, Clone)]
 pub struct AstObject {
     pub path_hash: Spanned<BinHash>,
     pub object: Ptr<AstStruct>,
@@ -42,12 +44,14 @@ impl Ast {
     }
 }
 
+#[derive(Debug, Clone)]
 pub(super) struct RawRootEntry {
     key: PropertyValueEnum<Span>,
     type_span: Span,
     value: AstValue,
 }
 
+#[derive(Debug, Clone)]
 pub(super) struct BuildCtx<'a> {
     pub cst: &'a Cst,
     pub text: &'a str,

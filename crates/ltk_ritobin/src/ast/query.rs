@@ -9,8 +9,16 @@ use crate::{
     parse::Span,
 };
 
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub enum NodeKind {
+    Object,
+    Struct,
+    Property,
+    Value,
+}
+
 /// Any node in an [`Ast`].
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum Node<'a> {
     Object(&'a AstObject),
     Struct(&'a AstStruct),
@@ -19,6 +27,14 @@ pub enum Node<'a> {
 }
 
 impl<'a> Node<'a> {
+    pub fn kind(&self) -> NodeKind {
+        match self {
+            Node::Object(_) => NodeKind::Object,
+            Node::Struct(_) => NodeKind::Struct,
+            Node::Property(_) => NodeKind::Property,
+            Node::Value(_) => NodeKind::Value,
+        }
+    }
     pub fn span(&self) -> Span {
         match self {
             // TODO: don't do this
@@ -62,6 +78,7 @@ impl<'a> Node<'a> {
 /// Iterator of every [`Node`] on the way to a given offset, from the top level.
 ///
 /// Use [`Ast::path_to`] to construct this iterator.
+#[derive(Clone)]
 pub struct AstPathIter<'a> {
     next: Option<Node<'a>>,
     offset: u32,
