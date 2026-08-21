@@ -1,12 +1,7 @@
-//! Packs a `vec2`/`vec3`/`vec4`/`rgba`/`mtx44` value's flat, bare-number body into one combined
-//! [`AstValue`]. Ported from [`crate::typecheck::listlikes`] - same rules, same
-//! [`ListLike`]/[`Diagnostic`] vocabulary - just reading list items directly off the CST as it
-//! goes rather than draining a pre-collected queue.
-
 use ltk_meta::{property::values, PropertyKind};
 
 use crate::{
-    ast::{build::BuildCtx, nodes::AstValue},
+    ast::{build::BuildCtx, AstValue},
     cst::{Child, Cst, Kind, Node},
     parse::Span,
     typecheck::diagnostics::{Diagnostic, ListLike, MaybeSpanDiag, RitoTypeOrVirtual},
@@ -37,7 +32,7 @@ impl<'c> ListIter<'_, '_, 'c> {
             self.span = node.span;
             return Some(
                 self.ctx
-                    .resolve_scalar(node, expected, self.type_span)
+                    .resolve_numeric(node, expected, self.type_span)
                     .map_err(MaybeSpanDiag::from),
             );
         }

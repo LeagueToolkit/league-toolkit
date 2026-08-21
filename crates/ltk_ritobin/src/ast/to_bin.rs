@@ -1,22 +1,15 @@
-//! Converts a resolved [`Ast`] into a plain [`Bin`] - the direct counterpart to
-//! [`crate::typecheck::TypeChecker::collect_to_bin`], just starting from [`AstValue`] instead of
-//! merging into `ltk_meta` types while walking.
-
 use ltk_meta::{property::values, traits::PropertyExt as _, Bin, BinObject, PropertyValueEnum};
 
 use crate::{
     ast::{
         build::{Ast, AstObject},
-        nodes::{AstStruct, AstValue},
+        nodes::AstStruct,
+        AstValue,
     },
     parse::Span,
 };
 
 impl Ast {
-    /// Builds a plain [`Bin`] from this tree. Non-consuming: a caller can hold onto `Ast` (e.g.
-    /// for hover/lints) and still export a `Bin` on demand. `text` is what turns
-    /// `dependencies`' spans back into the owned `String`s `Bin` needs - passed explicitly
-    /// rather than stored, same convention as `Cst::build_bin`/`Cst::print` already use.
     pub fn to_bin(&self, text: &str) -> Bin {
         let objects = self
             .objects
@@ -31,8 +24,6 @@ impl Ast {
             })
             .collect::<Vec<_>>();
 
-        // `dependencies` spans cover the whole string literal, quotes included (same convention
-        // as `ast::Literal::String`) - strip them to get the dependency path itself.
         let dependencies: Vec<String> = self
             .dependencies
             .iter()
@@ -47,7 +38,7 @@ impl AstValue {
     /// Recursively converts this value into an equivalent `PropertyValueEnum<Span>` - the bridge
     /// back to `ltk_meta`'s own container constructors (`Container::TryFrom`, `Map::new`, ...),
     /// which know how to assemble the binary-format-shaped types this crate ultimately needs.
-    fn to_spanned(&self) -> PropertyValueEnum<Span> {
+    fn to_prop_value(&self) -> PropertyValueEnum<Span> {
         match self {
             AstValue::None(v) => PropertyValueEnum::None(*v),
             AstValue::Bool(v) => PropertyValueEnum::Bool(v.clone()),
@@ -77,7 +68,10 @@ impl AstValue {
                 items,
                 span,
             } => {
-                let items = items.iter().map(AstValue::to_spanned).collect::<Vec<_>>();
+                let items = items
+                    .iter()
+                    .map(AstValue::to_prop_value)
+                    .collect::<Vec<_>>();
                 let container = values::Container::try_from(items).unwrap_or_else(|_| {
                     values::Container::empty(*item_kind).unwrap_or(values::Container::None {
                         items: Vec::new(),
@@ -91,7 +85,10 @@ impl AstValue {
                 items,
                 span,
             } => {
-                let items = items.iter().map(AstValue::to_spanned).collect::<Vec<_>>();
+                let items = items
+                    .iter()
+                    .map(AstValue::to_prop_value)
+                    .collect::<Vec<_>>();
                 let container = values::Container::try_from(items).unwrap_or_else(|_| {
                     values::Container::empty(*item_kind).unwrap_or(values::Container::None {
                         items: Vec::new(),
@@ -108,7 +105,7 @@ impl AstValue {
             } => {
                 let mut map = values::Map::empty(*key_kind, *value_kind);
                 for (k, v) in entries {
-                    let _ = map.push(k.to_spanned(), v.to_spanned());
+                    let _ = map.push(k.to_prop_value(), v.to_prop_value());
                 }
                 *map.meta_mut() = *span;
                 PropertyValueEnum::Map(map)
@@ -118,7 +115,7 @@ impl AstValue {
                 value,
                 span,
             } => {
-                let inner = value.as_deref().map(AstValue::to_spanned);
+                let inner = value.as_deref().map(AstValue::to_prop_value);
                 let optional = values::Optional::new_with_meta(*item_kind, inner, *span)
                     .unwrap_or_else(|_| {
                         values::Optional::empty(*item_kind).unwrap_or(values::Optional::None {
@@ -139,7 +136,7 @@ impl AstStruct {
             properties: self
                 .properties
                 .iter()
-                .map(|p| (p.name.value, p.value.to_spanned()))
+                .map(|p| (p.name.value, p.value.to_prop_value()))
                 .collect(),
             meta: self.span,
         }

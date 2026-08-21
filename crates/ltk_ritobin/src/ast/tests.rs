@@ -1,7 +1,3 @@
-//! Ported from `typecheck::test` - same cases, exercised against `ast::build`/`Ast::to_bin`
-//! instead of `Cst::build_bin`. See `tests/differential.rs` for why these two engines need to
-//! agree in the first place.
-
 use glam::{Vec3, Vec4};
 use ltk_hash::BinHash;
 use ltk_meta::{
@@ -60,6 +56,15 @@ fn build_errs(input: &str) -> Vec<DiagnosticWithSpan> {
     cst.build_ast(&input).diagnostics
 }
 
+#[test]
+fn option() {
+    assert(r#"0x1: option[vec3] = { { 0.5, 5.3, -0.20 } }"#, |obj| {
+        obj.property(
+            0x1,
+            values::Optional::from(values::Vector3::from(Vec3::new(0.5, 5.3, -0.2))),
+        )
+    });
+}
 #[test]
 fn option_coerce() {
     assert(r#"0x1: option[vec3] = { 0.5, 5.3, -0.20 }"#, |obj| {
@@ -654,8 +659,17 @@ fn a_quoted_property_name_produces_the_same_property_as_a_bare_one() {
     let quoted_ast = Cst::parse(&quoted).build_ast(&quoted);
     let bare_ast = Cst::parse(&bare).build_ast(&bare);
 
-    assert_eq!(quoted_ast.diagnostics.len(), 1, "{:#?}", quoted_ast.diagnostics);
-    assert!(bare_ast.diagnostics.is_empty(), "{:#?}", bare_ast.diagnostics);
+    assert_eq!(
+        quoted_ast.diagnostics.len(),
+        1,
+        "{:#?}",
+        quoted_ast.diagnostics
+    );
+    assert!(
+        bare_ast.diagnostics.is_empty(),
+        "{:#?}",
+        bare_ast.diagnostics
+    );
     pretty_assertions::assert_eq!(quoted_ast.to_bin(&quoted), bare_ast.to_bin(&bare));
 }
 
@@ -786,14 +800,4 @@ entries: map[hash,embed] = {
     let cst = Cst::parse(input);
     let errs = cst.build_ast(input).diagnostics;
     assert!(errs.is_empty(), "{errs:#?}");
-}
-
-#[test]
-fn debug_span_probe2() {
-    let input = "0x1: map[hash,u32] = { 5 }";
-    let cst = Cst::parse(input);
-    let mut s = String::new();
-    cst.print(&mut s, input);
-    eprintln!("{s}");
-    panic!("dump");
 }

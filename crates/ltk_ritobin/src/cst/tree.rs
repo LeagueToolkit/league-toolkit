@@ -3,6 +3,7 @@ use std::fmt::{self, Display};
 use ltk_meta::Bin;
 
 use crate::{
+    ast::build::ChildrenExt as _,
     cst::{
         visitor::{Visit, VisitCtx},
         ChildRange, ErrorRange, NodeId, TokenId, Visitor,
@@ -143,6 +144,26 @@ impl Node {
             .filter(|t| t.kind == TokenKind::LCurly)
             .map_or(self.span, |t| t.span)
     }
+
+    pub fn trimmed_span(&self, cst: &Cst) -> Span {
+        let children = self.children.get(cst);
+        match self.kind {
+            Kind::Entry => {
+                let key = children.find_tree(cst, Kind::EntryKey);
+                let value = children.find_tree(cst, Kind::EntryValue);
+                match (key, value) {
+                    (Some(key), Some(value)) => Span::new(key.span.start, value.span.end),
+                    _ => self.span,
+                }
+            }
+            Kind::ListItem => children
+                .iter()
+                .find_map(|c| c.tree(cst))
+                .map(|t| t.span)
+                .unwrap_or(self.span),
+            _ => self.span,
+        }
+    }
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -218,12 +239,9 @@ impl Cst {
         checker.collect_to_bin()
     }
 
-    /// Walks this tree once and produces a fully resolved [`crate::ast::Ast`] - a persisted,
-    /// queryable structure for programmatic consumers (lints, an LSP), as opposed to
-    /// [`Self::build_bin`]'s "give me a `Bin`, fast" path. See the [`crate::ast`] module docs.
     #[cfg(feature = "ast")]
     pub fn build_ast(&self, text: &str) -> crate::ast::Ast {
-        crate::ast::build(self, text)
+        crate::ast::Ast::from_cst(self, text)
     }
 
     /// Print this tree to a string for debugging purposes. This does **NOT** output ritobin, see [`crate::Print`] for

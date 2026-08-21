@@ -1,10 +1,7 @@
-//! Span-containment lookup on an already-resolved [`Ast`] - how hover is served. See the
-//! [`crate::ast`] module docs: because the whole file is always resolved up front, hover never
-//! needs a separate on-demand resolution step, just a lookup on a structure that already exists.
-
 use crate::ast::{
     build::{Ast, AstObject},
-    nodes::{AstProperty, AstStruct, AstValue},
+    nodes::{AstProperty, AstStruct},
+    AstValue,
 };
 
 pub enum Located<'a> {

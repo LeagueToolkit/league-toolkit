@@ -3,7 +3,7 @@ use ltk_meta::{property::values, traits::PropertyExt, PropertyKind, PropertyValu
 
 use crate::{
     cst::{self, visitor::VisitCtx, Kind, Node},
-    literals::{resolve_hash, resolve_literal},
+    literals::{eval, eval_unknown_hash},
     parse::{Span, Token, TokenKind},
     typecheck::{
         diagnostics::{self, Diagnostic, MaybeSpanDiag, RitoTypeOrVirtual},
@@ -163,7 +163,7 @@ pub(crate) fn resolve_value(
                 Token {
                     kind: TokenKind::HexLit,
                     span,
-                } => match resolve_hash(ctx.text, *span)? {
+                } => match eval_unknown_hash(ctx.text, *span)? {
                     PropertyValueEnum::Hash(hash) => *hash,
                     value => {
                         return Err(TypeMismatch {
@@ -228,7 +228,7 @@ pub(crate) fn resolve_value(
             let Some(child) = children.get(visit_ctx.cst).first() else {
                 return Ok(None);
             };
-            return resolve_literal(
+            return eval(
                 ctx.text,
                 child.token(visit_ctx.cst).unwrap(),
                 kind_hint,
@@ -302,8 +302,8 @@ pub(crate) fn resolve_entry(
         Some(Token {
             kind: TokenKind::HexLit,
             span,
-        }) => resolve_hash(ctx.text, *span)?,
-        Some(token) => resolve_literal(
+        }) => eval_unknown_hash(ctx.text, *span)?,
+        Some(token) => eval(
             ctx.text,
             token,
             parent_value_kind

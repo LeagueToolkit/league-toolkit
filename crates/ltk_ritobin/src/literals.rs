@@ -1,10 +1,4 @@
-//! Literal/coercion rules shared by both typecheckers ([`crate::typecheck`] and [`crate::ast`]).
-//!
-//! Everything here takes tokens/spans/text directly rather than a CST [`crate::cst::Node`], so
-//! it doesn't care which tree shape is driving it - kept in one place so both engines apply the
-//! same rules instead of maintaining two copies that could silently drift apart.
-
-use std::{borrow::Cow, fmt::Debug};
+use std::{borrow::Cow, fmt::Debug, str::FromStr};
 
 use ltk_hash::{BinHash, Hash as _, WadHash};
 use ltk_meta::{property::values, PropertyKind, PropertyValueEnum};
@@ -112,7 +106,10 @@ impl CoerceFrom for PropertyKind {
     }
 }
 
-pub(crate) fn resolve_hash(text: &str, span: Span) -> Result<PropertyValueEnum<Span>, Diagnostic> {
+pub(crate) fn eval_unknown_hash(
+    text: &str,
+    span: Span,
+) -> Result<PropertyValueEnum<Span>, Diagnostic> {
     // TODO: better errs here?
     let src = text[span].strip_prefix("0x").ok_or(InvalidHash(span))?;
 
@@ -127,6 +124,15 @@ pub(crate) fn resolve_hash(text: &str, span: Span) -> Result<PropertyValueEnum<S
             Err(_) => return Err(InvalidHash(span)),
         },
     })
+}
+
+pub(crate) fn eval_hash<H: ltk_hash::Hash + FromStr>(
+    text: &str,
+    span: Span,
+) -> Result<H, Diagnostic> {
+    // TODO: better errs here?
+    let src = text[span].strip_prefix("0x").ok_or(InvalidHash(span))?;
+    H::from_str(src).map_err(|_| InvalidHash(span))
 }
 
 pub(crate) fn parse_int<T: std::str::FromStr<Err = std::num::ParseIntError>>(
@@ -144,18 +150,12 @@ pub(crate) fn parse_int<T: std::str::FromStr<Err = std::num::ParseIntError>>(
         })
 }
 
-/// Resolves a single literal token into the value it spells.
-///
-/// - `text` - the source text the token's span indexes into
-/// - `token` - the literal to resolve
-/// - `kind_hint` - the type to read the literal as. A number, `true` or a string can be several
-///   types, so without a hint an ambiguous literal cannot be resolved at all
-/// - `kind_hint_span` - where `kind_hint` was written, so a mismatch can point at it
+/// Evaluate a literal token into a value
 ///
 /// # Errors
 /// If the literal does not fit `kind_hint`, or if it is ambiguous and there is no hint to pick
 /// with - a bare `5` on its own has no type.
-pub(crate) fn resolve_literal(
+pub(crate) fn eval(
     text: &str,
     token: &Token,
     kind_hint: Option<RitoType>,
@@ -185,7 +185,7 @@ pub(crate) fn resolve_literal(
         Token {
             kind: TokenKind::HexLit,
             span,
-        } => resolve_hash(text, *span)?,
+        } => eval_unknown_hash(text, *span)?,
         Token {
             kind: TokenKind::Number,
             span,
