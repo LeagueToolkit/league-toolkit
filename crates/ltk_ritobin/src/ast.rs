@@ -21,6 +21,8 @@ pub mod build;
 mod listlikes;
 pub mod nodes;
 pub mod query;
+#[cfg(test)]
+mod tests;
 mod to_bin;
 
 pub use build::{build, Ast, AstObject};
