@@ -218,6 +218,14 @@ impl Cst {
         checker.collect_to_bin()
     }
 
+    /// Walks this tree once and produces a fully resolved [`crate::ast::Ast`] - a persisted,
+    /// queryable structure for programmatic consumers (lints, an LSP), as opposed to
+    /// [`Self::build_bin`]'s "give me a `Bin`, fast" path. See the [`crate::ast`] module docs.
+    #[cfg(feature = "ast")]
+    pub fn build_ast(&self, text: &str) -> crate::ast::Ast {
+        crate::ast::build(self, text)
+    }
+
     /// Print this tree to a string for debugging purposes. This does **NOT** output ritobin, see [`crate::Print`] for
     /// actual ritobin pretty-printing.
     pub fn print(&self, mut buf: &mut String, source: &str) {

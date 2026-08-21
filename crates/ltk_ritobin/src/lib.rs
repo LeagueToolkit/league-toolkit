@@ -81,8 +81,11 @@
 #[allow(unused, reason = "for module level doc link")]
 use ltk_meta::Bin;
 
+#[cfg(feature = "ast")]
+pub mod ast;
 pub mod cst;
 pub mod hashes;
+pub mod literals;
 pub mod parse;
 pub mod print;
 pub mod typecheck;
