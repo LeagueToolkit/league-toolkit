@@ -16,7 +16,9 @@ use std::io::{Read, Seek, SeekFrom};
 use byteorder::{ReadBytesExt, LE};
 use ltk_io_ext::ReaderExt;
 use ltk_mesh::mem::vertex::{ElementFormat, ElementName};
-use ltk_mesh::mem::{IndexBuffer, VertexBufferDescription, VertexBufferUsage, VertexElement};
+use ltk_mesh::mem::{
+    IndexBuffer, VertexBuffer, VertexBufferDescription, VertexBufferUsage, VertexElement,
+};
 
 use crate::{
     BucketedGeometry, EnvironmentAsset, EnvironmentMesh, ParseError, PlanarReflector, Result,
@@ -165,7 +167,7 @@ impl EnvironmentAsset {
             let mut buf = vec![0u8; size];
             reader.read_exact(&mut buf)?;
 
-            let vb = desc.into_vertex_buffer(buf);
+            let vb = VertexBuffer::new(desc, buf);
             let decoded = vb.count();
             if decoded != expected_vertex_count {
                 return Err(ParseError::VertexBufferVertexCountMismatch {

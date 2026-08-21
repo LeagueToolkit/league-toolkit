@@ -1,4 +1,4 @@
-use crate::{error::ParseError, r#static::MAGIC, StaticMesh, StaticMeshFace, StaticMeshFlags};
+use crate::{error::ParseError, r#static::SCB_MAGIC, StaticMesh, StaticMeshFace, StaticMeshFlags};
 use byteorder::{ReadBytesExt, LE};
 use glam::{vec3, Vec3};
 use ltk_io_ext::ReaderExt;
@@ -6,11 +6,16 @@ use ltk_primitives::Color;
 use std::io::{BufRead, Read};
 
 impl StaticMesh {
-    /// Reads a static mesh from a binary stream
+    /// Reads a static mesh from a binary `.scb` stream.
+    ///
+    /// # Errors
+    /// Returns [`ParseError::InvalidFileSignature`] if the magic is wrong,
+    /// [`ParseError::InvalidFileVersion`] for an unsupported version, and
+    /// [`ParseError::IOError`] on a short read.
     pub fn from_reader<R: Read>(reader: &mut R) -> crate::Result<Self> {
         let mut buf: [u8; 8] = [0; 8];
         reader.read_exact(&mut buf)?;
-        if MAGIC != buf {
+        if SCB_MAGIC != buf {
             return Err(ParseError::InvalidFileSignature);
         }
 
@@ -80,7 +85,12 @@ impl StaticMesh {
         })
     }
 
-    /// Reads a static mesh from an ASCII stream (.sco format)
+    /// Reads a static mesh from an ASCII `.sco` stream.
+    ///
+    /// # Errors
+    /// Returns [`ParseError::InvalidFileSignature`] if the header line is wrong,
+    /// [`ParseError::InvalidField`] for a malformed field, and [`ParseError::IOError`] if the
+    /// stream ends early.
     pub fn from_ascii<R: BufRead>(reader: &mut R) -> crate::Result<Self> {
         let mut line = String::new();
 
