@@ -1,24 +1,9 @@
 //! Recovering chunk names from the `.bin` files of an archive.
 //!
-//! A WAD keys a chunk by the hash of its path and stores no path. A hash table
-//! names most chunks, and the rest extract as sixteen hex digits. League's
-//! `.bin` files name the assets they use by path, as linked files and as string
-//! properties, so the paths of many anonymous chunks sit inside the archive
-//! itself. This module reads them out.
-//!
-//! A match is exact: a string counts only when its hash is the hash of a chunk
-//! the resolver could not name, so a string that is not a path never matches.
-//!
-//! # How it stays cheap
-//!
-//! - Nothing runs when the resolver names every chunk.
-//! - A bin is found by its name, or by its first bytes. The first bytes come
-//!   from the first compressed block alone, so an anonymous texture costs one
-//!   block and not the whole chunk.
-//! - Strings are read out of the bytes as the length-prefixed runs the format
-//!   writes them as, with no parse of the object tree in between.
-//! - The bins decompress on worker threads, and the scan stops as soon as every
-//!   anonymous chunk has a name.
+//! - The scan tells a bin from any other chunk by its magic, decoded from the
+//!   first compressed block alone.
+//! - The scan reads the strings of a bin as the length-prefixed runs the format
+//!   writes, with no parse of the `PROP` data.
 //!
 //! # Example
 //!
@@ -93,7 +78,7 @@ pub struct RecoveredNames {
     pub names: HashMap<WadHash, String>,
     /// Bins read for the names.
     pub bins_scanned: usize,
-    /// Chunks whose first bytes were read because nothing named them.
+    /// Chunks whose first bytes the scan read because nothing named them.
     pub chunks_sniffed: usize,
 }
 
@@ -184,7 +169,7 @@ impl<'a> NameRecovery<'a> {
 
     /// Stop early once `flag` reads `true`.
     ///
-    /// The names found so far are returned, and a stop is not an error.
+    /// [`run`](Self::run) returns the names found so far, and a stop is not an error.
     pub fn with_cancel_flag(mut self, flag: &'a AtomicBool) -> Self {
         self.cancel = Some(flag);
         self
@@ -194,9 +179,9 @@ impl<'a> NameRecovery<'a> {
     ///
     /// # Errors
     ///
-    /// Fails when the archive cannot be read, with a [`WadError::Chunk`] that
-    /// names the bin. A bin that does not decompress is skipped, because one
-    /// bad bin is no reason to lose the names in the rest.
+    /// Fails when the recovery cannot read the archive, with a [`WadError::Chunk`]
+    /// that names the bin. The recovery skips a bin that does not decompress,
+    /// because one bad bin is no reason to lose the names in the rest.
     pub fn run<S: Read + Seek, R: PathResolver + ?Sized>(
         &self,
         wad: &mut Wad<S>,
@@ -246,7 +231,7 @@ impl<'a> NameRecovery<'a> {
         let (sender, receiver) = mpsc::sync_channel::<RawChunk>(workers);
         let receiver = Mutex::new(receiver);
 
-        /* Taken inside the scope so it drops before the workers are joined.
+        /* Taken inside the scope so it drops before the scope joins the workers.
         A worker only stops once every sender is gone. */
         let mut sender = Some(sender);
         let scanned = thread::scope(|scope| {
@@ -326,7 +311,7 @@ fn sniff_is_bin<S: Read + Seek>(
         };
         match decoder.decompress_prefix(&raw, chunk.compression_type, SNIFF_BYTES) {
             Ok(head) if head.len() >= wanted => return is_bin_magic(&head),
-            /* The first block was cut short, and the chunk holds more. */
+            /* The prefix cut the first block short, and the chunk holds more. */
             _ if raw.len() == limit && limit < SNIFF_RAW_BYTES => limit = SNIFF_RAW_BYTES,
             _ => return false,
         }
@@ -354,7 +339,7 @@ fn is_printable(byte: u8) -> bool {
 ///
 /// The format writes a string as a little-endian `u16` length and the bytes,
 /// with no terminator. A path is printable ASCII and its length's high byte is
-/// zero, so each run of printable bytes starts on a string's first byte, and
+/// zero. So each run of printable bytes starts on a string's first byte, and
 /// the two bytes in front of the run are its length. The length then bounds
 /// the string exactly, however many printable bytes follow it, such as the low
 /// byte of the next string's length.
@@ -498,7 +483,7 @@ mod tests {
         assert_eq!(recovered.get(WadHash::hash_str(asset)), Some(asset));
         assert_eq!(recovered.len(), 1);
         assert_eq!(recovered.bins_scanned, 1);
-        /* The asset was sniffed, and the named bin was not. */
+        /* The recovery sniffed the asset, and not the named bin. */
         assert_eq!(recovered.chunks_sniffed, 1);
         assert!(!recovered
             .names

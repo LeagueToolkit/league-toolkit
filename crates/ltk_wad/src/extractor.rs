@@ -47,14 +47,14 @@
 //!
 //! # How a chunk is named on disk
 //!
-//! - A path the resolver knows is used as is.
-//! - A chunk the resolver has no name for is written under its hash as sixteen
-//!   hex digits, with the extension its bytes identify as, when they identify
+//! - A path the resolver knows stays as it is.
+//! - A chunk the resolver has no name for lands under its hash as sixteen hex
+//!   digits. The extension is the one its bytes identify as, when they identify
 //!   as anything.
 //! - A path with no extension, or one that collides with an existing directory,
 //!   becomes `<stem>.ltk.<ext>`, or `<stem>.ltk` when the bytes identify as nothing.
-//! - A name the file system refuses as too long falls back to `<hash>.<ext>` in
-//!   the output directory itself.
+//! - A name the file system refuses as too long becomes `<hash>.<ext>` in the
+//!   output directory itself.
 //!
 //! A chunk no resolver names can still get its name from the archive itself.
 //! [`WadExtractor::with_name_recovery`] reads the `.bin` files for it first.
@@ -65,8 +65,8 @@
 //! [`extract_all`](WadExtractor::extract_all) and
 //! [`extract_chunks`](WadExtractor::extract_chunks) read the archive in order on
 //! the calling thread and hand each chunk to a worker that decompresses and
-//! writes it. The channel between the two is bounded by the worker count, so
-//! memory holds a few chunks whatever the archive holds. The resolver, the path
+//! writes it. The worker count bounds the channel between the two, so memory
+//! holds a few chunks whatever the archive holds. The resolver, the path
 //! filter and the progress callback run on the calling thread only, so none of
 //! them needs to be [`Sync`]. The progress callback hears of each chunk once
 //! the chunk is done.
@@ -96,8 +96,8 @@ use crate::{ChunkDecoder, NameRecovery, RecoveredNames, Wad, WadChunk, WadError}
 ///
 /// A WAD stores the hash of each chunk's path and not the path. A resolver
 /// supplies the path, from a hash table or any other source, and answers
-/// `None` for a hash it has no name for. Such a chunk is written under its
-/// hash as sixteen hex digits.
+/// `None` for a hash it has no name for. The extractor writes such a chunk
+/// under its hash as sixteen hex digits.
 ///
 /// Every `HashMap<WadHash, String>` is a resolver, and so is a reference, a `Box`
 /// or an `Arc` of any resolver.
@@ -155,7 +155,7 @@ impl<S: BuildHasher> PathResolver for HashMap<WadHash, String, S> {
     }
 }
 
-/// A resolver that names nothing, so every chunk is written under its hash.
+/// A resolver that names nothing, so every chunk lands under its hash.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct NoResolver;
 
@@ -169,7 +169,7 @@ impl PathResolver for NoResolver {
     }
 }
 
-/// A path hash as the sixteen hex digits a nameless chunk is written under.
+/// A path hash as the sixteen hex digits a nameless chunk lands under.
 pub(crate) fn hex_name(path_hash: WadHash) -> String {
     format!("{path_hash:016x}")
 }
@@ -191,7 +191,7 @@ impl ExtractProgress<'_> {
         self.done
     }
 
-    /// Chunks the extraction set out to do.
+    /// Chunks the extraction covers, done or not.
     pub fn total(&self) -> usize {
         self.total
     }
@@ -251,9 +251,9 @@ pub enum ExtractLayout {
     Paths,
     /// In the output directory itself, by its file name alone.
     ///
-    /// When two chunks of one extraction share a name, the second keeps apart
-    /// with its path hash before the extension, as `name.<hash>.ext`. Which of
-    /// the two is second follows write order.
+    /// When two chunks of one extraction share a name, the second takes its
+    /// path hash before the extension, as `name.<hash>.ext`. Which of the two
+    /// is second follows write order.
     Flat,
 }
 
@@ -266,8 +266,8 @@ pub enum ExistingFilePolicy {
     Overwrite,
     /// Leave it, and count the chunk under [`ExtractReport::skipped_existing`].
     ///
-    /// The file is opened with `create_new`, so a file that appears between two
-    /// chunks is left alone too and no check races the write.
+    /// The worker opens the file with `create_new`, so it leaves a file that
+    /// appears between two chunks alone too, and no check races the write.
     Skip,
 }
 
@@ -288,7 +288,7 @@ pub struct ExtractReport {
     pub bytes_written: u64,
     /// Written chunks, by the kind their bytes identify as.
     pub by_kind: BTreeMap<LeagueFileKind, usize>,
-    /// The cancel flag was set, so some chunks were never read.
+    /// The cancel flag was set, so the reader never reached some chunks.
     pub cancelled: bool,
     /// What [`with_name_recovery`](WadExtractor::with_name_recovery) read out
     /// of the archive's bins. Empty when recovery was off.
@@ -376,8 +376,8 @@ type ProgressCallback<'a> = Box<dyn FnMut(&ExtractProgress<'_>) + 'a>;
 
 /// Configuration and execution of WAD chunk extraction.
 ///
-/// Build one with [`new`](Self::new), set it up with the `with_*` methods, and
-/// run it with [`extract_all`](Self::extract_all) or
+/// Build one with [`new`](Self::new), configure it with the `with_*` methods,
+/// and run it with [`extract_all`](Self::extract_all) or
 /// [`extract_chunks`](Self::extract_chunks). One extractor runs any number of
 /// extractions.
 pub struct WadExtractor<'a> {
@@ -463,8 +463,8 @@ impl<'a> WadExtractor<'a> {
 
     /// Stop early once `flag` reads `true`.
     ///
-    /// The flag is read before each chunk is read from the archive. Chunks
-    /// already handed to a worker still land, and
+    /// The reader checks the flag before it reads each chunk from the archive.
+    /// Chunks already handed to a worker still land, and
     /// [`ExtractReport::cancelled`] reports the stop.
     pub fn with_cancel_flag(mut self, flag: &'a AtomicBool) -> Self {
         self.cancel = Some(flag);
@@ -480,7 +480,7 @@ impl<'a> WadExtractor<'a> {
     }
 
     /// Read the archive's `.bin` files for the names of chunks the resolver
-    /// cannot name, before anything is written.
+    /// cannot name, before the extraction writes anything.
     ///
     /// Read [`NameRecovery`] for what it costs and what it finds. The names
     /// land in [`ExtractReport::recovered`], and the extraction uses the same
@@ -494,7 +494,7 @@ impl<'a> WadExtractor<'a> {
     ///
     /// # Errors
     ///
-    /// Fails on the first chunk that cannot be read, decompressed or written,
+    /// Fails on the first chunk the extractor cannot read, decompress or write,
     /// with a [`WadError::Chunk`] that names it. Chunks written before it stay
     /// on disk.
     pub fn extract_all<S: Read + Seek>(
@@ -509,12 +509,12 @@ impl<'a> WadExtractor<'a> {
     /// Extract the chunks of `wad` with the given path hashes into
     /// `output_dir`, in the order given.
     ///
-    /// A hash given twice is extracted once. A hash the archive holds no chunk
-    /// for is listed under [`ExtractReport::missing`] and is not an error.
+    /// A hash given twice counts once. A hash the archive holds no chunk for
+    /// lands under [`ExtractReport::missing`] and is not an error.
     ///
     /// # Errors
     ///
-    /// Fails on the first chunk that cannot be read, decompressed or written,
+    /// Fails on the first chunk the extractor cannot read, decompress or write,
     /// with a [`WadError::Chunk`] that names it. Chunks written before it stay
     /// on disk.
     pub fn extract_chunks<S: Read + Seek>(
@@ -745,8 +745,8 @@ impl Shared<'_> {
 
     /// Take jobs until every sender is gone.
     ///
-    /// After a failure the jobs are drained and dropped rather than written,
-    /// so a reader blocked on a full channel gets to see the failure too.
+    /// After a failure the worker drains and drops the jobs rather than writes
+    /// them, so a reader blocked on a full channel sees the failure too.
     fn run_worker(&self, receiver: &Mutex<mpsc::Receiver<Job>>, done: &mpsc::Sender<Done>) {
         let mut decoder = ChunkDecoder::new();
         loop {
@@ -780,15 +780,15 @@ impl Shared<'_> {
 /// The half of the extractor that the workers share.
 ///
 /// Everything here is [`Sync`]. The resolver, the path filter and the progress
-/// callback stay behind on the reader, which is what keeps those three free of
+/// callback stay on the reader, which is what keeps those three free of
 /// any such bound.
 struct ChunkWriter<'s> {
     layout: ExtractLayout,
     existing: ExistingFilePolicy,
     type_filter: Option<&'s [LeagueFileKind]>,
     output_dir: &'s Utf8Path,
-    /* The names the flat layout has handed out, so a second chunk of one name
-    can tell. Behind a mutex because the workers claim names concurrently. */
+    /* The names the flat layout gave so far, so a second chunk of one name can
+    tell. Behind a mutex because the workers claim names concurrently. */
     flat_names: Mutex<HashSet<String>>,
 }
 
@@ -939,7 +939,7 @@ fn write_file(path: &Utf8Path, data: &[u8], policy: ExistingFilePolicy) -> io::R
     }
 }
 
-/// `<hash>.<ext>`, the name a chunk falls back to when its own is refused.
+/// `<hash>.<ext>`, the name a chunk takes when the file system refuses its own.
 fn hashed_name(chunk: &WadChunk, chunk_kind: LeagueFileKind) -> Utf8PathBuf {
     let mut hashed_path = Utf8PathBuf::from(hex_name(chunk.path_hash));
     if let Some(ext) = chunk_kind.extension() {
@@ -951,7 +951,7 @@ fn hashed_name(chunk: &WadChunk, chunk_kind: LeagueFileKind) -> Utf8PathBuf {
 /// Check if a path looks like a hex-encoded hash (e.g., "0123456789abcdef").
 ///
 /// This is the name a chunk gets on disk when nothing resolves its hash, so
-/// a file tree extracted earlier can be told apart into named and unnamed
+/// a caller can sort a file tree extracted earlier into named and unnamed
 /// files.
 ///
 /// # Example
@@ -1648,7 +1648,7 @@ mod tests {
         let mut wad = source.into_wad(chunks);
         let resolver = names(&[(0x1111, "a/same.txt"), (0x2222, "b/same.txt")]);
 
-        // One worker, so the chunks land in the order they are read.
+        // One worker, so the chunks land in the order the reader reads them.
         let report = WadExtractor::new(&resolver)
             .with_layout(ExtractLayout::Flat)
             .with_workers(NonZeroUsize::new(1).unwrap())

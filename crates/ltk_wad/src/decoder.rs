@@ -93,11 +93,11 @@ fn decompress_zstd_multi(raw_data: &[u8], uncompressed_size: usize) -> Result<Bo
 /// Decompresses at most `max_len` bytes from the start of a chunk's raw data.
 ///
 /// `raw_data` may be a prefix of the chunk's raw bytes. As long as it holds
-/// the first compressed block, the first bytes decode, which is what a read
-/// of a chunk's magic wants without the rest of the chunk. A prefix that cuts
+/// the first compressed block, the first bytes decode. That is all a read of
+/// a chunk's magic wants, without the rest of the chunk. A prefix that cuts
 /// the first block short fails to decode.
 ///
-/// For [`WadChunkCompression::None`], the prefix of the input is returned as is.
+/// For [`WadChunkCompression::None`], the prefix of the input comes back as is.
 pub fn decompress_prefix(
     raw_data: &[u8],
     compression: WadChunkCompression,
@@ -264,7 +264,7 @@ impl ChunkDecoder {
         Ok(data)
     }
 
-    /// Decode frames from `input` into `output` until one of them runs out.
+    /// Decode frames from `input` into `output` until one of them ends.
     ///
     /// Returns the bytes written. Input that ends mid-block is not an error
     /// here, because a prefix read does that on purpose.

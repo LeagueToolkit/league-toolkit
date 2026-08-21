@@ -41,7 +41,7 @@ ltk_texture = "0.4"
 - `PathResolver` trait — Maps path hashes to human-readable paths
 - `WadHash` — A chunk's key, re-exported from `ltk_hash`
 
-**WAD Path Hashing**: Files in WAD archives are identified by 64-bit path hashes (XXHash64 of lowercase path), typed as `ltk_hash::WadHash`. `WadHash::hash_str(path)` hashes a path (bring `ltk_hash::Hash` into scope), and a `WadChunkLink` read out of a bin holds the same type. Use a "hashtable" (hash→path mapping) to resolve paths.
+**WAD Path Hashing**: A 64-bit path hash (XXHash64 of the lowercase path), typed as `ltk_hash::WadHash`, identifies each file in a WAD archive. `WadHash::hash_str(path)` hashes a path (bring `ltk_hash::Hash` into scope), and a `WadChunkLink` read out of a bin holds the same type. Use a "hashtable" (hash→path mapping) to resolve paths.
 
 **Example: Reading a WAD**
 ```rust
@@ -84,7 +84,7 @@ println!("{report}");
 the archive lacks under `report.missing`. `with_layout(ExtractLayout::Flat)`
 drops the directories, and `with_existing_file_policy(ExistingFilePolicy::Skip)`
 leaves files that exist. `with_name_recovery()` reads the archive's `.bin` files
-for the names of chunks the hash table lacks, before anything is written.
+for the names of chunks the hash table lacks, before it writes anything.
 `NameRecovery` runs the same scan on its own. A failure names its chunk through
 `WadError::Chunk`.
 
