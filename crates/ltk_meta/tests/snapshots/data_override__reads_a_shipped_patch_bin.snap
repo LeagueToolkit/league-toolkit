@@ -1,0 +1,69 @@
+---
+source: crates/ltk_meta/tests/data_override.rs
+expression: "&patch_bin.patches[..3]"
+---
+[
+  PropertyPatch(
+    object_hash: BinHash(1246217236),
+    path: "Position.Anchors.Anchor",
+    value: PropertyValueEnum(
+      kind: Vector2,
+      value: Vector2(
+        value: Vec2(0.0, 1.0),
+        meta: NoMeta,
+      ),
+    ),
+  ),
+  PropertyPatch(
+    object_hash: BinHash(1246217236),
+    path: "Position.UIRect",
+    value: PropertyValueEnum(
+      kind: Embedded,
+      value: Embedded(Struct(
+        class_hash: BinHash(1320794703),
+        properties: {
+          BinHash(597743964): PropertyValueEnum(
+            kind: Vector2,
+            value: Vector2(
+              value: Vec2(32.0, 32.0),
+              meta: NoMeta,
+            ),
+          ),
+          BinHash(2471448074): PropertyValueEnum(
+            kind: Vector2,
+            value: Vector2(
+              value: Vec2(368.0, 1168.0),
+              meta: NoMeta,
+            ),
+          ),
+          BinHash(2711301737): PropertyValueEnum(
+            kind: U16,
+            value: U16(
+              value: 1200,
+              meta: NoMeta,
+            ),
+          ),
+          BinHash(4133780694): PropertyValueEnum(
+            kind: U16,
+            value: U16(
+              value: 1600,
+              meta: NoMeta,
+            ),
+          ),
+        },
+        meta: NoMeta,
+      )),
+    ),
+  ),
+  PropertyPatch(
+    object_hash: BinHash(2767047437),
+    path: "FlipX",
+    value: PropertyValueEnum(
+      kind: Bool,
+      value: Bool(
+        value: true,
+        meta: NoMeta,
+      ),
+    ),
+  ),
+]

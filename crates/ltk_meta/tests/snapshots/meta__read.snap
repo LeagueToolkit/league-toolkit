@@ -3,7 +3,6 @@ source: crates/ltk_meta/tests/meta.rs
 expression: bin
 ---
 Bin(
-  is_override: false,
   version: 3,
   objects: {
     BinHash(2154231397): BinObject(
@@ -127,5 +126,4 @@ Bin(
     ),
   },
   dependencies: [],
-  data_overrides: [],
 )

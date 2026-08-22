@@ -1,6 +1,8 @@
+use ltk_hash::BinHash;
 use miette::Diagnostic;
 
 use super::property::Kind;
+use crate::{path::PropertyPathError, BinKind};
 
 #[derive(Debug, thiserror::Error, Diagnostic)]
 pub enum Error {
@@ -8,6 +10,19 @@ pub enum Error {
     InvalidFileSignature,
     #[error("Invalid file version '{0}'")]
     InvalidFileVersion(u32),
+    #[error("Expected a {expected} bin, found a {found} bin")]
+    UnexpectedBinKind { expected: BinKind, found: BinKind },
+    #[error("Invalid PTCH version '{0}' - the client only accepts 1")]
+    InvalidOverrideVersion(u32),
+    #[error("The PTCH declares {0} dependencies - a patch that has any cannot be loaded")]
+    OverrideDependencies(u32),
+    #[error("Invalid property path in patch record {index} (object {object_hash:08x}) - {source}")]
+    InvalidPropertyPath {
+        index: usize,
+        object_hash: BinHash,
+        #[source]
+        source: PropertyPathError,
+    },
     #[error("Invalid '{0}' - got '{1}'")]
     InvalidField(&'static str, String),
     #[error("Invalid property kind - {0}")]

@@ -9,7 +9,6 @@ use crate::Bin;
 /// use ltk_meta::{Bin, BinObject, property::NoMeta};
 ///
 /// let tree = Bin::<NoMeta>::builder()
-///     .is_override(false)
 ///     .dependency("base.bin")
 ///     .dependencies(["extra1.bin", "extra2.bin"])
 ///     .object(BinObject::new(0x1234, 0x5678))
@@ -17,7 +16,6 @@ use crate::Bin;
 /// ```
 #[derive(Debug, Default, Clone)]
 pub struct Builder<M> {
-    is_override: bool,
     objects: Vec<BinObject<M>>,
     dependencies: Vec<String>,
 }
@@ -29,14 +27,6 @@ impl<M> Builder<M> {
         M: Default,
     {
         Self::default()
-    }
-
-    /// Sets whether this is an override bin file.
-    ///
-    /// Default is `false`.
-    pub fn is_override(mut self, is_override: bool) -> Self {
-        self.is_override = is_override;
-        self
     }
 
     /// Adds a single dependency.
@@ -69,10 +59,8 @@ impl<M> Builder<M> {
     pub fn build(self) -> Bin<M> {
         Bin {
             version: 3,
-            is_override: self.is_override,
             objects: self.objects.into_iter().map(|o| (o.path_hash, o)).collect(),
             dependencies: self.dependencies,
-            data_overrides: Vec::new(),
         }
     }
 }

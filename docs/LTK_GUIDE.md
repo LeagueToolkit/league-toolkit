@@ -8,8 +8,8 @@ This document provides context for LLM assistants working on projects that use `
 
 League Toolkit is a Rust library for parsing, editing, and writing League of Legends file formats. The library is organized as a cargo workspace with:
 
-- **`league-toolkit`** — Umbrella crate that re-exports all sub-crates via feature flags
-- **Individual `ltk_*` crates** — Can be used independently for smaller dependency surfaces
+- **`league-toolkit`** - Umbrella crate that re-exports all sub-crates via feature flags
+- **Individual `ltk_*` crates** - Can be used independently for smaller dependency surfaces
 
 ### Quick Start
 
@@ -28,17 +28,17 @@ ltk_texture = "0.4"
 
 ## Crate Reference
 
-### `ltk_wad` — WAD Archive Handling
+### `ltk_wad` - WAD Archive Handling
 
 **Purpose**: Read and write WAD archives (`.wad.client` files), which are League's primary asset containers.
 
 **Key Types**:
-- `Wad<TSource>` — A mounted WAD archive (lazy loading)
-- `WadChunk` — Metadata for a single file in the archive
-- `WadDecoder` — Decompresses chunk data (GZip, Zstd, ZstdMulti)
-- `WadBuilder` — Creates new WAD archives
-- `WadExtractor` — Extracts chunks to disk with progress callbacks
-- `PathResolver` trait — Maps path hashes to human-readable paths
+- `Wad<TSource>` - A mounted WAD archive (lazy loading)
+- `WadChunk` - Metadata for a single file in the archive
+- `WadDecoder` - Decompresses chunk data (GZip, Zstd, ZstdMulti)
+- `WadBuilder` - Creates new WAD archives
+- `WadExtractor` - Extracts chunks to disk with progress callbacks
+- `PathResolver` trait - Maps path hashes to human-readable paths
 
 **WAD Path Hashing**: Files in WAD archives are identified by 64-bit path hashes (XXHash64 of lowercase path). Use a "hashtable" (hash→path mapping) to resolve paths.
 
@@ -77,23 +77,23 @@ extractor.extract_all(&mut decoder, chunks, "./output")?;
 ```
 
 **Compression Types**:
-- `None` — Uncompressed
-- `GZip` — Standard gzip
-- `Zstd` — Zstandard
-- `ZstdMulti` — Zstd with multiple frames
-- `Satellite` — External file reference (rare)
+- `None` - Uncompressed
+- `GZip` - Standard gzip
+- `Zstd` - Zstandard
+- `ZstdMulti` - Zstd with multiple frames
+- `Satellite` - External file reference (rare)
 
 ---
 
-### `ltk_texture` — Texture Formats
+### `ltk_texture` - Texture Formats
 
 **Purpose**: Decode and encode League's texture formats (.tex, .dds).
 
 **Key Types**:
-- `Texture` — Enum over `Tex` and `Dds`
-- `Tex` — League's custom .tex format
-- `Dds` — Standard DirectDraw Surface format
-- `Surface` — Decoded pixel data, convertible to `image::RgbaImage`
+- `Texture` - Enum over `Tex` and `Dds`
+- `Tex` - League's custom .tex format
+- `Dds` - Standard DirectDraw Surface format
+- `Surface` - Decoded pixel data, convertible to `image::RgbaImage`
 
 **Example: Decoding a Texture**
 ```rust
@@ -118,27 +118,27 @@ ltk_texture = { version = "0.4", features = ["intel-tex"] }
 
 ---
 
-### `ltk_mesh` — Mesh Formats
+### `ltk_mesh` - Mesh Formats
 
 **Purpose**: Parse skinned meshes (.skn) and static meshes (.scb/.sco).
 
 **Key Types**:
-- `SkinnedMesh` — Skinned mesh for characters (vertex skinning with bone weights)
-- `StaticMesh` — Static environment mesh
-- `VertexBuffer`, `IndexBuffer` — GPU-ready buffer abstractions
-- `SkinnedMeshRange` — Submesh range (material assignment)
-- `SkinnedMeshVertexType` — `Basic` (52 B), `Color` (56 B), `Tangent` (72 B), `Ext` (104 B)
-- `SkinnedMeshFlags` — v4 header flags, see below
+- `SkinnedMesh` - Skinned mesh for characters (vertex skinning with bone weights)
+- `StaticMesh` - Static environment mesh
+- `VertexBuffer`, `IndexBuffer` - GPU-ready buffer abstractions
+- `SkinnedMeshRange` - Submesh range (material assignment)
+- `SkinnedMeshVertexType` - `Basic` (52 B), `Color` (56 B), `Tangent` (72 B), `Ext` (104 B)
+- `SkinnedMeshFlags` - v4 header flags, see below
 
 **Skinned Mesh (.skn)**:
 ```rust
 use ltk_mesh::{SkinnedMesh, mem::vertex::ElementName};
 use std::{fs::File, io::BufReader};
 
-// Buffer the file — the header and submesh table are read in small pieces
+// Buffer the file - the header and submesh table are read in small pieces
 let mesh = SkinnedMesh::from_reader(&mut BufReader::new(File::open("champion.skn")?))?;
 
-// Resolve accessors ONCE and reuse them — each one costs a map lookup, so building one
+// Resolve accessors ONCE and reuse them - each one costs a map lookup, so building one
 // per vertex is the easiest way to make this slow
 let positions = mesh.vertex_buffer().accessor::<glam::Vec3>(ElementName::Position)
     .expect("skinned meshes always carry positions");
@@ -167,11 +167,11 @@ cargo run -p ltk_mesh --example skinned_mesh -- champion.skn
 
 **Vertex elements**: position, blend indices, blend weights, normal and `Texcoord0` exist in
 every layout; colour, tangent (`Texcoord6`) and `Texcoord1-4` only in some, which is why
-`accessor()` returns `Option`. Read each as the type matching its format — `Vec3` for
+`accessor()` returns `Option`. Read each as the type matching its format - `Vec3` for
 position/normal, `Vec2` for a UV, `Vec4` for blend weights and tangent, `[u8; 4]` for blend
 indices and colour.
 
-**GPU upload** — the cheapest path, and what normalized indices are for. Nothing is touched
+**GPU upload** - the cheapest path, and what normalized indices are for. Nothing is touched
 per index: hand over both buffers verbatim and issue one indexed draw per range with
 `start_vertex` as the base vertex.
 
@@ -186,7 +186,7 @@ for range in mesh.ranges() {
 
 **Index normalization**: on disk, indices are absolute into the shared vertex buffer unless
 the file says otherwise. `from_reader` rebases them per range (`index -= start_vertex`),
-exactly as the game does on load, so `mesh.index_buffer()` is **always normalized** —
+exactly as the game does on load, so `mesh.index_buffer()` is **always normalized**  - 
 consumers never branch on the flag. `mesh.range_indices(range)` adds `start_vertex` back in
 32 bits when you want absolute ones. `to_writer` restores whichever form the flag asks for,
 so a load/save round trip is byte exact.
@@ -204,10 +204,10 @@ buffer, and `0.1` gets a single synthesised unnamed range spanning the whole mes
 
 | flag | meaning |
 | --- | --- |
-| `DIRECT_BLEND_INDICES` | Blend indices are used as-is — the game skips both the rig influence remap and the bone palette lookup. Such a file also carries an opaque `u16`-length-prefixed block between the header and the index buffer, exposed as `direct_blend_index_block()`. |
+| `DIRECT_BLEND_INDICES` | Blend indices are used as-is - the game skips both the rig influence remap and the bone palette lookup. Such a file also carries an opaque `u16`-length-prefixed block between the header and the index buffer, exposed as `direct_blend_index_block()`. |
 | `NORMALIZED_INDICES` | The indices *on disk* are already normalized, so no rebase happens on load. This also lifts the `MAX_VERTEX_COUNT` (65536) limit, since indices resolve as `start_vertex + index` in 32 bits. |
 
-Both are named after what the file *contains*, not after a behaviour to opt into — setting
+Both are named after what the file *contains*, not after a behaviour to opt into - setting
 one without laying out the buffers accordingly corrupts the mesh rather than enabling a
 feature.
 
@@ -241,15 +241,15 @@ println!("Faces: {}", mesh.faces().len());
 
 ---
 
-### `ltk_anim` — Animation & Skeleton Formats
+### `ltk_anim` - Animation & Skeleton Formats
 
 **Purpose**: Parse skeleton files (.skl) and animation files (.anm).
 
 **Key Types**:
-- `RigResource` — Skeleton/rig definition
-- `Joint` — Single bone/joint in hierarchy
-- `Animation` — Animation clip (compressed or uncompressed)
-- `AnimationAsset` — Unified animation asset container
+- `RigResource` - Skeleton/rig definition
+- `Joint` - Single bone/joint in hierarchy
+- `Animation` - Animation clip (compressed or uncompressed)
+- `AnimationAsset` - Unified animation asset container
 
 **Reading a Skeleton**:
 ```rust
@@ -263,28 +263,30 @@ for joint in rig.joints() {
 ```
 
 **Animation Types**:
-- `Uncompressed` — Full keyframe data
-- `Compressed` — Quantized/compressed format (requires evaluator)
+- `Uncompressed` - Full keyframe data
+- `Compressed` - Quantized/compressed format (requires evaluator)
 
 ---
 
-### `ltk_meta` — Property Bin Files
+### `ltk_meta` - Property Bin Files
 
 **Purpose**: Read and write property bin files (.bin), League's primary data format for game configuration.
 
 **Key Types**:
-- `BinTree` — Top-level container (collection of objects + dependencies)
-- `BinTreeObject` — Single object with typed properties
-- `BinProperty` — Property with hash key and typed value
-- `value::*` — Property value types (I32, F32, String, Vec3, Container, etc.)
+- `Bin` - Top-level container of a `PROP` file (objects + dependencies)
+- `BinObject` - Single object with typed properties
+- `PropertyValueEnum` / `property::values::*` - Property value types (I32, F32, String, Vector3, Container, etc.)
+- `BinOverride` - Top-level container of a `PTCH` file: a patch applied over one base `Bin`
+- `PropertyPatch` / `path::PropertyPath` - One override record and the property path it addresses
+- `BinFile` / `BinKind` - Either kind of file, chosen by the file's magic
 
 **Property bins** are hierarchical data structures containing game data (champions, items, abilities, etc.).
 
 **Reading a Bin File**:
 ```rust
-use ltk_meta::BinTree;
+use ltk_meta::Bin;
 
-let tree = BinTree::from_reader(&mut file)?;
+let tree = Bin::from_reader(&mut file)?;
 
 println!("Dependencies: {:?}", tree.dependencies);
 for (path_hash, object) in &tree.objects {
@@ -297,15 +299,15 @@ for (path_hash, object) in &tree.objects {
 
 **Creating a Bin File**:
 ```rust
-use ltk_meta::{BinTree, BinTreeObject, value::*};
+use ltk_meta::{Bin, BinObject, property::values};
 
-let tree = BinTree::builder()
+let tree = Bin::builder()
     .dependency("shared/data.bin")
     .object(
-        BinTreeObject::builder(0x12345678, 0xABCDEF00)
-            .property(0x1111, I32Value(42))
-            .property(0x2222, StringValue("hello".into()))
-            .property(0x3333, Vec3Value(glam::Vec3::new(1.0, 2.0, 3.0)))
+        BinObject::builder(0x12345678_u32, 0xABCDEF00_u32)
+            .property(0x1111, values::I32::new(42))
+            .property(0x2222, values::String::from("hello"))
+            .property(0x3333, values::Vector3::new(glam::Vec3::new(1.0, 2.0, 3.0)))
             .build()
     )
     .build();
@@ -313,13 +315,52 @@ let tree = BinTree::builder()
 tree.to_writer(&mut output)?;
 ```
 
+**Override (`PTCH`) Bins**: a `PTCH` file is not a bin of its own but a patch over exactly one
+base bin. It carries a set of object hashes to delete, whole objects to add, and property patch
+records. Each record names an object by hash, a property inside it by a path
+(`Position.Anchors.Anchor`, `Elements[3]`, `Lookup{"weapon"}`), and the value to write. Riot ships
+these as UI scene variants (flipped minimap, mobile layouts).
+
+```rust
+use ltk_meta::{Bin, BinFile, BinKind, BinOverride};
+
+// When the kind is known
+let patch_bin = BinOverride::from_reader(&mut file)?;
+for patch in &patch_bin.patches {
+    println!("{:08x} {} = {:?}", patch.object_hash, patch.path, patch.kind());
+}
+
+// When it is not, e.g. while walking a wad or opening a .bin by extension
+match BinFile::from_reader(&mut file)? {
+    BinFile::Prop(bin) => println!("{} objects", bin.objects.len()),
+    BinFile::Override(patch_bin) => println!("{} patches", patch_bin.patches.len()),
+}
+
+// Or ask first, then call the reader you want. The magic is left in place,
+// so the same reader can be handed straight on.
+match BinKind::identify_from_reader(&mut file)? {
+    BinKind::Prop => { let bin = Bin::from_reader(&mut file)?; }
+    BinKind::Override => { let patch_bin = BinOverride::from_reader(&mut file)?; }
+}
+
+// From a buffer, e.g. a decompressed wad chunk
+let kind = BinKind::identify_from_bytes(&data); // Option<BinKind>
+```
+
+`BinFile` also has `kind()`, `is_prop()` / `is_override()`, `as_prop()` / `as_override()` and
+their `_mut` and `into_` forms, plus `objects()` for the object table both kinds carry.
+
+`PropertyPath` is validated on construction and keeps its text byte for byte;
+`path.segments()` walks it, and `Segment::name_hash()` gives the FNV-1a hash a name resolves to.
+Resolving a path against a base bin and applying a patch are not implemented yet.
+
 **Path/Name Hashing**: Object paths and property names are stored as FNV-1a hashes. Use community hash databases or `ltk_hash::fnv1a::hash_lower()` to compute hashes.
 
 ---
 
-### `ltk_ritobin` — Human-Readable Bin Format
+### `ltk_ritobin` - Human-Readable Bin Format
 
-**Purpose**: Parse and write the "ritobin" text format — a human-readable representation of .bin files.
+**Purpose**: Parse and write the "ritobin" text format - a human-readable representation of .bin files.
 
 **Example**:
 ```rust
@@ -337,11 +378,11 @@ entries: map[hash,embed] = {
 }
 "#;
 
-// Parse text → RitobinFile → BinTree
+// Parse text → RitobinFile → Bin
 let file = parse(text)?;
 let tree = file.to_bin_tree();
 
-// BinTree → text
+// Bin → text
 let output = write(&tree)?;
 ```
 
@@ -349,15 +390,15 @@ Useful for debugging, diffing, or hand-editing bin data.
 
 ---
 
-### `ltk_mapgeo` — Map Geometry
+### `ltk_mapgeo` - Map Geometry
 
 **Purpose**: Parse .mapgeo files containing environment geometry for maps (Summoner's Rift, ARAM, etc.).
 
 **Key Types**:
-- `EnvironmentAsset` — Complete map geometry asset
-- `EnvironmentMesh` — Individual mesh with materials
-- `BucketedGeometry` — Spatial acceleration structure (grid-based)
-- `PlanarReflector` — Reflection plane definition
+- `EnvironmentAsset` - Complete map geometry asset
+- `EnvironmentMesh` - Individual mesh with materials
+- `BucketedGeometry` - Spatial acceleration structure (grid-based)
+- `PlanarReflector` - Reflection plane definition
 
 **Example**:
 ```rust
@@ -386,19 +427,19 @@ for scene_graph in asset.scene_graphs() {
 **Supported Versions**: 5, 6, 7, 9, 11, 12, 13, 14, 15, 17, 18
 
 Versions 19 and 20 are known (the game client's parser accepts them) but have
-never shipped, and the client discards the extra data they add — a dead byte
+never shipped, and the client discards the extra data they add - a dead byte
 per mesh in v19, a parsed-then-destroyed `MapGeoExtension` reflection blob per
-mesh in v20 — so they are intentionally unsupported. The format deltas are
+mesh in v20 - so they are intentionally unsupported. The format deltas are
 documented in `crates/ltk_mapgeo/src/read/version.rs`.
 
 ---
 
-### `ltk_file` — File Type Detection
+### `ltk_file` - File Type Detection
 
 **Purpose**: Identify League file types from magic bytes or extensions.
 
 **Key Types**:
-- `LeagueFileKind` — Enum of all known file types
+- `LeagueFileKind` - Enum of all known file types
 
 **Example**:
 ```rust
@@ -421,34 +462,34 @@ assert_eq!(LeagueFileKind::Animation.extension(), Some("anm"));
 
 ---
 
-### `ltk_hash` — Hashing Utilities
+### `ltk_hash` - Hashing Utilities
 
 **Purpose**: Hash functions used by League of Legends formats.
 
 **Functions**:
-- `fnv1a::hash_lower(input)` → `u32` — FNV-1a hash of lowercase string (used for bin property/object hashes)
-- `elf::elf(input)` → `usize` — ELF hash
+- `fnv1a::hash_lower(input)` → `u32` - FNV-1a hash of lowercase string (used for bin property/object hashes)
+- `elf::elf(input)` → `usize` - ELF hash
 
 **Example**:
 ```rust
 use ltk_hash::fnv1a::hash_lower;
 
 let hash = hash_lower("mSpellName");
-// Use this hash to look up properties in BinTree
+// Use this hash to look up properties in Bin
 ```
 
 **Note**: WAD path hashes use XXHash64, not FNV-1a.
 
 ---
 
-### `ltk_primitives` — Primitive Types
+### `ltk_primitives` - Primitive Types
 
 **Purpose**: Common geometric primitives used across crates.
 
 **Types**:
-- `AABB` — Axis-aligned bounding box
-- `Sphere` — Bounding sphere
-- `Color<T>` — RGBA color (generic over component type)
+- `AABB` - Axis-aligned bounding box
+- `Sphere` - Bounding sphere
+- `Color<T>` - RGBA color (generic over component type)
 
 ```rust
 use ltk_primitives::{AABB, Sphere, Color};
@@ -461,20 +502,20 @@ let color = Color::<u8>::new(255, 128, 64, 255);
 
 ---
 
-### `ltk_shader` — Shader Utilities
+### `ltk_shader` - Shader Utilities
 
 **Purpose**: Shader path generation and TOC (table of contents) parsing for League's shader system.
 
 **Key Functions**:
-- `create_shader_object_path(path, shader_type, platform)` — Build shader path
-- `create_shader_bundle_path(path, bundle_id)` — Build bundle path
+- `create_shader_object_path(path, shader_type, platform)` - Build shader path
+- `create_shader_bundle_path(path, bundle_id)` - Build bundle path
 
 **Platforms**: Dx9, Dx11, Glsl, Metal  
 **Shader Types**: Vertex, Pixel
 
 ---
 
-### `ltk_io_ext` — I/O Extensions
+### `ltk_io_ext` - I/O Extensions
 
 **Purpose**: Internal I/O utilities used by other crates. Generally not needed directly.
 
@@ -489,7 +530,7 @@ Most types implement `from_reader(&mut impl Read)`:
 ```rust
 let mesh = SkinnedMesh::from_reader(&mut file)?;
 let tex = Tex::from_reader(&mut cursor)?;
-let tree = BinTree::from_reader(&mut reader)?;
+let tree = Bin::from_reader(&mut reader)?;
 ```
 
 ### Writing Files
@@ -506,8 +547,8 @@ mesh.to_writer(&mut output)?;
 Complex types often use builders:
 
 ```rust
-// BinTree builder
-let tree = BinTree::builder()
+// Bin builder
+let tree = Bin::builder()
     .dependency("base.bin")
     .object(obj)
     .build();
@@ -542,7 +583,8 @@ use glam::{Vec2, Vec3, Vec4, Mat4, Quat};
 | Extension | Crate | Type | Description |
 |-----------|-------|------|-------------|
 | `.wad.client` | `ltk_wad` | `Wad` | Asset archive container |
-| `.bin` | `ltk_meta` | `BinTree` | Property/configuration data |
+| `.bin` | `ltk_meta` | `Bin` | Property/configuration data (`PROP`) |
+| `.bin` | `ltk_meta` | `BinOverride` | Patch over a base bin (`PTCH`) |
 | `.skn` | `ltk_mesh` | `SkinnedMesh` | Character mesh with skinning |
 | `.skl` | `ltk_anim` | `RigResource` | Skeleton/rig |
 | `.anm` | `ltk_anim` | `Animation` | Animation clip |
@@ -589,7 +631,7 @@ use glam::{Vec2, Vec3, Vec4, Mat4, Quat};
 
 7. **Reader must be seekable for WAD**: `Wad::mount()` requires `Read + Seek`.
 
-8. **Bin files can reference other bins**: Check `dependencies` field in `BinTree`.
+8. **Bin files can reference other bins**: Check the `dependencies` field on `Bin`.
 
 ---
 
@@ -601,7 +643,7 @@ use ltk_wad::{Wad, WadExtractor, HashMapPathResolver};
 use ltk_file::LeagueFileKind;
 use ltk_texture::Texture;
 use ltk_mesh::SkinnedMesh;
-use ltk_meta::BinTree;
+use ltk_meta::Bin;
 
 fn extract_and_process(wad_path: &str, output_dir: &str) -> anyhow::Result<()> {
     // 1. Mount WAD
@@ -623,8 +665,12 @@ fn extract_and_process(wad_path: &str, output_dir: &str) -> anyhow::Result<()> {
                 println!("Texture {}x{}", tex.width, tex.height);
             }
             LeagueFileKind::PropertyBin => {
-                let tree = BinTree::from_reader(&mut std::io::Cursor::new(&data))?;
+                let tree = Bin::from_reader(&mut std::io::Cursor::new(&data))?;
                 println!("Bin with {} objects", tree.len());
+            }
+            LeagueFileKind::PropertyBinOverride => {
+                let patch_bin = ltk_meta::BinOverride::from_reader(&mut std::io::Cursor::new(&data))?;
+                println!("Patch with {} records", patch_bin.patches.len());
             }
             _ => {}
         }
