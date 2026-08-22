@@ -12,6 +12,8 @@ use ltk_hash::BinHash;
 use crate::{property::NoMeta, Bin, BinObject, BinOverride, Error};
 
 /// The two kinds of bin file, told apart by their magic.
+///
+/// For any league file rather than just bins, `ltk_file::LeagueFileKind` identifies the same way.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BinKind {

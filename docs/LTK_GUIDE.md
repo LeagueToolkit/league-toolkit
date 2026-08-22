@@ -445,10 +445,12 @@ documented in `crates/ltk_mapgeo/src/read/version.rs`.
 ```rust
 use ltk_file::{LeagueFileKind, MAX_MAGIC_SIZE};
 
-// From magic bytes
-let mut buffer = [0u8; MAX_MAGIC_SIZE];
-reader.read(&mut buffer)?;
-let kind = LeagueFileKind::identify_from_bytes(&buffer);
+// From a reader. Reads at most MAX_MAGIC_SIZE bytes and seeks back, so the
+// reader can be handed straight to the parser this names.
+let kind = LeagueFileKind::identify_from_reader(&mut reader)?;
+
+// From a buffer, e.g. a decompressed wad chunk
+let kind = LeagueFileKind::identify_from_bytes(&data);
 
 // From extension
 let kind = LeagueFileKind::from_extension(".skn");
@@ -458,7 +460,11 @@ assert_eq!(kind, LeagueFileKind::SimpleSkin);
 assert_eq!(LeagueFileKind::Animation.extension(), Some("anm"));
 ```
 
-**Known File Types**: Animation (.anm), MapGeometry (.mapgeo), PropertyBin (.bin), SimpleSkin (.skn), Skeleton (.skl), StaticMeshBinary (.scb), StaticMeshAscii (.sco), Texture (.tex), TextureDds (.dds), WwiseBank (.bnk), WwisePackage (.wpk), and more.
+An unrecognized magic is `LeagueFileKind::Unknown`, not an error. Note that an extension cannot
+always decide: `.bin` is both `PropertyBin` (`PROP`) and `PropertyBinOverride` (`PTCH`), so
+`from_extension("bin")` always answers `PropertyBin` and only the magic can tell them apart.
+
+**Known File Types**: Animation (.anm), MapGeometry (.mapgeo), PropertyBin (.bin), PropertyBinOverride (.bin), SimpleSkin (.skn), Skeleton (.skl), StaticMeshBinary (.scb), StaticMeshAscii (.sco), Texture (.tex), TextureDds (.dds), WwiseBank (.bnk), WwisePackage (.wpk), and more.
 
 ---
 
