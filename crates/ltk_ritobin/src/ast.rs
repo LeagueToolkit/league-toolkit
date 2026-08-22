@@ -3,6 +3,7 @@ pub mod nodes;
 pub mod query;
 pub mod resolve;
 pub mod value;
+pub mod visitor;
 
 mod to_bin;
 
