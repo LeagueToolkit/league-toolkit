@@ -494,12 +494,14 @@ mod test {
             "errors parsing ritobin - {:#?}",
             cst2.errors
         );
-        let (bin2, errors) = cst2.build_bin(&str);
+        let partial2 = cst2.build_bin(&str);
 
         assert!(
-            errors.is_empty(),
-            "errors building tree from reparsed ritobin - {errors:#?}"
+            partial2.diagnostics.is_empty(),
+            "errors building tree from reparsed ritobin - {:#?}",
+            partial2.diagnostics
         );
+        let bin2 = partial2.bin;
 
         pretty_assertions::assert_eq!(bin2, bin);
     }

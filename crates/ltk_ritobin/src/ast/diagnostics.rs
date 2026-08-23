@@ -234,6 +234,15 @@ pub enum Diagnostic {
         span: Span,
         base_type: Span,
     },
+
+    /// A container/map/optional's declared item type is itself container-shaped
+    /// (list/list2/map/option)
+    InvalidNesting {
+        /// span of the offending subtype token
+        span: Span,
+        /// the container-shaped type that cannot be nested
+        kind: RitoType,
+    },
 }
 
 impl Display for Diagnostic {
@@ -335,6 +344,10 @@ impl Display for Diagnostic {
                 write!(f, "Expected {expected} type parameters, got {got}")
             }
             UnexpectedSubtypes { .. } => f.write_str("This type does not accept type parameters"),
+
+            InvalidNesting { kind, .. } => {
+                write!(f, "{kind} cannot be nested inside a container")
+            }
         }
     }
 }
@@ -367,6 +380,7 @@ impl Diagnostic {
             | ParseNumericError { span, .. }
             | NotEnoughItems { span, .. }
             | TooManyItems { span, .. }
+            | InvalidNesting { span, .. }
             | InvalidRootEntryType { key_span: span, .. } => Some(span),
         }
     }

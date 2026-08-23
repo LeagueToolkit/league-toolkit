@@ -33,6 +33,11 @@ mod test {
         Cst, ItemShape, RitoType,
     };
 
+    fn build(cst: &Cst, text: &str) -> (Bin, Vec<DiagnosticWithSpan>) {
+        let partial = cst.build_bin(text);
+        (partial.bin, partial.diagnostics)
+    }
+
     fn wrap(input: &str) -> String {
         format!(
             r#"
@@ -57,7 +62,7 @@ entries: map[hash,embed] = {{
         cst.print(&mut str, &input);
         eprintln!("#### CST:\n{str}");
 
-        let (bin, errs) = cst.build_bin(&input);
+        let (bin, errs) = build(&cst, &input);
 
         assert!(errs.is_empty(), "Typecheck errors: {:#?}", errs);
 
@@ -71,7 +76,7 @@ entries: map[hash,embed] = {{
     fn build_errs(input: &str) -> Vec<DiagnosticWithSpan> {
         let input = wrap(input);
         let cst = Cst::parse(&input);
-        let (_, errs) = cst.build_bin(&input);
+        let (_, errs) = build(&cst, &input);
         errs
     }
 
@@ -221,7 +226,7 @@ version: u32 = 3
 entries: map[hash,embed] = {}
 "#;
         let cst = Cst::parse(input);
-        let (_, errs) = cst.build_bin(input);
+        let (_, errs) = build(&cst, input);
         assert!(
             errs.iter().any(|e| matches!(
                 e.diagnostic,
@@ -241,7 +246,7 @@ version: u32 = 3
 linked: list[string] = {}
 "#;
         let cst = Cst::parse(input);
-        let (_, errs) = cst.build_bin(input);
+        let (_, errs) = build(&cst, input);
         assert!(
             errs.iter().any(|e| matches!(
                 e.diagnostic,
@@ -261,7 +266,7 @@ linked: list[string] = {}
 entries: map[hash,embed] = {}
 "#;
         let cst = Cst::parse(input);
-        let (_, errs) = cst.build_bin(input);
+        let (_, errs) = build(&cst, input);
         assert!(
             errs.iter().any(|e| matches!(
                 e.diagnostic,
@@ -282,7 +287,7 @@ linked: list[string] = {}
 entries: map[hash,embed] = {}
 "#;
         let cst = Cst::parse(input);
-        let (_, errs) = cst.build_bin(input);
+        let (_, errs) = build(&cst, input);
         assert!(
             errs.iter().any(|e| matches!(
                 e.diagnostic,
@@ -406,11 +411,15 @@ entries: map[hash,embed] = {}
         );
     }
 
-    /// A block list item is how nested containers are written - that must stay quiet.
     #[test]
-    fn a_block_list_item_in_a_nested_container_is_fine() {
+    fn nested_container_fails() {
         let errs = build_errs(r#"0x1: list[list[u32]] = { { 1 2 } { 3 4 } }"#);
-        assert!(errs.is_empty(), "{errs:#?}");
+        assert_eq!(errs.len(), 1, "{errs:#?}");
+        assert!(
+            matches!(errs[0].diagnostic, Diagnostic::InvalidNesting { .. }),
+            "{:#?}",
+            errs[0]
+        );
     }
 
     /// So must one that is properly introduced by a class name.
@@ -464,7 +473,7 @@ entries: map[hash,embed] = {}
         // expectation was not written down anywhere
         let blamed = |input: &str| {
             let text = wrap(input);
-            let (_, errs) = Cst::parse(&text).build_bin(&text);
+            let (_, errs) = build(&Cst::parse(&text), &text);
             errs.into_iter()
                 .find_map(|e| match e.diagnostic {
                     Diagnostic::TypeMismatch { expected_span, .. } => Some(expected_span),
@@ -666,8 +675,8 @@ entries: map[hash,embed] = {}
         let quoted = wrap(r#""skinClassification": u32 = 1"#);
         let bare = wrap(r#"skinClassification: u32 = 1"#);
 
-        let (quoted_bin, quoted_errs) = Cst::parse(&quoted).build_bin(&quoted);
-        let (bare_bin, bare_errs) = Cst::parse(&bare).build_bin(&bare);
+        let (quoted_bin, quoted_errs) = build(&Cst::parse(&quoted), &quoted);
+        let (bare_bin, bare_errs) = build(&Cst::parse(&bare), &bare);
 
         assert_eq!(quoted_errs.len(), 1, "{quoted_errs:#?}");
         assert!(bare_errs.is_empty(), "{bare_errs:#?}");
@@ -715,7 +724,7 @@ entries: map[hash,embed] = {}
             ("f32", "1.5"),
         ] {
             let input = wrap(&format!("0x1: map[{ty},u32] = {{ {key} = 1 }}"));
-            let (bin, errs) = Cst::parse(&input).build_bin(&input);
+            let (bin, errs) = build(&Cst::parse(&input), &input);
             assert!(errs.is_empty(), "map[{ty},u32] with key {key}: {errs:#?}");
 
             // No diagnostics is not the same as no data lost - that is the whole failure
@@ -761,7 +770,7 @@ entries: map[hash,embed] = {}
     #[test]
     fn a_rejected_map_key_still_drops_the_pair() {
         let input = wrap(r#"0x1: map[u32,u32] = { "0.5" = 1 }"#);
-        let (bin, errs) = Cst::parse(&input).build_bin(&input);
+        let (bin, errs) = build(&Cst::parse(&input), &input);
 
         assert_eq!(errs.len(), 1, "{errs:#?}");
         pretty_assertions::assert_eq!(
@@ -793,7 +802,7 @@ entries: map[hash,embed] = {
 }
 "#;
         let cst = Cst::parse(input);
-        let (_, errs) = cst.build_bin(input);
+        let (_, errs) = build(&cst, input);
         assert!(errs.is_empty(), "{errs:#?}");
     }
 }

@@ -37,9 +37,20 @@ impl<'a> BuildCtx<'a> {
                     .iter()
                     .filter_map(|c| c.tree(self.cst).filter(|t| t.kind == Kind::TypeArg))
                     .map(|t| {
-                        let resolved = PropertyKind::from_rito_name(&self.text[t.span]);
-                        if resolved.is_none() {
-                            self.push(UnknownType(t.span).unwrap());
+                        let mut resolved = PropertyKind::from_rito_name(&self.text[t.span]);
+                        match resolved {
+                            None => self.push(UnknownType(t.span).unwrap()),
+                            Some(kind) if kind.is_container() => {
+                                self.push(
+                                    InvalidNesting {
+                                        span: t.span,
+                                        kind: RitoType::simple(kind),
+                                    }
+                                    .unwrap(),
+                                );
+                                resolved = None;
+                            }
+                            Some(_) => {}
                         }
                         (resolved, t.span)
                     })

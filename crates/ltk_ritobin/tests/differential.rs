@@ -62,11 +62,13 @@ fn sample_matches() {
     let cst = Cst::parse(SAMPLE_RITOBIN);
     assert!(cst.errors.is_empty(), "parse errors = {:#?}", cst.errors);
 
-    let (fast_bin, fast_diags) = cst.build_bin(SAMPLE_RITOBIN);
+    let fast_partial = cst.build_bin(SAMPLE_RITOBIN);
     assert!(
-        fast_diags.is_empty(),
-        "typecheck::walk diagnostics = {fast_diags:#?}"
+        fast_partial.diagnostics.is_empty(),
+        "build_bin diagnostics = {:#?}",
+        fast_partial.diagnostics
     );
+    let fast_bin = fast_partial.bin;
 
     let ast = cst.build_ast(SAMPLE_RITOBIN);
     assert!(
@@ -272,12 +274,23 @@ proptest! {
         let cst = Cst::parse(&text);
         prop_assert!(cst.errors.is_empty(), "reparse errors: {:#?}\ntext:\n{text}", cst.errors);
 
-        let (fast_bin, fast_diags) = cst.build_bin(&text);
+        let fast_partial = cst.build_bin(&text);
         let ast = cst.build_ast(&text);
         let new_bin = ast.to_bin(&text);
 
-        prop_assert!(fast_diags.is_empty(), "typecheck::walk diagnostics: {fast_diags:#?}\ntext:\n{text}");
+        prop_assert!(fast_partial.diagnostics.is_empty(), "build_bin diagnostics: {:#?}\ntext:\n{}", fast_partial.diagnostics, text);
         prop_assert!(ast.diagnostics.is_empty(), "ast::build diagnostics: {:#?}\ntext:\n{}", ast.diagnostics, text);
-        prop_assert_eq!(fast_bin, new_bin, "the two typecheckers disagree on this input:\n{}", text);
+        prop_assert_eq!(fast_partial.bin, new_bin, "build_bin and Ast::to_bin disagree on this input:\n{}", text);
+    }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(256))]
+
+    //TODO: better arbitrary source gen
+    #[test]
+    fn build_bin_never_panics_on_arbitrary_text(text in ".{0,400}") {
+        let cst = Cst::parse(&text);
+        let _ = cst.build_bin(&text);
     }
 }

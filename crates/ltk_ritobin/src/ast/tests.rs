@@ -396,11 +396,37 @@ fn missing_class_name_in_a_map_entry_is_reported() {
     );
 }
 
-/// A block list item is how nested containers are written - that must stay quiet.
 #[test]
-fn a_block_list_item_in_a_nested_container_is_fine() {
+fn nested_container_fails() {
     let errs = build_errs(r#"0x1: list[list[u32]] = { { 1 2 } { 3 4 } }"#);
-    assert!(errs.is_empty(), "{errs:#?}");
+    assert_eq!(errs.len(), 1, "{errs:#?}");
+    assert!(
+        matches!(errs[0].diagnostic, Diagnostic::InvalidNesting { .. }),
+        "{:#?}",
+        errs[0]
+    );
+}
+
+#[test]
+fn nested_map_key_type_fails() {
+    let errs = build_errs(r#"0x1: map[list,u32] = {}"#);
+    assert_eq!(errs.len(), 1, "{errs:#?}");
+    assert!(
+        matches!(errs[0].diagnostic, Diagnostic::InvalidNesting { .. }),
+        "{:#?}",
+        errs[0]
+    );
+}
+
+#[test]
+fn nested_optional_type_fails() {
+    let errs = build_errs(r#"0x1: option[map] = {}"#);
+    assert_eq!(errs.len(), 1, "{errs:#?}");
+    assert!(
+        matches!(errs[0].diagnostic, Diagnostic::InvalidNesting { .. }),
+        "{:#?}",
+        errs[0]
+    );
 }
 
 /// So must one that is properly introduced by a class name.

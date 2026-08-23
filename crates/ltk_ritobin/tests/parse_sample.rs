@@ -56,8 +56,13 @@ fn tree(input: &str) -> String {
 #[test]
 fn test_roundtrip() {
     let cst = Cst::parse(SAMPLE_RITOBIN);
-    let (tree, errors) = cst.build_bin(SAMPLE_RITOBIN);
-    assert!(errors.is_empty(), "errors = {errors:#?}");
+    let partial = cst.build_bin(SAMPLE_RITOBIN);
+    assert!(
+        partial.diagnostics.is_empty(),
+        "errors = {:#?}",
+        partial.diagnostics
+    );
+    let tree = partial.bin;
 
     // Write back to text
     let output = tree.print().expect("Failed to write");
@@ -76,8 +81,13 @@ fn test_roundtrip() {
     cst2.print(&mut str, &output);
     println!("reparsed:\n{str}");
 
-    let (tree2, errors) = cst2.build_bin(&output);
-    assert!(errors.is_empty(), "build bin errors = {errors:#?}");
+    let partial2 = cst2.build_bin(&output);
+    assert!(
+        partial2.diagnostics.is_empty(),
+        "build bin errors = {:#?}",
+        partial2.diagnostics
+    );
+    let tree2 = partial2.bin;
 
     // Verify structure is preserved
     assert_eq!(tree.version, tree2.version);

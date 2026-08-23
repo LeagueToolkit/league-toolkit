@@ -19,6 +19,7 @@ pub use r#struct::AstStruct;
 
 pub use crate::Spanned;
 pub use build::{Ast, AstObject};
+pub use to_bin::PartialBin;
 pub use value::AstValue;
 
 #[cfg(not(feature = "salsa"))]

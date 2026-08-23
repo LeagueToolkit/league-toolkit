@@ -1,9 +1,12 @@
-use ltk_meta::{property::values, traits::PropertyExt as _, Bin, BinObject, PropertyValueEnum};
+use ltk_meta::{
+    property::values, traits::PropertyExt as _, Bin, BinObject, Error as MetaError, PropertyKind,
+    PropertyValueEnum,
+};
 
 use crate::{
     ast::{
         build::{Ast, AstObject},
-        diagnostics::Diagnostic,
+        diagnostics::DiagnosticWithSpan,
         AstStruct, AstValue,
     },
     parse::Span,
@@ -11,7 +14,18 @@ use crate::{
 
 pub struct PartialBin {
     pub bin: Bin,
-    pub errors: Vec<Diagnostic>,
+    pub diagnostics: Vec<DiagnosticWithSpan>,
+}
+
+impl PartialBin {
+    #[allow(clippy::result_large_err)]
+    pub fn finish(self) -> Result<Bin, Self> {
+        if self.diagnostics.is_empty() {
+            Ok(self.bin)
+        } else {
+            Err(self)
+        }
+    }
 }
 
 impl Ast {
@@ -37,12 +51,28 @@ impl Ast {
 
         Bin::new(objects, dependencies)
     }
+
+    pub fn into_partial_bin(self, text: &str) -> PartialBin {
+        let bin = self.to_bin(text);
+        PartialBin {
+            bin,
+            diagnostics: self.diagnostics,
+        }
+    }
+}
+
+fn trust<T>(result: Result<T, MetaError>, fallback: impl FnOnce() -> T) -> T {
+    match result {
+        Ok(v) => v,
+        Err(e) => {
+            debug_assert!(false, "ast::build should have prevented this: {e:?}");
+            fallback()
+        }
+    }
 }
 
 impl AstValue {
     /// Recursively converts this value into an equivalent `PropertyValueEnum<Span>`.
-    ///
-    /// **NOTE:** this conversion quietly ignores/skips container related errors (pushing entries/items with invalid types)
     pub fn to_bin_value(&self) -> PropertyValueEnum<Span> {
         match self {
             AstValue::None(v) => PropertyValueEnum::None(*v),
@@ -74,30 +104,14 @@ impl AstValue {
                 item_kind,
                 items,
                 span,
-            } => {
-                let items = items.iter().map(AstValue::to_bin_value).collect::<Vec<_>>();
-                let container = values::Container::try_from(items).unwrap_or_else(|_| {
-                    values::Container::empty(*item_kind).unwrap_or(values::Container::None {
-                        items: Vec::new(),
-                        meta: *span,
-                    })
-                });
-                PropertyValueEnum::Container(container)
-            }
+            } => PropertyValueEnum::Container(container_from(*item_kind, items, *span)),
             AstValue::UnorderedContainer {
                 item_kind,
                 items,
                 span,
-            } => {
-                let items = items.iter().map(AstValue::to_bin_value).collect::<Vec<_>>();
-                let container = values::Container::try_from(items).unwrap_or_else(|_| {
-                    values::Container::empty(*item_kind).unwrap_or(values::Container::None {
-                        items: Vec::new(),
-                        meta: *span,
-                    })
-                });
-                PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(container))
-            }
+            } => PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(container_from(
+                *item_kind, items, *span,
+            ))),
             AstValue::Map {
                 key_kind,
                 value_kind,
@@ -106,7 +120,8 @@ impl AstValue {
             } => {
                 let mut map = values::Map::empty(*key_kind, *value_kind);
                 for (k, v) in entries {
-                    let _ = map.push(k.to_bin_value(), v.to_bin_value());
+                    let (key, value) = (k.to_bin_value(), v.to_bin_value());
+                    trust(map.push(key, value), || ());
                 }
                 *map.meta_mut() = *span;
                 PropertyValueEnum::Map(map)
@@ -117,17 +132,37 @@ impl AstValue {
                 span,
             } => {
                 let inner = value.as_deref().map(AstValue::to_bin_value);
-                let optional = values::Optional::new_with_meta(*item_kind, inner, *span)
-                    .unwrap_or_else(|_| {
-                        values::Optional::empty(*item_kind).unwrap_or(values::Optional::None {
-                            value: None,
-                            meta: *span,
-                        })
-                    });
+                let optional = trust(
+                    values::Optional::new_with_meta(*item_kind, inner, *span),
+                    || values::Optional::empty(*item_kind).unwrap_or_else(|| none_optional(*span)),
+                );
                 PropertyValueEnum::Optional(optional)
             }
         }
     }
+}
+
+fn container_from(
+    item_kind: PropertyKind,
+    items: &[AstValue],
+    span: Span,
+) -> values::Container<Span> {
+    let mut container = trust(values::Container::empty(item_kind), || {
+        values::Container::empty(PropertyKind::None).expect("None is always a valid item kind")
+    });
+    for item in items {
+        let value = item.to_bin_value();
+        trust(container.push(value), || ());
+    }
+    *container.meta_mut() = span;
+    container
+}
+
+fn none_optional(span: Span) -> values::Optional<Span> {
+    let mut optional = values::Optional::empty(PropertyKind::None)
+        .expect("None is always a valid item kind for Optional");
+    *optional.meta_mut() = span;
+    optional
 }
 
 impl AstStruct {

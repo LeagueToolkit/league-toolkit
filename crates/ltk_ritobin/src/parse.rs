@@ -167,9 +167,9 @@ linked: list[string] = { }
         "#;
         let cst = assert_success(text);
 
-        let (_bin, errors) = cst.build_bin(text);
+        let partial = cst.build_bin(text);
         assert!(
-            !errors.is_empty(),
+            !partial.diagnostics.is_empty(),
             "There should be an error for the naked 'ooo' in the class block"
         );
     }

@@ -1,9 +1,7 @@
 use std::fmt::{self, Display};
 
-use ltk_meta::Bin;
-
 use crate::{
-    ast::{build::ChildrenExt as _, diagnostics::DiagnosticWithSpan},
+    ast::{build::ChildrenExt as _, PartialBin},
     cst::{
         visitor::{Visit, VisitCtx},
         ChildRange, ErrorRange, NodeId, TokenId, Visitor,
@@ -230,12 +228,11 @@ impl Cst {
         p.build_tree(error_propagation)
     }
 
-    /// Construct a best-effort [`Bin`] from this tree, returning any errors. If there are any
-    /// errors returned, the [`Bin`] may only be partially constructed.
-    pub fn build_bin(&self, text: &str) -> (Bin, Vec<DiagnosticWithSpan>) {
-        let ast = self.build_ast(text);
-        // ast.to_bin(text)
-        todo!()
+    /// Construct a best-effort [`Bin`] from this tree, along with any diagnostics. If there
+    /// are any diagnostics, the [`Bin`] may only be partially/best-effort constructed - use
+    /// [`PartialBin::finish`] to get a quick Result type.
+    pub fn build_bin(&self, text: &str) -> PartialBin {
+        self.build_ast(text).into_partial_bin(text)
     }
 
     #[cfg(feature = "ast")]

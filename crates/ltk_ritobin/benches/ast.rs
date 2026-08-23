@@ -35,7 +35,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 &(cst, sample),
                 |b, (cst, sample)| {
                     b.iter(|| {
-                        let (_bin, _errs) = std::hint::black_box(cst.build_bin(sample));
+                        let _partial = std::hint::black_box(cst.build_bin(sample));
                     })
                 },
             );

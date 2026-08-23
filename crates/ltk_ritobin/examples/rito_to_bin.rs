@@ -23,14 +23,16 @@ fn main() {
         return;
     }
 
-    let (bin, errors) = cst.build_bin(&text);
-    if !errors.is_empty() {
-        eprintln!("Errors while converting to bin:");
-        for err in errors {
-            eprintln!("- {err:#?}");
+    let bin = match cst.build_bin(&text).finish() {
+        Ok(bin) => bin,
+        Err(partial) => {
+            eprintln!("Errors while converting to bin:");
+            for diag in &partial.diagnostics {
+                eprintln!("- {diag:#?}");
+            }
+            return;
         }
-        return;
-    }
+    };
 
     let mut file = File::create(output_path).unwrap();
     bin.to_writer(&mut file).unwrap();
