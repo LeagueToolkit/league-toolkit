@@ -126,14 +126,14 @@ pub(crate) fn eval_unknown_hash(
     })
 }
 
-pub(crate) fn eval_hash<H: ltk_hash::Hash + FromStr>(
-    text: &str,
-    span: Span,
-) -> Result<H, Diagnostic> {
-    // TODO: better errs here?
-    let src = text[span].strip_prefix("0x").ok_or(InvalidHash(span))?;
-    H::from_str(src).map_err(|_| InvalidHash(span))
-}
+// pub(crate) fn eval_hash<H: ltk_hash::Hash + FromStr>(
+//     text: &str,
+//     span: Span,
+// ) -> Result<H, Diagnostic> {
+//     // TODO: better errs here?
+//     let src = text[span].strip_prefix("0x").ok_or(InvalidHash(span))?;
+//     H::from_str(src).map_err(|_| InvalidHash(span))
+// }
 
 pub(crate) fn parse_int<T: std::str::FromStr<Err = std::num::ParseIntError>>(
     txt: &str,
