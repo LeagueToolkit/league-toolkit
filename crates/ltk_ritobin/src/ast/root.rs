@@ -1,15 +1,9 @@
 use std::borrow::Cow;
 
-use indexmap::{Equivalent, IndexMap};
-use ltk_meta::{traits::PropertyExt, PropertyValueEnum};
+use indexmap::Equivalent;
+use ltk_meta::{traits::PropertyExt as _, PropertyValueEnum};
 
-use crate::{
-    parse::Span,
-    typecheck::{
-        diagnostics::{DiagnosticWithSpan, RootKind},
-        ir::{IrItem, IrListItem},
-    },
-};
+use crate::{ast::diagnostics::RootKind, parse::Span};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RootKindOrUnknown<'a> {
@@ -56,6 +50,8 @@ impl Equivalent<RootKindOrUnknown<'_>> for str {
 
 #[cfg(test)]
 mod test {
+    use indexmap::IndexMap;
+
     use super::*;
 
     #[test]
@@ -104,39 +100,4 @@ impl<'a> From<Cow<'a, str>> for RootKindOrUnknown<'a> {
     fn from(value: Cow<'a, str>) -> Self {
         Self::Unknown(value)
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct RootEntry {
-    pub(crate) key: PropertyValueEnum<Span>,
-    pub(crate) type_span: Span,
-    pub(crate) value: PropertyValueEnum<Span>,
-}
-
-pub struct TypeChecker<'a> {
-    pub(crate) ctx: Ctx<'a>,
-    pub root: IndexMap<RootKindOrUnknown<'a>, RootEntry>,
-    pub(crate) stack: Vec<(u32, IrItem)>,
-    pub(crate) list_queue: Vec<IrListItem>,
-    pub(crate) depth: u32,
-}
-
-impl<'a> TypeChecker<'a> {
-    pub fn new(text: &'a str) -> Self {
-        Self {
-            ctx: Ctx {
-                text,
-                diagnostics: Vec::new(),
-            },
-            root: IndexMap::new(),
-            stack: Vec::new(),
-            list_queue: Vec::new(),
-            depth: 0,
-        }
-    }
-}
-
-pub(crate) struct Ctx<'a> {
-    pub(crate) text: &'a str,
-    pub(crate) diagnostics: Vec<DiagnosticWithSpan>,
 }

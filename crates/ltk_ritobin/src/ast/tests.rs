@@ -6,7 +6,7 @@ use ltk_meta::{
 };
 
 use crate::{
-    typecheck::diagnostics::{Diagnostic, DiagnosticWithSpan, RootKind},
+    ast::diagnostics::{Diagnostic, DiagnosticWithSpan, RootKind},
     Cst, ItemShape, RitoType,
 };
 

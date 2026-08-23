@@ -3,6 +3,7 @@ pub mod coerce;
 pub mod diagnostics;
 pub mod query;
 pub mod resolve;
+pub mod root;
 pub mod value;
 pub mod visitor;
 

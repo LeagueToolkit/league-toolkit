@@ -3,15 +3,15 @@ use ltk_meta::PropertyKind;
 use crate::{
     ast::{
         build::BuildCtx,
+        diagnostics::{
+            Diagnostic::{self, *},
+            MaybeSpanDiag,
+        },
         resolve::literals::{self},
         AstValue,
     },
     cst::Kind,
     parse::Span,
-    typecheck::diagnostics::{
-        Diagnostic::{self, *},
-        MaybeSpanDiag,
-    },
     Node, RitoType,
 };
 

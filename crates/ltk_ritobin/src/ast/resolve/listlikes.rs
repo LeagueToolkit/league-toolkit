@@ -1,10 +1,13 @@
 use ltk_meta::{property::values, PropertyKind};
 
 use crate::{
-    ast::{build::BuildCtx, AstValue},
+    ast::{
+        build::BuildCtx,
+        diagnostics::{Diagnostic, ListLike, MaybeSpanDiag, RitoTypeOrVirtual},
+        AstValue,
+    },
     cst::{Child, Cst, Kind, Node},
     parse::Span,
-    typecheck::diagnostics::{Diagnostic, ListLike, MaybeSpanDiag, RitoTypeOrVirtual},
     RitoType,
 };
 

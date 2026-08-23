@@ -3,13 +3,13 @@ use ltk_hash::BinHash;
 use ltk_meta::{traits::PropertyExt as _, PropertyKind, PropertyValueEnum};
 
 use crate::{
-    ast::{AstStruct, AstValue, Ptr, Spanned},
+    ast::{
+        diagnostics::{Diagnostic, DiagnosticWithSpan, RootKind},
+        root::RootKindOrUnknown,
+        AstStruct, AstValue, Ptr, Spanned,
+    },
     cst::{Child, Cst, Kind, Node},
     parse::{Span, Token, TokenKind},
-    typecheck::{
-        diagnostics::{Diagnostic, DiagnosticWithSpan, RootKind},
-        state::RootKindOrUnknown,
-    },
     RitoType,
 };
 

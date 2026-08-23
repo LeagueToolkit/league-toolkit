@@ -29,7 +29,6 @@ mod test {
     use crate::{
         cst::{Cst, Kind},
         print::CstPrinter,
-        typecheck::TypeChecker,
     };
 
     fn assert_success(text: &str) -> Cst {
@@ -202,14 +201,13 @@ entries: map[hash, embed] = {
 
         assert!(errors.is_empty());
 
-        let mut checker = TypeChecker::new(text);
-        cst.walk(&mut checker);
+        let mut ast = cst.build_ast(&str);
 
-        let (tree, errors) = checker.collect_to_bin();
+        let tree = ast.to_bin(&str);
 
         eprintln!("{str}\n====== type errors: ======\n");
         for err in errors {
-            eprintln!("{:?}: {:#?}", &text[err.span], err.diagnostic);
+            eprintln!("{:?}: {:#?}", &text[err.span], err);
         }
 
         eprintln!("==== FINAL TREE =====\n{tree:#?}");

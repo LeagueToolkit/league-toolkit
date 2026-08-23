@@ -1,11 +1,11 @@
-use std::{borrow::Cow, fmt::Debug, str::FromStr};
+use std::borrow::Cow;
 
-use ltk_hash::{BinHash, Hash as _, WadHash};
+use ltk_hash::{BinHash, WadHash};
 use ltk_meta::{property::values, PropertyKind, PropertyValueEnum};
 
 use crate::{
+    ast::diagnostics::{Diagnostic, RitoTypeOrVirtual},
     parse::{Span, Token, TokenKind},
-    typecheck::diagnostics::{Diagnostic, RitoTypeOrVirtual},
     RitoType,
 };
 

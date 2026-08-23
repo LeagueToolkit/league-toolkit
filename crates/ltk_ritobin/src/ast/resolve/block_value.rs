@@ -1,10 +1,14 @@
 use ltk_meta::{traits::PropertyExt as _, PropertyKind, PropertyValueEnum};
 
 use crate::{
-    ast::{build::BuildCtx, coerce::CoerceFrom as _, AstProperty, AstValue, Spanned},
+    ast::{
+        build::BuildCtx,
+        coerce::CoerceFrom as _,
+        diagnostics::{Diagnostic::*, MaybeSpanDiag},
+        AstProperty, AstValue, Spanned,
+    },
     cst::Kind,
     parse::Span,
-    typecheck::diagnostics::{Diagnostic::*, MaybeSpanDiag},
     Node, PropertyValueExt as _, RitoType,
 };
 

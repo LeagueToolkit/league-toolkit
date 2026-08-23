@@ -235,7 +235,6 @@ impl Cst {
         self.build_ast(text).into_partial_bin(text)
     }
 
-    #[cfg(feature = "ast")]
     pub fn build_ast(&self, text: &str) -> crate::ast::Ast {
         crate::ast::Ast::from_cst(self, text)
     }

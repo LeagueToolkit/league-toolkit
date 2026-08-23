@@ -4,18 +4,18 @@ use crate::{
     ast::{
         build::{BuildCtx, ChildrenExt as _},
         coerce::CanCoerce as _,
+        diagnostics::{
+            Diagnostic::{
+                self, CustomSpan, InvalidHash, MissingTree, MissingType, QuotedPropertyName,
+                TypeMismatch,
+            },
+            MaybeSpanDiag,
+        },
         resolve::literals::{self},
         AstValue,
     },
     cst::Kind,
     parse::{Span, Token, TokenKind},
-    typecheck::diagnostics::{
-        Diagnostic::{
-            self, CustomSpan, InvalidHash, MissingTree, MissingType, QuotedPropertyName,
-            TypeMismatch,
-        },
-        MaybeSpanDiag,
-    },
     Node, RitoType,
 };
 

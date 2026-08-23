@@ -1,10 +1,12 @@
 use ltk_meta::PropertyKind;
 
 use crate::{
-    ast::build::{BuildCtx, ChildrenExt as _},
+    ast::{
+        build::{BuildCtx, ChildrenExt as _},
+        diagnostics::Diagnostic::{self, *},
+    },
     cst::Kind,
     parse::{Span, TokenKind},
-    typecheck::diagnostics::Diagnostic::{self, *},
     Node, RitoType, RitobinName as _,
 };
 
