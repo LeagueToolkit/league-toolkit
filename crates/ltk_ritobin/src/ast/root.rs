@@ -48,31 +48,6 @@ impl Equivalent<RootKindOrUnknown<'_>> for str {
     }
 }
 
-#[cfg(test)]
-mod test {
-    use indexmap::IndexMap;
-
-    use super::*;
-
-    #[test]
-    fn root_kind_eq() {
-        let mut root: IndexMap<RootKindOrUnknown<'static>, ()> = Default::default();
-
-        root.insert(RootKind::Version.into(), ());
-        root.insert(RootKind::Entries.into(), ());
-        root.insert(RootKindOrUnknown::Unknown("foo".into()), ());
-        root.insert(RootKindOrUnknown::Unknown("bar".into()), ());
-
-        assert!(root.swap_remove(&RootKind::Version).is_some());
-        assert!(root.swap_remove(&RootKind::Entries).is_some());
-        assert!(root
-            .swap_remove(&RootKindOrUnknown::Unknown("bar".into()))
-            .is_some());
-
-        assert_eq!(root.len(), 1);
-    }
-}
-
 impl<'a> RootKindOrUnknown<'a> {
     pub fn from_value(src: &'a str, value: &PropertyValueEnum<Span>) -> Self {
         let PropertyValueEnum::String(string) = value else {
@@ -99,5 +74,30 @@ impl<'a> From<Cow<'a, str>> for RootKindOrUnknown<'a> {
     #[inline(always)]
     fn from(value: Cow<'a, str>) -> Self {
         Self::Unknown(value)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use indexmap::IndexMap;
+
+    use super::*;
+
+    #[test]
+    fn root_kind_eq() {
+        let mut root: IndexMap<RootKindOrUnknown<'static>, ()> = Default::default();
+
+        root.insert(RootKind::Version.into(), ());
+        root.insert(RootKind::Entries.into(), ());
+        root.insert(RootKindOrUnknown::Unknown("foo".into()), ());
+        root.insert(RootKindOrUnknown::Unknown("bar".into()), ());
+
+        assert!(root.swap_remove(&RootKind::Version).is_some());
+        assert!(root.swap_remove(&RootKind::Entries).is_some());
+        assert!(root
+            .swap_remove(&RootKindOrUnknown::Unknown("bar".into()))
+            .is_some());
+
+        assert_eq!(root.len(), 1);
     }
 }

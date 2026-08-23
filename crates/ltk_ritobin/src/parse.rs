@@ -201,8 +201,7 @@ entries: map[hash, embed] = {
 
         assert!(errors.is_empty());
 
-        let mut ast = cst.build_ast(&str);
-
+        let ast = cst.build_ast(&str);
         let tree = ast.to_bin(&str);
 
         eprintln!("{str}\n====== type errors: ======\n");
