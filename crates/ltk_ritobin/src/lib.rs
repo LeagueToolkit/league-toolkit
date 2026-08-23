@@ -97,3 +97,17 @@ pub use types::*;
 pub use cst::Cst;
 pub use cst::Node;
 pub use print::Print;
+
+use crate::parse::Span;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Spanned<T> {
+    pub span: Span,
+    pub value: T,
+}
+
+impl<T> Spanned<T> {
+    pub fn new(span: Span, value: T) -> Self {
+        Self { span, value }
+    }
+}

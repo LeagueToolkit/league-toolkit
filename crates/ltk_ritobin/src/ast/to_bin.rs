@@ -3,8 +3,7 @@ use ltk_meta::{property::values, traits::PropertyExt as _, Bin, BinObject, Prope
 use crate::{
     ast::{
         build::{Ast, AstObject},
-        nodes::AstStruct,
-        AstValue,
+        AstStruct, AstValue,
     },
     parse::Span,
 };

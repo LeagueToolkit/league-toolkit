@@ -1,40 +1,66 @@
-use ltk_hash::BinHash;
+use std::iter::once;
 
 use crate::{
     ast::{
         build::{Ast, AstObject},
-        nodes::{AstProperty, AstStruct, Spanned},
-        AstValue,
+        query::{
+            nodes::{DetailedNode, Node},
+            path_iter::{AstFinePathIter, AstPathIter},
+        },
+        AstProperty, AstStruct, AstValue,
     },
     parse::Span,
 };
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub enum NodeKind {
-    Object,
-    Struct,
-    Property,
-    Value,
-}
+mod detail;
+pub mod nodes;
+pub mod path_iter;
 
-/// Any node in an [`Ast`].
-#[derive(Debug, Clone, Copy)]
-pub enum Node<'a> {
-    Object(&'a AstObject),
-    Struct(&'a AstStruct),
-    Property(&'a AstProperty),
-    Value(&'a AstValue),
+pub use detail::*;
+
+impl AstObject {
+    pub fn children<'a>(&'a self) -> impl Iterator<Item = Node<'a>> {
+        once(Node::Struct(&self.object))
+    }
+    pub fn detailed_children<'a>(&'a self) -> impl Iterator<Item = DetailedNode<'a>> {
+        [
+            DetailedNode::Object(self, AstObjectDetail::PathHash),
+            DetailedNode::Struct(&self.object, AstStructDetail::Node),
+            DetailedNode::Object(self, AstObjectDetail::Trivia),
+        ]
+        .into_iter()
+    }
+}
+impl AstStruct {
+    pub fn children<'a>(&'a self) -> impl Iterator<Item = Node<'a>> {
+        self.properties.iter().map(Node::Property)
+    }
+    pub fn detailed_children<'a>(&'a self) -> impl Iterator<Item = DetailedNode<'a>> {
+        once(DetailedNode::Struct(self, AstStructDetail::ClassHash))
+            .chain(
+                self.properties
+                    .iter()
+                    .map(|v| DetailedNode::Property(v, AstPropertyDetail::Node)),
+            )
+            .chain(once(DetailedNode::Struct(self, AstStructDetail::Trivia)))
+    }
+}
+impl AstProperty {
+    pub fn children<'a>(&'a self) -> impl Iterator<Item = Node<'a>> {
+        once(Node::Value(&self.value))
+    }
+    pub fn detailed_children<'a>(&'a self) -> impl Iterator<Item = DetailedNode<'a>> {
+        [
+            DetailedNode::Property(self, AstPropertyDetail::Name),
+            DetailedNode::Property(self, AstPropertyDetail::TypeExpr),
+            DetailedNode::Value(&self.value),
+            DetailedNode::Property(self, AstPropertyDetail::Trivia),
+        ]
+        .into_iter()
+    }
 }
 
 impl<'a> Node<'a> {
-    pub fn kind(&self) -> NodeKind {
-        match self {
-            Node::Object(_) => NodeKind::Object,
-            Node::Struct(_) => NodeKind::Struct,
-            Node::Property(_) => NodeKind::Property,
-            Node::Value(_) => NodeKind::Value,
-        }
-    }
     pub fn span(&self) -> Span {
         match self {
             // TODO: don't do this
@@ -45,15 +71,6 @@ impl<'a> Node<'a> {
             Node::Struct(s) => s.span,
             Node::Property(p) => p.span(),
             Node::Value(v) => v.span(),
-        }
-    }
-
-    /// This node's own class, if it's an object or struct.
-    pub fn class_hash(&self) -> Option<Spanned<BinHash>> {
-        match self {
-            Node::Object(o) => Some(o.object.class_hash),
-            Node::Struct(s) => Some(s.class_hash),
-            Node::Property(_) | Node::Value(_) => None,
         }
     }
 
@@ -68,29 +85,7 @@ impl<'a> Node<'a> {
 
     /// The chain of nodes on the way to `offset`, including this node.
     pub fn path_to(&self, offset: u32) -> AstPathIter<'a> {
-        AstPathIter {
-            next: self.span().contains(offset).then_some(*self),
-            offset,
-        }
-    }
-}
-
-/// Iterator of every [`Node`] on the way to a given offset, from the top level.
-///
-/// Use [`Ast::path_to`] to construct this iterator.
-#[derive(Clone)]
-pub struct AstPathIter<'a> {
-    next: Option<Node<'a>>,
-    offset: u32,
-}
-
-impl<'a> Iterator for AstPathIter<'a> {
-    type Item = Node<'a>;
-
-    fn next(&mut self) -> Option<Node<'a>> {
-        let current = self.next.take()?;
-        self.next = current.children().find(|c| c.span().contains(self.offset));
-        Some(current)
+        AstPathIter::from_node(*self, offset)
     }
 }
 
@@ -117,18 +112,20 @@ impl AstValue {
 }
 
 impl Ast {
+    /// The chain of nodes on the way to `offset`, outermost first.
+    pub fn coarse_path_to(&self, offset: u32) -> AstPathIter<'_> {
+        AstPathIter::from_ast(self, offset)
+    }
     /// The chain of nodes on the way to `offset`, outermost first
-    pub fn path_to(&self, offset: u32) -> AstPathIter<'_> {
-        let next = self
-            .objects
-            .iter()
-            .find(|o| o.object.span.contains(offset) || o.path_hash.span.contains(offset))
-            .map(Node::Object);
-        AstPathIter { next, offset }
+    pub fn fine_path_to(&self, offset: u32) -> AstFinePathIter<'_> {
+        AstFinePathIter::from_ast(self, offset)
     }
 
     /// The most specific node containing `offset`. See [`Self::path_to`] if you need the full path.
-    pub fn find_node(&self, offset: u32) -> Option<Node<'_>> {
-        self.path_to(offset).last()
+    pub fn coarse_find_node(&self, offset: u32) -> Option<Node<'_>> {
+        self.coarse_path_to(offset).last()
+    }
+    pub fn fine_find_node(&self, offset: u32) -> Option<DetailedNode<'_>> {
+        self.fine_path_to(offset).last()
     }
 }

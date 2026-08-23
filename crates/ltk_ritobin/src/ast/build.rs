@@ -3,10 +3,7 @@ use ltk_hash::BinHash;
 use ltk_meta::{traits::PropertyExt as _, PropertyKind, PropertyValueEnum};
 
 use crate::{
-    ast::{
-        nodes::{AstStruct, Ptr, Spanned},
-        AstValue,
-    },
+    ast::{AstStruct, AstValue, Ptr, Spanned},
     cst::{Child, Cst, Kind, Node},
     parse::{Span, Token, TokenKind},
     typecheck::{
@@ -31,6 +28,12 @@ pub struct Ast {
 pub struct AstObject {
     pub path_hash: Spanned<BinHash>,
     pub object: Ptr<AstStruct>,
+}
+
+impl AstObject {
+    pub fn span(&self) -> Span {
+        Span::new(self.path_hash.span.start, self.object.span.end)
+    }
 }
 
 impl Ast {
