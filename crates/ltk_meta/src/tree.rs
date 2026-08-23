@@ -5,8 +5,8 @@ mod object;
 use ltk_hash::BinHash;
 pub use object::{BinObject, Builder as ObjectBuilder};
 
-mod read;
-mod write;
+pub(crate) mod read;
+pub(crate) mod write;
 
 #[cfg(test)]
 mod tests;
@@ -42,9 +42,6 @@ use crate::property::NoMeta;
 )]
 #[derive(Debug, Clone, PartialEq)]
 pub struct Bin<M = NoMeta> {
-    /// Whether this is an override/patch bin file.
-    pub is_override: bool,
-
     /// The bin file version. When reading, this reflects the source file version.
     /// When writing, version 3 is always used regardless of this value.
     pub version: u32,
@@ -57,19 +54,14 @@ pub struct Bin<M = NoMeta> {
     /// Property bins can depend on other property bins in a similar fashion
     /// to importing code libraries.
     pub dependencies: Vec<String>,
-
-    /// Data overrides (currently not fully implemented).
-    data_overrides: Vec<()>,
 }
 
 impl Default for Bin {
     fn default() -> Self {
         Self {
             version: 3,
-            is_override: false,
             objects: IndexMap::new(),
             dependencies: Vec::new(),
-            data_overrides: Vec::new(),
         }
     }
 }
@@ -77,7 +69,7 @@ impl Default for Bin {
 impl<M> Bin<M> {
     /// Creates a new `Bin` with the given objects and dependencies.
     ///
-    /// The version is set to 3 and `is_override` is set to false.
+    /// The version is set to 3.
     ///
     /// # Examples
     ///
@@ -95,13 +87,11 @@ impl<M> Bin<M> {
     ) -> Self {
         Self {
             version: 3,
-            is_override: false,
             objects: objects
                 .into_iter()
                 .map(|o: BinObject<M>| (o.path_hash, o))
                 .collect(),
             dependencies: dependencies.into_iter().map(Into::into).collect(),
-            data_overrides: Vec::new(),
         }
     }
 

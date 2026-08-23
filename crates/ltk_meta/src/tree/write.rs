@@ -1,6 +1,7 @@
 use std::io;
 
 use super::Bin;
+use crate::BinKind;
 use byteorder::{WriteBytesExt as _, LE};
 use ltk_hash::WriteBytesExt as _;
 use ltk_io_ext::WriterExt as _;
@@ -11,7 +12,7 @@ use ltk_io_ext::WriterExt as _;
 /// dependencies and data overrides.
 pub const WRITE_VERSION: u32 = 3;
 
-impl Bin {
+impl<M: Clone> Bin<M> {
     /// Write this bin to a writer.
     ///
     /// The output will always use version 3 format, regardless of the
@@ -34,12 +35,7 @@ impl Bin {
     /// # Ok::<(), std::io::Error>(())
     /// ```
     pub fn to_writer<W: io::Write + io::Seek + ?Sized>(&self, writer: &mut W) -> io::Result<()> {
-        match self.is_override {
-            true => todo!("implement is_override Bin write"),
-            false => {
-                writer.write_u32::<LE>(Self::PROP)?;
-            }
-        }
+        writer.write_all(&BinKind::Prop.magic())?;
 
         // Always write version 3
         writer.write_u32::<LE>(WRITE_VERSION)?;
@@ -54,13 +50,6 @@ impl Bin {
         }
         for obj in self.objects.values() {
             obj.to_writer(writer)?;
-        }
-
-        if self.is_override {
-            writer.write_u32::<LE>(self.data_overrides.len() as _)?;
-            // TODO: impl data overrides
-            //for o in &self.data_overrides {
-            //}
         }
 
         Ok(())
