@@ -153,7 +153,7 @@ impl AstValue {
         if self.kind() == to {
             return Some(self);
         }
-        let leaf: PropertyValueEnum<Span> = self.try_into().ok()?;
+        let leaf: PropertyValueEnum<Span> = self.to_bin_value();
         to.coerce_from(leaf).map(AstValue::from)
     }
 }
@@ -216,41 +216,6 @@ impl From<PropertyValueEnum<Span>> for AstValue {
                 value: None,
             },
         }
-    }
-}
-
-impl TryFrom<AstValue> for PropertyValueEnum<Span> {
-    type Error = ();
-    fn try_from(value: AstValue) -> Result<Self, ()> {
-        Ok(match value {
-            AstValue::None(v) => PropertyValueEnum::None(v),
-            AstValue::Bool(v) => PropertyValueEnum::Bool(v),
-            AstValue::BitBool(v) => PropertyValueEnum::BitBool(v),
-            AstValue::I8(v) => PropertyValueEnum::I8(v),
-            AstValue::U8(v) => PropertyValueEnum::U8(v),
-            AstValue::I16(v) => PropertyValueEnum::I16(v),
-            AstValue::U16(v) => PropertyValueEnum::U16(v),
-            AstValue::I32(v) => PropertyValueEnum::I32(v),
-            AstValue::U32(v) => PropertyValueEnum::U32(v),
-            AstValue::I64(v) => PropertyValueEnum::I64(v),
-            AstValue::U64(v) => PropertyValueEnum::U64(v),
-            AstValue::F32(v) => PropertyValueEnum::F32(v),
-            AstValue::Vector2(v) => PropertyValueEnum::Vector2(v),
-            AstValue::Vector3(v) => PropertyValueEnum::Vector3(v),
-            AstValue::Vector4(v) => PropertyValueEnum::Vector4(v),
-            AstValue::Matrix44(v) => PropertyValueEnum::Matrix44(v),
-            AstValue::Color(v) => PropertyValueEnum::Color(v),
-            AstValue::String(v) => PropertyValueEnum::String(v),
-            AstValue::Hash(v) => PropertyValueEnum::Hash(v),
-            AstValue::WadChunkLink(v) => PropertyValueEnum::WadChunkLink(v),
-            AstValue::ObjectLink(v) => PropertyValueEnum::ObjectLink(v),
-            AstValue::Struct(_)
-            | AstValue::Embedded(_)
-            | AstValue::Container { .. }
-            | AstValue::UnorderedContainer { .. }
-            | AstValue::Map { .. }
-            | AstValue::Optional { .. } => return Err(()),
-        })
     }
 }
 

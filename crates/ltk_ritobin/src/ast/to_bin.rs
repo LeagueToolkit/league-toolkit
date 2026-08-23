@@ -14,7 +14,7 @@ impl Ast {
             .objects
             .iter()
             .map(|AstObject { path_hash, object }| {
-                let struct_val = object.to_spanned().no_meta();
+                let struct_val = object.to_bin_value().no_meta();
                 BinObject {
                     path_hash: path_hash.value,
                     class_hash: struct_val.class_hash,
@@ -34,10 +34,10 @@ impl Ast {
 }
 
 impl AstValue {
-    /// Recursively converts this value into an equivalent `PropertyValueEnum<Span>` - the bridge
-    /// back to `ltk_meta`'s own container constructors (`Container::TryFrom`, `Map::new`, ...),
-    /// which know how to assemble the binary-format-shaped types this crate ultimately needs.
-    fn to_prop_value(&self) -> PropertyValueEnum<Span> {
+    /// Recursively converts this value into an equivalent `PropertyValueEnum<Span>`.
+    ///
+    /// **NOTE:** this conversion quietly ignores/skips container related errors (pushing entries/items with invalid types)
+    pub fn to_bin_value(&self) -> PropertyValueEnum<Span> {
         match self {
             AstValue::None(v) => PropertyValueEnum::None(*v),
             AstValue::Bool(v) => PropertyValueEnum::Bool(v.clone()),
@@ -60,17 +60,16 @@ impl AstValue {
             AstValue::Hash(v) => PropertyValueEnum::Hash(v.clone()),
             AstValue::WadChunkLink(v) => PropertyValueEnum::WadChunkLink(v.clone()),
             AstValue::ObjectLink(v) => PropertyValueEnum::ObjectLink(v.clone()),
-            AstValue::Struct(s) => PropertyValueEnum::Struct(s.to_spanned()),
-            AstValue::Embedded(s) => PropertyValueEnum::Embedded(values::Embedded(s.to_spanned())),
+            AstValue::Struct(s) => PropertyValueEnum::Struct(s.to_bin_value()),
+            AstValue::Embedded(s) => {
+                PropertyValueEnum::Embedded(values::Embedded(s.to_bin_value()))
+            }
             AstValue::Container {
                 item_kind,
                 items,
                 span,
             } => {
-                let items = items
-                    .iter()
-                    .map(AstValue::to_prop_value)
-                    .collect::<Vec<_>>();
+                let items = items.iter().map(AstValue::to_bin_value).collect::<Vec<_>>();
                 let container = values::Container::try_from(items).unwrap_or_else(|_| {
                     values::Container::empty(*item_kind).unwrap_or(values::Container::None {
                         items: Vec::new(),
@@ -84,10 +83,7 @@ impl AstValue {
                 items,
                 span,
             } => {
-                let items = items
-                    .iter()
-                    .map(AstValue::to_prop_value)
-                    .collect::<Vec<_>>();
+                let items = items.iter().map(AstValue::to_bin_value).collect::<Vec<_>>();
                 let container = values::Container::try_from(items).unwrap_or_else(|_| {
                     values::Container::empty(*item_kind).unwrap_or(values::Container::None {
                         items: Vec::new(),
@@ -104,7 +100,7 @@ impl AstValue {
             } => {
                 let mut map = values::Map::empty(*key_kind, *value_kind);
                 for (k, v) in entries {
-                    let _ = map.push(k.to_prop_value(), v.to_prop_value());
+                    let _ = map.push(k.to_bin_value(), v.to_bin_value());
                 }
                 *map.meta_mut() = *span;
                 PropertyValueEnum::Map(map)
@@ -114,7 +110,7 @@ impl AstValue {
                 value,
                 span,
             } => {
-                let inner = value.as_deref().map(AstValue::to_prop_value);
+                let inner = value.as_deref().map(AstValue::to_bin_value);
                 let optional = values::Optional::new_with_meta(*item_kind, inner, *span)
                     .unwrap_or_else(|_| {
                         values::Optional::empty(*item_kind).unwrap_or(values::Optional::None {
@@ -129,13 +125,13 @@ impl AstValue {
 }
 
 impl AstStruct {
-    fn to_spanned(&self) -> values::Struct<Span> {
+    pub fn to_bin_value(&self) -> values::Struct<Span> {
         values::Struct {
             class_hash: self.class_hash.value,
             properties: self
                 .properties
                 .iter()
-                .map(|p| (p.name.value, p.value.to_prop_value()))
+                .map(|p| (p.name.value, p.value.to_bin_value()))
                 .collect(),
             meta: self.span,
         }
