@@ -8,9 +8,9 @@ use crate::{
     },
     parse::Span,
     typecheck::{
+        coerce::CoerceFrom,
         diagnostics::{self, RitoTypeOrVirtual},
         ir::{IrEntry, IrItem, IrListItem},
-        resolve::CoerceFrom,
     },
     PropertyValueExt as _, RitoType,
 };

@@ -1,4 +1,6 @@
 pub mod build;
+pub mod coerce;
+pub mod diagnostics;
 pub mod query;
 pub mod resolve;
 pub mod value;

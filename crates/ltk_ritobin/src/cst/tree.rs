@@ -3,7 +3,7 @@ use std::fmt::{self, Display};
 use ltk_meta::Bin;
 
 use crate::{
-    ast::build::ChildrenExt as _,
+    ast::{build::ChildrenExt as _, diagnostics::DiagnosticWithSpan},
     cst::{
         visitor::{Visit, VisitCtx},
         ChildRange, ErrorRange, NodeId, TokenId, Visitor,
@@ -13,7 +13,6 @@ use crate::{
         tokenizer::{self, Token},
         Error, ErrorPropagation, Parser, Span, TokenKind,
     },
-    typecheck::diagnostics::DiagnosticWithSpan,
 };
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -234,9 +233,9 @@ impl Cst {
     /// Construct a best-effort [`Bin`] from this tree, returning any errors. If there are any
     /// errors returned, the [`Bin`] may only be partially constructed.
     pub fn build_bin(&self, text: &str) -> (Bin, Vec<DiagnosticWithSpan>) {
-        let mut checker = crate::typecheck::TypeChecker::new(text);
-        self.walk(&mut checker);
-        checker.collect_to_bin()
+        let ast = self.build_ast(text);
+        // ast.to_bin(text)
+        todo!()
     }
 
     #[cfg(feature = "ast")]

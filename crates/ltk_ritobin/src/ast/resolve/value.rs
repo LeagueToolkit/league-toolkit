@@ -2,10 +2,11 @@ use ltk_meta::PropertyKind;
 
 use crate::{
     ast::{
-        build::BuildCtx, AstValue,
+        build::BuildCtx,
+        resolve::literals::{self},
+        AstValue,
     },
     cst::Kind,
-    literals::{self},
     parse::Span,
     typecheck::diagnostics::{
         Diagnostic::{self, *},

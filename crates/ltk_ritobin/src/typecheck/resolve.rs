@@ -3,16 +3,15 @@ use ltk_meta::{property::values, traits::PropertyExt, PropertyKind, PropertyValu
 
 use crate::{
     cst::{self, visitor::VisitCtx, Kind, Node},
-    literals::{eval, eval_unknown_hash},
     parse::{Span, Token, TokenKind},
     typecheck::{
+        coerce::{CanCoerce, CoerceFrom},
         diagnostics::{self, Diagnostic, MaybeSpanDiag, RitoTypeOrVirtual},
         ir::IrEntry,
+        literals::{eval, eval_unknown_hash},
     },
     Cst, PropertyValueExt as _, RitoType, RitobinName,
 };
-
-pub use crate::literals::{CanCoerce, CoerceFrom};
 
 use super::{state::Ctx, trace::trace};
 

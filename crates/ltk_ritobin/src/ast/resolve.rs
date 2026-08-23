@@ -2,18 +2,22 @@ mod block_value;
 mod class;
 mod entry;
 mod listlikes;
+pub mod literals;
 mod type_expr;
 mod value;
 
 use ltk_meta::PropertyKind;
 
 use crate::{
-    ast::{build::BuildCtx, AstValue},
-    parse::Span,
-    typecheck::diagnostics::{
-        Diagnostic::{self, *},
-        RitoTypeOrVirtual,
+    ast::{
+        build::BuildCtx,
+        diagnostics::{
+            Diagnostic::{self, *},
+            RitoTypeOrVirtual,
+        },
+        AstValue,
     },
+    parse::Span,
     Node, RitoType,
 };
 

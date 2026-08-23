@@ -3,10 +3,11 @@ use ltk_meta::{property::values, traits::PropertyExt as _, PropertyKind, Propert
 use crate::{
     ast::{
         build::{BuildCtx, ChildrenExt as _},
+        coerce::CanCoerce as _,
+        resolve::literals::{self},
         AstValue,
     },
     cst::Kind,
-    literals::{self, CanCoerce as _},
     parse::{Span, Token, TokenKind},
     typecheck::diagnostics::{
         Diagnostic::{

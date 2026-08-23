@@ -3,10 +3,16 @@ use ltk_meta::{property::values, traits::PropertyExt as _, Bin, BinObject, Prope
 use crate::{
     ast::{
         build::{Ast, AstObject},
+        diagnostics::Diagnostic,
         AstStruct, AstValue,
     },
     parse::Span,
 };
+
+pub struct PartialBin {
+    pub bin: Bin,
+    pub errors: Vec<Diagnostic>,
+}
 
 impl Ast {
     pub fn to_bin(&self, text: &str) -> Bin {

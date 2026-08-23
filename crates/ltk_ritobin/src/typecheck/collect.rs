@@ -5,8 +5,8 @@ use ltk_meta::{
 use crate::{
     parse::Span,
     typecheck::{
+        coerce::CoerceFrom,
         diagnostics::{self, RootKind},
-        resolve::CoerceFrom,
     },
     RitoType,
 };

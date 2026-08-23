@@ -4,8 +4,7 @@ use ltk_hash::BinHash;
 use ltk_meta::{property::values, traits::PropertyExt as _, PropertyKind, PropertyValueEnum};
 
 use crate::{
-    ast::{AstStruct, Spanned},
-    literals::CoerceFrom as _,
+    ast::{coerce::CoerceFrom as _, AstStruct, Spanned},
     parse::Span,
     RitoType,
 };

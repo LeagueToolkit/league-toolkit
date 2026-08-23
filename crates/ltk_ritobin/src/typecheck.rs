@@ -5,7 +5,9 @@
 //!
 //! TODO: better explanation of the type checking impl
 
-pub mod diagnostics;
+pub use crate::ast::coerce;
+pub use crate::ast::diagnostics;
+pub use crate::ast::resolve::literals;
 pub mod ir;
 pub mod state;
 
