@@ -8,15 +8,18 @@ enum Event {
     Exit(Kind),
 }
 
-/// Records every callback; optionally returns Stop/Skip when a node of the
-/// configured kind is hit.
+/// Records every callback; optionally returns Abort/Stop/Skip when a node of
+/// the configured kind is hit.
 #[derive(Default)]
 struct Recorder {
     events: Vec<Event>,
+    abort_on_enter: Option<Kind>,
     stop_on_enter: Option<Kind>,
     skip_on_enter: Option<Kind>,
+    abort_on_exit: Option<Kind>,
     stop_on_exit: Option<Kind>,
     skip_on_exit: Option<Kind>,
+    abort_on_token: bool,
     stop_on_token: bool,
     skip_on_token_in: Option<Kind>,
 }
@@ -34,6 +37,9 @@ impl Visitor for Recorder {
     fn enter_tree(&mut self, ctx: &VisitCtx<'_>, tree: NodeId) -> Visit {
         let kind = ctx.node(tree).unwrap().kind;
         self.events.push(Event::Enter(kind));
+        if self.abort_on_enter == Some(kind) {
+            return Visit::Abort;
+        }
         if self.stop_on_enter == Some(kind) {
             return Visit::Stop;
         }
@@ -45,6 +51,9 @@ impl Visitor for Recorder {
     fn exit_tree(&mut self, ctx: &VisitCtx<'_>, tree: NodeId) -> Visit {
         let kind = ctx.node(tree).unwrap().kind;
         self.events.push(Event::Exit(kind));
+        if self.abort_on_exit == Some(kind) {
+            return Visit::Abort;
+        }
         if self.stop_on_exit == Some(kind) {
             return Visit::Stop;
         }
@@ -55,6 +64,9 @@ impl Visitor for Recorder {
     }
     fn visit_token(&mut self, ctx: &VisitCtx<'_>, _token: TokenId, parent: NodeId) -> Visit {
         self.events.push(Event::Token);
+        if self.abort_on_token {
+            return Visit::Abort;
+        }
         if self.stop_on_token {
             return Visit::Stop;
         }
@@ -205,6 +217,56 @@ fn pruning_is_local_and_the_walk_continues_elsewhere() {
 }
 
 #[test]
+fn abort_from_enter_runs_no_more_callbacks() {
+    let events = Recorder {
+        abort_on_enter: Some(Kind::EntryValue),
+        ..Default::default()
+    }
+    .walk(TEXT);
+    // the aborting node and its open ancestors never exit
+    assert_eq!(events.last(), Some(&Event::Enter(Kind::EntryValue)));
+    assert_eq!(count(&events, Event::Exit(Kind::Entry)), 0);
+    assert_eq!(count(&events, Event::Exit(Kind::File)), 0);
+}
+
+#[test]
+fn abort_from_token_runs_no_more_callbacks() {
+    let events = Recorder {
+        abort_on_token: true,
+        ..Default::default()
+    }
+    .walk(TEXT);
+    assert_eq!(count(&events, Event::Token), 1);
+    assert_eq!(events.last(), Some(&Event::Token));
+}
+
+#[test]
+fn abort_from_exit_skips_the_remaining_exits() {
+    let events = Recorder {
+        abort_on_exit: Some(Kind::EntryKey),
+        ..Default::default()
+    }
+    .walk(TEXT);
+    assert_eq!(events.last(), Some(&Event::Exit(Kind::EntryKey)));
+    assert_eq!(count(&events, Event::Exit(Kind::Entry)), 0);
+    assert_eq!(count(&events, Event::Exit(Kind::File)), 0);
+}
+
+#[test]
+fn abort_from_exit_while_unwinding_skips_the_remaining_exits() {
+    // a Stop deep in the tree starts unwinding; an ancestor's exit aborts,
+    // so the exits above it never run
+    let events = Recorder {
+        stop_on_enter: Some(Kind::EntryValue),
+        abort_on_exit: Some(Kind::Entry),
+        ..Default::default()
+    }
+    .walk(TEXT);
+    assert_eq!(events.last(), Some(&Event::Exit(Kind::Entry)));
+    assert_eq!(count(&events, Event::Exit(Kind::File)), 0);
+}
+
+#[test]
 fn walk_reports_how_it_ended() {
     let cst = Cst::parse(TEXT);
     assert_eq!(cst.walk(&mut Recorder::default()), WalkOutcome::Completed);
@@ -214,6 +276,13 @@ fn walk_reports_how_it_ended() {
             ..Default::default()
         }),
         WalkOutcome::Stopped
+    );
+    assert_eq!(
+        cst.walk(&mut Recorder {
+            abort_on_token: true,
+            ..Default::default()
+        }),
+        WalkOutcome::Aborted
     );
     // pruning is not a stop
     assert_eq!(

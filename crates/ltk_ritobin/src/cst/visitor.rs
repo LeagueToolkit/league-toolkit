@@ -9,10 +9,15 @@ mod tests;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Visit {
+    /// Aborts the walk immediately, with no stack unwinding.
+    ///
+    /// [`Visitor::exit_tree`] will not be called for open nodes in the walk stack.
+    Abort,
     /// Stop the walk
     ///
     /// The walk will unwind, calling [`Visitor::exit_tree`] for every node that was in the walk stack,
     /// bottom-up, until the walk is fully unwound. The walk will not resume after a [`Visit::Stop`].
+    /// Use [`Visit::Abort`] to bail without the exit calls.
     Stop,
     /// Skip ahead, locally
     ///
@@ -47,7 +52,8 @@ pub trait Visitor {
     /// Called when a [`Node`] finished its walk, got skipped, or the walk stack is unwinding.
     ///
     /// Runs symmetrically to [`Visitor::enter_tree`], so every node that was entered will be exited,
-    /// even if the walk is unwinding after a [`Visit::Stop`].
+    /// even if the walk is unwinding after a [`Visit::Stop`] - unless the walk is aborted by a
+    /// [`Visit::Abort`], which skips all remaining callbacks.
     ///
     /// Returning [`Visit::Skip`] from here prunes the parent's remaining children: the walk
     /// jumps straight to the parent's `exit_tree` and continues from there.
@@ -79,10 +85,17 @@ pub enum WalkOutcome {
     Completed,
     /// A visitor returned [`Visit::Stop`] and the walk unwound early.
     Stopped,
+    /// A visitor returned [`Visit::Abort`] and the walk ended without unwinding.
+    Aborted,
 }
 
-/// Walk unwind marker, used to propagate a [`Visit::Stop`] up the walk stack.
-struct Unwind;
+/// Walk teardown marker, propagated up the walk stack.
+enum Interrupt {
+    /// A [`Visit::Stop`]: [`Visitor::exit_tree`] still runs for every open node, bottom-up.
+    Unwind,
+    /// A [`Visit::Abort`]: no further callbacks run.
+    Abort,
+}
 
 /// Where the walk resumes after a child subtree finished.
 enum Resume {
@@ -97,8 +110,8 @@ enum Resume {
 ///
 /// - `Continue(resume)` continues the walk; `?` on it yields where the walk
 ///   resumes - with the next sibling, or at the parent.
-/// - `Break(Unwind)` propagates a [`Visit::Stop`] and `?` on it unwinds the walk.
-type Walk = ControlFlow<Unwind, Resume>;
+/// - `Break(interrupt)` tears the walk down; `?` on it propagates the teardown.
+type Walk = ControlFlow<Interrupt, Resume>;
 
 impl Cst {
     /// Walk a [`Visitor`] implementor along this tree.
@@ -109,7 +122,8 @@ impl Cst {
 
         match self.walk_inner(visitor, NodeId(0)) {
             Continue(_) => WalkOutcome::Completed,
-            Break(Unwind) => WalkOutcome::Stopped,
+            Break(Interrupt::Unwind) => WalkOutcome::Stopped,
+            Break(Interrupt::Abort) => WalkOutcome::Aborted,
         }
     }
 
@@ -117,14 +131,21 @@ impl Cst {
         let ctx = VisitCtx { cst: self };
 
         let walked = match visitor.enter_tree(&ctx, node_idx) {
-            Visit::Stop => Break(Unwind),
+            Visit::Abort => Break(Interrupt::Abort),
+            Visit::Stop => Break(Interrupt::Unwind),
             Visit::Skip => Continue(()),
             Visit::Continue => self.walk_children(visitor, &ctx, node_idx),
         };
 
+        // an abort skips the remaining exits entirely
+        if let Break(Interrupt::Abort) = walked {
+            return Break(Interrupt::Abort);
+        }
+
         // exit_tree runs exactly once for every entered node, even while unwinding
         match (walked, visitor.exit_tree(&ctx, node_idx)) {
-            (Break(Unwind), _) | (_, Visit::Stop) => Break(Unwind),
+            (_, Visit::Abort) => Break(Interrupt::Abort),
+            (Break(Interrupt::Unwind), _) | (_, Visit::Stop) => Break(Interrupt::Unwind),
             (_, Visit::Skip) => Continue(Resume::Parent),
             (_, Visit::Continue) => Continue(Resume::Siblings),
         }
@@ -135,13 +156,14 @@ impl Cst {
         visitor: &mut V,
         ctx: &VisitCtx<'_>,
         node_idx: NodeId,
-    ) -> ControlFlow<Unwind> {
+    ) -> ControlFlow<Interrupt> {
         for child in self.node(node_idx).unwrap().children.get(self) {
             match child {
                 Child::Token(token) => match visitor.visit_token(ctx, *token, node_idx) {
                     Visit::Continue => {}
                     Visit::Skip => break,
-                    Visit::Stop => return Break(Unwind),
+                    Visit::Stop => return Break(Interrupt::Unwind),
+                    Visit::Abort => return Break(Interrupt::Abort),
                 },
                 Child::Tree(child) => match self.walk_inner(visitor, *child)? {
                     Resume::Siblings => {}
