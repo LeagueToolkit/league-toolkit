@@ -14,7 +14,8 @@ pub use item::ContainerItem;
 /// A list of values that all have the same [`Kind`].
 ///
 /// The kind is declared once, both in the file and in [`Container::item_kind`], and every item
-/// matches it. [`Container::push`] enforces that; [`Container::items_mut`] does not.
+/// matches it. [`Container::push`] and the checked constructors enforce that on the way in, and
+/// [`Container::slot`] is the only way to reach an item mutably, which is why it pins the kind.
 ///
 /// The format has no nested containers, so a container, option or map cannot be an item. The
 /// checked constructors reject those kinds, and [`ContainerItem`] excludes them at compile time.

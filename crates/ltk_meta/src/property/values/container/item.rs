@@ -15,6 +15,7 @@ use crate::{property::values, traits::PropertyValueExt};
 /// [`UnorderedContainer`]: values::UnorderedContainer
 /// [`Optional`]: values::Optional
 /// [`Map`]: values::Map
+/// [`Kind`]: crate::property::Kind
 /// [`Kind::is_container`]: crate::property::Kind::is_container
 pub trait ContainerItem: PropertyValueExt {}
 
