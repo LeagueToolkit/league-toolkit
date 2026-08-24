@@ -76,6 +76,7 @@ impl<'a> Parser<'a> {
     }
 
     pub fn build_tree(self, error_propagation: ErrorPropagation) -> Cst {
+        let source_len = self.text.len() as u32;
         let last_token = self.tokens.last().copied();
 
         let mut tokens = self.tokens.into_iter().peekable();
@@ -176,11 +177,10 @@ impl<'a> Parser<'a> {
                             ErrorKind::Expected { .. }
                             | ErrorKind::ExpectedAny { .. }
                             | ErrorKind::Unexpected { .. } => {
-                                let mut span = tokens.peek().map(|t| t.span).unwrap_or(last_span);
-                                // so we point at the character just after our token
-                                span.end += 1;
-                                span.start = span.end - 1;
-                                span
+                                let base = tokens.peek().map(|t| t.span).unwrap_or(last_span);
+                                // point at the next token, clamped to the source end
+                                let start = base.end.min(source_len);
+                                Span::new(start, (start + 1).min(source_len))
                             }
                             // whole tree is the problem
                             ErrorKind::UnexpectedTree => cur_node.span,

@@ -75,6 +75,28 @@ mod test {
     }
 
     #[test]
+    fn error_spans_stay_within_the_source() {
+        // all of these error at the end of input, where the "point just past
+        // the token" error span used to run past the source
+        for text in ["entries: map[hash,embed] = {", "a: u32 =", "a:", ""] {
+            let cst = Cst::parse(text);
+            for err in &cst.errors {
+                assert!(
+                    err.span.start <= err.span.end,
+                    "inverted error span {:?} for {text:?}",
+                    err.span
+                );
+                assert!(
+                    err.span.end as usize <= text.len(),
+                    "error span {:?} leaves the source (len {}) for {text:?}",
+                    err.span,
+                    text.len()
+                );
+            }
+        }
+    }
+
+    #[test]
     fn comments() {
         assert_success(
             r#"
