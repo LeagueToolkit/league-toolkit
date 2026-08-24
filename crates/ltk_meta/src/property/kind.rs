@@ -110,6 +110,44 @@ impl Kind {
         )
     }
 
+    /// Whether this property kind may key a map.
+    ///
+    /// The fixed-size and string-like kinds, plus [`Kind::Hash`] and [`Kind::WadChunkLink`].
+    /// Deliberately spelled out rather than defined in terms of [`Kind::is_primitive`]: whether a
+    /// kind can be a key is a question about the map format, and whether a kind is a leaf is a
+    /// question about the value model, so the two are free to diverge even though they currently
+    /// agree.
+    ///
+    /// [`Kind::ObjectLink`] is excluded despite being a `u32` hash like [`Kind::Hash`], as are
+    /// [`Kind::BitBool`], [`Kind::Struct`], [`Kind::Embedded`] and the four container kinds. No
+    /// shipped bin in the client keys a map on any of them.
+    #[inline(always)]
+    #[must_use]
+    pub fn is_valid_map_key(&self) -> bool {
+        use Kind::*;
+        matches!(
+            self,
+            None | Bool
+                | I8
+                | U8
+                | I16
+                | U16
+                | I32
+                | U32
+                | I64
+                | U64
+                | F32
+                | Vector2
+                | Vector3
+                | Vector4
+                | Matrix44
+                | Color
+                | String
+                | Hash
+                | WadChunkLink
+        )
+    }
+
     /// Whether this property kind is a container type (container, unordered container, optional, map).
     #[inline(always)]
     #[must_use]

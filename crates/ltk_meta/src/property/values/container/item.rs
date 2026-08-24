@@ -10,6 +10,11 @@ use crate::{property::values, traits::PropertyValueExt};
 /// [`Container::from_iter`] and the [`Optional`] conversions reject a nested container at compile
 /// time; the constructors that take a [`Kind`] check the same rule at run time.
 ///
+/// The trait is sealed. Those conversions are infallible, and they are only sound because every
+/// implementor is a non-container kind, so allowing a downstream type to claim membership would
+/// let it declare [`PropertyValueExt::KIND`] as a container and nest one through a safe
+/// constructor.
+///
 /// [`Container`]: super::Container
 /// [`Container::from_iter`]: super::Container::from_iter
 /// [`UnorderedContainer`]: values::UnorderedContainer
@@ -17,11 +22,18 @@ use crate::{property::values, traits::PropertyValueExt};
 /// [`Map`]: values::Map
 /// [`Kind`]: crate::property::Kind
 /// [`Kind::is_container`]: crate::property::Kind::is_container
-pub trait ContainerItem: PropertyValueExt {}
+pub trait ContainerItem: PropertyValueExt + sealed::Sealed {}
+
+mod sealed {
+    pub trait Sealed {}
+}
 
 macro_rules! impl_container_item {
     ($($variant:ident,)*) => {
-        $(impl<M> ContainerItem for values::$variant<M> {})*
+        $(
+            impl<M> sealed::Sealed for values::$variant<M> {}
+            impl<M> ContainerItem for values::$variant<M> {}
+        )*
     };
 }
 
