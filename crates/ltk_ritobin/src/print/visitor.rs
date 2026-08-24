@@ -651,6 +651,9 @@ impl<'a, W: Write> CstVisitor<'a, W> {
 
 impl<'a, W: fmt::Write> Visitor for CstVisitor<'a, W> {
     fn enter_tree(&mut self, ctx: &VisitCtx<'_>, tree: NodeId) -> Visit {
+        if self.error.is_some() {
+            return Visit::Stop;
+        }
         match self.enter_tree_inner(ctx, tree) {
             Ok(_) => Visit::Continue,
             Err(e) => {
@@ -659,7 +662,12 @@ impl<'a, W: fmt::Write> Visitor for CstVisitor<'a, W> {
             }
         }
     }
+    // exit_tree also runs while a Stop unwinds; keep the first error and
+    // write nothing further once one is recorded
     fn exit_tree(&mut self, ctx: &VisitCtx<'_>, tree: NodeId) -> Visit {
+        if self.error.is_some() {
+            return Visit::Stop;
+        }
         match self.exit_tree_inner(ctx, tree) {
             Ok(_) => Visit::Continue,
             Err(e) => {
@@ -669,6 +677,9 @@ impl<'a, W: fmt::Write> Visitor for CstVisitor<'a, W> {
         }
     }
     fn visit_token(&mut self, ctx: &VisitCtx<'_>, token: TokenId, parent: NodeId) -> Visit {
+        if self.error.is_some() {
+            return Visit::Stop;
+        }
         match self.visit_token_inner(ctx, token, parent) {
             Ok(_) => Visit::Continue,
             Err(e) => {

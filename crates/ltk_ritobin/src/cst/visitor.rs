@@ -1,10 +1,15 @@
 //! Visitor pattern for walking CSTs
+use std::ops::ControlFlow::{self, Break, Continue};
+
 use super::{tree::Child, Cst};
 use crate::cst::{Node, NodeId, TokenId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Visit {
-    /// Stop walking immediately
+    /// Stop the walk
+    ///
+    /// The walk will unwind, calling [`Visitor::exit_tree`] for every node that was in the walk stack,
+    /// bottom-up, until the walk is fully unwound. The walk will not resume after a [`Visit::Stop`].
     Stop,
     /// Skips all remaining tokens in the current tree
     Skip,
@@ -30,7 +35,10 @@ pub trait Visitor {
         Visit::Continue
     }
 
-    /// Called after all children of a [`Node`] have finished walking.
+    /// Called when a [`Node`] finished its walk, got skipped, or the walk stack is unwinding.
+    ///
+    /// Runs symmetrically to [`Visitor::enter_tree`], so every node that was entered will be exited,
+    /// even if the walk is unwinding after a [`Visit::Stop`].
     #[must_use]
     fn exit_tree(&mut self, ctx: &VisitCtx<'_>, tree: NodeId) -> Visit {
         Visit::Continue
@@ -52,47 +60,250 @@ pub trait VisitorExt: Sized + Visitor {
 
 impl<T: Sized + Visitor> VisitorExt for T {}
 
+/// Walk unwind marker, used to propagate a [`Visit::Stop`] up the walk stack.
+struct Unwind;
+
+/// Subtree walk state
+///
+/// - `Continue` propagates a [`Visit::Continue`] and `?` on it continues the walk.
+/// - `Break(Unwind)` propagates a [`Visit::Stop`] and `?` on it unwinds the walk.
+type Walk = ControlFlow<Unwind>;
+
 impl Cst {
     /// Walk a [`Visitor`] implementor along this tree.
     pub fn walk<V: Visitor>(&self, visitor: &mut V) {
         if self.nodes.is_empty() {
             return;
         }
-        self.walk_inner(visitor, NodeId(0));
+
+        let _ = self.walk_inner(visitor, NodeId(0));
     }
 
-    fn walk_inner<V: Visitor>(&self, visitor: &mut V, node_idx: NodeId) -> Visit {
+    fn walk_inner<V: Visitor>(&self, visitor: &mut V, node_idx: NodeId) -> Walk {
         let ctx = VisitCtx { cst: self };
 
-        let node = self.node(node_idx).unwrap();
-        if let Some(ret) = match visitor.enter_tree(&ctx, node_idx) {
-            Visit::Stop => Some(Visit::Stop),
-            Visit::Skip => Some(Visit::Continue),
-            _ => None,
-        } {
-            if visitor.exit_tree(&ctx, node_idx) == Visit::Stop {
-                return Visit::Stop;
-            }
-            return ret;
-        }
+        let walked = match visitor.enter_tree(&ctx, node_idx) {
+            Visit::Stop => Break(Unwind),
+            Visit::Skip => Continue(()),
+            Visit::Continue => self.walk_children(visitor, &ctx, node_idx),
+        };
 
-        for child in node.children.get(self) {
+        match visitor.exit_tree(&ctx, node_idx) {
+            Visit::Stop => Break(Unwind),
+            _ => walked,
+        }
+    }
+
+    fn walk_children<V: Visitor>(
+        &self,
+        visitor: &mut V,
+        ctx: &VisitCtx<'_>,
+        node_idx: NodeId,
+    ) -> Walk {
+        for child in self.node(node_idx).unwrap().children.get(self) {
             match child {
-                Child::Token(token) => match visitor.visit_token(&ctx, *token, node_idx) {
+                Child::Token(token) => match visitor.visit_token(ctx, *token, node_idx) {
                     Visit::Continue => {}
                     Visit::Skip => break,
-                    Visit::Stop => return Visit::Stop,
+                    Visit::Stop => return Break(Unwind),
                 },
-                Child::Tree(child) => match self.walk_inner(visitor, *child) {
-                    Visit::Continue => {}
-                    Visit::Skip => {
-                        break;
-                    }
-                    Visit::Stop => return Visit::Stop,
-                },
+                Child::Tree(child) => self.walk_inner(visitor, *child)?,
             }
         }
 
-        visitor.exit_tree(&ctx, node_idx)
+        Continue(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::cst::Kind;
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum Event {
+        Enter(Kind),
+        Token,
+        Exit(Kind),
+    }
+
+    /// Records every callback; optionally returns Stop/Skip when a node of the
+    /// configured kind is hit.
+    #[derive(Default)]
+    struct Recorder {
+        events: Vec<Event>,
+        stop_on_enter: Option<Kind>,
+        skip_on_enter: Option<Kind>,
+        stop_on_exit: Option<Kind>,
+        skip_on_exit: Option<Kind>,
+        stop_on_token: bool,
+        skip_on_token_in: Option<Kind>,
+    }
+
+    impl Recorder {
+        fn walk(mut self, text: &str) -> Vec<Event> {
+            let cst = Cst::parse(text);
+            assert!(cst.errors.is_empty(), "parse errors: {:#?}", cst.errors);
+            cst.walk(&mut self);
+            self.events
+        }
+    }
+
+    impl Visitor for Recorder {
+        fn enter_tree(&mut self, ctx: &VisitCtx<'_>, tree: NodeId) -> Visit {
+            let kind = ctx.node(tree).unwrap().kind;
+            self.events.push(Event::Enter(kind));
+            if self.stop_on_enter == Some(kind) {
+                return Visit::Stop;
+            }
+            if self.skip_on_enter == Some(kind) {
+                return Visit::Skip;
+            }
+            Visit::Continue
+        }
+        fn exit_tree(&mut self, ctx: &VisitCtx<'_>, tree: NodeId) -> Visit {
+            let kind = ctx.node(tree).unwrap().kind;
+            self.events.push(Event::Exit(kind));
+            if self.stop_on_exit == Some(kind) {
+                return Visit::Stop;
+            }
+            if self.skip_on_exit == Some(kind) {
+                return Visit::Skip;
+            }
+            Visit::Continue
+        }
+        fn visit_token(&mut self, ctx: &VisitCtx<'_>, _token: TokenId, parent: NodeId) -> Visit {
+            self.events.push(Event::Token);
+            if self.stop_on_token {
+                return Visit::Stop;
+            }
+            if self.skip_on_token_in == Some(ctx.node(parent).unwrap().kind) {
+                return Visit::Skip;
+            }
+            Visit::Continue
+        }
+    }
+
+    const TEXT: &str = "a: list[u32] = { 1 2 }\nb: u32 = 3";
+
+    /// Every `Enter` has a matching, properly nested `Exit`, and nothing is
+    /// left open at the end.
+    fn assert_balanced(events: &[Event]) {
+        let mut stack = Vec::new();
+        for event in events {
+            match event {
+                Event::Enter(kind) => stack.push(*kind),
+                Event::Exit(kind) => {
+                    assert_eq!(stack.pop(), Some(*kind), "mismatched exit in {events:#?}")
+                }
+                Event::Token => {}
+            }
+        }
+        assert!(stack.is_empty(), "nodes never exited: {stack:?}");
+    }
+
+    fn count(events: &[Event], event: Event) -> usize {
+        events.iter().filter(|e| **e == event).count()
+    }
+
+    #[test]
+    fn full_walk_is_balanced() {
+        let events = Recorder::default().walk(TEXT);
+        assert_balanced(&events);
+        assert_eq!(events.first(), Some(&Event::Enter(Kind::File)));
+        assert_eq!(events.last(), Some(&Event::Exit(Kind::File)));
+        assert_eq!(count(&events, Event::Enter(Kind::Entry)), 2);
+    }
+
+    #[test]
+    fn stop_from_enter_exits_open_ancestors() {
+        let events = Recorder {
+            stop_on_enter: Some(Kind::EntryValue),
+            ..Default::default()
+        }
+        .walk(TEXT);
+        assert_balanced(&events);
+        // nothing new is entered after the stop fired
+        let stop_at = events
+            .iter()
+            .position(|e| *e == Event::Enter(Kind::EntryValue))
+            .unwrap();
+        assert!(
+            events[stop_at + 1..]
+                .iter()
+                .all(|e| matches!(e, Event::Exit(_))),
+            "walk continued after Stop: {events:#?}"
+        );
+    }
+
+    #[test]
+    fn stop_from_token_exits_open_ancestors() {
+        let events = Recorder {
+            stop_on_token: true,
+            ..Default::default()
+        }
+        .walk(TEXT);
+        assert_balanced(&events);
+        assert_eq!(count(&events, Event::Token), 1);
+    }
+
+    #[test]
+    fn stop_from_exit_exits_open_ancestors() {
+        let events = Recorder {
+            stop_on_exit: Some(Kind::EntryKey),
+            ..Default::default()
+        }
+        .walk(TEXT);
+        assert_balanced(&events);
+        let stop_at = events
+            .iter()
+            .position(|e| *e == Event::Exit(Kind::EntryKey))
+            .unwrap();
+        assert!(
+            events[stop_at + 1..]
+                .iter()
+                .all(|e| matches!(e, Event::Exit(_))),
+            "walk continued after Stop: {events:#?}"
+        );
+    }
+
+    #[test]
+    fn skip_from_enter_skips_children_but_still_exits() {
+        let events = Recorder {
+            skip_on_enter: Some(Kind::Entry),
+            ..Default::default()
+        }
+        .walk(TEXT);
+        assert_balanced(&events);
+        // children of both entries were skipped, the entries still exited,
+        // and the walk went on to the sibling entry
+        assert_eq!(count(&events, Event::Enter(Kind::EntryKey)), 0);
+        assert_eq!(count(&events, Event::Enter(Kind::Entry)), 2);
+        assert_eq!(count(&events, Event::Exit(Kind::Entry)), 2);
+    }
+
+    #[test]
+    fn skip_from_token_skips_the_nodes_remaining_children() {
+        // skip fires on the block's `{`, so its list items are never entered
+        let events = Recorder {
+            skip_on_token_in: Some(Kind::Block),
+            ..Default::default()
+        }
+        .walk(TEXT);
+        assert_balanced(&events);
+        assert_eq!(count(&events, Event::Enter(Kind::ListItem)), 0);
+        assert_eq!(count(&events, Event::Exit(Kind::Block)), 1);
+    }
+
+    #[test]
+    fn skip_from_exit_does_not_skip_siblings() {
+        let events = Recorder {
+            skip_on_exit: Some(Kind::Entry),
+            ..Default::default()
+        }
+        .walk(TEXT);
+        assert_balanced(&events);
+        // the first entry's exit returning Skip must not swallow its sibling
+        assert_eq!(count(&events, Event::Enter(Kind::Entry)), 2);
     }
 }
