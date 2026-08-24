@@ -152,6 +152,22 @@ macro_rules! define_container_enum {
                 }
             }
 
+            #[inline(always)]
+            #[must_use]
+            pub fn is_empty(&self) -> bool {
+                self.len() == 0
+            }
+
+            #[inline(always)]
+            #[must_use]
+            pub fn len(&self) -> usize {
+                match (self) {
+                    $(Self::$variant{items,..} => {
+                        items.len()
+                    })*
+                }
+            }
+
             pub fn push(&mut self, value: PropertyValueEnum<M>) -> Result<(), Error>{
                 let got = value.kind();
                 let expected = self.item_kind();
