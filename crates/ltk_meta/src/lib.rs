@@ -25,15 +25,17 @@ for (path_hash, object) in &tree.objects {
 
 ### Creating a bin file programmatically
 
+The [`concrete`] module pins the metadata parameter to [`NoMeta`], so nothing
+generic needs spelling:
+
 ```
-use ltk_meta::{Bin, BinObject};
-use ltk_meta::property::{values, NoMeta};
+use ltk_meta::concrete::{values, Bin, BinObject};
 
 // Using the builder pattern
 let tree = Bin::builder()
     .dependency("common.bin")
     .object(
-        BinObject::<NoMeta>::builder(0x12345678, 0xABCDEF00)
+        BinObject::builder(0x12345678u32, 0xABCDEF00u32)
             .property(0x1111, values::I32::new(42))
             .property(0x2222, values::String::from("hello"))
             .build()
@@ -42,10 +44,12 @@ let tree = Bin::builder()
 
 // Or using the simple constructor
 let tree = Bin::new(
-    [BinObject::<NoMeta>::new(0x1234, 0x5678)],
+    [BinObject::new(0x1234u32, 0x5678u32)],
     ["dependency.bin"],
 );
 ```
+
+[`NoMeta`]: crate::property::NoMeta
 
 ### Modifying a bin file
 
@@ -160,6 +164,7 @@ match BinKind::identify_from_reader(&mut file)? {
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 */
+pub mod concrete;
 pub mod path;
 pub mod property;
 pub use property::{Kind as PropertyKind, PropertyValueEnum, ValueSlot};
