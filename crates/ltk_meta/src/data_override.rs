@@ -1,5 +1,8 @@
 //! `PTCH` bins: a patch of deletions, added objects and property patch records over a base bin.
 
+mod apply;
+pub use apply::{ApplyReport, SkippedPatch};
+
 mod read;
 mod write;
 

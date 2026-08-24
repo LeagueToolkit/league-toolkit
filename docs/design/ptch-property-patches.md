@@ -768,7 +768,10 @@ Decisions, each with the alternative that was not taken:
   in-game.
 - **D10 `{key}`** follows `PropertyPath.hpp`. Untested in-game: zero shipped records.
 - **D11 The type rule** compares `ValueShape`: kind, item and key kinds, Embed class exact,
-  Pointer class ignored.
+  Pointer class ignored. Corrected on 2026-08-24: the client does compare a Pointer's class,
+  accepting any that derives from the declared one and skipping the rest. Deciding that needs the
+  class hierarchy, which only the game has, so the class stays out of the comparison and this
+  crate accepts a Pointer the client might reject. See section 15.3.
 - **D12 `BinFile`** ships in phase 1. It is small and it is what every scanning tool wants.
 
 Resolved in review on 2026-08-22:
@@ -888,3 +891,91 @@ time.
 This deleted `container/iter.rs` and the `container_variants!` list, and cost eight lines in
 `ltk_ritobin`. It landed as `refactor(meta)!: store container and option items as
 PropertyValueEnum`, before the resolver.
+
+### 15.2 `ValueSlot`
+
+Flattening the containers opened a hole the typed variants had closed: a `&mut PropertyValueEnum`
+into a container could be assigned a value of another kind, leaving the container disagreeing with
+its own declared item kind and the writer emitting a file the game cannot read, silently.
+
+`ValueSlot` closes it. A mutable borrow is used for two different things and only one is
+dangerous: replacing the whole value can change the kind, editing inside it cannot. So no `&mut
+PropertyValueEnum` is handed out at all. `Container::items_mut`, `Optional::value_mut` and the
+`Map::entries_mut` that briefly existed are replaced by `slot`, which returns a handle carrying
+the kind its holder pins it to. `ValueSlot::set` checks that kind; `ValueSlot::as_mut` and
+`ValueSlot::get_mut` reach the concrete value type, where the kind is not expressible as anything
+else. A slot on an object or struct property pins nothing, because there the kind is free.
+
+Two supporting pieces on `PropertyValueEnum`, both generated from the existing variant list and
+useful on their own: `ValueMut`, a borrowed enum with one variant per kind, and `FromValue`,
+behind `get` and `get_mut`. The crate had no `as_*` accessors at all before this, so reaching an
+`i32` meant writing a `match`.
+
+This changed `resolve_mut`'s return type from section 8.1's `&mut PropertyValueEnum<M>` to
+`ValueSlot<'_, M>`. Section 8.1 called `resolve_mut` the raw escape hatch that performs no type
+check, which was written when containers held typed variants and the hole did not exist.
+
+### 15.3 What the client reference changed
+
+The resolver was written from sections 8.2 and 8.3, which were paraphrased from the decompile
+during phase 1. Reading the source documents again before implementing confirmed the traversal
+table and the outer type gate, and changed two things.
+
+- **D11 was wrong.** The client's pointer reader walks the primary base chain and then the
+  secondary-base pairs, so a class that derives from the declared one is accepted and constructed
+  as the file's class, and an unrelated or unresolvable class is skipped. It is an is-a test, not
+  an absence of one. Without the class hierarchy there is no way to run it, so `ValueShape` leaves
+  a pointer's class out entirely, which accepts strictly more than the client does. An Embed is
+  unaffected: the client compares `MetaClass` pointers, so the class must be exact.
+- **Insertion has no client counterpart at all.** The client patches a live object that was
+  in-place constructed from its class before deserialization, so every property the class declares
+  already exists at its offset holding whatever its constructor left there; the file only
+  overwrites the ones it carries. There is no absent leaf and no insert. Both halves of D8 are
+  therefore toolkit decisions with nothing to check them against, and the skip half does strictly
+  less than the game: patching into an intermediate Embed the base never serialized is something
+  the client handles without noticing.
+
+Two smaller confirmations worth recording. Indices are parsed with `strtol` base 0, so `[0x1F]`
+and `[010]` are legal, which section 7.1 already accepts. And a `Link` is never dereferenced while
+resolving: no descent rule exists for it, and every Link-typed path in the shipped corpus is
+terminal.
+
+The `{key}` conversion follows `PropertyPath.hpp`, which has the brace text parsed as JSON and
+coerced to the map's key type. The other source states flatly that the resolver touches no JSON at
+all. Neither can be settled from shipped data, because no shipped record uses a `{key}` subscript
+(D10). `PropertyPath.hpp` also resolves a quoted string against a global enum registry for an
+enum-typed key, which needs a schema and is not implemented.
+
+`ValueShape`'s `Display` uses this crate's own `Kind` names rather than ritobin's - `Vector2`,
+`Container[I32]`, `Map[Hash, String]`, `Embedded 4eb9ba4f`. The ritobin vocabulary lives in
+`ltk_ritobin` and duplicating it here would give `ltk_meta` two names for every kind.
+
+`check` differs from `apply` in one way the design did not call out: it judges every record
+against the base as it stands, where `apply` runs them in file order. A record that only fits
+because an earlier record in the same patch replaced a pointer or an embed above it is therefore
+judged against the value that earlier record would have overwritten.
+
+### 15.4 Corpus check
+
+The scratch tooling in appendix B is replaced by `crates/ltk_meta/tests/corpus.rs`, ignored unless
+`LTK_LOL_GAME_DIR` points at an install. Rather than the sibling-`uibase` heuristic the phase 1
+scratch tool used, it collects every object a patch's records name, by hash, from the archive the
+patch lives in - a bin object's path hash is the hash of its asset path, so a record lands on the
+object it names without needing to know which file that is.
+
+Against client 16.16.804.9184, 456 archives:
+
+| measurement | result |
+|---|---|
+| PTCH chunks read, re-written and compared byte for byte | 238 of 238 |
+| records / whole objects / deletions | 23,047 / 582 / 0 |
+| records that resolve, and of those, that create the leaf | 22,877 / 2,464 |
+| skipped, no such object | 101 |
+| skipped, an intermediate property is absent | 69 |
+| skipped for any other reason | 0 |
+
+The last row is the assertion the test makes, and it is the one section 2.1 measured: a shipped
+record never mismatches a type, subscripts something unsubscriptable, runs off the end of a
+container or walks into a null pointer. The first two rows reproduce section 14.1 exactly. The
+"no such object" count is lower than section 2.1's 173 because that measurement resolved only
+against `uibase` in the same directory, where this one reaches every object in the archive.

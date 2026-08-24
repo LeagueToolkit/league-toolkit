@@ -49,6 +49,19 @@ impl<'a, M> ValueSlot<'a, M> {
         }
     }
 
+    /// A slot whose holder accepts a value of any kind.
+    pub(crate) fn free(value: &'a mut PropertyValueEnum<M>) -> Self {
+        Self {
+            pinned: None,
+            value,
+        }
+    }
+
+    /// The borrow itself, for walking further down inside the crate.
+    pub(crate) fn into_inner(self) -> &'a mut PropertyValueEnum<M> {
+        self.value
+    }
+
     /// The kind of the value currently in the slot.
     #[inline(always)]
     #[must_use]

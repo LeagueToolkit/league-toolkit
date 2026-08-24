@@ -18,6 +18,9 @@
 
 mod parse;
 
+mod resolve;
+pub use resolve::{PatchError, ResolveError, ResolveErrorKind, ValueShape};
+
 #[cfg(test)]
 mod tests;
 

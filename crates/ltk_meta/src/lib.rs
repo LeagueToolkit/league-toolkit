@@ -120,7 +120,9 @@ mod tree;
 pub use tree::*;
 
 mod data_override;
-pub use data_override::{BinOverride, Builder as BinOverrideBuilder, PropertyPatch};
+pub use data_override::{
+    ApplyReport, BinOverride, Builder as BinOverrideBuilder, PropertyPatch, SkippedPatch,
+};
 
 mod file;
 pub use file::{BinFile, BinKind};
