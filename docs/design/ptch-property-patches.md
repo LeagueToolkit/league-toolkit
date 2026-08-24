@@ -867,3 +867,24 @@ against client 16.16.804.9184, every `.wad.client` in the install:
 | PROP chunks still read after the reader refactor | 52,352 of 52,352 |
 | records / whole objects / deletions | 23,047 / 582 / 0 |
 | distinct paths, longest, with a `{key}` subscript | 124, 48 bytes, 0 |
+
+## 15. Implementation notes (phase 2)
+
+### 15.1 Container storage
+
+Section 8.1 hands out `&PropertyValueEnum<M>`, which `Container`, `UnorderedContainer` and
+`Optional` could not do: they stored typed variants (`Vec<values::Vector2<M>>`,
+`Option<values::I32<M>>`), so an item was never a `PropertyValueEnum` to lend out. `Optional` had
+no borrowing accessor at all. `Map` had stored `PropertyValueEnum` pairs all along.
+
+The two now match `Map`: an `item_kind: Kind` beside `Vec<PropertyValueEnum<M>>` (`Optional` boxes
+its single value, because the type allows the nesting the format forbids). The homogeneity the
+variants enforced at compile time is enforced at run time by the constructors and `push`, which is
+where `Map` already enforced it and where `Container::push` already did; `items_mut` and
+`value_mut` are documented as the way around it. `ContainerItem`, a marker for the value types the
+format lets a container hold, keeps `From`/`FromIterator` rejecting a nested container at compile
+time.
+
+This deleted `container/iter.rs` and the `container_variants!` list, and cost eight lines in
+`ltk_ritobin`. It landed as `refactor(meta)!: store container and option items as
+PropertyValueEnum`, before the resolver.

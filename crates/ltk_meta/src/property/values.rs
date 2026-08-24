@@ -1,6 +1,5 @@
 //! Value types for [`super::PropertyValueEnum`].
 
-#[macro_use]
 mod container;
 mod embedded;
 mod map;
@@ -11,13 +10,7 @@ mod string;
 mod r#struct;
 mod unordered_container;
 
-pub mod iter {
-    pub mod container {
-        pub use super::super::container::iter::*;
-    }
-}
-
-pub use container::Container;
+pub use container::{Container, ContainerItem};
 pub use embedded::*;
 pub use map::*;
 pub use none::*;

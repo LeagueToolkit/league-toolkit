@@ -203,24 +203,18 @@ pub(crate) fn try_populate_listlike(
                 V::Vector4(v) => items.inject_vec4(v, ListLike::Vec4)?,
                 V::Color(v) => items.inject_color(v, ListLike::Color)?,
                 V::Matrix44(v) => items.inject_mat44(v, ListLike::Mat44)?,
-                V::Optional(opt) => match opt {
-                    values::Optional::Vector2 { value, .. } => {
-                        items.inject_vec2(value.get_or_insert_default(), ListLike::Vec2)?
+                // Check the item kind before reaching in: `value_or_insert_default` would
+                // otherwise fill an option that turns out not to hold a listlike at all.
+                V::Optional(opt) if ListLike::from_kind(opt.item_kind()).is_some() => {
+                    match opt.value_or_insert_default() {
+                        V::Vector2(v) => items.inject_vec2(v, ListLike::Vec2)?,
+                        V::Vector3(v) => items.inject_vec3(v, ListLike::Vec3)?,
+                        V::Vector4(v) => items.inject_vec4(v, ListLike::Vec4)?,
+                        V::Color(v) => items.inject_color(v, ListLike::Color)?,
+                        V::Matrix44(v) => items.inject_mat44(v, ListLike::Mat44)?,
+                        _ => return Ok(None),
                     }
-                    values::Optional::Vector3 { value, .. } => {
-                        items.inject_vec3(value.get_or_insert_default(), ListLike::Vec3)?
-                    }
-                    values::Optional::Vector4 { value, .. } => {
-                        items.inject_vec4(value.get_or_insert_default(), ListLike::Vec4)?
-                    }
-                    values::Optional::Color { value, .. } => {
-                        items.inject_color(value.get_or_insert_default(), ListLike::Color)?
-                    }
-                    values::Optional::Matrix44 { value, .. } => {
-                        items.inject_mat44(value.get_or_insert_default(), ListLike::Mat44)?
-                    }
-                    _ => return Ok(None),
-                },
+                }
                 _ => return Ok(None),
             }))
         };
