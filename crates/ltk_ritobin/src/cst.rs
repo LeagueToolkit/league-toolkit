@@ -15,7 +15,7 @@ mod ids;
 pub use ids::*;
 
 pub mod visitor;
-pub use visitor::Visitor;
+pub use visitor::{Visitor, WalkOutcome};
 
 pub mod builder;
 pub use builder::Builder as CstBuilder;

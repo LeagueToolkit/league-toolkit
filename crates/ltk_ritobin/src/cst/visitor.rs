@@ -11,7 +11,13 @@ pub enum Visit {
     /// The walk will unwind, calling [`Visitor::exit_tree`] for every node that was in the walk stack,
     /// bottom-up, until the walk is fully unwound. The walk will not resume after a [`Visit::Stop`].
     Stop,
-    /// Skips all remaining tokens in the current tree
+    /// Skip ahead, locally
+    ///
+    /// - From [`Visitor::enter_tree`]: the node's children are skipped; its
+    ///   [`Visitor::exit_tree`] still runs.
+    /// - From [`Visitor::visit_token`]: the rest of the current node's children are skipped.
+    /// - From [`Visitor::exit_tree`]: the parent's remaining children are pruned - the walk
+    ///   jumps straight to the parent's [`Visitor::exit_tree`] and continues from there.
     Skip,
     /// Continue walking
     Continue,
@@ -39,6 +45,9 @@ pub trait Visitor {
     ///
     /// Runs symmetrically to [`Visitor::enter_tree`], so every node that was entered will be exited,
     /// even if the walk is unwinding after a [`Visit::Stop`].
+    ///
+    /// Returning [`Visit::Skip`] from here prunes the parent's remaining children: the walk
+    /// jumps straight to the parent's `exit_tree` and continues from there.
     #[must_use]
     fn exit_tree(&mut self, ctx: &VisitCtx<'_>, tree: NodeId) -> Visit {
         Visit::Continue
@@ -60,23 +69,45 @@ pub trait VisitorExt: Sized + Visitor {
 
 impl<T: Sized + Visitor> VisitorExt for T {}
 
+/// How a [`Cst::walk`] ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WalkOutcome {
+    /// The walk reached the end of the tree.
+    Completed,
+    /// A visitor returned [`Visit::Stop`] and the walk unwound early.
+    Stopped,
+}
+
 /// Walk unwind marker, used to propagate a [`Visit::Stop`] up the walk stack.
 struct Unwind;
 
+/// Where the walk resumes after a child subtree finished.
+enum Resume {
+    /// With the parent's remaining children.
+    Siblings,
+    /// At the parent's [`Visitor::exit_tree`]: the child's exit returned
+    /// [`Visit::Skip`], pruning the remaining siblings.
+    Parent,
+}
+
 /// Subtree walk state
 ///
-/// - `Continue` propagates a [`Visit::Continue`] and `?` on it continues the walk.
+/// - `Continue(resume)` continues the walk; `?` on it yields where the walk
+///   resumes - with the next sibling, or at the parent.
 /// - `Break(Unwind)` propagates a [`Visit::Stop`] and `?` on it unwinds the walk.
-type Walk = ControlFlow<Unwind>;
+type Walk = ControlFlow<Unwind, Resume>;
 
 impl Cst {
     /// Walk a [`Visitor`] implementor along this tree.
-    pub fn walk<V: Visitor>(&self, visitor: &mut V) {
+    pub fn walk<V: Visitor>(&self, visitor: &mut V) -> WalkOutcome {
         if self.nodes.is_empty() {
-            return;
+            return WalkOutcome::Completed;
         }
 
-        let _ = self.walk_inner(visitor, NodeId(0));
+        match self.walk_inner(visitor, NodeId(0)) {
+            Continue(_) => WalkOutcome::Completed,
+            Break(Unwind) => WalkOutcome::Stopped,
+        }
     }
 
     fn walk_inner<V: Visitor>(&self, visitor: &mut V, node_idx: NodeId) -> Walk {
@@ -88,9 +119,11 @@ impl Cst {
             Visit::Continue => self.walk_children(visitor, &ctx, node_idx),
         };
 
-        match visitor.exit_tree(&ctx, node_idx) {
-            Visit::Stop => Break(Unwind),
-            _ => walked,
+        // exit_tree runs exactly once for every entered node, even while unwinding
+        match (walked, visitor.exit_tree(&ctx, node_idx)) {
+            (Break(Unwind), _) | (_, Visit::Stop) => Break(Unwind),
+            (_, Visit::Skip) => Continue(Resume::Parent),
+            (_, Visit::Continue) => Continue(Resume::Siblings),
         }
     }
 
@@ -99,7 +132,7 @@ impl Cst {
         visitor: &mut V,
         ctx: &VisitCtx<'_>,
         node_idx: NodeId,
-    ) -> Walk {
+    ) -> ControlFlow<Unwind> {
         for child in self.node(node_idx).unwrap().children.get(self) {
             match child {
                 Child::Token(token) => match visitor.visit_token(ctx, *token, node_idx) {
@@ -107,7 +140,10 @@ impl Cst {
                     Visit::Skip => break,
                     Visit::Stop => return Break(Unwind),
                 },
-                Child::Tree(child) => self.walk_inner(visitor, *child)?,
+                Child::Tree(child) => match self.walk_inner(visitor, *child)? {
+                    Resume::Siblings => {}
+                    Resume::Parent => break,
+                },
             }
         }
 
@@ -296,14 +332,51 @@ mod test {
     }
 
     #[test]
-    fn skip_from_exit_does_not_skip_siblings() {
+    fn skip_from_exit_prunes_later_siblings() {
         let events = Recorder {
             skip_on_exit: Some(Kind::Entry),
             ..Default::default()
         }
         .walk(TEXT);
         assert_balanced(&events);
-        // the first entry's exit returning Skip must not swallow its sibling
+        // the first entry's exit returned Skip, so the second entry is pruned,
+        // but the parent still exits normally
+        assert_eq!(count(&events, Event::Enter(Kind::Entry)), 1);
+        assert_eq!(events.last(), Some(&Event::Exit(Kind::File)));
+    }
+
+    #[test]
+    fn pruning_is_local_and_the_walk_continues_elsewhere() {
+        // the first list item's exit prunes the block's remaining children,
+        // but everything outside the block is still walked
+        let events = Recorder {
+            skip_on_exit: Some(Kind::ListItem),
+            ..Default::default()
+        }
+        .walk(TEXT);
+        assert_balanced(&events);
+        assert_eq!(count(&events, Event::Enter(Kind::ListItem)), 1);
         assert_eq!(count(&events, Event::Enter(Kind::Entry)), 2);
+    }
+
+    #[test]
+    fn walk_reports_how_it_ended() {
+        let cst = Cst::parse(TEXT);
+        assert_eq!(cst.walk(&mut Recorder::default()), WalkOutcome::Completed);
+        assert_eq!(
+            cst.walk(&mut Recorder {
+                stop_on_token: true,
+                ..Default::default()
+            }),
+            WalkOutcome::Stopped
+        );
+        // pruning is not a stop
+        assert_eq!(
+            cst.walk(&mut Recorder {
+                skip_on_exit: Some(Kind::Entry),
+                ..Default::default()
+            }),
+            WalkOutcome::Completed
+        );
     }
 }
