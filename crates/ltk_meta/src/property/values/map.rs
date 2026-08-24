@@ -3,7 +3,7 @@ use std::{hash::Hash, io};
 use crate::{
     property::{Kind, NoMeta},
     traits::{PropertyExt, PropertyValueExt, ReadProperty, ReaderExt, WriteProperty, WriterExt},
-    Error, PropertyValueEnum,
+    Error, PropertyValueEnum, ValueSlot,
 };
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 use ltk_io_ext::{measure, window_at};
@@ -73,6 +73,20 @@ impl<M> Map<M> {
     #[must_use]
     pub fn entries(&self) -> &[(PropertyValueEnum<M>, PropertyValueEnum<M>)] {
         &self.entries
+    }
+
+    /// A mutable handle on the value of entry `index`, pinned to [`Map::value_kind`].
+    ///
+    /// There is no plain `&mut` to an entry: writing a value of a different kind would leave the
+    /// map disagreeing with its own declared kinds and [`Map::to_writer`] emitting a file the
+    /// game cannot read, and a key is not mutable at all, since changing one would reorder the
+    /// map behind its own back. Add entries with [`Map::push`].
+    #[inline(always)]
+    #[must_use]
+    pub fn slot(&mut self, index: usize) -> Option<ValueSlot<'_, M>> {
+        let value_kind = self.value_kind;
+        let (_, value) = self.entries.get_mut(index)?;
+        Some(ValueSlot::pinned(value_kind, value))
     }
 
     #[inline(always)]

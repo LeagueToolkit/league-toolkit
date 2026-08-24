@@ -114,7 +114,7 @@ match BinKind::identify_from_reader(&mut file)? {
 */
 pub mod path;
 pub mod property;
-pub use property::{Kind as PropertyKind, PropertyValueEnum};
+pub use property::{Kind as PropertyKind, PropertyValueEnum, ValueSlot};
 
 mod tree;
 pub use tree::*;

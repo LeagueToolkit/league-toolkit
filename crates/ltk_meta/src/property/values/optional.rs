@@ -1,5 +1,5 @@
 use crate::{
-    property::{values::ContainerItem, Kind, NoMeta},
+    property::{values::ContainerItem, Kind, NoMeta, ValueSlot},
     traits::{PropertyExt, PropertyValueExt, ReadProperty, ReaderExt, WriteProperty, WriterExt},
     Error, PropertyValueEnum,
 };
@@ -91,15 +91,17 @@ impl<M> Optional<M> {
         self.value.as_deref()
     }
 
-    /// See [`Optional::value`].
+    /// A mutable handle on the contained value, pinned to [`Optional::item_kind`].
     ///
-    /// Nothing stops you from writing a value of a different kind, which leaves the option
-    /// disagreeing with its own [`Optional::item_kind`] and [`Optional::to_writer`] emitting a
-    /// file the game cannot read. Go through [`Optional::set`] to have the kind checked.
+    /// There is no plain `&mut` to the value, because writing one of a different kind would
+    /// leave the option disagreeing with its own item kind and [`Optional::to_writer`] emitting a
+    /// file the game cannot read. [`ValueSlot`] edits in place freely and checks the kind only on
+    /// a whole-value replace.
     #[inline(always)]
     #[must_use]
-    pub fn value_mut(&mut self) -> Option<&mut PropertyValueEnum<M>> {
-        self.value.as_deref_mut()
+    pub fn slot(&mut self) -> Option<ValueSlot<'_, M>> {
+        let item_kind = self.item_kind;
+        Some(ValueSlot::pinned(item_kind, self.value.as_deref_mut()?))
     }
 
     /// Replaces the contained value, returning the old one.
@@ -123,15 +125,17 @@ impl<M> Optional<M> {
         Ok(std::mem::replace(&mut self.value, value.map(Box::new)).map(|v| *v))
     }
 
-    /// The contained value, inserting [`Kind::default_value`] for [`Optional::item_kind`] first if
-    /// there is none.
-    pub fn value_or_insert_default(&mut self) -> &mut PropertyValueEnum<M>
+    /// See [`Optional::slot`], inserting [`Kind::default_value`] for [`Optional::item_kind`] first
+    /// if there is no value.
+    pub fn slot_or_insert_default(&mut self) -> ValueSlot<'_, M>
     where
         M: Default,
     {
         let item_kind = self.item_kind;
-        self.value
-            .get_or_insert_with(|| Box::new(item_kind.default_value()))
+        let value = self
+            .value
+            .get_or_insert_with(|| Box::new(item_kind.default_value()));
+        ValueSlot::pinned(item_kind, value)
     }
 
     /// Whether a value is present.
@@ -342,16 +346,44 @@ mod tests {
     fn fills_an_empty_option_with_its_item_kind() {
         let mut option = Optional::<NoMeta>::empty(Kind::Vector2).unwrap();
         assert_eq!(
-            *option.value_or_insert_default(),
-            Kind::Vector2.default_value()
+            option.slot_or_insert_default().get(),
+            &Kind::Vector2.default_value()
         );
         assert!(option.is_some());
 
         // Already filled, so it stays as it was.
         let mut option = Optional::<NoMeta>::from(values::F32::new(1.5));
         assert_eq!(
-            *option.value_or_insert_default(),
-            values::F32::new(1.5).into()
+            option.slot_or_insert_default().get(),
+            &values::F32::new(1.5).into()
         );
+    }
+
+    /// The value can be edited in place or replaced by its own kind, and by nothing else.
+    #[test]
+    fn pins_its_item_kind_to_the_slots_it_hands_out() {
+        use crate::property::ValueMut;
+
+        assert!(Optional::<NoMeta>::empty(Kind::F32)
+            .unwrap()
+            .slot()
+            .is_none());
+
+        let mut option = Optional::<NoMeta>::from(values::F32::new(1.5));
+        let mut slot = option.slot().unwrap();
+        assert_eq!(slot.pinned_kind(), Some(Kind::F32));
+
+        assert!(matches!(
+            slot.set(values::U8::new(1).into()),
+            Err(Error::MismatchedContainerTypes { .. })
+        ));
+
+        let ValueMut::F32(value) = slot.as_mut() else {
+            panic!("the slot holds an f32");
+        };
+        value.value = 2.5;
+
+        assert_eq!(option.item_kind(), Kind::F32);
+        assert_eq!(option.value(), Some(&values::F32::new(2.5).into()));
     }
 }

@@ -1,4 +1,8 @@
-use ltk_meta::{property::values, traits::PropertyExt, PropertyKind, PropertyValueEnum};
+use ltk_meta::{
+    property::{values, ValueMut},
+    traits::PropertyExt,
+    PropertyKind, PropertyValueEnum,
+};
 
 use crate::{
     parse::Span,
@@ -203,15 +207,15 @@ pub(crate) fn try_populate_listlike(
                 V::Vector4(v) => items.inject_vec4(v, ListLike::Vec4)?,
                 V::Color(v) => items.inject_color(v, ListLike::Color)?,
                 V::Matrix44(v) => items.inject_mat44(v, ListLike::Mat44)?,
-                // Check the item kind before reaching in: `value_or_insert_default` would
+                // Check the item kind before reaching in: `slot_or_insert_default` would
                 // otherwise fill an option that turns out not to hold a listlike at all.
                 V::Optional(opt) if ListLike::from_kind(opt.item_kind()).is_some() => {
-                    match opt.value_or_insert_default() {
-                        V::Vector2(v) => items.inject_vec2(v, ListLike::Vec2)?,
-                        V::Vector3(v) => items.inject_vec3(v, ListLike::Vec3)?,
-                        V::Vector4(v) => items.inject_vec4(v, ListLike::Vec4)?,
-                        V::Color(v) => items.inject_color(v, ListLike::Color)?,
-                        V::Matrix44(v) => items.inject_mat44(v, ListLike::Mat44)?,
+                    match opt.slot_or_insert_default().as_mut() {
+                        ValueMut::Vector2(v) => items.inject_vec2(v, ListLike::Vec2)?,
+                        ValueMut::Vector3(v) => items.inject_vec3(v, ListLike::Vec3)?,
+                        ValueMut::Vector4(v) => items.inject_vec4(v, ListLike::Vec4)?,
+                        ValueMut::Color(v) => items.inject_color(v, ListLike::Color)?,
+                        ValueMut::Matrix44(v) => items.inject_mat44(v, ListLike::Mat44)?,
                         _ => return Ok(None),
                     }
                 }

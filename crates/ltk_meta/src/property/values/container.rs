@@ -3,7 +3,7 @@ use std::io;
 use crate::{
     property::{Kind, NoMeta},
     traits::{PropertyExt, PropertyValueExt, ReadProperty, ReaderExt, WriteProperty, WriterExt},
-    Error, PropertyValueEnum,
+    Error, PropertyValueEnum, ValueSlot,
 };
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 use ltk_io_ext::{measure, window_at};
@@ -82,17 +82,6 @@ impl<M> Container<M> {
         &self.items
     }
 
-    /// The items, in order, mutably.
-    ///
-    /// Nothing stops you from writing an item of a different kind, which leaves the container
-    /// inhomogeneous and [`Container::to_writer`] emitting a file the game cannot read. Compare
-    /// against [`Container::item_kind`] first, or go through [`Container::push`].
-    #[inline(always)]
-    #[must_use]
-    pub fn items_mut(&mut self) -> &mut [PropertyValueEnum<M>] {
-        &mut self.items
-    }
-
     /// The item at `index`, if there is one.
     #[inline(always)]
     #[must_use]
@@ -100,11 +89,17 @@ impl<M> Container<M> {
         self.items.get(index)
     }
 
-    /// See [`Container::get`]. The caveat on [`Container::items_mut`] applies.
+    /// A mutable handle on item `index`, pinned to [`Container::item_kind`].
+    ///
+    /// There is no plain `&mut` to an item, because writing one of a different kind would leave
+    /// the container inhomogeneous and [`Container::to_writer`] emitting a file the game cannot
+    /// read. [`ValueSlot`] edits in place freely and checks the kind only on a whole-value
+    /// replace.
     #[inline(always)]
     #[must_use]
-    pub fn get_mut(&mut self, index: usize) -> Option<&mut PropertyValueEnum<M>> {
-        self.items.get_mut(index)
+    pub fn slot(&mut self, index: usize) -> Option<ValueSlot<'_, M>> {
+        let item_kind = self.item_kind;
+        Some(ValueSlot::pinned(item_kind, self.items.get_mut(index)?))
     }
 
     /// How many items this container holds.
@@ -344,17 +339,47 @@ mod tests {
     }
 
     #[test]
-    fn borrows_and_mutates_its_items() {
-        let mut list = Container::<NoMeta>::from(vec![values::I32::new(1), values::I32::new(2)]);
+    fn borrows_its_items() {
+        let list = Container::<NoMeta>::from(vec![values::I32::new(1), values::I32::new(2)]);
 
         assert_eq!(list.get(0), Some(&values::I32::new(1).into()));
         assert_eq!(list.get(2), None);
+        assert_eq!(list.items().len(), 2);
+        assert_eq!(list.into_items().len(), 2);
+    }
 
-        *list.get_mut(1).unwrap() = values::I32::new(7).into();
+    /// An item can be edited in place or replaced by its own kind, and by nothing else.
+    #[test]
+    fn pins_its_item_kind_to_the_slots_it_hands_out() {
+        use crate::property::ValueMut;
+
+        let mut list = Container::<NoMeta>::from(vec![values::I32::new(1), values::I32::new(2)]);
+        assert!(list.slot(2).is_none());
+
+        let mut slot = list.slot(1).unwrap();
+        assert_eq!(slot.pinned_kind(), Some(Kind::I32));
+
+        assert!(matches!(
+            slot.set(values::String::from("no").into()),
+            Err(Error::MismatchedContainerTypes {
+                expected: Kind::I32,
+                got: Kind::String
+            })
+        ));
+        assert_eq!(
+            slot.set(values::I32::new(7).into()).unwrap(),
+            values::I32::new(2).into()
+        );
+
+        let ValueMut::I32(item) = slot.as_mut() else {
+            panic!("the slot holds an i32");
+        };
+        item.value += 1;
+
+        assert_eq!(list.item_kind(), Kind::I32);
         assert_eq!(
             list.items(),
-            [values::I32::new(1).into(), values::I32::new(7).into()]
+            [values::I32::new(1).into(), values::I32::new(8).into()]
         );
-        assert_eq!(list.into_items().len(), 2);
     }
 }
