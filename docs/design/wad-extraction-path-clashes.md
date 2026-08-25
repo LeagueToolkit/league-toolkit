@@ -51,7 +51,7 @@ A modern `Global` or UI WAD would settle it.
 | #   | Policy                                                       | Deterministic | Exact     | Cost                                   |
 | --- | ------------------------------------------------------------ | ------------- | --------- | -------------------------------------- |
 | 1   | Resolve at write time                                        | No            | Yes       | None                                   |
-| 2   | **Deterministic prefix pass**                                | Yes           | Yes       | One extra resolve per chunk, plus a set. Measured below |
+| 2   | **Deterministic prefix pass**                                | Yes           | Yes       | Holding the names for the run, plus a set. Measured below |
 | 3   | Suffix every extensionless path                              | Yes           | Heuristic | 866 renames to catch 88, still incomplete |
 | 4   | Universal `.ltk` on every file                               | Yes           | Yes       | 1.1M files pay for 88                  |
 | 5   | `ExtractLayout::Flat`                                        | Yes           | Yes       | Loses the hierarchy                    |
@@ -99,8 +99,12 @@ real table, this is the decision to revisit.
 
 ## 5. What the extractor does
 
-1. Before any write, resolve every chunk of the extraction once and collect the set of directories
-   those paths name — every prefix of every path, excluding the paths themselves.
+1. Before any write, resolve every chunk of the extraction and collect the set of directories those
+   paths name — every prefix of every path, excluding the paths themselves. The names are read
+   **once** and carried from there to the worker that writes each chunk. A worker needs an owned
+   path either way, because the job crosses a thread boundary, so nothing is allocated twice and a
+   caller's resolver is asked about each chunk once. The path filter runs in the same pass, for the
+   same reason.
 2. A path in that set is renamed to `<name>.ltk`. Anything else keeps its name.
 3. A directory the output tree held *already*, from an earlier extraction or from anything else, is
    still only found by the write failing, so option 1 remains as the backstop for it, along with
