@@ -51,10 +51,40 @@
 //! - A chunk the resolver has no name for lands under its hash as sixteen hex
 //!   digits. The extension is the one its bytes identify as, when they identify
 //!   as anything.
-//! - A path with no extension, or one that collides with an existing directory,
-//!   becomes `<stem>.ltk.<ext>`, or `<stem>.ltk` when the bytes identify as nothing.
-//! - A name the file system refuses as too long becomes `<hash>.<ext>` in the
-//!   output directory itself.
+//! - A name a directory holds takes a `.ltk` suffix: `foo.bin` becomes
+//!   `foo.bin.ltk`, because a file cannot share a name with a directory. The
+//!   suffix is added and never substituted, so stripping a trailing `.ltk`
+//!   gives the name back, hex name as much as path. Nothing else moves a chunk
+//!   off the name its path gave it, which is what a caller hashing an extracted
+//!   file's path back to its chunk needs.
+//! - A WAD can name both `x` and `x/y`; no file system holds both. `x` is the
+//!   one that moves, to `x.ltk`, so both paths come through the extraction.
+//!   Which of the two moves is worked out over the extraction's own paths
+//!   before it writes any of them, so one archive and one hash table give one
+//!   output tree every run, whatever order the chunks are written in.
+//! - A name the file system refuses outright, most often the Windows
+//!   long-path limit, becomes `<hash>.<ext>` in the output directory itself,
+//!   losing the directories the path named.
+//!
+//! An extraction never ends over a pair of its own paths that cannot both
+//! stand. It moves one of them and lists it under [`ExtractReport::displaced`].
+//!
+//! # Paths the extraction will not write
+//!
+//! A resolver's paths are untrusted: a hash table is a third-party download,
+//! and name recovery reads paths out of the archive itself. Two kinds never
+//! reach the file system, and [`ExtractReport::displaced`] lists both:
+//!
+//! - A path that would name a file the caller did not ask for: one leaving the
+//!   output directory, or one a host would quietly read as something else.
+//!   [`DisplacedChunk::path`] carries the rejected path.
+//! - A path a chunk of the same extraction claimed already. The first file
+//!   stays; the second chunk is not written over it. Two hashes resolving to
+//!   one path means the resolver is wrong about one of them, and an extraction
+//!   that overwrote in silence would lose the difference.
+//!
+//! The report lists a chunk the file system refused the name of as well, so
+//! that rename is not silent either.
 //!
 //! A chunk no resolver names can still get its name from the archive itself.
 //! [`WadExtractor::with_name_recovery`] reads the `.bin` files for it first.
@@ -71,20 +101,22 @@
 //! them needs to be [`Sync`]. The progress callback hears of each chunk once
 //! the chunk is done.
 
+mod naming;
+mod report;
+mod resolver;
+mod writer;
+
 #[cfg(test)]
 mod tests;
 
 use std::{
-    borrow::Cow,
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::HashSet,
     fmt,
-    fs::{self, OpenOptions},
-    hash::BuildHasher,
-    io::{self, Read, Seek, Write as _},
+    io::{Read, Seek},
     num::NonZeroUsize,
     sync::{
         atomic::{AtomicBool, Ordering},
-        mpsc, Arc, Mutex, MutexGuard, PoisonError,
+        mpsc, Mutex, MutexGuard, PoisonError,
     },
     thread,
 };
@@ -95,323 +127,19 @@ use ltk_hash::WadHash;
 
 use crate::{ChunkDecoder, NameRecovery, RecoveredNames, Wad, WadChunk, WadError};
 
-/// Names chunks by their path hash.
-///
-/// A WAD stores the hash of each chunk's path and not the path. A resolver
-/// supplies the path, from a hash table or any other source, and answers
-/// `None` for a hash it has no name for. The extractor writes such a chunk
-/// under its hash as sixteen hex digits.
-///
-/// Every `HashMap<WadHash, String>` is a resolver, and so is a reference, a `Box`
-/// or an `Arc` of any resolver.
-pub trait PathResolver {
-    /// The path of `path_hash`, or `None` when the resolver has no name for it.
-    fn resolve(&self, path_hash: WadHash) -> Option<Cow<'_, str>>;
+pub use self::{
+    report::{DisplacedChunk, ExtractProgress, ExtractReport, ExtractResult, PathIssue},
+    resolver::{is_hex_chunk_path, NoResolver, PathResolver},
+    writer::{ExistingFilePolicy, ExtractLayout},
+};
 
-    /// Whether the resolver names `path_hash`.
-    ///
-    /// The default calls [`resolve`](Self::resolve). A resolver that can
-    /// answer without building the string should override it.
-    fn is_known(&self, path_hash: WadHash) -> bool {
-        self.resolve(path_hash).is_some()
-    }
-}
+pub(crate) use self::resolver::hex_name;
 
-impl<R: PathResolver + ?Sized> PathResolver for &R {
-    fn resolve(&self, path_hash: WadHash) -> Option<Cow<'_, str>> {
-        (**self).resolve(path_hash)
-    }
-
-    fn is_known(&self, path_hash: WadHash) -> bool {
-        (**self).is_known(path_hash)
-    }
-}
-
-impl<R: PathResolver + ?Sized> PathResolver for Box<R> {
-    fn resolve(&self, path_hash: WadHash) -> Option<Cow<'_, str>> {
-        (**self).resolve(path_hash)
-    }
-
-    fn is_known(&self, path_hash: WadHash) -> bool {
-        (**self).is_known(path_hash)
-    }
-}
-
-impl<R: PathResolver + ?Sized> PathResolver for Arc<R> {
-    fn resolve(&self, path_hash: WadHash) -> Option<Cow<'_, str>> {
-        (**self).resolve(path_hash)
-    }
-
-    fn is_known(&self, path_hash: WadHash) -> bool {
-        (**self).is_known(path_hash)
-    }
-}
-
-impl<S: BuildHasher> PathResolver for HashMap<WadHash, String, S> {
-    fn resolve(&self, path_hash: WadHash) -> Option<Cow<'_, str>> {
-        self.get(&path_hash)
-            .map(|path| Cow::Borrowed(path.as_str()))
-    }
-
-    fn is_known(&self, path_hash: WadHash) -> bool {
-        self.contains_key(&path_hash)
-    }
-}
-
-/// A resolver that names nothing, so every chunk lands under its hash.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct NoResolver;
-
-impl PathResolver for NoResolver {
-    fn resolve(&self, _path_hash: WadHash) -> Option<Cow<'_, str>> {
-        None
-    }
-
-    fn is_known(&self, _path_hash: WadHash) -> bool {
-        false
-    }
-}
-
-/// A path hash as the sixteen hex digits a nameless chunk lands under.
-pub(crate) fn hex_name(path_hash: WadHash) -> String {
-    format!("{path_hash:016x}")
-}
-
-/// One chunk done, as [`WadExtractor::on_progress`] reports it.
-#[derive(Debug, Clone)]
-pub struct ExtractProgress<'a> {
-    done: usize,
-    total: usize,
-    path_hash: WadHash,
-    path: &'a str,
-    named: bool,
-    output_path: Option<&'a Utf8Path>,
-    result: ExtractResult,
-    bytes: u64,
-}
-
-impl ExtractProgress<'_> {
-    /// Chunks done so far, this one included.
-    pub fn done(&self) -> usize {
-        self.done
-    }
-
-    /// Chunks the extraction covers, done or not.
-    pub fn total(&self) -> usize {
-        self.total
-    }
-
-    /// [`done`](Self::done) over [`total`](Self::total), from 0.0 to 1.0.
-    ///
-    /// Zero when there was nothing to do.
-    pub fn fraction(&self) -> f64 {
-        if self.total == 0 {
-            0.0
-        } else {
-            self.done as f64 / self.total as f64
-        }
-    }
-
-    /// The chunk's path hash.
-    pub fn path_hash(&self) -> WadHash {
-        self.path_hash
-    }
-
-    /// The chunk's path, or its hash as sixteen hex digits when nothing named it.
-    ///
-    /// [`is_named`](Self::is_named) tells the two apart.
-    pub fn path(&self) -> &str {
-        self.path
-    }
-
-    /// Whether a resolver named the chunk.
-    ///
-    /// `false` means nothing knew the hash, so [`path`](Self::path) is that
-    /// hash as sixteen hex digits and not a path the archive was built from.
-    ///
-    /// A caller sorting an extraction into named and unnamed chunks reads this
-    /// rather than [`is_hex_chunk_path`], which cannot tell a real name of
-    /// sixteen hex digits from a hash.
-    pub fn is_named(&self) -> bool {
-        self.named
-    }
-
-    /// What became of the chunk.
-    pub fn result(&self) -> ExtractResult {
-        self.result
-    }
-
-    /// Bytes written for the chunk. Zero unless it was extracted.
-    pub fn bytes(&self) -> u64 {
-        self.bytes
-    }
-
-    /// The chunk's file, relative to the extraction's output directory.
-    ///
-    /// `None` when a filter left the chunk out, so no file was named for it.
-    /// The layout, the `.ltk` affix and a name the file system refuses can
-    /// each make this differ from [`path`](Self::path), so a caller that
-    /// indexes what an extraction wrote reads this and not that.
-    pub fn output_path(&self) -> Option<&Utf8Path> {
-        self.output_path
-    }
-}
-
-/// What became of one chunk.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-pub enum ExtractResult {
-    /// Written to disk.
-    Extracted,
-    /// Left out by the type filter.
-    SkippedByType,
-    /// Left out by the path filter.
-    SkippedByPath,
-    /// Its file existed already, and the policy was [`ExistingFilePolicy::Skip`].
-    SkippedExisting,
-}
-
-/// Where each extracted chunk lands under the output directory.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-#[non_exhaustive]
-pub enum ExtractLayout {
-    /// At its resolved path, with every directory of that path.
-    #[default]
-    Paths,
-    /// In the output directory itself, by its file name alone.
-    ///
-    /// When two chunks of one extraction share a name, the second takes its
-    /// path hash before the extension, as `name.<hash>.ext`. Which of the two
-    /// is second follows write order.
-    Flat,
-}
-
-/// What to do with a chunk whose file exists already.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-#[non_exhaustive]
-pub enum ExistingFilePolicy {
-    /// Write over it.
-    #[default]
-    Overwrite,
-    /// Leave it, and count the chunk under [`ExtractReport::skipped_existing`].
-    ///
-    /// The worker opens the file with `create_new`, so it leaves a file that
-    /// appears between two chunks alone too, and no check races the write.
-    Skip,
-}
-
-/// What an extraction did, summed over its chunks.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-#[non_exhaustive]
-pub struct ExtractReport {
-    /// Chunks written to disk.
-    pub extracted: usize,
-    /// Chunks left alone under [`ExistingFilePolicy::Skip`].
-    pub skipped_existing: usize,
-    /// Chunks the path filter or the type filter left out.
-    pub skipped_by_filter: usize,
-    /// Path hashes given to [`extract_chunks`](WadExtractor::extract_chunks)
-    /// that the archive holds no chunk for.
-    pub missing: Vec<WadHash>,
-    /// Bytes written, after decompression.
-    pub bytes_written: u64,
-    /// Written chunks, by the kind their bytes identify as.
-    pub by_kind: BTreeMap<LeagueFileKind, usize>,
-    /// The cancel flag was set, so the reader never reached some chunks.
-    pub cancelled: bool,
-    /// What [`with_name_recovery`](WadExtractor::with_name_recovery) read out
-    /// of the archive's bins. Empty when recovery was off.
-    pub recovered: RecoveredNames,
-}
-
-impl ExtractReport {
-    fn record(&mut self, outcome: ChunkOutcome) {
-        match outcome {
-            ChunkOutcome::Written { kind, bytes } => {
-                self.extracted += 1;
-                self.bytes_written += bytes;
-                *self.by_kind.entry(kind).or_insert(0) += 1;
-            }
-            ChunkOutcome::SkippedByType | ChunkOutcome::SkippedByPath => {
-                self.skipped_by_filter += 1
-            }
-            ChunkOutcome::SkippedExisting => self.skipped_existing += 1,
-        }
-    }
-}
-
-impl fmt::Display for ExtractReport {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{} extracted, {} bytes",
-            self.extracted, self.bytes_written
-        )?;
-        if self.skipped_existing > 0 {
-            write!(f, ", {} existed", self.skipped_existing)?;
-        }
-        if self.skipped_by_filter > 0 {
-            write!(f, ", {} filtered out", self.skipped_by_filter)?;
-        }
-        if !self.missing.is_empty() {
-            write!(f, ", {} missing", self.missing.len())?;
-        }
-        if !self.recovered.is_empty() {
-            write!(f, ", {} names recovered", self.recovered.len())?;
-        }
-        if self.cancelled {
-            f.write_str(", cancelled")?;
-        }
-        Ok(())
-    }
-}
-
-/// What happened to one chunk, with the figures the report sums.
-#[derive(Debug, Clone, Copy)]
-enum ChunkOutcome {
-    Written { kind: LeagueFileKind, bytes: u64 },
-    SkippedByType,
-    SkippedByPath,
-    SkippedExisting,
-}
-
-impl ChunkOutcome {
-    fn bytes(self) -> u64 {
-        match self {
-            Self::Written { bytes, .. } => bytes,
-            Self::SkippedByType | Self::SkippedByPath | Self::SkippedExisting => 0,
-        }
-    }
-}
-
-/// What a worker did with one chunk, and the file it wrote for it.
-struct WriteOutcome {
-    outcome: ChunkOutcome,
-    /// The file written, relative to the output directory, or `None` when the
-    /// type filter left the chunk out so no file was ever named.
-    path: Option<Utf8PathBuf>,
-}
-
-impl WriteOutcome {
-    /// A chunk a filter left out, which wrote nothing.
-    fn skipped(outcome: ChunkOutcome) -> Self {
-        Self {
-            outcome,
-            path: None,
-        }
-    }
-}
-
-impl From<ChunkOutcome> for ExtractResult {
-    fn from(outcome: ChunkOutcome) -> Self {
-        match outcome {
-            ChunkOutcome::Written { .. } => ExtractResult::Extracted,
-            ChunkOutcome::SkippedByType => ExtractResult::SkippedByType,
-            ChunkOutcome::SkippedByPath => ExtractResult::SkippedByPath,
-            ChunkOutcome::SkippedExisting => ExtractResult::SkippedExisting,
-        }
-    }
-}
+use self::{
+    naming::{is_evil, DirectoryPaths},
+    report::ChunkOutcome,
+    writer::ChunkWriter,
+};
 
 /// Most workers an extraction starts unless [`WadExtractor::with_workers`] says
 /// otherwise. Each worker holds a compressed and a decompressed chunk at once,
@@ -473,12 +201,24 @@ impl<'a> WadExtractor<'a> {
     ///
     /// The filter sees the path the resolver gave, or the hash as sixteen hex
     /// digits when it gave none. It runs on the calling thread.
+    ///
+    /// An extraction asks the filter about each chunk once, before it writes
+    /// any of them, because which paths it will write decides which of them a
+    /// directory has to hold.
     pub fn with_filter(mut self, filter: impl Fn(&str) -> bool + 'a) -> Self {
         self.filter = Some(Box::new(filter));
         self
     }
 
     /// Extract only the chunks whose bytes identify as one of `kinds`.
+    ///
+    /// A chunk's kind is not known until its bytes are decompressed, so this
+    /// filter cannot say up front which paths the extraction will write. A
+    /// chunk it drops still counts as a directory of the path it names, so a
+    /// path that a dropped chunk made a directory of still takes its `.ltk`
+    /// suffix. The extraction reports the move under
+    /// [`ExtractReport::displaced`], and the path filter, which does run up
+    /// front, has no such cost.
     pub fn with_type_filter(mut self, kinds: impl IntoIterator<Item = LeagueFileKind>) -> Self {
         self.type_filter = Some(kinds.into_iter().collect());
         self
@@ -585,6 +325,45 @@ impl<'a> WadExtractor<'a> {
         self.run(wad, chunks, missing, output_dir.as_ref())
     }
 
+    /// Name every chunk, and settle what is decided before any write: the
+    /// paths the extraction refuses, and the ones the path filter drops.
+    ///
+    /// Every chunk is resolved here and nowhere else. The rename needs all of
+    /// the extraction's paths before it can say which of them a directory has
+    /// to hold, so the paths are read once, up front, and carried from here to
+    /// the worker that writes each chunk.
+    fn resolve_chunks(&self, chunks: Vec<WadChunk>, resolver: &dyn PathResolver) -> Vec<Named> {
+        chunks
+            .into_iter()
+            .map(|chunk| {
+                let (path, named) = match resolver.resolve(chunk.path_hash) {
+                    Some(path) => (path, true),
+                    None => (hex_name(chunk.path_hash), false),
+                };
+                /* Refused before filtered, so a caller's selection cannot mask
+                the fact that its resolver handed out a path the extraction
+                will not write. */
+                let refused = if is_evil(&path) {
+                    Some(Refusal::Rejected)
+                } else if self
+                    .filter
+                    .as_ref()
+                    .is_some_and(|filter| !filter(path.as_str()))
+                {
+                    Some(Refusal::Filtered)
+                } else {
+                    None
+                };
+                Named {
+                    chunk,
+                    path,
+                    named,
+                    refused,
+                }
+            })
+            .collect()
+    }
+
     fn run<S: Read + Seek>(
         &mut self,
         wad: &mut Wad<S>,
@@ -605,13 +384,24 @@ impl<'a> WadExtractor<'a> {
         };
         let resolver = recovered.over(self.resolver);
 
+        let total = chunks.len();
+        let chunks = self.resolve_chunks(chunks, &resolver);
+
+        let directories = match self.layout {
+            ExtractLayout::Paths => directory_paths(&chunks),
+            /* A flat layout writes file names into the output directory itself
+            and makes no directory, so no path of it can be one. */
+            ExtractLayout::Flat => DirectoryPaths::default(),
+        };
+
         let shared = Shared {
             writer: ChunkWriter {
                 layout: self.layout,
                 existing: self.existing,
                 type_filter: self.type_filter.as_deref(),
                 output_dir,
-                flat_names: Mutex::default(),
+                directories,
+                claimed: Mutex::default(),
             },
             report: Mutex::default(),
             failure: Mutex::default(),
@@ -621,12 +411,11 @@ impl<'a> WadExtractor<'a> {
         let (done_sender, done) = mpsc::channel::<Done>();
 
         let mut reader = Reader {
-            filter: self.filter.as_deref(),
             cancel: self.cancel,
             progress: Progress {
                 callback: self.progress.as_deref_mut(),
                 done: 0,
-                total: chunks.len(),
+                total,
             },
         };
 
@@ -641,7 +430,7 @@ impl<'a> WadExtractor<'a> {
             sender is gone, and this one would never go on its own. */
             drop(done_sender);
 
-            let result = reader.read_chunks(wad, &chunks, &resolver, &sender, shared, &done);
+            let result = reader.read_chunks(wad, chunks, &sender, shared, &done);
             /* A worker exits, and lets go of its done sender, only once every
             job sender is gone. */
             drop(sender);
@@ -677,6 +466,44 @@ pub(crate) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
+/// One chunk of an extraction under the name it will be written under.
+///
+/// Built once, before anything is written, because the rename cannot be
+/// settled chunk by chunk: whether a path has to move depends on every other
+/// path of the same extraction.
+struct Named {
+    chunk: WadChunk,
+    /// The resolved path, or the hash as sixteen hex digits when no resolver
+    /// named the chunk.
+    path: String,
+    /// Whether a resolver named the chunk.
+    named: bool,
+    /// What stopped the chunk before any of it was written, when something did.
+    refused: Option<Refusal>,
+}
+
+/// Why a chunk never reached a worker.
+#[derive(Debug, Clone, Copy)]
+enum Refusal {
+    /// Its path is one the extraction will not write.
+    Rejected,
+    /// The path filter did not accept it.
+    Filtered,
+}
+
+/// The directories the chunks of one extraction name between them.
+///
+/// A chunk that will not be written makes no directory, and neither does one
+/// under a bare hash, since a hash names no directory. The type filter cannot
+/// be applied here, because a chunk's kind is not known until its bytes are
+/// decompressed, so a chunk the type filter goes on to drop still counts as a
+/// directory of the path it names.
+fn directory_paths(chunks: &[Named]) -> DirectoryPaths {
+    DirectoryPaths::of(chunks.iter().filter_map(|resolved| {
+        (resolved.named && resolved.refused.is_none()).then_some(resolved.path.as_str())
+    }))
+}
+
 /// One chunk on its way from the reader to a worker.
 struct Job {
     chunk: WadChunk,
@@ -692,6 +519,17 @@ struct Done {
     named: bool,
     output_path: Option<Utf8PathBuf>,
     outcome: ChunkOutcome,
+}
+
+impl Done {
+    /// The report entry for this chunk, when something was wrong with its path.
+    fn displaced(&self, issue: Option<PathIssue>) -> Option<DisplacedChunk> {
+        Some(DisplacedChunk {
+            path_hash: self.path_hash,
+            path: self.path.clone(),
+            issue: issue?,
+        })
+    }
 }
 
 /// The progress callback and its count. Both stay on the reader thread.
@@ -721,7 +559,6 @@ impl Progress<'_, '_> {
 
 /// The half of the extractor that runs on the calling thread.
 struct Reader<'r, 'a> {
-    filter: Option<&'r (dyn Fn(&str) -> bool + 'a)>,
     cancel: Option<&'r AtomicBool>,
     progress: Progress<'r, 'a>,
 }
@@ -731,13 +568,18 @@ impl Reader<'_, '_> {
     fn read_chunks<S: Read + Seek>(
         &mut self,
         wad: &mut Wad<S>,
-        chunks: &[WadChunk],
-        resolver: &dyn PathResolver,
+        chunks: Vec<Named>,
         sender: &mpsc::SyncSender<Job>,
         shared: &Shared<'_>,
         done: &mpsc::Receiver<Done>,
     ) -> Result<bool, WadError> {
-        for chunk in chunks {
+        for Named {
+            chunk,
+            path,
+            named,
+            refused,
+        } in chunks
+        {
             if self.cancel.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
                 return Ok(true);
             }
@@ -745,29 +587,30 @@ impl Reader<'_, '_> {
                 return Ok(false);
             }
 
-            let (path, named) = match resolver.resolve(chunk.path_hash) {
-                Some(path) => (path.into_owned(), true),
-                None => (hex_name(chunk.path_hash), false),
-            };
-
-            if self.filter.is_some_and(|filter| !filter(path.as_str())) {
+            if let Some(refusal) = refused {
+                let (outcome, issue) = match refusal {
+                    Refusal::Rejected => {
+                        (ChunkOutcome::SkippedRejectedPath, Some(PathIssue::Rejected))
+                    }
+                    Refusal::Filtered => (ChunkOutcome::SkippedByPath, None),
+                };
                 let finished = Done {
                     path_hash: chunk.path_hash,
                     path,
                     named,
                     output_path: None,
-                    outcome: ChunkOutcome::SkippedByPath,
+                    outcome,
                 };
-                lock(&shared.report).record(finished.outcome);
+                lock(&shared.report).record_chunk(finished.outcome, finished.displaced(issue));
                 self.progress.report(&finished);
                 continue;
             }
 
             let raw = wad
-                .load_chunk_raw(chunk)
+                .load_chunk_raw(&chunk)
                 .map_err(|error| WadError::chunk(chunk.path_hash, &path, error))?;
             let job = Job {
-                chunk: *chunk,
+                chunk,
                 path,
                 named,
                 raw,
@@ -811,16 +654,18 @@ impl Shared<'_> {
             }
             match self.writer.write(&job, &mut decoder) {
                 Ok(written) => {
-                    lock(&self.report).record(written.outcome);
-                    /* The receiver outlives every worker, so this cannot fail. */
                     /* `path` moves out of `job`, so `named` is read first. */
-                    let _ = done.send(Done {
+                    let finished = Done {
                         path_hash: job.chunk.path_hash,
                         named: job.named,
                         path: job.path,
                         output_path: written.path,
                         outcome: written.outcome,
-                    });
+                    };
+                    lock(&self.report)
+                        .record_chunk(finished.outcome, finished.displaced(written.issue));
+                    /* The receiver outlives every worker, so this cannot fail. */
+                    let _ = done.send(finished);
                 }
                 Err(error) => {
                     let mut failure = lock(&self.failure);
@@ -830,214 +675,5 @@ impl Shared<'_> {
                 }
             }
         }
-    }
-}
-
-/// The half of the extractor that the workers share.
-///
-/// Everything here is [`Sync`]. The resolver, the path filter and the progress
-/// callback stay on the reader, which is what keeps those three free of
-/// any such bound.
-struct ChunkWriter<'s> {
-    layout: ExtractLayout,
-    existing: ExistingFilePolicy,
-    type_filter: Option<&'s [LeagueFileKind]>,
-    output_dir: &'s Utf8Path,
-    /* The names the flat layout gave so far, so a second chunk of one name can
-    tell. Behind a mutex because the workers claim names concurrently. */
-    flat_names: Mutex<HashSet<String>>,
-}
-
-impl ChunkWriter<'_> {
-    fn write(&self, job: &Job, decoder: &mut ChunkDecoder) -> Result<WriteOutcome, WadError> {
-        let data = decoder.decompress(
-            &job.raw,
-            job.chunk.compression_type,
-            job.chunk.uncompressed_size,
-        )?;
-        self.write_chunk(&job.chunk, &data, Utf8Path::new(&job.path), job.named)
-    }
-
-    fn write_chunk(
-        &self,
-        chunk: &WadChunk,
-        chunk_data: &[u8],
-        chunk_path: &Utf8Path,
-        named: bool,
-    ) -> Result<WriteOutcome, WadError> {
-        let chunk_kind = LeagueFileKind::identify_from_bytes(chunk_data);
-
-        if self
-            .type_filter
-            .is_some_and(|types| !types.contains(&chunk_kind))
-        {
-            return Ok(WriteOutcome::skipped(ChunkOutcome::SkippedByType));
-        }
-
-        let mut relative_path = match self.layout {
-            ExtractLayout::Paths => {
-                self.resolve_final_path(chunk_path, named, chunk_data, chunk_kind)
-            }
-            ExtractLayout::Flat => {
-                self.resolve_flat_path(chunk, chunk_path, named, chunk_data, chunk_kind)
-            }
-        };
-        let full_path = self.output_dir.join(&relative_path);
-
-        if let Some(parent) = full_path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-
-        let written = match write_file(&full_path, chunk_data, self.existing) {
-            Ok(written) => written,
-            Err(error) if error.kind() == io::ErrorKind::InvalidFilename => {
-                relative_path = hashed_name(chunk, chunk_kind);
-                write_file(
-                    &self.output_dir.join(&relative_path),
-                    chunk_data,
-                    self.existing,
-                )?
-            }
-            Err(error) => return Err(WadError::IoError(error)),
-        };
-
-        let outcome = match written {
-            Written::Yes => ChunkOutcome::Written {
-                kind: chunk_kind,
-                bytes: chunk_data.len() as u64,
-            },
-            Written::Existed => ChunkOutcome::SkippedExisting,
-        };
-        Ok(WriteOutcome {
-            outcome,
-            path: Some(relative_path),
-        })
-    }
-
-    /// Resolve the final output path for a chunk.
-    fn resolve_final_path(
-        &self,
-        chunk_path: &Utf8Path,
-        named: bool,
-        chunk_data: &[u8],
-        chunk_kind: LeagueFileKind,
-    ) -> Utf8PathBuf {
-        let mut final_path = chunk_path.to_path_buf();
-
-        if !named {
-            if let Some(ext) = chunk_kind.extension() {
-                final_path.set_extension(ext);
-            }
-            return final_path;
-        }
-
-        // - If the original path has no extension, affix .ltk (and real extension if known)
-        // - OR if the destination path collides with an existing directory, affix .ltk
-        let has_extension = final_path.extension().is_some();
-        let collides_with_dir = self.output_dir.join(&final_path).is_dir();
-        if !has_extension || collides_with_dir {
-            final_path.set_file_name(build_ltk_name(
-                chunk_path.file_stem().unwrap_or_default(),
-                chunk_data,
-            ));
-        }
-
-        final_path
-    }
-
-    /// The file name alone, made unique among the names this extraction wrote.
-    fn resolve_flat_path(
-        &self,
-        chunk: &WadChunk,
-        chunk_path: &Utf8Path,
-        named: bool,
-        chunk_data: &[u8],
-        chunk_kind: LeagueFileKind,
-    ) -> Utf8PathBuf {
-        let file_name = Utf8Path::new(chunk_path.file_name().unwrap_or_default());
-        let resolved = self.resolve_final_path(file_name, named, chunk_data, chunk_kind);
-
-        let mut names = lock(&self.flat_names);
-        if names.insert(resolved.as_str().to_owned()) {
-            return resolved;
-        }
-
-        let suffixed = match resolved.extension() {
-            Some(ext) => format!(
-                "{}.{:016x}.{ext}",
-                resolved.file_stem().unwrap_or_default(),
-                chunk.path_hash
-            ),
-            None => format!("{}.{:016x}", resolved.as_str(), chunk.path_hash),
-        };
-        names.insert(suffixed.clone());
-        Utf8PathBuf::from(suffixed)
-    }
-}
-
-enum Written {
-    Yes,
-    Existed,
-}
-
-/// Write `data` to `path` under `policy`.
-///
-/// `Skip` opens with `create_new`, which makes the existence check and the
-/// create one operation, so two workers can never both write one path.
-fn write_file(path: &Utf8Path, data: &[u8], policy: ExistingFilePolicy) -> io::Result<Written> {
-    match policy {
-        ExistingFilePolicy::Overwrite => {
-            fs::write(path, data)?;
-            Ok(Written::Yes)
-        }
-        ExistingFilePolicy::Skip => {
-            match OpenOptions::new().write(true).create_new(true).open(path) {
-                Ok(mut file) => {
-                    file.write_all(data)?;
-                    Ok(Written::Yes)
-                }
-                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => Ok(Written::Existed),
-                Err(error) => Err(error),
-            }
-        }
-    }
-}
-
-/// `<hash>.<ext>`, the name a chunk takes when the file system refuses its own.
-fn hashed_name(chunk: &WadChunk, chunk_kind: LeagueFileKind) -> Utf8PathBuf {
-    let mut hashed_path = Utf8PathBuf::from(hex_name(chunk.path_hash));
-    if let Some(ext) = chunk_kind.extension() {
-        hashed_path.set_extension(ext);
-    }
-    hashed_path
-}
-
-/// Check if a path looks like a hex-encoded hash (e.g., "0123456789abcdef").
-///
-/// This is the name a chunk gets on disk when nothing resolves its hash, so
-/// a caller can sort a file tree extracted earlier into named and unnamed
-/// files.
-///
-/// # Example
-///
-/// ```
-/// use ltk_wad::is_hex_chunk_path;
-/// use camino::Utf8Path;
-///
-/// assert!(is_hex_chunk_path(Utf8Path::new("0123456789abcdef")));
-/// assert!(is_hex_chunk_path(Utf8Path::new("0123456789abcdef.bin")));
-/// assert!(!is_hex_chunk_path(Utf8Path::new("assets/champions/aatrox.bin")));
-/// ```
-pub fn is_hex_chunk_path(path: &Utf8Path) -> bool {
-    let file_stem = path.file_stem().unwrap_or("");
-    file_stem.len() == 16 && file_stem.chars().all(|c| c.is_ascii_hexdigit())
-}
-
-/// Build a filename with `.ltk` suffix and optional type extension.
-fn build_ltk_name(file_stem: impl AsRef<str>, chunk_data: &[u8]) -> String {
-    let kind = LeagueFileKind::identify_from_bytes(chunk_data);
-    match kind.extension() {
-        Some(ext) => format!("{}.ltk.{}", file_stem.as_ref(), ext),
-        None => format!("{}.ltk", file_stem.as_ref()),
     }
 }

@@ -24,7 +24,6 @@
 //! ```
 
 use std::{
-    borrow::Cow,
     collections::{HashMap, HashSet},
     fmt,
     io::{Read, Seek},
@@ -108,8 +107,8 @@ impl RecoveredNames {
 }
 
 impl PathResolver for RecoveredNames {
-    fn resolve(&self, path_hash: WadHash) -> Option<Cow<'_, str>> {
-        self.get(path_hash).map(Cow::Borrowed)
+    fn resolve(&self, path_hash: WadHash) -> Option<String> {
+        self.get(path_hash).map(String::from)
     }
 
     fn is_known(&self, path_hash: WadHash) -> bool {
@@ -134,9 +133,9 @@ impl fmt::Debug for LayeredResolver<'_> {
 }
 
 impl PathResolver for LayeredResolver<'_> {
-    fn resolve(&self, path_hash: WadHash) -> Option<Cow<'_, str>> {
+    fn resolve(&self, path_hash: WadHash) -> Option<String> {
         match self.names.get(path_hash) {
-            Some(name) => Some(Cow::Borrowed(name)),
+            Some(name) => Some(String::from(name)),
             None => self.fallback.resolve(path_hash),
         }
     }
@@ -195,7 +194,7 @@ impl<'a> NameRecovery<'a> {
             match resolver.resolve(chunk.path_hash) {
                 Some(path) => {
                     if is_bin_name(&path) {
-                        bins.push((*chunk, path.into_owned()));
+                        bins.push((*chunk, path));
                     }
                 }
                 None => {
