@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.5](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_mesh-v0.4.4...ltk_mesh-v0.4.5) - 2026-08-25
+
+### Added
+
+- feat!(ltk_mesh): support new skn flags
+- *(mesh)* add support for pbr vertex type and correct element enumsCan
+
+### Other
+
+- *(ltk_mesh)* better skinned docs
+
 ## [0.4.4](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_mesh-v0.4.3...ltk_mesh-v0.4.4) - 2026-07-12
 
 ### Added
