@@ -4,7 +4,7 @@ version = "0.3.1"
 edition = "2021"
 description = "WAD archive reading/writing for League Toolkit"
 license = "MIT OR Apache-2.0"
-readme = "../../README.md"
+readme = "README.md"
 
 [lints]
 workspace = true
@@ -12,9 +12,8 @@ workspace = true
 [features]
 default = ["zstd"]
 
-serde = ["dep:serde"]
+serde = ["dep:serde", "ltk_hash/serde"]
 rust_backend = ["flate2/rust_backend", "ruzstd"]
-regex = ["dep:regex"]
 
 zstd = ["dep:zstd"]
 ruzstd = ["dep:ruzstd"]
@@ -38,8 +37,8 @@ serde = { workspace = true, optional = true }
 
 ltk_io_ext = { version = "0.4.4", path = "../ltk_io_ext" }
 ltk_file = { version = "0.2.10", path = "../ltk_file" }
+ltk_hash = { version = "0.4.0", path = "../ltk_hash" }
 
-regex = { version = "1", optional = true }
 camino = { workspace = true }
 
 [dev-dependencies]

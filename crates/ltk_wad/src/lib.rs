@@ -4,18 +4,19 @@
 //!
 //! ```no_run
 //! use std::fs::File;
-//! use ltk_wad::Wad;
+//! use ltk_hash::Hash as _;
+//! use ltk_wad::{Wad, WadHash};
 //!
 //! let file = File::open("archive.wad.client")?;
 //! let mut wad = Wad::mount(file)?;
 //!
 //! // Iterate chunks in path-hash order
 //! for chunk in wad.chunks() {
-//!     println!("{:#016x} ({} bytes)", chunk.path_hash(), chunk.uncompressed_size());
+//!     println!("{:016x} ({} bytes)", chunk.path_hash(), chunk.uncompressed_size());
 //! }
 //!
 //! // Read and decompress a specific chunk
-//! let chunk = *wad.chunks().get(0x1234567890abcdef).unwrap();
+//! let chunk = *wad.chunks().get(WadHash::hash_str("assets/some/file.dds")).unwrap();
 //! let data = wad.load_chunk_decompressed(&chunk)?;
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
@@ -24,16 +25,17 @@
 //!
 //! ```no_run
 //! use std::fs::File;
-//! use ltk_wad::{Wad, WadExtractor, HexPathResolver};
+//! use ltk_wad::{Wad, WadExtractor, NoResolver};
 //!
 //! let file = File::open("archive.wad.client")?;
 //! let mut wad = Wad::mount(file)?;
 //!
-//! let extractor = WadExtractor::new(&HexPathResolver)
-//!     .on_progress(|p| println!("{:.0}%", p.percent() * 100.0));
+//! // Any `HashMap<WadHash, String>` names the chunks. `NoResolver` names none.
+//! let mut extractor = WadExtractor::new(&NoResolver)
+//!     .on_progress(|p| println!("{:.0}%", p.fraction() * 100.0));
 //!
-//! let count = extractor.extract_all(&mut wad, "/output/path")?;
-//! println!("Extracted {count} chunks");
+//! let report = extractor.extract_all(&mut wad, "/output/path")?;
+//! println!("{report}");
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
@@ -92,6 +94,7 @@ mod decoder;
 mod error;
 mod extractor;
 mod file_ext;
+mod recovery;
 
 pub use builder::*;
 pub use chunk::*;
@@ -100,6 +103,15 @@ pub use decoder::*;
 pub use error::*;
 pub use extractor::*;
 pub use file_ext::*;
+pub use recovery::*;
+
+/// A chunk's key: the xxh64 of its lower-case path.
+///
+/// Re-exported from `ltk_hash`, where the bin tooling takes the same type
+/// for a `WadChunkLink`, so a link read out of a bin finds its chunk as is.
+/// To hash a path, bring `ltk_hash::Hash` into scope and call
+/// `WadHash::hash_str`.
+pub use ltk_hash::WadHash;
 
 use std::io::{BufReader, Read, Seek, SeekFrom};
 
@@ -143,6 +155,8 @@ pub struct Wad<TSource: Read + Seek> {
     checksum: u64,
     #[cfg_attr(feature = "serde", serde(skip))]
     source: TSource,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    decoder: ChunkDecoder,
 }
 
 impl<TSource: Read + Seek> Wad<TSource> {
@@ -206,6 +220,7 @@ impl<TSource: Read + Seek> Wad<TSource> {
             checksum,
             chunks,
             source,
+            decoder: ChunkDecoder::new(),
         })
     }
 
@@ -229,10 +244,32 @@ impl<TSource: Read + Seek> Wad<TSource> {
         Ok(data.into_boxed_slice())
     }
 
+    /// Reads at most `max_len` of the raw (compressed) bytes of a chunk, from its start.
+    ///
+    /// Enough of a gzip or zstd stream decodes its first block, which is all
+    /// [`decompress_prefix`] needs for a chunk's first bytes.
+    pub fn load_chunk_raw_prefix(
+        &mut self,
+        chunk: &WadChunk,
+        max_len: usize,
+    ) -> Result<Box<[u8]>, WadError> {
+        let mut data = vec![0; chunk.compressed_size.min(max_len)];
+
+        self.source
+            .seek(SeekFrom::Start(chunk.data_offset as u64))?;
+        self.source.read_exact(&mut data)?;
+
+        Ok(data.into_boxed_slice())
+    }
+
     /// Reads and decompresses a chunk from the source.
+    ///
+    /// The archive keeps the decoder between calls, so a run of chunks pays for
+    /// one zstd context and not one per chunk.
     pub fn load_chunk_decompressed(&mut self, chunk: &WadChunk) -> Result<Box<[u8]>, WadError> {
         let raw_data = self.load_chunk_raw(chunk)?;
-        decompress_raw(&raw_data, chunk.compression_type, chunk.uncompressed_size)
+        self.decoder
+            .decompress(&raw_data, chunk.compression_type, chunk.uncompressed_size)
     }
 
     /// Returns embedded checksum verbatim.
