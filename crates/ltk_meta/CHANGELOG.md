@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_meta-v0.6.1...ltk_meta-v0.7.0) - 2026-08-25
+
+### Added
+
+- *(meta)* add len/is_empty to container value
+- *(file)* identify a league file from a reader
+- *(meta)* [**breaking**] read and write PTCH bins
+
 ## [0.6.1](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_meta-v0.6.0...ltk_meta-v0.6.1) - 2026-07-12
 
 ### Added
