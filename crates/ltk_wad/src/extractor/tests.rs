@@ -1,8 +1,17 @@
 //! Tests for chunk extraction: naming, layout, filtering and progress.
 
-use super::*;
+use super::{
+    naming::{is_evil, ltk_name, plain_path, DirectoryPaths},
+    *,
+};
 use crate::WadChunks;
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::{
+    borrow::Cow,
+    collections::{BTreeMap, HashMap},
+    fs,
+    io::{self, Read, Seek, SeekFrom, Write},
+    sync::Arc,
+};
 
 // =============================================================================
 // Mock WAD Source for Testing
