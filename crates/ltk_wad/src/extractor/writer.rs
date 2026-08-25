@@ -167,18 +167,14 @@ impl ChunkWriter<'_> {
     ) -> (Utf8PathBuf, bool) {
         let mut final_path = chunk_path.to_path_buf();
 
-        /* A chunk no resolver named is here under its hash, and takes the
-        extension its bytes identify as. */
+        /* A nameless chunk is here under its hash. */
         if !named {
             if let Some(ext) = chunk_kind.extension() {
                 final_path.set_extension(ext);
             }
         }
 
-        /* A directory holding the name leaves no choice: a file cannot share a
-        name with one. Nothing else moves a chunk off the name its path, or its
-        hash, gave it. The extraction knows the directories of its own paths
-        before it writes any of them; one the output tree held already takes a
+        /* Our own directories are known up front; a pre-existing one takes a
         look to find. */
         if !self.directories.holds(final_path.as_str())
             && !self.output_dir.join(&final_path).is_dir()
@@ -187,11 +183,8 @@ impl ChunkWriter<'_> {
         }
 
         let renamed = ltk_path(&final_path);
-        /* A path can name the suffixed name a directory too. Nothing is left
-        to suffix onto, since a second `.ltk` would no longer strip back to the
-        path, so the chunk takes its hash: the name any refused write falls to.
-        Deciding it here and not by failing the write is what keeps it off the
-        order-dependent branch. */
+        /* The suffixed name can be a directory too. Nothing is left to suffix
+        onto, so the chunk takes its hash. */
         if self.directories.holds(renamed.as_str()) {
             return (hashed_name(chunk, chunk_kind), true);
         }
