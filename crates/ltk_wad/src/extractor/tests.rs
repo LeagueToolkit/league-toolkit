@@ -216,28 +216,27 @@ fn references_boxes_and_arcs_of_a_resolver_are_resolvers() {
 }
 
 // =============================================================================
-// build_ltk_name Tests
+// ltk_name
 // =============================================================================
 
+/// The suffix is added and never substituted, so what it is added to always
+/// survives. That is what lets a caller hash an extracted file's path back to
+/// the chunk it came from.
 #[test]
-fn test_build_ltk_name() {
-    // Unknown type
-    assert_eq!(build_ltk_name("myfile", &[]), "myfile.ltk");
-
-    // PNG magic bytes
-    let png_magic = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
-    assert_eq!(build_ltk_name("myfile", &png_magic), "myfile.ltk.png");
+fn the_ltk_suffix_keeps_the_whole_name() {
+    assert_eq!(ltk_name("myfile"), "myfile.ltk");
+    assert_eq!(ltk_name("myfile.bin"), "myfile.bin.ltk");
+    assert_eq!(ltk_name("myfile.tex.dds"), "myfile.tex.dds.ltk");
 }
 
+/// Stripping a trailing `.ltk` gives back exactly the name it was built from,
+/// whatever that name held.
 #[test]
-fn test_build_ltk_name_various_types() {
-    // JPEG magic
-    let jpg_magic = [0xFF, 0xD8, 0xFF, 0xE0];
-    assert_eq!(build_ltk_name("image", &jpg_magic), "image.ltk.jpg");
-
-    // DDS magic
-    let dds_magic = [0x44, 0x44, 0x53, 0x20]; // "DDS "
-    assert_eq!(build_ltk_name("texture", &dds_magic), "texture.ltk.dds");
+fn the_ltk_suffix_strips_back_to_the_original_name() {
+    for original in ["myfile", "myfile.bin", "texture.dds", "a.b.c"] {
+        let renamed = ltk_name(original);
+        assert_eq!(renamed.strip_suffix(".ltk"), Some(original), "{renamed}");
+    }
 }
 
 // =============================================================================
@@ -556,7 +555,7 @@ fn progress_gives_the_ltk_name_a_chunk_landed_under() {
         seen,
         vec![(
             "assets/noextension".to_owned(),
-            Some(Utf8PathBuf::from("assets/noextension.ltk.png")),
+            Some(Utf8PathBuf::from("assets/noextension")),
         )]
     );
 }
@@ -601,33 +600,6 @@ fn progress_gives_no_output_path_for_a_filtered_chunk() {
         seen["data/image.png"],
         (ExtractResult::SkippedByType, true, None)
     );
-}
-
-#[test]
-fn test_extract_path_without_extension_gets_ltk() {
-    let temp_dir = tempfile::TempDir::new().unwrap();
-    let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
-    let (mut wad, resolver) = one_chunk_wad(0x1234, "assets/noextension", &PNG_MAGIC);
-
-    WadExtractor::new(&resolver)
-        .extract_all(&mut wad, output_path)
-        .unwrap();
-
-    assert!(temp_dir.path().join("assets/noextension.ltk.png").exists());
-}
-
-#[test]
-fn test_extract_path_without_extension_unknown_type() {
-    let temp_dir = tempfile::TempDir::new().unwrap();
-    let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
-    let (mut wad, resolver) =
-        one_chunk_wad(0x1234, "assets/noextension", b"Unknown file type content");
-
-    WadExtractor::new(&resolver)
-        .extract_all(&mut wad, output_path)
-        .unwrap();
-
-    assert!(temp_dir.path().join("assets/noextension.ltk").exists());
 }
 
 #[test]
@@ -956,17 +928,51 @@ fn progress_reports_each_chunk_once_it_is_done() {
     );
 }
 
+/// A file already standing where a chunk's directory has to go is the same
+/// clash as one the extraction makes itself, and it moves the chunk the same
+/// way rather than ending the run.
 #[test]
-fn a_failed_write_names_the_chunk() {
+fn a_file_blocking_a_directory_displaces_the_chunk() {
     let temp_dir = tempfile::TempDir::new().unwrap();
     let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
     let (mut wad, resolver) = three_file_wad();
 
-    /* A file where the first chunk's directory has to go. */
     fs::write(temp_dir.path().join("dir1"), "in the way").unwrap();
 
-    let error = WadExtractor::new(&resolver)
+    let report = WadExtractor::new(&resolver)
+        .with_workers(NonZeroUsize::new(1).unwrap())
         .extract_all(&mut wad, output_path)
+        .unwrap();
+
+    assert_eq!(report.extracted, 3, "{report}");
+    assert_eq!(report.displaced.len(), 1, "{report}");
+    assert_eq!(report.displaced[0].path, "dir1/file1.txt");
+    assert_eq!(report.displaced[0].issue, PathIssue::Refused);
+    /* The file that was in the way is left as it was. */
+    assert_eq!(
+        fs::read_to_string(temp_dir.path().join("dir1")).unwrap(),
+        "in the way"
+    );
+
+    let landed = report.displaced[0].output_path.clone().unwrap();
+    assert!(temp_dir.path().join(&landed).exists(), "{landed}");
+}
+
+/// A chunk with nowhere left to go does end the run, and the error says which
+/// chunk and which path could not be written.
+#[test]
+fn a_failed_write_names_the_chunk() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    /* The output directory is a file, so even the fallback name has no
+    directory to land in. */
+    let output_path = Utf8Path::from_path(temp_dir.path()).unwrap().join("a-file");
+    fs::write(output_path.as_std_path(), "not a directory").unwrap();
+
+    let (mut wad, resolver) = three_file_wad();
+
+    let error = WadExtractor::new(&resolver)
+        .with_workers(NonZeroUsize::new(1).unwrap())
+        .extract_all(&mut wad, &output_path)
         .unwrap_err();
 
     assert!(
@@ -977,4 +983,832 @@ fn a_failed_write_names_the_chunk() {
         "{error:?}"
     );
     assert!(error.to_string().contains("dir1/file1.txt"), "{error}");
+}
+
+// =============================================================================
+// is_evil
+// =============================================================================
+
+/// The shapes a League path takes, which nothing here should stand in the way
+/// of. The device names are here because Rust reaches the file system through a
+/// verbatim path, which resolves none of them, so they are ordinary files.
+#[test]
+fn an_ordinary_path_is_not_evil() {
+    for path in [
+        "assets/characters/aatrox/skin0.bin",
+        "a",
+        "a/./b",
+        "a//b",
+        "a/b/",
+        "assets/..bin/x...y",
+        "data/NUL.bin",
+        "data/COM1",
+    ] {
+        assert!(!is_evil(path), "{path:?} should be allowed");
+    }
+}
+
+#[test]
+fn an_evil_path_is_refused() {
+    let bs = "\\";
+    let cases = [
+        // Names no file at all.
+        ("", "empty"),
+        (".", "the directory itself"),
+        ("./.", "nothing but dots"),
+        // Ignores the directory it is joined onto.
+        ("/etc/passwd", "unix root"),
+        ("C:/evil.bat", "drive"),
+        ("c:evil.bat", "drive relative"),
+        // Reaches the directory above. Measured: this one really does escape.
+        ("..", "bare"),
+        ("../evil.bat", "leading"),
+        ("assets/../../evil.bat", "in the middle"),
+        ("assets/..", "trailing"),
+        // A drive or an alternate data stream, not a file the directory lists.
+        ("data/notes.txt:stream", "data stream"),
+        ("data/c:evil.bat", "drive inside a component"),
+        /* Windows strips a trailing dot or space before it looks a name up, so
+        `notes.txt.` and `notes.txt` are one file. Refusing only one of the two
+        would walk the pair past the check for two chunks claiming one path. */
+        ("data/notes.txt.", "trailing dot"),
+        ("data/notes.txt ", "trailing space"),
+        ("data./notes.txt", "trailing dot on a directory"),
+        ("...", "bare dots"),
+        (".. ", "dots and a space"),
+        ("assets/.../evil.bat", "bare dots in the middle"),
+    ];
+
+    for (path, why) in cases {
+        assert!(is_evil(path), "{path:?} ({why}) should be refused");
+    }
+
+    /* Backslashes count wherever the extraction runs: a table written for
+    Windows must not escape on Linux, nor the other way round. */
+    for path in [
+        format!("..{bs}evil.bat"),
+        format!("assets{bs}..{bs}..{bs}evil.bat"),
+        format!("{bs}evil.bat"),
+        format!("{bs}{bs}server{bs}share{bs}evil.bat"),
+    ] {
+        assert!(is_evil(&path), "{path:?} should be refused");
+    }
+}
+
+#[test]
+fn a_path_leaving_the_output_directory_is_refused() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
+    let (mut wad, resolver) = one_chunk_wad(0x1234, "../../../evil.bat", b"payload");
+
+    let mut seen = Vec::new();
+    let mut extractor = WadExtractor::new(&resolver).on_progress(|progress| {
+        seen.push((progress.result(), progress.output_path().is_some()));
+    });
+    let report = extractor.extract_all(&mut wad, output_path).unwrap();
+    drop(extractor);
+
+    assert_eq!(report.extracted, 0);
+    assert_eq!(report.skipped_unusable_path, 1);
+    assert_eq!(seen, vec![(ExtractResult::SkippedUnwritablePath, false)]);
+    assert_eq!(
+        report.displaced,
+        vec![DisplacedChunk {
+            path_hash: WadHash(0x1234),
+            path: "../../../evil.bat".to_owned(),
+            issue: PathIssue::Unwritable,
+            output_path: None,
+        }]
+    );
+    assert!(!temp_dir.path().parent().unwrap().join("evil.bat").exists());
+}
+
+/// A caller's own filter must not be able to hide a hostile table.
+#[test]
+fn a_filter_does_not_mask_an_unsafe_path() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
+    let (mut wad, resolver) = one_chunk_wad(0x1234, "../evil.bat", b"payload");
+
+    let report = WadExtractor::new(&resolver)
+        .with_filter(|_| false)
+        .extract_all(&mut wad, output_path)
+        .unwrap();
+
+    assert_eq!(report.skipped_by_filter, 0);
+    assert_eq!(report.skipped_unusable_path, 1);
+    assert_eq!(report.displaced[0].issue, PathIssue::Unwritable);
+}
+
+/// Any resolver's paths are untrusted, name recovery's included.
+#[test]
+fn an_absolute_path_from_any_resolver_is_refused() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
+    let (mut wad, _) = one_chunk_wad(0x1234, "unused", b"payload");
+
+    struct Escaping;
+    impl PathResolver for Escaping {
+        fn resolve(&self, _path_hash: WadHash) -> Option<String> {
+            Some("/tmp/evil.bat".to_owned())
+        }
+    }
+
+    let report = WadExtractor::new(&Escaping)
+        .extract_all(&mut wad, output_path)
+        .unwrap();
+
+    assert_eq!(report.skipped_unusable_path, 1);
+    assert_eq!(report.displaced[0].issue, PathIssue::Unwritable);
+}
+
+// =============================================================================
+// Path collisions
+// =============================================================================
+
+#[test]
+fn a_second_chunk_claiming_one_path_is_not_written_over_the_first() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
+
+    let mut source = MockWadSource::new();
+    let first = source.write_at(1000, b"first");
+    let second = source.write_at(2000, b"second");
+    let chunks = WadChunks::from_iter([
+        create_uncompressed_chunk(0x1111, first, b"first"),
+        create_uncompressed_chunk(0x2222, second, b"second"),
+    ]);
+    let mut wad = source.into_wad(chunks);
+    /* A stale table naming two hashes the same path. */
+    let resolver = names(&[(0x1111, "data/notes.txt"), (0x2222, "data/notes.txt")]);
+
+    let report = WadExtractor::new(&resolver)
+        /* One worker, so the order chunks claim in is the archive's. */
+        .with_workers(NonZeroUsize::new(1).unwrap())
+        .extract_all(&mut wad, output_path)
+        .unwrap();
+
+    assert_eq!(report.extracted, 1);
+    assert_eq!(report.skipped_unusable_path, 1);
+    assert_eq!(
+        report.displaced,
+        vec![DisplacedChunk {
+            path_hash: WadHash(0x2222),
+            path: "data/notes.txt".to_owned(),
+            issue: PathIssue::Duplicate,
+            output_path: None,
+        }]
+    );
+    assert_eq!(
+        fs::read_to_string(temp_dir.path().join("data/notes.txt")).unwrap(),
+        "first"
+    );
+}
+
+/// The flat layout collides by design, so it keeps disambiguating rather than
+/// dropping the second chunk.
+#[test]
+fn the_flat_layout_still_suffixes_a_shared_name() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
+
+    let mut source = MockWadSource::new();
+    let first = source.write_at(1000, b"first");
+    let second = source.write_at(2000, b"second");
+    let chunks = WadChunks::from_iter([
+        create_uncompressed_chunk(0x1111, first, b"first"),
+        create_uncompressed_chunk(0x2222, second, b"second"),
+    ]);
+    let mut wad = source.into_wad(chunks);
+    let resolver = names(&[(0x1111, "one/notes.txt"), (0x2222, "two/notes.txt")]);
+
+    let report = WadExtractor::new(&resolver)
+        .with_layout(ExtractLayout::Flat)
+        .with_workers(NonZeroUsize::new(1).unwrap())
+        .extract_all(&mut wad, output_path)
+        .unwrap();
+
+    assert_eq!(report.extracted, 2);
+    assert_eq!(report.skipped_unusable_path, 0);
+    assert!(report.displaced.is_empty());
+    assert!(temp_dir.path().join("notes.txt").exists());
+    assert!(temp_dir.path().join("notes.0000000000002222.txt").exists());
+}
+
+// =============================================================================
+// Names the file system refuses
+// =============================================================================
+
+#[test]
+fn a_name_a_directory_holds_is_renamed_and_reported() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
+    let (mut wad, resolver) = one_chunk_wad(0x1234, "assets/thing.bin", &PNG_MAGIC);
+
+    /* A directory already standing where the chunk's file would go. */
+    fs::create_dir_all(temp_dir.path().join("assets/thing.bin")).unwrap();
+
+    let report = WadExtractor::new(&resolver)
+        .extract_all(&mut wad, output_path)
+        .unwrap();
+
+    assert_eq!(report.extracted, 1);
+    assert_eq!(
+        report.displaced,
+        vec![DisplacedChunk {
+            path_hash: WadHash(0x1234),
+            path: "assets/thing.bin".to_owned(),
+            issue: PathIssue::Refused,
+            output_path: Some(Utf8PathBuf::from("assets/thing.bin.ltk")),
+        }]
+    );
+    assert!(temp_dir.path().join("assets/thing.bin.ltk").exists());
+}
+
+// =============================================================================
+// A path with no extension
+// =============================================================================
+
+/// Nothing moves a named chunk off its own path but a directory of that name,
+/// so a path with no extension keeps it. A `.ltk` suffix would say no more than
+/// the bare path already does, and would cost the caller the path it hashes by.
+#[test]
+fn a_path_with_no_extension_keeps_it() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
+    let (mut wad, resolver) = one_chunk_wad(0x1234, "assets/noextension", &PNG_MAGIC);
+
+    let mut seen = Vec::new();
+    let mut extractor = WadExtractor::new(&resolver).on_progress(|progress| {
+        seen.push(progress.output_path().map(Utf8Path::to_path_buf));
+    });
+    let report = extractor.extract_all(&mut wad, output_path).unwrap();
+    drop(extractor);
+
+    assert_eq!(report.extracted, 1);
+    assert!(report.displaced.is_empty());
+    assert_eq!(seen, vec![Some(Utf8PathBuf::from("assets/noextension"))]);
+    assert!(temp_dir.path().join("assets/noextension").exists());
+    assert!(!temp_dir.path().join("assets/noextension.ltk").exists());
+}
+
+/// A directory of that name does move it, because a file cannot share a name
+/// with one. The report says so rather than let it pass unseen.
+#[test]
+fn a_directory_of_that_name_appends_the_suffix() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
+    let (mut wad, resolver) = one_chunk_wad(0x1234, "assets/noextension", &PNG_MAGIC);
+
+    fs::create_dir_all(temp_dir.path().join("assets/noextension")).unwrap();
+
+    let report = WadExtractor::new(&resolver)
+        .extract_all(&mut wad, output_path)
+        .unwrap();
+
+    assert_eq!(report.extracted, 1);
+    assert_eq!(report.displaced[0].issue, PathIssue::Refused);
+    assert_eq!(
+        report.displaced[0].output_path.as_deref(),
+        Some(Utf8Path::new("assets/noextension.ltk"))
+    );
+}
+
+/// The whole point of appending: the original extension survives the rename,
+/// so the path can still be hashed back to its chunk.
+#[test]
+fn the_suffix_keeps_an_extension_the_path_already_had() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
+    let (mut wad, resolver) = one_chunk_wad(0x1234, "assets/thing.bin", &PNG_MAGIC);
+
+    fs::create_dir_all(temp_dir.path().join("assets/thing.bin")).unwrap();
+
+    let report = WadExtractor::new(&resolver)
+        .extract_all(&mut wad, output_path)
+        .unwrap();
+
+    assert_eq!(report.extracted, 1);
+    let landed = report.displaced[0].output_path.as_deref().unwrap();
+    assert_eq!(landed, Utf8Path::new("assets/thing.bin.ltk"));
+    /* The name the chunk was given is what is left when the suffix comes off,
+    down to the `.bin` a stem-built name would have dropped. */
+    assert_eq!(
+        landed
+            .file_name()
+            .and_then(|name| name.strip_suffix(".ltk")),
+        Some("thing.bin")
+    );
+}
+
+// =============================================================================
+// A path that is a directory of another path
+// =============================================================================
+
+/// A WAD can name both `x` and `x/y`. No file system holds both, so one chunk
+/// has to move -- but the extraction must finish, not die on the second one,
+/// and both paths must come through it.
+///
+/// Chunks are written in path hash order, so which of the pair carries the
+/// lower hash decides which one the writes reach first. Neither assignment
+/// changes the tree: `x` is the one that moves, every time.
+#[test]
+fn the_write_order_of_a_clashing_pair_does_not_change_the_tree() {
+    for (plain, nested) in [(0x1111u64, 0x2222u64), (0x2222, 0x1111)] {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
+
+        let mut source = MockWadSource::new();
+        let plain_at = source.write_at(1000, b"the file");
+        let nested_at = source.write_at(2000, b"the nested file");
+        let chunks = WadChunks::from_iter([
+            create_uncompressed_chunk(plain, plain_at, b"the file"),
+            create_uncompressed_chunk(nested, nested_at, b"the nested file"),
+        ]);
+        let mut wad = source.into_wad(chunks);
+        let resolver = names(&[(plain, "assets/thing"), (nested, "assets/thing/inner.bin")]);
+
+        let report = WadExtractor::new(&resolver)
+            .with_workers(NonZeroUsize::new(1).unwrap())
+            .extract_all(&mut wad, output_path)
+            .unwrap();
+
+        assert_eq!(report.extracted, 2, "{report}");
+        assert_eq!(
+            tree(temp_dir.path()),
+            ["assets/thing.ltk", "assets/thing/inner.bin"],
+            "plain chunk at {plain:#x}"
+        );
+        assert_eq!(
+            fs::read_to_string(temp_dir.path().join("assets/thing.ltk")).unwrap(),
+            "the file"
+        );
+        assert_eq!(
+            fs::read_to_string(temp_dir.path().join("assets/thing/inner.bin")).unwrap(),
+            "the nested file"
+        );
+
+        /* The chunk that moved is the one a directory has to hold, whichever
+        of the two the writes reached first. */
+        assert_eq!(report.displaced.len(), 1, "{report}");
+        assert_eq!(report.displaced[0].path_hash, WadHash(plain));
+        assert_eq!(report.displaced[0].issue, PathIssue::Refused);
+    }
+}
+
+/// The same clash for a path that carries an extension, which the suffix goes
+/// on the end of rather than replaces. A tool that reads `.bin` files by their
+/// name will not find this one -- the price of a name that hashes back to its
+/// chunk, and one no measured hash table pays: every clash in a real table is
+/// between paths with no extension at all.
+#[test]
+fn an_extension_does_not_save_a_path_from_the_same_clash() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
+
+    let mut source = MockWadSource::new();
+    let first = source.write_at(1000, b"the file");
+    let second = source.write_at(2000, b"the nested file");
+    let chunks = WadChunks::from_iter([
+        create_uncompressed_chunk(0x1111, first, b"the file"),
+        create_uncompressed_chunk(0x2222, second, b"the nested file"),
+    ]);
+    let mut wad = source.into_wad(chunks);
+    let resolver = names(&[
+        (0x1111, "assets/thing.bin"),
+        (0x2222, "assets/thing.bin/inner.bin"),
+    ]);
+
+    let report = WadExtractor::new(&resolver)
+        .with_workers(NonZeroUsize::new(1).unwrap())
+        .extract_all(&mut wad, output_path)
+        .unwrap();
+
+    assert_eq!(report.extracted, 2, "{report}");
+    assert_eq!(
+        tree(temp_dir.path()),
+        ["assets/thing.bin.ltk", "assets/thing.bin/inner.bin"]
+    );
+    assert_eq!(report.displaced.len(), 1);
+    assert_eq!(report.displaced[0].path_hash, WadHash(0x1111));
+    assert_eq!(report.displaced[0].issue, PathIssue::Refused);
+}
+
+/// A resolver's paths are untrusted, and a table naming `<hash>/y` for the very
+/// hash a nameless chunk lands under clashes with that chunk's own hex name.
+/// The nameless chunk moves like any other, rather than ending the run: it has
+/// nowhere else to go, since the name a refused write falls back to is the hex
+/// name it just failed to write.
+#[test]
+fn a_directory_named_for_a_nameless_chunk_does_not_end_the_run() {
+    /* Either side of the nameless chunk's own hash, so the nested chunk is
+    written once before it and once after. */
+    for nested_hash in [0x0001u64, 0x2222] {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
+
+        let mut source = MockWadSource::new();
+        /* Bytes of no known kind, so the chunk takes its bare hex name. */
+        let nameless = source.write_at(1000, b"the file");
+        let nested = source.write_at(2000, b"the nested file");
+        let chunks = WadChunks::from_iter([
+            create_uncompressed_chunk(0x1111, nameless, b"the file"),
+            create_uncompressed_chunk(nested_hash, nested, b"the nested file"),
+        ]);
+        let mut wad = source.into_wad(chunks);
+        let resolver = names(&[(nested_hash, "0000000000001111/inner.bin")]);
+
+        let report = WadExtractor::new(&resolver)
+            .with_workers(NonZeroUsize::new(1).unwrap())
+            .extract_all(&mut wad, output_path)
+            .unwrap();
+
+        assert_eq!(report.extracted, 2, "{report}");
+        assert_eq!(
+            tree(temp_dir.path()),
+            ["0000000000001111.ltk", "0000000000001111/inner.bin"],
+            "nested chunk at {nested_hash:#x}"
+        );
+        assert_eq!(
+            fs::read_to_string(temp_dir.path().join("0000000000001111.ltk")).unwrap(),
+            "the file"
+        );
+
+        let displaced = &report.displaced[0];
+        assert_eq!(displaced.path_hash, WadHash(0x1111));
+        assert_eq!(displaced.issue, PathIssue::Refused);
+        /* The suffix goes on the end here too, so the name still reads as the
+        hash it was built from. */
+        assert!(is_hex_chunk_path(Utf8Path::new("0000000000001111.ltk")));
+    }
+}
+
+/// A path the filter drops is never written, so it makes no directory and the
+/// path it would have clashed with keeps its own name.
+#[test]
+fn a_filter_that_drops_the_nested_path_leaves_the_plain_one_alone() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
+    let (mut wad, resolver) = clashing_pair_wad();
+
+    let report = WadExtractor::new(&resolver)
+        .with_filter(|path| !path.ends_with("inner.bin"))
+        .extract_all(&mut wad, output_path)
+        .unwrap();
+
+    assert_eq!(report.extracted, 1, "{report}");
+    assert!(report.displaced.is_empty(), "{report}");
+    assert_eq!(tree(temp_dir.path()), ["assets/thing"]);
+}
+
+/// A path the extraction refuses makes no directory either.
+#[test]
+fn a_refused_nested_path_leaves_the_plain_one_alone() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
+
+    let mut source = MockWadSource::new();
+    let plain = source.write_at(1000, b"the file");
+    let nested = source.write_at(2000, b"the nested file");
+    let chunks = WadChunks::from_iter([
+        create_uncompressed_chunk(0x1111, plain, b"the file"),
+        create_uncompressed_chunk(0x2222, nested, b"the nested file"),
+    ]);
+    let mut wad = source.into_wad(chunks);
+    let resolver = names(&[
+        (0x1111, "assets/thing"),
+        (0x2222, "assets/thing/../../inner.bin"),
+    ]);
+
+    let report = WadExtractor::new(&resolver)
+        .extract_all(&mut wad, output_path)
+        .unwrap();
+
+    assert_eq!(report.extracted, 1, "{report}");
+    assert_eq!(report.displaced.len(), 1, "{report}");
+    assert_eq!(report.displaced[0].issue, PathIssue::Unwritable);
+    assert_eq!(tree(temp_dir.path()), ["assets/thing"]);
+}
+
+/// Every worker racing on one such pair still finishes, whichever order they
+/// happen to reach the file system in.
+#[test]
+fn racing_workers_on_a_clashing_pair_still_finish() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
+
+    let mut source = MockWadSource::new();
+    let mut chunks = Vec::new();
+    let mut entries = Vec::new();
+    for i in 0..16u64 {
+        let payload = format!("payload {i}");
+        let offset = source.write_at(1000 + i as usize * 64, payload.as_bytes());
+        chunks.push(create_uncompressed_chunk(i, offset, payload.as_bytes()));
+        /* Even hashes take a plain name, odd ones make that name a directory. */
+        entries.push(if i % 2 == 0 {
+            (i, format!("assets/thing{}", i / 2))
+        } else {
+            (i, format!("assets/thing{}/inner.bin", i / 2))
+        });
+    }
+    let mut wad = source.into_wad(WadChunks::from_iter(chunks));
+    let borrowed: Vec<(u64, &str)> = entries
+        .iter()
+        .map(|(hash, path)| (*hash, path.as_str()))
+        .collect();
+    let resolver = names(&borrowed);
+
+    let report = WadExtractor::new(&resolver)
+        .extract_all(&mut wad, output_path)
+        .unwrap();
+
+    assert_eq!(report.extracted, 16, "{report}");
+    assert_eq!(report.displaced.len(), 8, "{report}");
+
+    let mut expected: Vec<String> = (0..8)
+        .flat_map(|i| {
+            [
+                format!("assets/thing{i}.ltk"),
+                format!("assets/thing{i}/inner.bin"),
+            ]
+        })
+        .collect();
+    expected.sort();
+    assert_eq!(tree(temp_dir.path()), expected);
+}
+
+// =============================================================================
+// One tree, every run
+// =============================================================================
+
+/// Every file under `root`, relative to it and sorted, with `/` between the
+/// components whatever the host writes.
+fn tree(root: &std::path::Path) -> Vec<String> {
+    fn walk(dir: &std::path::Path, prefix: &str, found: &mut Vec<String>) {
+        for entry in fs::read_dir(dir).unwrap() {
+            let entry = entry.unwrap();
+            let name = entry.file_name().into_string().unwrap();
+            let path = format!("{prefix}{name}");
+            if entry.file_type().unwrap().is_dir() {
+                walk(&entry.path(), &format!("{path}/"), found);
+            } else {
+                found.push(path);
+            }
+        }
+    }
+
+    let mut found = Vec::new();
+    walk(root, "", &mut found);
+    found.sort();
+    found
+}
+
+/// A WAD holding both `assets/thing` and `assets/thing/inner.bin`.
+fn clashing_pair_wad() -> (Wad<MockWadSource>, HashMap<WadHash, String>) {
+    let mut source = MockWadSource::new();
+    let plain = source.write_at(1000, b"the file");
+    let nested = source.write_at(2000, b"the nested file");
+    let chunks = WadChunks::from_iter([
+        create_uncompressed_chunk(0x1111, plain, b"the file"),
+        create_uncompressed_chunk(0x2222, nested, b"the nested file"),
+    ]);
+    let resolver = names(&[(0x1111, "assets/thing"), (0x2222, "assets/thing/inner.bin")]);
+    (source.into_wad(chunks), resolver)
+}
+
+/// The clash is settled over the extraction's own paths before anything is
+/// written, so which of `x` and `x/y` moves is not a race. Either read order
+/// gives one tree, and it is the tree that keeps both paths: the one a
+/// directory has to hold takes the suffix, the other stays where it is.
+#[test]
+fn a_clashing_pair_gives_one_tree_whichever_order_it_is_read_in() {
+    let orders = [
+        [WadHash(0x1111), WadHash(0x2222)],
+        [WadHash(0x2222), WadHash(0x1111)],
+    ];
+
+    for order in orders {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
+        let (mut wad, resolver) = clashing_pair_wad();
+
+        let report = WadExtractor::new(&resolver)
+            .with_workers(NonZeroUsize::new(1).unwrap())
+            .extract_chunks(&mut wad, order, output_path)
+            .unwrap();
+
+        assert_eq!(report.extracted, 2, "{report}");
+        assert_eq!(
+            tree(temp_dir.path()),
+            ["assets/thing.ltk", "assets/thing/inner.bin"],
+            "read in {order:?}"
+        );
+        assert_eq!(
+            fs::read_to_string(temp_dir.path().join("assets/thing.ltk")).unwrap(),
+            "the file"
+        );
+        assert_eq!(
+            fs::read_to_string(temp_dir.path().join("assets/thing/inner.bin")).unwrap(),
+            "the nested file"
+        );
+
+        assert_eq!(report.displaced.len(), 1, "{report}");
+        assert_eq!(report.displaced[0].path_hash, WadHash(0x1111));
+        assert_eq!(report.displaced[0].issue, PathIssue::Refused);
+        assert_eq!(
+            report.displaced[0].output_path.as_deref(),
+            Some(Utf8Path::new("assets/thing.ltk"))
+        );
+    }
+}
+
+// =============================================================================
+// DirectoryPaths
+// =============================================================================
+
+/// The directories are the path's own prefixes, and the path itself is not one
+/// of them: a leaf is only a directory because some *other* path says so.
+#[test]
+fn the_directories_of_a_path_are_its_prefixes() {
+    let directories = DirectoryPaths::of(["assets/champions/aatrox.bin"]);
+
+    assert!(directories.holds("assets"));
+    assert!(directories.holds("assets/champions"));
+    assert!(!directories.holds("assets/champions/aatrox.bin"));
+}
+
+/// A path with no directory in it names none.
+#[test]
+fn a_bare_name_names_no_directory() {
+    let directories = DirectoryPaths::of(["aatrox.bin"]);
+
+    assert!(!directories.holds("aatrox.bin"));
+    assert!(!directories.holds(""));
+}
+
+/// A hash table written on Windows and one written anywhere else name the same
+/// directories, and either is found by a lookup written the other way. The
+/// extraction would otherwise clash on one host and not on the other.
+#[test]
+fn a_backslash_names_the_same_directory_a_slash_does() {
+    let from_backslashes = DirectoryPaths::of([r"assets\champions\aatrox.bin"]);
+
+    assert!(from_backslashes.holds("assets/champions"));
+    assert!(from_backslashes.holds(r"assets\champions"));
+
+    let from_slashes = DirectoryPaths::of(["assets/champions/aatrox.bin"]);
+    assert!(from_slashes.holds(r"assets\champions"));
+}
+
+/// The components a join steps over are the ones this steps over, so a path
+/// written the long way round still finds the directory it names.
+#[test]
+fn the_components_a_join_steps_over_name_no_directory() {
+    let directories = DirectoryPaths::of(["./assets//champions/aatrox.bin"]);
+
+    assert!(directories.holds("assets"));
+    assert!(directories.holds("assets/champions"));
+    assert!(directories.holds("./assets//champions"));
+    assert!(!directories.holds("."));
+    assert!(!directories.holds(""));
+}
+
+/// A directory one path names is one whatever the other paths hold.
+#[test]
+fn paths_pool_the_directories_they_name() {
+    let directories = DirectoryPaths::of(["a/b/one.bin", "a/c/two.bin", "d"]);
+
+    for held in ["a", "a/b", "a/c"] {
+        assert!(directories.holds(held), "{held}");
+    }
+    for free in ["d", "a/b/one.bin", "a/d"] {
+        assert!(!directories.holds(free), "{free}");
+    }
+}
+
+/// Nothing at all names nothing at all, which is what a flat layout hands the
+/// writer.
+#[test]
+fn no_paths_name_no_directories() {
+    let directories = DirectoryPaths::default();
+
+    assert!(!directories.holds("assets"));
+    assert!(!directories.holds(""));
+}
+
+// =============================================================================
+// plain_path
+// =============================================================================
+
+/// A path already written with one `/` between its components is handed back
+/// as it is, which is nearly every path a hash table holds.
+#[test]
+fn a_path_that_needs_no_work_is_borrowed() {
+    for path in ["assets/champions/aatrox.bin", "aatrox.bin", "a"] {
+        assert!(
+            matches!(plain_path(path), Cow::Borrowed(_)),
+            "{path} was copied"
+        );
+    }
+}
+
+#[test]
+fn a_path_is_written_with_one_slash_between_its_components() {
+    for (path, plain) in [
+        (
+            r"assets\champions\aatrox.bin",
+            "assets/champions/aatrox.bin",
+        ),
+        ("assets//champions", "assets/champions"),
+        ("./assets/champions", "assets/champions"),
+        ("assets/champions/", "assets/champions"),
+        (
+            r"assets\champions/aatrox.bin",
+            "assets/champions/aatrox.bin",
+        ),
+        ("./", ""),
+    ] {
+        assert_eq!(plain_path(path), plain, "{path}");
+    }
+}
+
+// =============================================================================
+// The renamed path is still a path
+// =============================================================================
+
+/// The suffix goes on the end of the path string, so the path a caller reads
+/// back is written the way every other path of the extraction is.
+///
+/// Building it through `set_file_name` would re-join the path with the host's
+/// separator, handing back `assets\thing.bin.ltk` on Windows where every
+/// un-renamed chunk reports `assets/thing.bin`. A caller stripping the suffix
+/// would then hash `assets\thing.bin`, which is not the chunk's path hash.
+#[test]
+fn a_renamed_path_keeps_the_separators_it_came_with() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
+    let (mut wad, resolver) = clashing_pair_wad();
+
+    let report = WadExtractor::new(&resolver)
+        .extract_all(&mut wad, output_path)
+        .unwrap();
+
+    let landed = report.displaced[0].output_path.as_deref().unwrap();
+    assert_eq!(landed.as_str(), "assets/thing.ltk");
+    assert_eq!(landed.as_str().strip_suffix(".ltk"), Some("assets/thing"));
+}
+
+/// A table can name the suffixed path a directory too. There is nothing left
+/// to suffix onto -- a second `.ltk` would no longer strip back to the path --
+/// so the chunk takes its hash, the name any refused write falls to. It must
+/// not fall there by failing a write, which is the order-dependent branch the
+/// pre-pass exists to remove.
+#[test]
+fn a_directory_over_the_suffixed_name_sends_the_chunk_to_its_hash() {
+    for order in [[0x1111u64, 0x2222, 0x3333], [0x3333, 0x2222, 0x1111]] {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
+
+        let mut source = MockWadSource::new();
+        let plain = source.write_at(1000, b"the file");
+        let nested = source.write_at(2000, b"the nested file");
+        let over = source.write_at(3000, b"over the suffix");
+        let chunks = WadChunks::from_iter([
+            create_uncompressed_chunk(order[0], plain, b"the file"),
+            create_uncompressed_chunk(order[1], nested, b"the nested file"),
+            create_uncompressed_chunk(order[2], over, b"over the suffix"),
+        ]);
+        let mut wad = source.into_wad(chunks);
+        let resolver = names(&[
+            (order[0], "assets/thing"),
+            (order[1], "assets/thing/inner.bin"),
+            (order[2], "assets/thing.ltk/also.bin"),
+        ]);
+
+        let report = WadExtractor::new(&resolver)
+            .extract_all(&mut wad, output_path)
+            .unwrap();
+
+        assert_eq!(report.extracted, 3, "{report}");
+        let mut expected = [
+            format!("{:016x}", order[0]),
+            "assets/thing/inner.bin".to_owned(),
+            "assets/thing.ltk/also.bin".to_owned(),
+        ];
+        expected.sort();
+        assert_eq!(
+            tree(temp_dir.path()),
+            expected,
+            "plain chunk {:#x}",
+            order[0]
+        );
+
+        let displaced = &report.displaced[0];
+        assert_eq!(displaced.path_hash, WadHash(order[0]));
+        assert_eq!(displaced.issue, PathIssue::Refused);
+        assert_eq!(
+            fs::read_to_string(temp_dir.path().join(format!("{:016x}", order[0]))).unwrap(),
+            "the file"
+        );
+    }
 }
