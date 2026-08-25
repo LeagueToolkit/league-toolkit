@@ -201,11 +201,9 @@ impl<'a> WadExtractor<'a> {
     /// The filter sees the path the resolver gave, or the hash as sixteen hex
     /// digits when it gave none. It runs on the calling thread.
     ///
-    /// An extraction asks the filter about each chunk **twice**: once to work
-    /// out which paths it will write, and so which of them a directory has to
-    /// hold, and once as it reads the chunk. A filter that only answers the
-    /// question notices no difference; one that counts what it accepted, or
-    /// drives a progress bar, counts each chunk twice.
+    /// An extraction asks the filter about each chunk once, before it writes
+    /// any of them, because which paths it will write decides which of them a
+    /// directory has to hold.
     pub fn with_filter(mut self, filter: impl Fn(&str) -> bool + 'a) -> Self {
         self.filter = Some(Box::new(filter));
         self
@@ -327,24 +325,43 @@ impl<'a> WadExtractor<'a> {
     }
 
     /// The directories the chunks of one extraction name between them.
+    /// Name every chunk, and settle what is decided before any write: the
+    /// paths the extraction refuses, and the ones the path filter drops.
     ///
-    /// This resolves every chunk a second time, which is what buys a rename
-    /// that does not follow the order the chunks happen to be written in. The
-    /// type filter cannot be applied here, since a chunk's kind is not known
-    /// until its bytes are decompressed, so a chunk that filter goes on to drop
-    /// still counts as a directory of the path it names.
-    fn directory_paths(&self, chunks: &[WadChunk], resolver: &dyn PathResolver) -> DirectoryPaths {
-        DirectoryPaths::of(chunks.iter().filter_map(|chunk| {
-            let path = resolver.resolve(chunk.path_hash)?;
-            /* A path the extraction refuses, or one the filter drops, is never
-            written, so it makes no directory. */
-            let written = !is_evil(&path)
-                && self
+    /// Every chunk is resolved here and nowhere else. The rename needs all of
+    /// the extraction's paths before it can say which of them a directory has
+    /// to hold, so the paths are read once, up front, and carried from here to
+    /// the worker that writes each chunk.
+    fn resolve_chunks(&self, chunks: Vec<WadChunk>, resolver: &dyn PathResolver) -> Vec<Named> {
+        chunks
+            .into_iter()
+            .map(|chunk| {
+                let (path, named) = match resolver.resolve(chunk.path_hash) {
+                    Some(path) => (path, true),
+                    None => (hex_name(chunk.path_hash), false),
+                };
+                /* Refused before filtered, so a caller's selection cannot mask
+                the fact that its resolver handed out a path the extraction
+                will not write. */
+                let refused = if is_evil(&path) {
+                    Some(Refusal::Unwritable)
+                } else if self
                     .filter
                     .as_ref()
-                    .is_none_or(|filter| filter(path.as_str()));
-            written.then_some(path)
-        }))
+                    .is_some_and(|filter| !filter(path.as_str()))
+                {
+                    Some(Refusal::Filtered)
+                } else {
+                    None
+                };
+                Named {
+                    chunk,
+                    path,
+                    named,
+                    refused,
+                }
+            })
+            .collect()
     }
 
     fn run<S: Read + Seek>(
@@ -367,8 +384,11 @@ impl<'a> WadExtractor<'a> {
         };
         let resolver = recovered.over(self.resolver);
 
+        let total = chunks.len();
+        let chunks = self.resolve_chunks(chunks, &resolver);
+
         let directories = match self.layout {
-            ExtractLayout::Paths => self.directory_paths(&chunks, &resolver),
+            ExtractLayout::Paths => directory_paths(&chunks),
             /* A flat layout writes file names into the output directory itself
             and makes no directory, so no path of it can be one. */
             ExtractLayout::Flat => DirectoryPaths::default(),
@@ -391,12 +411,11 @@ impl<'a> WadExtractor<'a> {
         let (done_sender, done) = mpsc::channel::<Done>();
 
         let mut reader = Reader {
-            filter: self.filter.as_deref(),
             cancel: self.cancel,
             progress: Progress {
                 callback: self.progress.as_deref_mut(),
                 done: 0,
-                total: chunks.len(),
+                total,
             },
         };
 
@@ -411,7 +430,7 @@ impl<'a> WadExtractor<'a> {
             sender is gone, and this one would never go on its own. */
             drop(done_sender);
 
-            let result = reader.read_chunks(wad, &chunks, &resolver, &sender, shared, &done);
+            let result = reader.read_chunks(wad, chunks, &sender, shared, &done);
             /* A worker exits, and lets go of its done sender, only once every
             job sender is gone. */
             drop(sender);
@@ -445,6 +464,44 @@ pub(crate) fn default_workers() -> usize {
 
 pub(crate) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// One chunk of an extraction under the name it will be written under.
+///
+/// Built once, before anything is written, because the rename cannot be
+/// settled chunk by chunk: whether a path has to move depends on every other
+/// path of the same extraction.
+struct Named {
+    chunk: WadChunk,
+    /// The resolved path, or the hash as sixteen hex digits when no resolver
+    /// named the chunk.
+    path: String,
+    /// Whether a resolver named the chunk.
+    named: bool,
+    /// What stopped the chunk before any of it was written, when something did.
+    refused: Option<Refusal>,
+}
+
+/// Why a chunk never reached a worker.
+#[derive(Debug, Clone, Copy)]
+enum Refusal {
+    /// Its path is one the extraction will not write.
+    Unwritable,
+    /// The path filter did not accept it.
+    Filtered,
+}
+
+/// The directories the chunks of one extraction name between them.
+///
+/// A chunk that will not be written makes no directory, and neither does one
+/// under a bare hash, since a hash names no directory. The type filter cannot
+/// be applied here, because a chunk's kind is not known until its bytes are
+/// decompressed, so a chunk that filter goes on to drop still counts as a
+/// directory of the path it names.
+fn directory_paths(chunks: &[Named]) -> DirectoryPaths {
+    DirectoryPaths::of(chunks.iter().filter_map(|resolved| {
+        (resolved.named && resolved.refused.is_none()).then_some(resolved.path.as_str())
+    }))
 }
 
 /// One chunk on its way from the reader to a worker.
@@ -503,7 +560,6 @@ impl Progress<'_, '_> {
 
 /// The half of the extractor that runs on the calling thread.
 struct Reader<'r, 'a> {
-    filter: Option<&'r (dyn Fn(&str) -> bool + 'a)>,
     cancel: Option<&'r AtomicBool>,
     progress: Progress<'r, 'a>,
 }
@@ -513,13 +569,18 @@ impl Reader<'_, '_> {
     fn read_chunks<S: Read + Seek>(
         &mut self,
         wad: &mut Wad<S>,
-        chunks: &[WadChunk],
-        resolver: &dyn PathResolver,
+        chunks: Vec<Named>,
         sender: &mpsc::SyncSender<Job>,
         shared: &Shared<'_>,
         done: &mpsc::Receiver<Done>,
     ) -> Result<bool, WadError> {
-        for chunk in chunks {
+        for Named {
+            chunk,
+            path,
+            named,
+            refused,
+        } in chunks
+        {
             if self.cancel.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
                 return Ok(true);
             }
@@ -527,47 +588,31 @@ impl Reader<'_, '_> {
                 return Ok(false);
             }
 
-            let (path, named) = match resolver.resolve(chunk.path_hash) {
-                Some(path) => (path, true),
-                None => (hex_name(chunk.path_hash), false),
-            };
-
-            /* Before the filter, so a caller's selection cannot mask the fact
-            that its resolver handed out a path the extraction will not write. */
-            if is_evil(&path) {
+            if let Some(refusal) = refused {
+                let (outcome, issue) = match refusal {
+                    Refusal::Unwritable => (
+                        ChunkOutcome::SkippedUnwritablePath,
+                        Some(PathIssue::Unwritable),
+                    ),
+                    Refusal::Filtered => (ChunkOutcome::SkippedByPath, None),
+                };
                 let finished = Done {
                     path_hash: chunk.path_hash,
                     path,
                     named,
                     output_path: None,
-                    outcome: ChunkOutcome::SkippedUnwritablePath,
+                    outcome,
                 };
-                lock(&shared.report).record_chunk(
-                    finished.outcome,
-                    finished.displaced(Some(PathIssue::Unwritable)),
-                );
-                self.progress.report(&finished);
-                continue;
-            }
-
-            if self.filter.is_some_and(|filter| !filter(path.as_str())) {
-                let finished = Done {
-                    path_hash: chunk.path_hash,
-                    path,
-                    named,
-                    output_path: None,
-                    outcome: ChunkOutcome::SkippedByPath,
-                };
-                lock(&shared.report).record_chunk(finished.outcome, None);
+                lock(&shared.report).record_chunk(finished.outcome, finished.displaced(issue));
                 self.progress.report(&finished);
                 continue;
             }
 
             let raw = wad
-                .load_chunk_raw(chunk)
+                .load_chunk_raw(&chunk)
                 .map_err(|error| WadError::chunk(chunk.path_hash, &path, error))?;
             let job = Job {
-                chunk: *chunk,
+                chunk,
                 path,
                 named,
                 raw,

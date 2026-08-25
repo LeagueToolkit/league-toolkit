@@ -1821,3 +1821,75 @@ fn a_directory_over_the_suffixed_name_sends_the_chunk_to_its_hash() {
         );
     }
 }
+
+// =============================================================================
+// Asking the caller's code once
+// =============================================================================
+
+/// Resolving is the work an extraction asks a caller's code to do most often,
+/// and a resolver can be doing far more per lookup than a hash map does. It is
+/// asked once per chunk, and so is the path filter, whatever the paths turn
+/// out to clash over.
+///
+/// The rename cannot be settled chunk by chunk, since whether a path has to
+/// move depends on every other path of the extraction. That is why the names
+/// are read up front -- but up front is not twice.
+#[test]
+fn each_chunk_is_resolved_and_filtered_once() {
+    struct CountingResolver {
+        names: HashMap<WadHash, String>,
+        calls: std::cell::Cell<usize>,
+    }
+
+    impl PathResolver for CountingResolver {
+        fn resolve(&self, path_hash: WadHash) -> Option<String> {
+            self.calls.set(self.calls.get() + 1);
+            self.names.get(&path_hash).cloned()
+        }
+    }
+
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
+
+    let mut source = MockWadSource::new();
+    let plain = source.write_at(1000, b"the file");
+    let nested = source.write_at(2000, b"the nested file");
+    let other = source.write_at(3000, b"another file");
+    let chunks = WadChunks::from_iter([
+        create_uncompressed_chunk(0x1111, plain, b"the file"),
+        create_uncompressed_chunk(0x2222, nested, b"the nested file"),
+        create_uncompressed_chunk(0x3333, other, b"another file"),
+    ]);
+    let mut wad = source.into_wad(chunks);
+
+    let resolver = CountingResolver {
+        names: names(&[
+            (0x1111, "assets/thing"),
+            (0x2222, "assets/thing/inner.bin"),
+            (0x3333, "assets/other.bin"),
+        ]),
+        calls: std::cell::Cell::new(0),
+    };
+    let filter_calls = std::cell::Cell::new(0);
+
+    let mut extractor = WadExtractor::new(&resolver).with_filter(|path| {
+        filter_calls.set(filter_calls.get() + 1);
+        path != "assets/other.bin"
+    });
+    let report = extractor.extract_all(&mut wad, output_path).unwrap();
+    drop(extractor);
+
+    assert_eq!(
+        resolver.calls.get(),
+        3,
+        "resolver asked more than once a chunk"
+    );
+    assert_eq!(filter_calls.get(), 3, "filter asked more than once a chunk");
+
+    /* And the clash is still settled, which is what the up-front pass is for. */
+    assert_eq!(report.extracted, 2, "{report}");
+    assert_eq!(
+        tree(temp_dir.path()),
+        ["assets/thing.ltk", "assets/thing/inner.bin"]
+    );
+}
