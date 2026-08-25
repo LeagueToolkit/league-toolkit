@@ -112,7 +112,7 @@ pub enum ExtractResult {
     /// Its resolved path was one the extraction will not write, so nothing was.
     ///
     /// [`ExtractReport::displaced`] names it and says why.
-    SkippedUnwritablePath,
+    SkippedRejectedPath,
     /// Another chunk of the extraction claimed its path first, so nothing was
     /// written.
     ///
@@ -121,16 +121,16 @@ pub enum ExtractResult {
 }
 
 /// Why a chunk did not land at the path its resolver gave.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum PathIssue {
-    /// The path was one the extraction will not write, so nothing was written.
+    /// The path was one the extraction refuses to write, so nothing was written.
     ///
     /// A resolver's paths are untrusted: a hash table is a third-party
     /// download, and [`with_name_recovery`](crate::WadExtractor::with_name_recovery)
-    /// reads paths out of the archive itself, and [`DisplacedChunk::path`]
-    /// carries the one that was refused.
-    Unwritable,
+    /// reads paths out of the archive itself. [`DisplacedChunk::path`]
+    /// carries the rejected path.
+    Rejected,
     /// Another chunk claimed the path first, so nothing was written.
     ///
     /// Two path hashes resolving to one path means the resolver is wrong about
@@ -138,17 +138,20 @@ pub enum PathIssue {
     /// than let the second overwrite it unseen. Which chunk is first follows
     /// write order.
     Duplicate,
-    /// The path could not name a file, so the chunk took another name.
+    /// The path could not name a file, so the chunk was written at this path
+    /// instead, relative to the output directory.
     ///
-    /// A directory holds the name, so the chunk took a `.ltk` suffix — a WAD
-    /// can hold both `x` and `x/y`, which no file system can — or the file
-    /// system refused the name outright, the long-path case on Windows most
-    /// often, so the chunk took its hash. It is still written, and
-    /// [`DisplacedChunk::output_path`] says where.
-    Refused,
+    /// Either a directory holds the name, so the chunk took a `.ltk` suffix
+    /// (a WAD can hold both `x` and `x/y`, which no file system can), or the
+    /// file system refused the name outright, most often the Windows
+    /// long-path limit, so the chunk took its hash.
+    Renamed(Utf8PathBuf),
 }
 
 /// One chunk that did not land at the path its resolver gave.
+///
+/// [`PathIssue::Renamed`] carries the file the chunk landed in instead; under
+/// either other issue, nothing was written.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct DisplacedChunk {
@@ -158,11 +161,6 @@ pub struct DisplacedChunk {
     pub path: String,
     /// What was wrong with it.
     pub issue: PathIssue,
-    /// The file the chunk landed in, relative to the output directory.
-    ///
-    /// `None` when nothing was written, which is every issue but
-    /// [`PathIssue::Refused`].
-    pub output_path: Option<Utf8PathBuf>,
 }
 
 /// What an extraction did, summed over its chunks.
@@ -175,11 +173,6 @@ pub struct ExtractReport {
     pub skipped_existing: usize,
     /// Chunks the path filter or the type filter left out.
     pub skipped_by_filter: usize,
-    /// Chunks left out because their resolved path was unusable: it left the
-    /// output directory, or another chunk claimed it first.
-    ///
-    /// [`displaced`](Self::displaced) says which, for each of them.
-    pub skipped_unusable_path: usize,
     /// Path hashes given to [`extract_chunks`](crate::WadExtractor::extract_chunks)
     /// that the archive holds no chunk for.
     pub missing: Vec<WadHash>,
@@ -208,9 +201,8 @@ impl ExtractReport {
                 self.skipped_by_filter += 1
             }
             ChunkOutcome::SkippedExisting => self.skipped_existing += 1,
-            ChunkOutcome::SkippedUnwritablePath | ChunkOutcome::SkippedDuplicatePath => {
-                self.skipped_unusable_path += 1
-            }
+            /* Counted through displaced, which holds an entry for each. */
+            ChunkOutcome::SkippedRejectedPath | ChunkOutcome::SkippedDuplicatePath => {}
         }
     }
 
@@ -226,11 +218,25 @@ impl ExtractReport {
         }
     }
 
+    /// Chunks whose resolved path the extraction rejected, so nothing was written.
+    pub fn rejected(&self) -> usize {
+        self.issues(|issue| matches!(issue, PathIssue::Rejected))
+    }
+
+    /// Chunks whose path another chunk claimed first, so nothing was written.
+    pub fn duplicates(&self) -> usize {
+        self.issues(|issue| matches!(issue, PathIssue::Duplicate))
+    }
+
     /// Chunks written under a name that is not the one their path gave.
-    fn renamed(&self) -> usize {
+    pub fn renamed(&self) -> usize {
+        self.issues(|issue| matches!(issue, PathIssue::Renamed(_)))
+    }
+
+    fn issues(&self, issue: impl Fn(&PathIssue) -> bool) -> usize {
         self.displaced
             .iter()
-            .filter(|chunk| chunk.issue == PathIssue::Refused)
+            .filter(|chunk| issue(&chunk.issue))
             .count()
     }
 }
@@ -248,8 +254,13 @@ impl fmt::Display for ExtractReport {
         if self.skipped_by_filter > 0 {
             write!(f, ", {} filtered out", self.skipped_by_filter)?;
         }
-        if self.skipped_unusable_path > 0 {
-            write!(f, ", {} unusable paths", self.skipped_unusable_path)?;
+        let rejected = self.rejected();
+        if rejected > 0 {
+            write!(f, ", {rejected} rejected paths")?;
+        }
+        let duplicates = self.duplicates();
+        if duplicates > 0 {
+            write!(f, ", {duplicates} duplicate paths")?;
         }
         let renamed = self.renamed();
         if renamed > 0 {
@@ -275,7 +286,7 @@ pub(super) enum ChunkOutcome {
     SkippedByType,
     SkippedByPath,
     SkippedExisting,
-    SkippedUnwritablePath,
+    SkippedRejectedPath,
     SkippedDuplicatePath,
 }
 
@@ -286,7 +297,7 @@ impl ChunkOutcome {
             Self::SkippedByType
             | Self::SkippedByPath
             | Self::SkippedExisting
-            | Self::SkippedUnwritablePath
+            | Self::SkippedRejectedPath
             | Self::SkippedDuplicatePath => 0,
         }
     }
@@ -320,7 +331,7 @@ impl From<ChunkOutcome> for ExtractResult {
             ChunkOutcome::SkippedByType => ExtractResult::SkippedByType,
             ChunkOutcome::SkippedByPath => ExtractResult::SkippedByPath,
             ChunkOutcome::SkippedExisting => ExtractResult::SkippedExisting,
-            ChunkOutcome::SkippedUnwritablePath => ExtractResult::SkippedUnwritablePath,
+            ChunkOutcome::SkippedRejectedPath => ExtractResult::SkippedRejectedPath,
             ChunkOutcome::SkippedDuplicatePath => ExtractResult::SkippedDuplicatePath,
         }
     }

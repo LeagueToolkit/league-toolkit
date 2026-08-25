@@ -8,8 +8,7 @@
 //! is written, which is what makes one archive and one hash table give one
 //! output tree on every run.
 //!
-//! `docs/design/wad-extraction-path-clashes.md` records why, and what was
-//! measured.
+//! `docs/design/wad-extractor.md` records why, and what was measured.
 
 use std::{borrow::Cow, collections::HashSet, io};
 
@@ -22,9 +21,9 @@ use super::resolver::hex_name;
 
 /// Whether `path` is one an extraction must refuse to write.
 ///
-/// A resolver's paths are untrusted: a hash table is a third-party download,
-/// and [`WadExtractor::with_name_recovery`] reads paths out of the archive
-/// itself. A path is evil when joining it onto the output directory would not
+/// A resolver's paths are untrusted, a hash table and name recovery alike;
+/// the extractor module docs say why, under "Paths the extraction will not
+/// write". A path is evil when joining it onto the output directory would not
 /// give a plain file plainly under that directory:
 ///
 /// - it starts at a root, a drive or a network share, so the join ignores the
@@ -129,8 +128,9 @@ pub(super) fn plain_path(path: &str) -> Cow<'_, str> {
 /// Whether `error` says something already occupies `path`, rather than the
 /// write having failed for a reason a different name would not mend.
 ///
-/// Windows reports a directory in the way as `PermissionDenied`, and reports a
-/// file it will not open at all the same way, so the path settles that one.
+/// Windows reports a directory standing in the way as `PermissionDenied`, and
+/// reports a file it cannot open the same way, so `path.is_dir()` breaks the
+/// tie between the two.
 pub(super) fn is_path_conflict(error: &io::Error, path: &Utf8Path) -> bool {
     use io::ErrorKind as Kind;
 

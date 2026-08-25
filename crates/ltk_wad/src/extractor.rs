@@ -62,8 +62,9 @@
 //!   Which of the two moves is worked out over the extraction's own paths
 //!   before it writes any of them, so one archive and one hash table give one
 //!   output tree every run, whatever order the chunks are written in.
-//! - A name the file system refuses as too long becomes `<hash>.<ext>` in the
-//!   output directory itself, losing the directories the path named.
+//! - A name the file system refuses outright, most often the Windows
+//!   long-path limit, becomes `<hash>.<ext>` in the output directory itself,
+//!   losing the directories the path named.
 //!
 //! An extraction never ends over a pair of its own paths that cannot both
 //! stand. It moves one of them and lists it under [`ExtractReport::displaced`].
@@ -76,7 +77,7 @@
 //!
 //! - A path that would name a file the caller did not ask for: one leaving the
 //!   output directory, or one a host would quietly read as something else.
-//!   [`DisplacedChunk::path`] carries the path that was refused.
+//!   [`DisplacedChunk::path`] carries the rejected path.
 //! - A path a chunk of the same extraction claimed already. The first file
 //!   stays; the second chunk is not written over it. Two hashes resolving to
 //!   one path means the resolver is wrong about one of them, and an extraction
@@ -324,7 +325,6 @@ impl<'a> WadExtractor<'a> {
         self.run(wad, chunks, missing, output_dir.as_ref())
     }
 
-    /// The directories the chunks of one extraction name between them.
     /// Name every chunk, and settle what is decided before any write: the
     /// paths the extraction refuses, and the ones the path filter drops.
     ///
@@ -344,7 +344,7 @@ impl<'a> WadExtractor<'a> {
                 the fact that its resolver handed out a path the extraction
                 will not write. */
                 let refused = if is_evil(&path) {
-                    Some(Refusal::Unwritable)
+                    Some(Refusal::Rejected)
                 } else if self
                     .filter
                     .as_ref()
@@ -486,7 +486,7 @@ struct Named {
 #[derive(Debug, Clone, Copy)]
 enum Refusal {
     /// Its path is one the extraction will not write.
-    Unwritable,
+    Rejected,
     /// The path filter did not accept it.
     Filtered,
 }
@@ -496,7 +496,7 @@ enum Refusal {
 /// A chunk that will not be written makes no directory, and neither does one
 /// under a bare hash, since a hash names no directory. The type filter cannot
 /// be applied here, because a chunk's kind is not known until its bytes are
-/// decompressed, so a chunk that filter goes on to drop still counts as a
+/// decompressed, so a chunk the type filter goes on to drop still counts as a
 /// directory of the path it names.
 fn directory_paths(chunks: &[Named]) -> DirectoryPaths {
     DirectoryPaths::of(chunks.iter().filter_map(|resolved| {
@@ -528,7 +528,6 @@ impl Done {
             path_hash: self.path_hash,
             path: self.path.clone(),
             issue: issue?,
-            output_path: self.output_path.clone(),
         })
     }
 }
@@ -590,10 +589,9 @@ impl Reader<'_, '_> {
 
             if let Some(refusal) = refused {
                 let (outcome, issue) = match refusal {
-                    Refusal::Unwritable => (
-                        ChunkOutcome::SkippedUnwritablePath,
-                        Some(PathIssue::Unwritable),
-                    ),
+                    Refusal::Rejected => {
+                        (ChunkOutcome::SkippedRejectedPath, Some(PathIssue::Rejected))
+                    }
                     Refusal::Filtered => (ChunkOutcome::SkippedByPath, None),
                 };
                 let finished = Done {

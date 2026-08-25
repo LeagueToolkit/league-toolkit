@@ -14,7 +14,7 @@ use std::{
 };
 
 // =============================================================================
-// Mock WAD Source for Testing
+// A mock WAD source for testing
 // =============================================================================
 
 /// A mock WAD source that holds chunk data at specific offsets.
@@ -150,7 +150,7 @@ fn one_chunk_wad(
 }
 
 // =============================================================================
-// is_hex_chunk_path Tests
+// Recognising a hex chunk path
 // =============================================================================
 
 #[test]
@@ -187,7 +187,7 @@ fn test_is_hex_path_edge_cases() {
 }
 
 // =============================================================================
-// PathResolver Tests
+// Resolving paths
 // =============================================================================
 
 #[test]
@@ -225,7 +225,7 @@ fn references_boxes_and_arcs_of_a_resolver_are_resolvers() {
 }
 
 // =============================================================================
-// ltk_name
+// The .ltk suffix
 // =============================================================================
 
 /// The suffix is added and never substituted, so what it is added to always
@@ -249,7 +249,7 @@ fn the_ltk_suffix_strips_back_to_the_original_name() {
 }
 
 // =============================================================================
-// ExtractProgress Tests
+// Progress reporting
 // =============================================================================
 
 fn progress(done: usize, total: usize) -> ExtractProgress<'static> {
@@ -288,7 +288,7 @@ fn progress_accessors_read_the_fields() {
 }
 
 // =============================================================================
-// WadExtractor Integration Tests
+// Extracting end to end
 // =============================================================================
 
 #[test]
@@ -655,7 +655,7 @@ fn the_builder_takes_a_filter_on_a_condition() {
 }
 
 // =============================================================================
-// Report, Layout, Policy and Selection Tests
+// Reports, layouts, policies and selection
 // =============================================================================
 
 const PNG_MAGIC: [u8; 12] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0];
@@ -956,15 +956,15 @@ fn a_file_blocking_a_directory_displaces_the_chunk() {
     assert_eq!(report.extracted, 3, "{report}");
     assert_eq!(report.displaced.len(), 1, "{report}");
     assert_eq!(report.displaced[0].path, "dir1/file1.txt");
-    assert_eq!(report.displaced[0].issue, PathIssue::Refused);
+    let PathIssue::Renamed(renamed) = &report.displaced[0].issue else {
+        panic!("expected a rename, got {:?}", report.displaced[0].issue);
+    };
+    assert!(temp_dir.path().join(renamed.as_std_path()).is_file());
     /* The file that was in the way is left as it was. */
     assert_eq!(
         fs::read_to_string(temp_dir.path().join("dir1")).unwrap(),
         "in the way"
     );
-
-    let landed = report.displaced[0].output_path.clone().unwrap();
-    assert!(temp_dir.path().join(&landed).exists(), "{landed}");
 }
 
 /// A chunk with nowhere left to go does end the run, and the error says which
@@ -995,7 +995,7 @@ fn a_failed_write_names_the_chunk() {
 }
 
 // =============================================================================
-// is_evil
+// Refusing evil paths
 // =============================================================================
 
 /// The shapes a League path takes, which nothing here should stand in the way
@@ -1078,15 +1078,14 @@ fn a_path_leaving_the_output_directory_is_refused() {
     drop(extractor);
 
     assert_eq!(report.extracted, 0);
-    assert_eq!(report.skipped_unusable_path, 1);
-    assert_eq!(seen, vec![(ExtractResult::SkippedUnwritablePath, false)]);
+    assert_eq!(report.rejected(), 1);
+    assert_eq!(seen, vec![(ExtractResult::SkippedRejectedPath, false)]);
     assert_eq!(
         report.displaced,
         vec![DisplacedChunk {
             path_hash: WadHash(0x1234),
             path: "../../../evil.bat".to_owned(),
-            issue: PathIssue::Unwritable,
-            output_path: None,
+            issue: PathIssue::Rejected,
         }]
     );
     assert!(!temp_dir.path().parent().unwrap().join("evil.bat").exists());
@@ -1105,8 +1104,8 @@ fn a_filter_does_not_mask_an_unsafe_path() {
         .unwrap();
 
     assert_eq!(report.skipped_by_filter, 0);
-    assert_eq!(report.skipped_unusable_path, 1);
-    assert_eq!(report.displaced[0].issue, PathIssue::Unwritable);
+    assert_eq!(report.rejected(), 1);
+    assert_eq!(report.displaced[0].issue, PathIssue::Rejected);
 }
 
 /// Any resolver's paths are untrusted, name recovery's included.
@@ -1127,8 +1126,8 @@ fn an_absolute_path_from_any_resolver_is_refused() {
         .extract_all(&mut wad, output_path)
         .unwrap();
 
-    assert_eq!(report.skipped_unusable_path, 1);
-    assert_eq!(report.displaced[0].issue, PathIssue::Unwritable);
+    assert_eq!(report.rejected(), 1);
+    assert_eq!(report.displaced[0].issue, PathIssue::Rejected);
 }
 
 // =============================================================================
@@ -1158,14 +1157,13 @@ fn a_second_chunk_claiming_one_path_is_not_written_over_the_first() {
         .unwrap();
 
     assert_eq!(report.extracted, 1);
-    assert_eq!(report.skipped_unusable_path, 1);
+    assert_eq!(report.duplicates(), 1);
     assert_eq!(
         report.displaced,
         vec![DisplacedChunk {
             path_hash: WadHash(0x2222),
             path: "data/notes.txt".to_owned(),
             issue: PathIssue::Duplicate,
-            output_path: None,
         }]
     );
     assert_eq!(
@@ -1198,7 +1196,6 @@ fn the_flat_layout_still_suffixes_a_shared_name() {
         .unwrap();
 
     assert_eq!(report.extracted, 2);
-    assert_eq!(report.skipped_unusable_path, 0);
     assert!(report.displaced.is_empty());
     assert!(temp_dir.path().join("notes.txt").exists());
     assert!(temp_dir.path().join("notes.0000000000002222.txt").exists());
@@ -1227,8 +1224,7 @@ fn a_name_a_directory_holds_is_renamed_and_reported() {
         vec![DisplacedChunk {
             path_hash: WadHash(0x1234),
             path: "assets/thing.bin".to_owned(),
-            issue: PathIssue::Refused,
-            output_path: Some(Utf8PathBuf::from("assets/thing.bin.ltk")),
+            issue: PathIssue::Renamed(Utf8PathBuf::from("assets/thing.bin.ltk")),
         }]
     );
     assert!(temp_dir.path().join("assets/thing.bin.ltk").exists());
@@ -1276,10 +1272,9 @@ fn a_directory_of_that_name_appends_the_suffix() {
         .unwrap();
 
     assert_eq!(report.extracted, 1);
-    assert_eq!(report.displaced[0].issue, PathIssue::Refused);
     assert_eq!(
-        report.displaced[0].output_path.as_deref(),
-        Some(Utf8Path::new("assets/noextension.ltk"))
+        report.displaced[0].issue,
+        PathIssue::Renamed(Utf8PathBuf::from("assets/noextension.ltk"))
     );
 }
 
@@ -1298,8 +1293,10 @@ fn the_suffix_keeps_an_extension_the_path_already_had() {
         .unwrap();
 
     assert_eq!(report.extracted, 1);
-    let landed = report.displaced[0].output_path.as_deref().unwrap();
-    assert_eq!(landed, Utf8Path::new("assets/thing.bin.ltk"));
+    let PathIssue::Renamed(landed) = &report.displaced[0].issue else {
+        panic!("expected a rename, got {:?}", report.displaced[0].issue);
+    };
+    assert_eq!(landed.as_path(), Utf8Path::new("assets/thing.bin.ltk"));
     /* The name the chunk was given is what is left when the suffix comes off,
     down to the `.bin` a stem-built name would have dropped. */
     assert_eq!(
@@ -1315,7 +1312,7 @@ fn the_suffix_keeps_an_extension_the_path_already_had() {
 // =============================================================================
 
 /// A WAD can name both `x` and `x/y`. No file system holds both, so one chunk
-/// has to move -- but the extraction must finish, not die on the second one,
+/// has to move. The extraction must finish, not die on the second one,
 /// and both paths must come through it.
 ///
 /// Chunks are written in path hash order, so which of the pair carries the
@@ -1361,14 +1358,17 @@ fn the_write_order_of_a_clashing_pair_does_not_change_the_tree() {
         of the two the writes reached first. */
         assert_eq!(report.displaced.len(), 1, "{report}");
         assert_eq!(report.displaced[0].path_hash, WadHash(plain));
-        assert_eq!(report.displaced[0].issue, PathIssue::Refused);
+        assert_eq!(
+            report.displaced[0].issue,
+            PathIssue::Renamed(Utf8PathBuf::from("assets/thing.ltk"))
+        );
     }
 }
 
 /// The same clash for a path that carries an extension, which the suffix goes
 /// on the end of rather than replaces. A tool that reads `.bin` files by their
-/// name will not find this one -- the price of a name that hashes back to its
-/// chunk, and one no measured hash table pays: every clash in a real table is
+/// name will not find this one: the price of a name that hashes back to its
+/// chunk, and one no measured hash table pays, since every clash in a real table is
 /// between paths with no extension at all.
 #[test]
 fn an_extension_does_not_save_a_path_from_the_same_clash() {
@@ -1400,7 +1400,10 @@ fn an_extension_does_not_save_a_path_from_the_same_clash() {
     );
     assert_eq!(report.displaced.len(), 1);
     assert_eq!(report.displaced[0].path_hash, WadHash(0x1111));
-    assert_eq!(report.displaced[0].issue, PathIssue::Refused);
+    assert_eq!(
+        report.displaced[0].issue,
+        PathIssue::Renamed(Utf8PathBuf::from("assets/thing.bin.ltk"))
+    );
 }
 
 /// A resolver's paths are untrusted, and a table naming `<hash>/y` for the very
@@ -1445,7 +1448,10 @@ fn a_directory_named_for_a_nameless_chunk_does_not_end_the_run() {
 
         let displaced = &report.displaced[0];
         assert_eq!(displaced.path_hash, WadHash(0x1111));
-        assert_eq!(displaced.issue, PathIssue::Refused);
+        assert_eq!(
+            displaced.issue,
+            PathIssue::Renamed(Utf8PathBuf::from("0000000000001111.ltk"))
+        );
         /* The suffix goes on the end here too, so the name still reads as the
         hash it was built from. */
         assert!(is_hex_chunk_path(Utf8Path::new("0000000000001111.ltk")));
@@ -1495,7 +1501,7 @@ fn a_refused_nested_path_leaves_the_plain_one_alone() {
 
     assert_eq!(report.extracted, 1, "{report}");
     assert_eq!(report.displaced.len(), 1, "{report}");
-    assert_eq!(report.displaced[0].issue, PathIssue::Unwritable);
+    assert_eq!(report.displaced[0].issue, PathIssue::Rejected);
     assert_eq!(tree(temp_dir.path()), ["assets/thing"]);
 }
 
@@ -1623,16 +1629,15 @@ fn a_clashing_pair_gives_one_tree_whichever_order_it_is_read_in() {
 
         assert_eq!(report.displaced.len(), 1, "{report}");
         assert_eq!(report.displaced[0].path_hash, WadHash(0x1111));
-        assert_eq!(report.displaced[0].issue, PathIssue::Refused);
         assert_eq!(
-            report.displaced[0].output_path.as_deref(),
-            Some(Utf8Path::new("assets/thing.ltk"))
+            report.displaced[0].issue,
+            PathIssue::Renamed(Utf8PathBuf::from("assets/thing.ltk"))
         );
     }
 }
 
 // =============================================================================
-// DirectoryPaths
+// The directories a set of paths names
 // =============================================================================
 
 /// The directories are the path's own prefixes, and the path itself is not one
@@ -1706,7 +1711,7 @@ fn no_paths_name_no_directories() {
 }
 
 // =============================================================================
-// plain_path
+// Normalising a path
 // =============================================================================
 
 /// A path already written with one `/` between its components is handed back
@@ -1762,13 +1767,15 @@ fn a_renamed_path_keeps_the_separators_it_came_with() {
         .extract_all(&mut wad, output_path)
         .unwrap();
 
-    let landed = report.displaced[0].output_path.as_deref().unwrap();
+    let PathIssue::Renamed(landed) = &report.displaced[0].issue else {
+        panic!("expected a rename, got {:?}", report.displaced[0].issue);
+    };
     assert_eq!(landed.as_str(), "assets/thing.ltk");
     assert_eq!(landed.as_str().strip_suffix(".ltk"), Some("assets/thing"));
 }
 
 /// A table can name the suffixed path a directory too. There is nothing left
-/// to suffix onto -- a second `.ltk` would no longer strip back to the path --
+/// to suffix onto (a second `.ltk` would no longer strip back to the path),
 /// so the chunk takes its hash, the name any refused write falls to. It must
 /// not fall there by failing a write, which is the order-dependent branch the
 /// pre-pass exists to remove.
@@ -1814,7 +1821,10 @@ fn a_directory_over_the_suffixed_name_sends_the_chunk_to_its_hash() {
 
         let displaced = &report.displaced[0];
         assert_eq!(displaced.path_hash, WadHash(order[0]));
-        assert_eq!(displaced.issue, PathIssue::Refused);
+        assert_eq!(
+            displaced.issue,
+            PathIssue::Renamed(Utf8PathBuf::from(format!("{:016x}", order[0])))
+        );
         assert_eq!(
             fs::read_to_string(temp_dir.path().join(format!("{:016x}", order[0]))).unwrap(),
             "the file"
@@ -1833,7 +1843,7 @@ fn a_directory_over_the_suffixed_name_sends_the_chunk_to_its_hash() {
 ///
 /// The rename cannot be settled chunk by chunk, since whether a path has to
 /// move depends on every other path of the extraction. That is why the names
-/// are read up front -- but up front is not twice.
+/// are read up front, but up front is not twice.
 #[test]
 fn each_chunk_is_resolved_and_filtered_once() {
     struct CountingResolver {

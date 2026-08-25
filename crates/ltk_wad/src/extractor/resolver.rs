@@ -91,7 +91,7 @@ pub(crate) fn hex_name(path_hash: WadHash) -> String {
     format!("{path_hash:016x}")
 }
 
-/// Check if a path looks like a hex-encoded hash (e.g., "0123456789abcdef").
+/// Whether `path`'s file stem is the sixteen hex digits a nameless chunk lands under.
 ///
 /// This is the name a chunk gets on disk when nothing resolves its hash, so
 /// a caller can sort a file tree extracted earlier into named and unnamed

@@ -1,9 +1,8 @@
 //! Putting one chunk's bytes on disk.
 //!
 //! [`ChunkWriter`] is the half of the extractor the workers share, so
-//! everything here is [`Sync`]. The resolver, the path filter and the progress
-//! callback stay on the reader thread, which is what keeps those three free of
-//! any such bound.
+//! everything here is [`Sync`]. What stays on the reader thread instead, and
+//! why, is in the extractor module docs, under "Parallelism".
 
 use std::{
     collections::HashSet,
@@ -55,9 +54,8 @@ pub enum ExistingFilePolicy {
 
 /// The half of the extractor that the workers share.
 ///
-/// Everything here is [`Sync`]. The resolver, the path filter and the progress
-/// callback stay on the reader, which is what keeps those three free of
-/// any such bound.
+/// Everything here is [`Sync`]. What stays on the reader thread instead, and
+/// why, is in the extractor module docs, under "Parallelism".
 pub(super) struct ChunkWriter<'s> {
     pub(super) layout: ExtractLayout,
     pub(super) existing: ExistingFilePolicy,
@@ -101,9 +99,9 @@ impl ChunkWriter<'_> {
             return Ok(WriteOutcome::skipped(ChunkOutcome::SkippedByType, None));
         }
 
-        let (mut relative_path, mut issue) = match self.layout {
+        let (mut relative_path, mut renamed) = match self.layout {
             ExtractLayout::Paths => {
-                let (path, issue) = self.resolve_final_path(chunk, chunk_path, named, chunk_kind);
+                let (path, renamed) = self.resolve_final_path(chunk, chunk_path, named, chunk_kind);
                 /* Two hashes resolving to one path means the resolver is wrong
                 about one of them. Keeping the first file and saying so beats
                 letting the second overwrite it unseen. */
@@ -113,7 +111,7 @@ impl ChunkWriter<'_> {
                         Some(PathIssue::Duplicate),
                     ));
                 }
-                (path, issue)
+                (path, renamed)
             }
             /* The flat layout gives a second chunk of one name its hash rather
             than drop it, because a flat tree collides by design. */
@@ -128,7 +126,7 @@ impl ChunkWriter<'_> {
                 its path named. The report lists it and the name it landed
                 under. */
                 relative_path = hashed_name(chunk, chunk_kind);
-                issue = Some(PathIssue::Refused);
+                renamed = true;
                 lock(&self.claimed).insert(relative_path.clone());
                 self.place(&relative_path, chunk_data)?
             }
@@ -142,6 +140,7 @@ impl ChunkWriter<'_> {
             },
             Written::Existed => ChunkOutcome::SkippedExisting,
         };
+        let issue = renamed.then(|| PathIssue::Renamed(relative_path.clone()));
         Ok(WriteOutcome {
             outcome,
             path: Some(relative_path),
@@ -149,7 +148,6 @@ impl ChunkWriter<'_> {
         })
     }
 
-    /// Resolve the final output path for a chunk.
     /// Write `data` at `relative`, making the directories it names first.
     fn place(&self, relative: &Utf8Path, data: &[u8]) -> io::Result<Written> {
         let full_path = self.output_dir.join(relative);
@@ -159,14 +157,14 @@ impl ChunkWriter<'_> {
         write_file(&full_path, data, self.existing)
     }
 
-    /// The file a chunk lands in, and what was wrong with the path it asked for.
+    /// The file a chunk lands in, and whether that is a name its path did not give.
     fn resolve_final_path(
         &self,
         chunk: &WadChunk,
         chunk_path: &Utf8Path,
         named: bool,
         chunk_kind: LeagueFileKind,
-    ) -> (Utf8PathBuf, Option<PathIssue>) {
+    ) -> (Utf8PathBuf, bool) {
         let mut final_path = chunk_path.to_path_buf();
 
         /* A chunk no resolver named is here under its hash, and takes the
@@ -185,7 +183,7 @@ impl ChunkWriter<'_> {
         if !self.directories.holds(final_path.as_str())
             && !self.output_dir.join(&final_path).is_dir()
         {
-            return (final_path, None);
+            return (final_path, false);
         }
 
         let renamed = ltk_path(&final_path);
@@ -195,10 +193,10 @@ impl ChunkWriter<'_> {
         Deciding it here and not by failing the write is what keeps it off the
         order-dependent branch. */
         if self.directories.holds(renamed.as_str()) {
-            return (hashed_name(chunk, chunk_kind), Some(PathIssue::Refused));
+            return (hashed_name(chunk, chunk_kind), true);
         }
 
-        (renamed, Some(PathIssue::Refused))
+        (renamed, true)
     }
 
     /// The file name alone, made unique among the names this extraction wrote.
@@ -208,13 +206,13 @@ impl ChunkWriter<'_> {
         chunk_path: &Utf8Path,
         named: bool,
         chunk_kind: LeagueFileKind,
-    ) -> (Utf8PathBuf, Option<PathIssue>) {
+    ) -> (Utf8PathBuf, bool) {
         let file_name = Utf8Path::new(chunk_path.file_name().unwrap_or_default());
-        let (resolved, issue) = self.resolve_final_path(chunk, file_name, named, chunk_kind);
+        let (resolved, renamed) = self.resolve_final_path(chunk, file_name, named, chunk_kind);
 
         let mut claimed = lock(&self.claimed);
         if claimed.insert(resolved.clone()) {
-            return (resolved, issue);
+            return (resolved, renamed);
         }
 
         let suffixed = Utf8PathBuf::from(match resolved.extension() {
@@ -226,7 +224,7 @@ impl ChunkWriter<'_> {
             None => format!("{}.{:016x}", resolved.as_str(), chunk.path_hash),
         });
         claimed.insert(suffixed.clone());
-        (suffixed, issue)
+        (suffixed, renamed)
     }
 }
 
