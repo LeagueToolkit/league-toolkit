@@ -80,6 +80,8 @@
 //! with precise spans. Use [`ast::PartialBin::finish`] where you instead want a `Result` that
 //! only succeeds on a clean build.
 
+use std::ops::{Deref, DerefMut};
+
 #[allow(unused, reason = "for module level doc link")]
 use ltk_meta::Bin;
 
@@ -99,7 +101,7 @@ pub use print::Print;
 
 use crate::parse::Span;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Spanned<T> {
     pub span: Span,
     pub value: T,
@@ -108,5 +110,36 @@ pub struct Spanned<T> {
 impl<T> Spanned<T> {
     pub fn new(span: Span, value: T) -> Self {
         Self { span, value }
+    }
+}
+
+impl<T> DerefMut for Spanned<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
+    }
+}
+
+impl<T> Deref for Spanned<T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl<T> AsMut<T> for Spanned<T> {
+    fn as_mut(&mut self) -> &mut T {
+        &mut self.value
+    }
+}
+
+impl<T> AsRef<T> for Spanned<T> {
+    fn as_ref(&self) -> &T {
+        &self.value
+    }
+}
+
+impl AsRef<str> for Spanned<String> {
+    fn as_ref(&self) -> &str {
+        &self.value
     }
 }

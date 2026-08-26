@@ -1,7 +1,7 @@
 /// A span of text in the source file - `[start, end)` in bytes.
 /// `end` marks the offset after the last byte of the span
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub struct Span {
     pub start: u32,
     pub end: u32,
