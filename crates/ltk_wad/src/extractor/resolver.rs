@@ -30,6 +30,21 @@ pub trait PathResolver {
     fn is_known(&self, path_hash: WadHash) -> bool {
         self.resolve(path_hash).is_some()
     }
+
+    /// The paths of `path_hashes`, one answer per hash, in the order given.
+    ///
+    /// An extraction asks for every chunk of an archive at once, so a resolver
+    /// reading a compressed store can answer the batch in one pass over it
+    /// rather than seeking per hash. The default calls
+    /// [`resolve`](Self::resolve) once per hash, which is already what a
+    /// resolver backed by a map costs.
+    ///
+    /// Overriding this must not change *what* is resolved. A hash answered
+    /// here and a hash answered by [`resolve`](Self::resolve) name the same
+    /// path.
+    fn resolve_all(&self, path_hashes: &[WadHash]) -> Vec<Option<String>> {
+        path_hashes.iter().map(|&hash| self.resolve(hash)).collect()
+    }
 }
 
 impl<R: PathResolver + ?Sized> PathResolver for &R {
@@ -39,6 +54,10 @@ impl<R: PathResolver + ?Sized> PathResolver for &R {
 
     fn is_known(&self, path_hash: WadHash) -> bool {
         (**self).is_known(path_hash)
+    }
+
+    fn resolve_all(&self, path_hashes: &[WadHash]) -> Vec<Option<String>> {
+        (**self).resolve_all(path_hashes)
     }
 }
 
@@ -50,6 +69,10 @@ impl<R: PathResolver + ?Sized> PathResolver for Box<R> {
     fn is_known(&self, path_hash: WadHash) -> bool {
         (**self).is_known(path_hash)
     }
+
+    fn resolve_all(&self, path_hashes: &[WadHash]) -> Vec<Option<String>> {
+        (**self).resolve_all(path_hashes)
+    }
 }
 
 impl<R: PathResolver + ?Sized> PathResolver for Arc<R> {
@@ -59,6 +82,10 @@ impl<R: PathResolver + ?Sized> PathResolver for Arc<R> {
 
     fn is_known(&self, path_hash: WadHash) -> bool {
         (**self).is_known(path_hash)
+    }
+
+    fn resolve_all(&self, path_hashes: &[WadHash]) -> Vec<Option<String>> {
+        (**self).resolve_all(path_hashes)
     }
 }
 
@@ -72,6 +99,28 @@ impl<S: BuildHasher> PathResolver for HashMap<WadHash, String, S> {
     }
 }
 
+/// Every hash answered, with the count the trait promises enforced.
+///
+/// # Panics
+///
+/// Panics when `resolver` answers a different number of hashes than it was
+/// asked. Callers zip the answers back onto their chunks, where a short answer
+/// would drop chunks from an extraction rather than fail it.
+pub(crate) fn resolve_all_checked<R: PathResolver + ?Sized>(
+    resolver: &R,
+    path_hashes: &[WadHash],
+) -> Vec<Option<String>> {
+    let resolved = resolver.resolve_all(path_hashes);
+    assert_eq!(
+        resolved.len(),
+        path_hashes.len(),
+        "PathResolver::resolve_all answered {} of {} hashes",
+        resolved.len(),
+        path_hashes.len()
+    );
+    resolved
+}
+
 /// A resolver that names nothing, so every chunk lands under its hash.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct NoResolver;
@@ -83,6 +132,10 @@ impl PathResolver for NoResolver {
 
     fn is_known(&self, _path_hash: WadHash) -> bool {
         false
+    }
+
+    fn resolve_all(&self, path_hashes: &[WadHash]) -> Vec<Option<String>> {
+        vec![None; path_hashes.len()]
     }
 }
 

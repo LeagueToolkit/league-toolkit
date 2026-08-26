@@ -11,7 +11,8 @@ use std::{
     collections::{BTreeMap, HashMap},
     fs,
     io::{self, Read, Seek, SeekFrom, Write},
-    sync::Arc,
+    sync::atomic::{AtomicUsize, Ordering as AtomicOrdering},
+    sync::{Arc, Mutex},
 };
 
 // =============================================================================
@@ -223,6 +224,152 @@ fn references_boxes_and_arcs_of_a_resolver_are_resolvers() {
         assert!(resolver.is_known(WadHash(0x1)));
         assert!(!resolver.is_known(WadHash(0x2)));
     }
+}
+
+/// A resolver that records how it was asked, so a test can tell one batch from
+/// a run of single lookups.
+#[derive(Debug, Default)]
+struct CountingResolver {
+    names: HashMap<WadHash, String>,
+    singles: AtomicUsize,
+    /// The size of each batch, in the order the batches arrived.
+    batches: Mutex<Vec<usize>>,
+}
+
+impl CountingResolver {
+    fn new(entries: &[(u64, &str)]) -> Self {
+        Self {
+            names: names(entries),
+            ..Default::default()
+        }
+    }
+
+    fn batches(&self) -> Vec<usize> {
+        self.batches.lock().unwrap().clone()
+    }
+}
+
+impl PathResolver for CountingResolver {
+    fn resolve(&self, path_hash: WadHash) -> Option<String> {
+        self.singles.fetch_add(1, AtomicOrdering::Relaxed);
+        self.names.get(&path_hash).cloned()
+    }
+
+    fn resolve_all(&self, path_hashes: &[WadHash]) -> Vec<Option<String>> {
+        self.batches.lock().unwrap().push(path_hashes.len());
+        path_hashes
+            .iter()
+            .map(|hash| self.names.get(hash).cloned())
+            .collect()
+    }
+}
+
+/// A resolver that breaks the count the trait promises.
+#[derive(Debug)]
+struct ShortResolver;
+
+impl PathResolver for ShortResolver {
+    fn resolve(&self, _path_hash: WadHash) -> Option<String> {
+        None
+    }
+
+    fn resolve_all(&self, _path_hashes: &[WadHash]) -> Vec<Option<String>> {
+        Vec::new()
+    }
+}
+
+#[test]
+fn the_default_batch_answers_each_hash_through_resolve() {
+    let resolver = names(&[(0x1, "one"), (0x3, "three")]);
+    let asked = [WadHash(0x1), WadHash(0x2), WadHash(0x3)];
+
+    let resolved = resolver.resolve_all(&asked);
+
+    assert_eq!(
+        resolved,
+        [Some("one".to_owned()), None, Some("three".to_owned())]
+    );
+}
+
+#[test]
+fn no_resolver_answers_a_batch_with_a_miss_per_hash() {
+    let resolved = NoResolver.resolve_all(&[WadHash(0x1), WadHash(0x2)]);
+
+    assert_eq!(resolved, [None, None]);
+}
+
+#[test]
+fn an_extraction_asks_for_every_chunk_in_one_batch() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
+    let (mut wad, _) = three_file_wad();
+    let resolver = CountingResolver::new(&[
+        (0x1111, "dir1/file1.txt"),
+        (0x2222, "dir2/file2.txt"),
+        (0x3333, "dir3/file3.txt"),
+    ]);
+
+    let report = WadExtractor::new(&resolver)
+        .extract_all(&mut wad, output_path)
+        .unwrap();
+
+    assert_eq!(report.extracted, 3);
+    assert_eq!(resolver.batches(), [3]);
+    assert_eq!(resolver.singles.load(AtomicOrdering::Relaxed), 0);
+    assert!(temp_dir.path().join("dir1/file1.txt").exists());
+    assert!(temp_dir.path().join("dir3/file3.txt").exists());
+}
+
+/// The recovery reads every chunk's name before it opens a bin, so it is the
+/// second batch and not a lookup per chunk.
+#[test]
+fn name_recovery_asks_for_every_chunk_in_one_batch() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
+    let (mut wad, _) = three_file_wad();
+    let resolver = CountingResolver::new(&[
+        (0x1111, "dir1/file1.txt"),
+        (0x2222, "dir2/file2.txt"),
+        (0x3333, "dir3/file3.txt"),
+    ]);
+
+    WadExtractor::new(&resolver)
+        .with_name_recovery()
+        .extract_all(&mut wad, output_path)
+        .unwrap();
+
+    assert_eq!(resolver.batches(), [3, 3]);
+    assert_eq!(resolver.singles.load(AtomicOrdering::Relaxed), 0);
+}
+
+/// Without this the extractor, which holds a `&dyn`, would silently take the
+/// per-hash default from a resolver that overrode the batch.
+#[test]
+fn references_boxes_and_arcs_forward_the_batch() {
+    let asked = [WadHash(0x1)];
+    let by_ref = &CountingResolver::new(&[(0x1, "one")]);
+    let boxed: Box<dyn PathResolver> = Box::new(CountingResolver::new(&[(0x1, "one")]));
+    let shared: Arc<dyn PathResolver> = Arc::new(CountingResolver::new(&[(0x1, "one")]));
+
+    let resolvers: [&dyn PathResolver; 3] = [&by_ref, &boxed, &shared];
+    for resolver in resolvers {
+        assert_eq!(resolver.resolve_all(&asked), [Some("one".to_owned())]);
+    }
+
+    /* The counter the reference points at is the only one a test can read
+    back, and one batch reached it rather than a lookup. */
+    assert_eq!(by_ref.batches(), [1]);
+    assert_eq!(by_ref.singles.load(AtomicOrdering::Relaxed), 0);
+}
+
+#[test]
+#[should_panic(expected = "resolve_all answered 0 of 3 hashes")]
+fn a_resolver_that_answers_short_stops_the_extraction() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
+    let (mut wad, _) = three_file_wad();
+
+    let _ = WadExtractor::new(&ShortResolver).extract_all(&mut wad, output_path);
 }
 
 // =============================================================================

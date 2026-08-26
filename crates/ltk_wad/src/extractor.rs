@@ -147,6 +147,8 @@ use self::{
     writer::ChunkWriter,
 };
 
+pub(crate) use self::resolver::resolve_all_checked;
+
 /// Most workers an extraction starts unless [`WadExtractor::with_workers`] says
 /// otherwise. Each worker holds a compressed and a decompressed chunk at once,
 /// and a wide machine would otherwise hold dozens of the largest ones.
@@ -349,11 +351,19 @@ impl<'a> WadExtractor<'a> {
     /// the extraction's paths before it can say which of them a directory has
     /// to hold, so the paths are read once, up front, and carried from here to
     /// the worker that writes each chunk.
+    ///
+    /// The whole archive goes to the resolver in one
+    /// [`resolve_all`](PathResolver::resolve_all), which is what lets a
+    /// resolver reading a compressed store make one pass over it.
     fn resolve_chunks(&self, chunks: Vec<WadChunk>, resolver: &dyn PathResolver) -> Vec<Named> {
+        let path_hashes: Vec<WadHash> = chunks.iter().map(|chunk| chunk.path_hash).collect();
+        let resolved = resolve_all_checked(resolver, &path_hashes);
+
         chunks
             .into_iter()
-            .map(|chunk| {
-                let (path, named) = match resolver.resolve(chunk.path_hash) {
+            .zip(resolved)
+            .map(|(chunk, resolved)| {
+                let (path, named) = match resolved {
                     Some(path) => (path, true),
                     None => (hex_name(chunk.path_hash), false),
                 };
