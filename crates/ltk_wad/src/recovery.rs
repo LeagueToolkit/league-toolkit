@@ -82,6 +82,21 @@ pub struct RecoveredNames {
 }
 
 impl RecoveredNames {
+    /// Fold `other` into these names, as one run over several archives.
+    pub fn merge(&mut self, other: Self) {
+        /* Destructured so a field added here stops compiling until it is
+        folded in too. */
+        let Self {
+            names,
+            bins_scanned,
+            chunks_sniffed,
+        } = other;
+
+        self.names.extend(names);
+        self.bins_scanned += bins_scanned;
+        self.chunks_sniffed += chunks_sniffed;
+    }
+
     /// The recovered path of a chunk, if a bin named it.
     pub fn get(&self, path_hash: WadHash) -> Option<&str> {
         self.names.get(&path_hash).map(String::as_str)

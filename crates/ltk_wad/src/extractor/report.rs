@@ -218,6 +218,40 @@ impl ExtractReport {
         }
     }
 
+    /// Fold `other` into this report, as one run over several archives.
+    ///
+    /// [`ExtractReport`] is `#[non_exhaustive]`, so a caller cannot add its
+    /// fields up without naming each one and silently missing the next field
+    /// this gains. Extracting a set of archives is ordinary enough that the
+    /// crate that owns the fields should be the one that adds them.
+    pub fn merge(&mut self, other: Self) {
+        /* Destructured rather than read field by field, so a field added here
+        stops compiling until it is folded in too. */
+        let Self {
+            extracted,
+            skipped_existing,
+            skipped_by_filter,
+            missing,
+            bytes_written,
+            by_kind,
+            cancelled,
+            recovered,
+            displaced,
+        } = other;
+
+        self.extracted += extracted;
+        self.skipped_existing += skipped_existing;
+        self.skipped_by_filter += skipped_by_filter;
+        self.missing.extend(missing);
+        self.bytes_written += bytes_written;
+        for (kind, count) in by_kind {
+            *self.by_kind.entry(kind).or_default() += count;
+        }
+        self.cancelled |= cancelled;
+        self.recovered.merge(recovered);
+        self.displaced.extend(displaced);
+    }
+
     /// Chunks whose resolved path the extraction rejected, so nothing was written.
     pub fn rejected(&self) -> usize {
         self.issues(|issue| matches!(issue, PathIssue::Rejected))
