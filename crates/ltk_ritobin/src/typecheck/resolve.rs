@@ -462,12 +462,11 @@ pub(crate) fn resolve_value(
             let Some(child) = children.get(visit_ctx.cst).first() else {
                 return Ok(None);
             };
-            return resolve_literal(
-                ctx,
-                child.token(visit_ctx.cst).unwrap(),
-                kind_hint,
-                kind_hint_span,
-            );
+            // an unterminated string leaves an error tree here instead of a token
+            let Some(token) = child.token(visit_ctx.cst) else {
+                return Ok(None);
+            };
+            return resolve_literal(ctx, token, kind_hint, kind_hint_span);
         }
         _ => return Ok(None),
     }))
