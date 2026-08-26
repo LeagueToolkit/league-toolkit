@@ -435,7 +435,11 @@ impl<'a> WadExtractor<'a> {
                 type_filter: self.type_filter.as_deref(),
                 output_dir,
                 directories,
+                output_occupied: std::fs::read_dir(output_dir.as_std_path())
+                    .map(|mut entries| entries.next().is_some())
+                    .unwrap_or(false),
                 claimed: Mutex::default(),
+                created: Mutex::default(),
             },
             report: Mutex::default(),
             failure: Mutex::default(),

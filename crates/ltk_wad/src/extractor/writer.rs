@@ -65,9 +65,13 @@ pub(super) struct ChunkWriter<'s> {
     /* The directories this extraction's own paths name, known before any of
     them is written. */
     pub(super) directories: DirectoryPaths,
+    /* Whether the output directory held anything before the extraction. */
+    pub(super) output_occupied: bool,
     /* The names this extraction gave so far, so a second chunk claiming one of
     them can tell. Behind a mutex because the workers claim concurrently. */
     pub(super) claimed: Mutex<HashSet<Utf8PathBuf>>,
+    /* The directories made so far, so each is made once. */
+    pub(super) created: Mutex<HashSet<Utf8PathBuf>>,
 }
 
 impl ChunkWriter<'_> {
@@ -187,9 +191,25 @@ impl ChunkWriter<'_> {
     fn place(&self, relative: &Utf8Path, data: &[u8]) -> io::Result<Written> {
         let full_path = self.output_dir.join(relative);
         if let Some(parent) = full_path.parent() {
-            fs::create_dir_all(parent)?;
+            self.create_dirs(parent)?;
         }
         write_file(&full_path, data, self.existing)
+    }
+
+    /// Recursively creates the ancestor path directories, each once per extraction.
+    fn create_dirs(&self, parent: &Utf8Path) -> io::Result<()> {
+        if lock(&self.created).contains(parent) {
+            return Ok(());
+        }
+        fs::create_dir_all(parent)?;
+        let mut created = lock(&self.created);
+        for ancestor in parent.ancestors() {
+            /* Stop above the output directory, or at an ancestor already noted. */
+            if !ancestor.starts_with(self.output_dir) || !created.insert(ancestor.to_path_buf()) {
+                break;
+            }
+        }
+        Ok(())
     }
 
     /// The file a chunk lands in, and whether that is a name its path did not give.
@@ -223,9 +243,9 @@ impl ChunkWriter<'_> {
         }
 
         /* Our own directories are known up front; a pre-existing one takes a
-        look to find. */
+        look to find, which a pristine output cannot need. */
         if !self.directories.holds(final_path.as_str())
-            && !self.output_dir.join(&final_path).is_dir()
+            && !(self.output_occupied && self.output_dir.join(&final_path).is_dir())
         {
             return Some((final_path, false));
         }
