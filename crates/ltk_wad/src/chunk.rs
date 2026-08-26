@@ -101,7 +101,7 @@ impl WadChunk {
             compression_type,
             is_duplicated: false, // v3.4 always has is_duplicated = false
             frame_count,
-            start_frame: start_frame as u32,
+            start_frame,
             checksum,
         })
     }

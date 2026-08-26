@@ -61,6 +61,7 @@ impl MockWadSource {
             chunks,
             checksum: 0u64,
             signature: [0u8; 256],
+            subchunk_toc: None,
             source: self,
             decoder: ChunkDecoder::new(),
         }
@@ -2207,4 +2208,84 @@ fn merging_reports_adds_every_count() {
     assert_eq!(totals.extracted, 3);
     assert_eq!(totals.skipped_existing, 3);
     assert_eq!(totals.by_kind.values().sum::<usize>(), 3);
+}
+
+// =============================================================================
+// ZstdMulti extraction by subchunk records
+// =============================================================================
+
+/// A `ZstdMulti` chunk whose raw first subchunk holds the zstd magic, with the
+/// table that describes it, and the bytes the chunk holds.
+#[cfg(feature = "zstd")]
+fn zstd_multi_wad() -> (Wad<MockWadSource>, Vec<u8>) {
+    use crate::{SubchunkToc, WadChunkCompression};
+
+    let raw_run = b"raw (\xb5/\xfda fake frame start".to_vec();
+    let content = b"subchunked content".repeat(20);
+    let frame = zstd::encode_all(io::Cursor::new(&content[..]), 3).unwrap();
+    let chunk_data: Vec<u8> = [raw_run.as_slice(), &frame].concat();
+    let expected: Vec<u8> = [raw_run.as_slice(), &content].concat();
+
+    let mut toc_data = Vec::new();
+    for (compressed, uncompressed) in [
+        (raw_run.len() as u32, raw_run.len() as u32),
+        (frame.len() as u32, content.len() as u32),
+    ] {
+        toc_data.extend_from_slice(&compressed.to_le_bytes());
+        toc_data.extend_from_slice(&uncompressed.to_le_bytes());
+        toc_data.extend_from_slice(&0u64.to_le_bytes());
+    }
+
+    let mut source = MockWadSource::new();
+    let offset = source.write_at(1000, &chunk_data);
+    let chunks = WadChunks::from_iter([WadChunk {
+        path_hash: WadHash(0x1111),
+        data_offset: offset,
+        compressed_size: chunk_data.len(),
+        uncompressed_size: expected.len(),
+        compression_type: WadChunkCompression::ZstdMulti,
+        is_duplicated: false,
+        frame_count: 2,
+        start_frame: 0,
+        checksum: 0,
+    }]);
+
+    let mut wad = source.into_wad(chunks);
+    wad.subchunk_toc = Some(SubchunkToc::from_bytes(&toc_data).unwrap());
+    (wad, expected)
+}
+
+/// The raw run's fake frame start defeats the magic-scan fallback, so this
+/// passes only when the workers decode by the subchunk records.
+#[test]
+#[cfg(feature = "zstd")]
+fn a_zstd_multi_chunk_extracts_by_its_subchunk_records() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
+    let (mut wad, expected) = zstd_multi_wad();
+
+    let report = WadExtractor::new(&names(&[(0x1111, "assets/data.bin")]))
+        .with_workers(NonZeroUsize::new(4).unwrap())
+        .extract_all(&mut wad, output_path)
+        .unwrap();
+
+    assert_eq!(report.extracted, 1);
+    let written = fs::read(temp_dir.path().join("assets/data.bin")).unwrap();
+    assert_eq!(written, expected);
+}
+
+/// Without the table the same chunk fails, so the fallback does not quietly
+/// write garbage.
+#[test]
+#[cfg(feature = "zstd")]
+fn a_zstd_multi_chunk_without_the_table_still_goes_to_the_scan() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
+    let (mut wad, _) = zstd_multi_wad();
+    wad.subchunk_toc = None;
+
+    let result = WadExtractor::new(&names(&[(0x1111, "assets/data.bin")]))
+        .with_workers(NonZeroUsize::new(1).unwrap())
+        .extract_all(&mut wad, output_path);
+    result.unwrap_err();
 }

@@ -92,7 +92,12 @@ for the names of chunks the hash table lacks, before it writes anything.
 - `None` - Uncompressed
 - `GZip` - Standard gzip
 - `Zstd` - Zstandard
-- `ZstdMulti` - Zstd with multiple frames
+- `ZstdMulti` - Subchunked: a run of subchunks, each one zstd frame or stored
+  raw. The archive's `*.SubChunkTOC` chunk holds a 16-byte record per subchunk
+  (compressed size, uncompressed size, XXH3 checksum); a chunk's records are
+  `frame_count` of them from `start_frame`. `Wad::mount` finds that chunk by
+  shape (`SubchunkToc`), since its name hashes the archive's install path;
+  without it, decompression falls back to scanning for the first zstd frame.
 - `Satellite` - External file reference (rare)
 
 ---
