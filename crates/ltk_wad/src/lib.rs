@@ -323,9 +323,9 @@ impl<TSource: Read + Seek> Wad<TSource> {
 
     /// Reads and decompresses the first `count` of a chunk's subchunks.
     ///
-    /// A subchunked chunk's leading subchunks stand on their own, so this
-    /// reads and decodes only the bytes they cover: seek once, read their
-    /// compressed run, decode `count` frames. Riot's `.tex` textures put the
+    /// A chunk's first subchunks decode without the rest, so this reads and
+    /// decodes only the bytes they cover: seek once, read their compressed
+    /// run, decode `count` frames. Riot's `.tex` textures put the
     /// header and the smallest mips in the first subchunk, so one subchunk of
     /// a texture is a complete low-resolution texture; the crate root shows
     /// that use. Each subchunk is checked against its table checksum, the
