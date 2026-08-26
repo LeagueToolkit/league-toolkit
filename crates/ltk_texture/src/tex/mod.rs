@@ -140,15 +140,15 @@ impl Tex {
     }
 
     /// Byte size of a single z-slice of a mip.
-    fn slice_bytes(&self, dims: (usize, usize, usize)) -> usize {
+    fn slice_bytes(&self, w: usize, h: usize) -> usize {
         let (block_w, block_h) = self.format.block_size();
-        dims.0.div_ceil(block_w) * dims.1.div_ceil(block_h) * self.format.bytes_per_block()
+        w.div_ceil(block_w) * h.div_ceil(block_h) * self.format.bytes_per_block()
     }
 
     /// Byte size of a whole mip, all z-slices.
     fn mip_bytes(&self, level: u32) -> usize {
-        let dims = self.mip_dims(level);
-        self.slice_bytes(dims) * dims.2
+        let (w, h, d) = self.mip_dims(level);
+        self.slice_bytes(w, h) * d
     }
 
     /// How many mips the payload actually holds, counted from the smallest.
@@ -158,16 +158,16 @@ impl Tex {
     #[must_use]
     pub fn available_mip_count(&self) -> u32 {
         let mut remaining = self.data.len();
-        (0..self.mip_count)
-            .rev()
-            .take_while(|&level| {
-                let bytes = self.mip_bytes(level);
-                bytes <= remaining && {
-                    remaining -= bytes;
-                    true
-                }
-            })
-            .count() as u32
+        let mut available = 0;
+        for level in (0..self.mip_count).rev() {
+            let bytes = self.mip_bytes(level);
+            if bytes > remaining {
+                break;
+            }
+            remaining -= bytes;
+            available += 1;
+        }
+        available
     }
 
     /// Try to decode a single z-slice of a mipmap. For 2D textures the only valid slice is 0.
@@ -186,18 +186,19 @@ impl Tex {
 
         // sum all mips before our one
         // (league sorts mips smallest -> largest so our iterator counts up)
+        let slice_len = self.slice_bytes(w, h);
         let off = (level + 1..self.mip_count)
             .map(|level| self.mip_bytes(level))
             .sum::<usize>()
-            + slice as usize * self.slice_bytes((w, h, d));
+            + slice as usize * slice_len;
 
         let mip_data = self
             .data
-            .get(off..off + self.slice_bytes((w, h, d)))
+            .get(off..off + slice_len)
             .ok_or(DecodeErr::MipOutOfBounds {
                 level,
                 start: off,
-                end: off + self.slice_bytes((w, h, d)),
+                end: off + slice_len,
                 len: self.data.len(),
             })?;
 
