@@ -87,8 +87,45 @@ impl PathResolver for NoResolver {
 }
 
 /// A path hash as the sixteen hex digits a nameless chunk lands under.
-pub(crate) fn hex_name(path_hash: WadHash) -> String {
+///
+/// Zero padded to sixteen digits, which is the width
+/// [`hex_chunk_hash`] reads back and the only width a chunk name is valid at.
+/// [`WadHash`]'s own `Display` pads to nothing, so `hash.to_string()` is not
+/// this.
+///
+/// # Example
+///
+/// ```
+/// use ltk_wad::{hex_name, WadHash};
+///
+/// assert_eq!(hex_name(WadHash(0xff)), "00000000000000ff");
+/// ```
+pub fn hex_name(path_hash: WadHash) -> String {
     format!("{path_hash:016x}")
+}
+
+/// The chunk `path` was written for, when its file stem is a hash.
+///
+/// The sixteen hex digits of a nameless chunk's name, read back. Returns
+/// `None` for any other shape, so a caller sorting a file tree extracted
+/// earlier can tell a hash name from a path a resolver gave.
+///
+/// # Example
+///
+/// ```
+/// use ltk_wad::{hex_chunk_hash, WadHash};
+/// use camino::Utf8Path;
+///
+/// let hash = hex_chunk_hash(Utf8Path::new("0123456789abcdef.bin"));
+/// assert_eq!(hash, Some(WadHash(0x0123456789abcdef)));
+/// assert_eq!(hex_chunk_hash(Utf8Path::new("assets/aatrox.bin")), None);
+/// ```
+pub fn hex_chunk_hash(path: &Utf8Path) -> Option<WadHash> {
+    let file_stem = path.file_stem().unwrap_or("");
+    if file_stem.len() != 16 || !file_stem.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    WadHash::from_str_radix(file_stem, 16).ok()
 }
 
 /// Whether `path`'s file stem is the sixteen hex digits a nameless chunk lands under.
@@ -108,6 +145,5 @@ pub(crate) fn hex_name(path_hash: WadHash) -> String {
 /// assert!(!is_hex_chunk_path(Utf8Path::new("assets/champions/aatrox.bin")));
 /// ```
 pub fn is_hex_chunk_path(path: &Utf8Path) -> bool {
-    let file_stem = path.file_stem().unwrap_or("");
-    file_stem.len() == 16 && file_stem.chars().all(|c| c.is_ascii_hexdigit())
+    hex_chunk_hash(path).is_some()
 }

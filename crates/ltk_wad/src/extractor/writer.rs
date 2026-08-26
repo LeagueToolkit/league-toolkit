@@ -18,7 +18,7 @@ use crate::{ChunkDecoder, WadChunk, WadError};
 
 use super::{
     lock,
-    naming::{hashed_name, is_path_conflict, ltk_path, DirectoryPaths},
+    naming::{hashed_name, is_path_conflict, ltk_path, DirectoryPaths, NamingPolicy},
     report::{ChunkOutcome, WriteOutcome},
     Job, PathIssue,
 };
@@ -59,6 +59,7 @@ pub enum ExistingFilePolicy {
 pub(super) struct ChunkWriter<'s> {
     pub(super) layout: ExtractLayout,
     pub(super) existing: ExistingFilePolicy,
+    pub(super) naming: NamingPolicy,
     pub(super) type_filter: Option<&'s [LeagueFileKind]>,
     pub(super) output_dir: &'s Utf8Path,
     /* The directories this extraction's own paths name, known before any of
@@ -102,16 +103,15 @@ impl ChunkWriter<'_> {
         let (mut relative_path, mut renamed) = match self.layout {
             ExtractLayout::Paths => {
                 let (path, renamed) = self.resolve_final_path(chunk, chunk_path, named, chunk_kind);
-                /* Two hashes resolving to one path means the resolver is wrong
-                about one of them. Keeping the first file and saying so beats
-                letting the second overwrite it unseen. */
-                if !lock(&self.claimed).insert(path.clone()) {
-                    return Ok(WriteOutcome::skipped(
-                        ChunkOutcome::SkippedDuplicatePath,
-                        Some(PathIssue::Duplicate),
-                    ));
+                match self.claim_path(path, renamed, chunk, chunk_kind) {
+                    Some(claimed) => claimed,
+                    None => {
+                        return Ok(WriteOutcome::skipped(
+                            ChunkOutcome::SkippedDuplicatePath,
+                            Some(PathIssue::Duplicate),
+                        ))
+                    }
                 }
-                (path, renamed)
             }
             /* The flat layout gives a second chunk of one name its hash rather
             than drop it, because a flat tree collides by design. */
@@ -125,7 +125,7 @@ impl ChunkWriter<'_> {
                 hash in the output directory itself and loses the directories
                 its path named. The report lists it and the name it landed
                 under. */
-                relative_path = hashed_name(chunk, chunk_kind);
+                relative_path = hashed_name(chunk, chunk_kind, self.naming);
                 renamed = true;
                 lock(&self.claimed).insert(relative_path.clone());
                 self.place(&relative_path, chunk_data)?
@@ -168,7 +168,7 @@ impl ChunkWriter<'_> {
         let mut final_path = chunk_path.to_path_buf();
 
         /* A nameless chunk is here under its hash. */
-        if !named {
+        if !named && self.naming == NamingPolicy::Descriptive {
             if let Some(ext) = chunk_kind.extension() {
                 final_path.set_extension(ext);
             }
@@ -186,10 +186,48 @@ impl ChunkWriter<'_> {
         /* The suffixed name can be a directory too. Nothing is left to suffix
         onto, so the chunk takes its hash. */
         if self.directories.holds(renamed.as_str()) {
-            return (hashed_name(chunk, chunk_kind), true);
+            return (hashed_name(chunk, chunk_kind, self.naming), true);
         }
 
         (renamed, true)
+    }
+
+    /// The name this chunk keeps, or `None` when another chunk holds it and
+    /// the policy leaves this one unwritten.
+    ///
+    /// Two hashes resolving to one path means the resolver is wrong about one
+    /// of them, and the policy says what the second chunk gets:
+    ///
+    /// - [`NamingPolicy::Descriptive`]: nothing. The first file stands and the
+    ///   second is dropped, which beats letting it overwrite the first unseen.
+    /// - [`NamingPolicy::Lossless`]: a `.ltk` suffix, so both come through and
+    ///   either path can be read back. A third chunk on the same path takes
+    ///   its hash, which no other chunk can hold.
+    fn claim_path(
+        &self,
+        path: Utf8PathBuf,
+        renamed: bool,
+        chunk: &WadChunk,
+        chunk_kind: LeagueFileKind,
+    ) -> Option<(Utf8PathBuf, bool)> {
+        let mut claimed = lock(&self.claimed);
+        if claimed.insert(path.clone()) {
+            return Some((path, renamed));
+        }
+        if self.naming != NamingPolicy::Lossless {
+            return None;
+        }
+
+        let suffixed = ltk_path(&path);
+        if claimed.insert(suffixed.clone()) {
+            return Some((suffixed, true));
+        }
+
+        /* A third chunk on one path, so the suffix is taken too. A chunk's
+        hash is its own, so this always lands. */
+        let hashed = hashed_name(chunk, chunk_kind, self.naming);
+        claimed.insert(hashed.clone());
+        Some((hashed, true))
     }
 
     /// The file name alone, made unique among the names this extraction wrote.
