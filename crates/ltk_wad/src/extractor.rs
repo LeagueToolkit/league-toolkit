@@ -69,6 +69,13 @@
 //! An extraction never ends over a pair of its own paths that cannot both
 //! stand. It moves one of them and lists it under [`ExtractReport::displaced`].
 //!
+//! [`NamingPolicy::Lossless`] changes two of those. A nameless chunk keeps the
+//! bare hash, inventing no extension, and a chunk whose path another chunk
+//! claimed first takes the `.ltk` suffix rather than go unwritten. Every chunk
+//! then lands, and every name reads back as the path the resolver gave. Only a
+//! name the file system refuses outright still falls back to the hash, which no
+//! suffix can mend.
+//!
 //! # Paths the extraction will not write
 //!
 //! A resolver's paths are untrusted: a hash table is a third-party download,
@@ -128,12 +135,11 @@ use ltk_hash::WadHash;
 use crate::{ChunkDecoder, NameRecovery, RecoveredNames, Wad, WadChunk, WadError};
 
 pub use self::{
+    naming::{chunk_hash_of, strip_ltk_suffix, NamingPolicy},
     report::{DisplacedChunk, ExtractProgress, ExtractReport, ExtractResult, PathIssue},
-    resolver::{is_hex_chunk_path, NoResolver, PathResolver},
+    resolver::{hex_chunk_hash, hex_name, is_hex_chunk_path, NoResolver, PathResolver},
     writer::{ExistingFilePolicy, ExtractLayout},
 };
-
-pub(crate) use self::resolver::hex_name;
 
 use self::{
     naming::{is_evil, DirectoryPaths},
@@ -162,6 +168,7 @@ pub struct WadExtractor<'a> {
     progress: Option<ProgressCallback<'a>>,
     layout: ExtractLayout,
     existing: ExistingFilePolicy,
+    naming: NamingPolicy,
     cancel: Option<&'a AtomicBool>,
     workers: Option<NonZeroUsize>,
     recover_names: bool,
@@ -172,6 +179,7 @@ impl fmt::Debug for WadExtractor<'_> {
         f.debug_struct("WadExtractor")
             .field("layout", &self.layout)
             .field("existing", &self.existing)
+            .field("naming", &self.naming)
             .field("type_filter", &self.type_filter)
             .field("has_filter", &self.filter.is_some())
             .field("has_progress", &self.progress.is_some())
@@ -191,6 +199,7 @@ impl<'a> WadExtractor<'a> {
             progress: None,
             layout: ExtractLayout::default(),
             existing: ExistingFilePolicy::default(),
+            naming: NamingPolicy::default(),
             cancel: None,
             workers: None,
             recover_names: false,
@@ -245,6 +254,14 @@ impl<'a> WadExtractor<'a> {
     /// The default is [`ExistingFilePolicy::Overwrite`].
     pub fn with_existing_file_policy(mut self, policy: ExistingFilePolicy) -> Self {
         self.existing = policy;
+        self
+    }
+
+    /// Set whether names can be read back as the paths they came from.
+    ///
+    /// The default is [`NamingPolicy::Descriptive`].
+    pub fn with_naming_policy(mut self, policy: NamingPolicy) -> Self {
+        self.naming = policy;
         self
     }
 
@@ -398,6 +415,7 @@ impl<'a> WadExtractor<'a> {
             writer: ChunkWriter {
                 layout: self.layout,
                 existing: self.existing,
+                naming: self.naming,
                 type_filter: self.type_filter.as_deref(),
                 output_dir,
                 directories,

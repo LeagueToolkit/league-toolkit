@@ -1,10 +1,11 @@
 //! Tests for chunk extraction: naming, layout, filtering and progress.
 
 use super::{
-    naming::{is_evil, ltk_name, plain_path, DirectoryPaths},
+    naming::{is_evil, ltk_name, ltk_path, plain_path, DirectoryPaths},
     *,
 };
 use crate::WadChunks;
+use ltk_hash::Hash as _;
 use std::{
     borrow::Cow,
     collections::{BTreeMap, HashMap},
@@ -1902,4 +1903,131 @@ fn each_chunk_is_resolved_and_filtered_once() {
         tree(temp_dir.path()),
         ["assets/thing.ltk", "assets/thing/inner.bin"]
     );
+}
+
+#[test]
+fn lossless_naming_keeps_a_chunk_whose_path_is_taken() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
+
+    let mut source = MockWadSource::new();
+    let first = source.write_at(1000, b"first");
+    let second = source.write_at(2000, b"second");
+    let chunks = WadChunks::from_iter([
+        create_uncompressed_chunk(0x1111, first, b"first"),
+        create_uncompressed_chunk(0x2222, second, b"second"),
+    ]);
+    let mut wad = source.into_wad(chunks);
+    /* A stale table naming two hashes the same path. */
+    let resolver = names(&[(0x1111, "data/notes.txt"), (0x2222, "data/notes.txt")]);
+
+    let report = WadExtractor::new(&resolver)
+        .with_naming_policy(NamingPolicy::Lossless)
+        /* One worker, so the order chunks claim in is the archive's. */
+        .with_workers(NonZeroUsize::new(1).unwrap())
+        .extract_all(&mut wad, output_path)
+        .unwrap();
+
+    assert_eq!(report.extracted, 2);
+    assert_eq!(report.duplicates(), 0);
+    assert_eq!(report.renamed(), 1);
+    assert_eq!(
+        report.displaced,
+        vec![DisplacedChunk {
+            path_hash: WadHash(0x2222),
+            path: "data/notes.txt".to_owned(),
+            issue: PathIssue::Renamed(Utf8PathBuf::from("data/notes.txt.ltk")),
+        }]
+    );
+    assert_eq!(
+        fs::read_to_string(temp_dir.path().join("data/notes.txt")).unwrap(),
+        "first"
+    );
+    assert_eq!(
+        fs::read_to_string(temp_dir.path().join("data/notes.txt.ltk")).unwrap(),
+        "second"
+    );
+}
+
+#[test]
+fn lossless_naming_leaves_a_nameless_chunk_without_an_extension() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
+
+    let mut source = MockWadSource::new();
+    let offset = source.write_at(1000, &PNG_MAGIC);
+    let chunk = create_uncompressed_chunk(0x1234567890abcdef, offset, &PNG_MAGIC);
+    let mut wad = source.into_wad(WadChunks::from_iter([chunk]));
+
+    let report = WadExtractor::new(&NoResolver)
+        .with_naming_policy(NamingPolicy::Lossless)
+        .extract_all(&mut wad, output_path)
+        .unwrap();
+
+    assert_eq!(report.extracted, 1);
+    assert!(temp_dir.path().join("1234567890abcdef").exists());
+    assert!(!temp_dir.path().join("1234567890abcdef.png").exists());
+}
+
+#[test]
+fn hex_chunk_hash_reads_back_what_hex_name_wrote() {
+    let hash = WadHash(0xff);
+    let name = hex_name(hash);
+
+    assert_eq!(name, "00000000000000ff");
+    assert_eq!(hex_chunk_hash(Utf8Path::new(&name)), Some(hash));
+    assert_eq!(
+        hex_chunk_hash(Utf8Path::new("00000000000000ff.dds")),
+        Some(hash)
+    );
+    assert_eq!(hex_chunk_hash(Utf8Path::new("assets/aatrox.bin")), None);
+    /* Fifteen digits is not a chunk name, so a short hex stem is not one. */
+    assert_eq!(hex_chunk_hash(Utf8Path::new("00000000000ff")), None);
+}
+
+#[test]
+fn chunk_hash_of_undoes_every_name_the_extraction_gives() {
+    /* A nameless chunk, under either naming policy. */
+    let hash = WadHash(0x0123456789abcdef);
+    assert_eq!(chunk_hash_of(Utf8Path::new("0123456789abcdef")), hash);
+    assert_eq!(chunk_hash_of(Utf8Path::new("0123456789abcdef.png")), hash);
+    /* The same chunk once a directory took its name. */
+    assert_eq!(chunk_hash_of(Utf8Path::new("0123456789abcdef.ltk")), hash);
+
+    /* A path a resolver gave, and the same path after a rename. */
+    let named = WadHash::hash_str("assets/thing.bin");
+    assert_eq!(chunk_hash_of(Utf8Path::new("assets/thing.bin")), named);
+    assert_eq!(chunk_hash_of(Utf8Path::new("assets/thing.bin.ltk")), named);
+}
+
+#[test]
+fn strip_ltk_suffix_is_the_inverse_of_the_rename() {
+    let path = Utf8Path::new("assets/thing.bin");
+
+    assert_eq!(strip_ltk_suffix(&ltk_path(path)), path);
+    /* Nothing to strip leaves the path as it is. */
+    assert_eq!(strip_ltk_suffix(path), path);
+}
+
+#[test]
+fn merging_reports_adds_every_count() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
+    let (mut wad, resolver) = three_file_wad();
+
+    let one = WadExtractor::new(&resolver)
+        .extract_all(&mut wad, output_path)
+        .unwrap();
+    let two = WadExtractor::new(&resolver)
+        .with_existing_file_policy(ExistingFilePolicy::Skip)
+        .extract_all(&mut wad, output_path)
+        .unwrap();
+
+    let mut totals = ExtractReport::default();
+    totals.merge(one);
+    totals.merge(two);
+
+    assert_eq!(totals.extracted, 3);
+    assert_eq!(totals.skipped_existing, 3);
+    assert_eq!(totals.by_kind.values().sum::<usize>(), 3);
 }

@@ -14,10 +14,42 @@ use std::{borrow::Cow, collections::HashSet, io};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use ltk_file::LeagueFileKind;
+use ltk_hash::WadHash;
 
 use crate::WadChunk;
 
-use super::resolver::hex_name;
+use ltk_hash::Hash as _;
+
+use super::resolver::{hex_chunk_hash, hex_name};
+
+/// Whether an extraction's names can be read back as the paths they came from.
+///
+/// The policy picks between naming a chunk for what its bytes are and keeping
+/// every chunk under a name its resolved path can be read out of. The extractor
+/// module docs, under "How a chunk is named on disk", say what each name is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[non_exhaustive]
+pub enum NamingPolicy {
+    /// Names say what a file holds, at the price of dropping a duplicate.
+    ///
+    /// - A nameless chunk takes the extension its bytes identify as:
+    ///   `<hash>.<ext>`.
+    /// - A chunk whose path another chunk claimed first is left unwritten.
+    #[default]
+    Descriptive,
+    /// Every chunk lands, under a name its resolved path can be read out of.
+    ///
+    /// - A nameless chunk lands under its bare hash, with no invented
+    ///   extension.
+    /// - A chunk whose path is taken appends `.ltk` rather than give up its
+    ///   bytes. Stripping the suffix gives back the path the resolver named,
+    ///   which is what a caller hashing an extracted file's path back to its
+    ///   chunk needs.
+    /// - A name the file system refuses outright still falls back to the
+    ///   chunk's hash: a suffix only makes a name the host already rejected
+    ///   longer.
+    Lossless,
+}
 
 /// Whether `path` is one an extraction must refuse to write.
 ///
@@ -143,11 +175,20 @@ pub(super) fn is_path_conflict(error: &io::Error, path: &Utf8Path) -> bool {
     }
 }
 
-/// `<hash>.<ext>`, the name a chunk takes when the file system refuses its own.
-pub(super) fn hashed_name(chunk: &WadChunk, chunk_kind: LeagueFileKind) -> Utf8PathBuf {
+/// The name a chunk takes when the file system refuses its own.
+///
+/// `<hash>.<ext>` under [`NamingPolicy::Descriptive`], and the bare `<hash>`
+/// under [`NamingPolicy::Lossless`], which invents no extension.
+pub(super) fn hashed_name(
+    chunk: &WadChunk,
+    chunk_kind: LeagueFileKind,
+    naming: NamingPolicy,
+) -> Utf8PathBuf {
     let mut hashed_path = Utf8PathBuf::from(hex_name(chunk.path_hash));
-    if let Some(ext) = chunk_kind.extension() {
-        hashed_path.set_extension(ext);
+    if naming == NamingPolicy::Descriptive {
+        if let Some(ext) = chunk_kind.extension() {
+            hashed_path.set_extension(ext);
+        }
     }
     hashed_path
 }
@@ -174,4 +215,49 @@ pub(super) fn ltk_name(file_name: &str) -> String {
 /// the archive was never built from.
 pub(super) fn ltk_path(path: &Utf8Path) -> Utf8PathBuf {
     Utf8PathBuf::from(ltk_name(path.as_str()))
+}
+
+/// `path` without the `.ltk` suffix an extraction adds, if it has one.
+///
+/// The exact inverse of the rename: the suffix is only ever added, never
+/// substituted, so taking it off gives back the name the chunk was written
+/// for. Borrowed when there is no suffix to take off.
+pub fn strip_ltk_suffix(path: &Utf8Path) -> &Utf8Path {
+    Utf8Path::new(path.as_str().strip_suffix(".ltk").unwrap_or(path.as_str()))
+}
+
+/// The chunk an extracted file was written for.
+///
+/// Reads the extraction's naming back: the `.ltk` suffix comes off, a hash
+/// name parses as itself, and anything else is the path a resolver gave,
+/// hashed as the archive keys it. Both naming policies read back the same
+/// way, so this takes none.
+///
+/// The one shape it cannot tell apart is a resolver that named a chunk with
+/// sixteen hex digits of its own, which reads as that hash rather than as the
+/// path. [`ExtractProgress::is_named`](crate::ExtractProgress::is_named)
+/// reports which a chunk was at the time it was written, for a caller that
+/// must know.
+///
+/// # Example
+///
+/// ```
+/// use ltk_wad::{chunk_hash_of, WadHash};
+/// use camino::Utf8Path;
+///
+/// // A hash name, and the same chunk after a directory took its name.
+/// let bare = chunk_hash_of(Utf8Path::new("0123456789abcdef"));
+/// assert_eq!(bare, WadHash(0x0123456789abcdef));
+/// assert_eq!(chunk_hash_of(Utf8Path::new("0123456789abcdef.ltk")), bare);
+///
+/// // A path a resolver gave reads back the same before and after a rename.
+/// let named = chunk_hash_of(Utf8Path::new("assets/thing.bin"));
+/// assert_eq!(chunk_hash_of(Utf8Path::new("assets/thing.bin.ltk")), named);
+/// ```
+pub fn chunk_hash_of(path: &Utf8Path) -> WadHash {
+    let named = strip_ltk_suffix(path);
+    match hex_chunk_hash(named) {
+        Some(hash) => hash,
+        None => WadHash::hash_str(plain_path(named.as_str()).as_ref()),
+    }
 }
