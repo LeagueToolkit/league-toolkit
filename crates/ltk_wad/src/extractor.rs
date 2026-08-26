@@ -440,6 +440,7 @@ impl<'a> WadExtractor<'a> {
                     .unwrap_or(false),
                 claimed: Mutex::default(),
                 created: Mutex::default(),
+                subchunk_toc: wad.subchunk_toc().cloned(),
             },
             report: Mutex::default(),
             failure: Mutex::default(),

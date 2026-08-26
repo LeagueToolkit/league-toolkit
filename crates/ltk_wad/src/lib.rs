@@ -95,6 +95,7 @@ mod error;
 mod extractor;
 mod file_ext;
 mod recovery;
+mod subchunk;
 
 pub use builder::*;
 pub use chunk::*;
@@ -104,6 +105,7 @@ pub use error::*;
 pub use extractor::*;
 pub use file_ext::*;
 pub use recovery::*;
+pub use subchunk::*;
 
 /// A chunk's key: the xxh64 of its lower-case path.
 ///
@@ -153,6 +155,7 @@ pub struct Wad<TSource: Read + Seek> {
     #[cfg_attr(feature = "serde", serde(with = "signature_serde"))]
     signature: [u8; 256],
     checksum: u64,
+    subchunk_toc: Option<SubchunkToc>,
     #[cfg_attr(feature = "serde", serde(skip))]
     source: TSource,
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -214,11 +217,19 @@ impl<TSource: Read + Seek> Wad<TSource> {
         }
 
         let chunks = WadChunks::from_iter(raw_chunks);
+        drop(reader);
+        let subchunk_toc = subchunk::detect_subchunk_toc(&chunks, |chunk| {
+            let mut data = vec![0; chunk.compressed_size];
+            source.seek(SeekFrom::Start(chunk.data_offset as u64))?;
+            source.read_exact(&mut data)?;
+            Ok(data.into_boxed_slice())
+        });
 
         Ok(Wad {
             signature,
             checksum,
             chunks,
+            subchunk_toc,
             source,
             decoder: ChunkDecoder::new(),
         })
@@ -228,7 +239,9 @@ impl<TSource: Read + Seek> Wad<TSource> {
     ///
     /// This enables callers to take ownership of both parts separately,
     /// e.g. to wrap the source in synchronization primitives or to create
-    /// multiple readers for parallel extraction.
+    /// multiple readers for parallel extraction. A caller decompressing
+    /// [`ZstdMulti`](WadChunkCompression::ZstdMulti) chunks itself should
+    /// clone [`subchunk_toc`](Self::subchunk_toc) first.
     pub fn into_parts(self) -> (TSource, WadChunks) {
         (self.source, self.chunks)
     }
@@ -269,7 +282,17 @@ impl<TSource: Read + Seek> Wad<TSource> {
     pub fn load_chunk_decompressed(&mut self, chunk: &WadChunk) -> Result<Box<[u8]>, WadError> {
         let raw_data = self.load_chunk_raw(chunk)?;
         self.decoder
-            .decompress(&raw_data, chunk.compression_type, chunk.uncompressed_size)
+            .decompress_chunk(&raw_data, chunk, self.subchunk_toc.as_ref())
+    }
+
+    /// The archive's subchunk table, when mounting found one.
+    ///
+    /// The table is the chunk whose records describe every
+    /// [`ZstdMulti`](WadChunkCompression::ZstdMulti) chunk; read
+    /// [`SubchunkToc`] for how it is found. Without one, `ZstdMulti` chunks
+    /// decompress by scanning for their first zstd frame instead.
+    pub fn subchunk_toc(&self) -> Option<&SubchunkToc> {
+        self.subchunk_toc.as_ref()
     }
 
     /// Returns embedded checksum verbatim.

@@ -14,7 +14,7 @@ use std::{
 use camino::{Utf8Path, Utf8PathBuf};
 use ltk_file::LeagueFileKind;
 
-use crate::{ChunkDecoder, WadChunk, WadError};
+use crate::{ChunkDecoder, SubchunkToc, WadChunk, WadError};
 
 use super::{
     lock,
@@ -72,6 +72,8 @@ pub(super) struct ChunkWriter<'s> {
     pub(super) claimed: Mutex<HashSet<Utf8PathBuf>>,
     /* The directories made so far, so each is made once. */
     pub(super) created: Mutex<HashSet<Utf8PathBuf>>,
+    /* The archive's subchunk table, when it has one. */
+    pub(super) subchunk_toc: Option<SubchunkToc>,
 }
 
 impl ChunkWriter<'_> {
@@ -80,11 +82,7 @@ impl ChunkWriter<'_> {
         job: &Job,
         decoder: &mut ChunkDecoder,
     ) -> Result<WriteOutcome, WadError> {
-        let data = decoder.decompress(
-            &job.raw,
-            job.chunk.compression_type,
-            job.chunk.uncompressed_size,
-        )?;
+        let data = decoder.decompress_chunk(&job.raw, &job.chunk, self.subchunk_toc.as_ref())?;
         self.write_chunk(&job.chunk, &data, Utf8Path::new(&job.path), job.named)
     }
 

@@ -40,7 +40,7 @@ use ltk_hash::{Hash as _, WadHash};
 
 use crate::{
     extractor::{default_workers, hex_name, lock, resolve_all_checked},
-    ChunkDecoder, PathResolver, Wad, WadChunk, WadError,
+    ChunkDecoder, PathResolver, SubchunkToc, Wad, WadChunk, WadError,
 };
 
 /// Raw bytes the sniff reads from a chunk first.
@@ -281,15 +281,18 @@ impl<'a> NameRecovery<'a> {
         /* Taken inside the scope so it drops before the scope joins the workers.
         A worker only stops once every sender is gone. */
         let mut sender = Some(sender);
+        let toc = wad.subchunk_toc().cloned();
         let scanned = thread::scope(|scope| {
+            let toc = toc.as_ref();
+            let (receiver, unknown, found) = (&receiver, &unknown, &found);
             for _ in 0..workers {
-                scope.spawn(|| scan_bins(&receiver, &unknown, &found));
+                scope.spawn(move || scan_bins(receiver, unknown, found, toc));
             }
             let sender = sender.take().expect("the sender is taken once");
 
             let mut scanned = 0;
             for (chunk, path) in &bins {
-                if self.cancelled() || lock(&found).len() == unknown.len() {
+                if self.cancelled() || lock(found).len() == unknown.len() {
                     break;
                 }
                 let raw = wad
@@ -318,14 +321,14 @@ fn scan_bins(
     receiver: &Mutex<mpsc::Receiver<RawChunk>>,
     unknown: &HashSet<WadHash>,
     found: &Mutex<HashMap<WadHash, String>>,
+    toc: Option<&SubchunkToc>,
 ) {
     let mut decoder = ChunkDecoder::new();
     loop {
         let Ok((chunk, raw)) = lock(receiver).recv() else {
             return;
         };
-        let Ok(data) = decoder.decompress(&raw, chunk.compression_type, chunk.uncompressed_size)
-        else {
+        let Ok(data) = decoder.decompress_chunk(&raw, &chunk, toc) else {
             continue;
         };
         /* A chunk named `.bin` by a hash table is not always one. */
@@ -356,7 +359,7 @@ fn sniff_is_bin<S: Read + Seek>(
         let Ok(raw) = wad.load_chunk_raw_prefix(chunk, limit) else {
             return false;
         };
-        match decoder.decompress_prefix(&raw, chunk.compression_type, SNIFF_BYTES) {
+        match decoder.decompress_chunk_prefix(&raw, chunk, wad.subchunk_toc(), SNIFF_BYTES) {
             Ok(head) if head.len() >= wanted => return is_bin_magic(&head),
             /* The prefix cut the first block short, and the chunk holds more. */
             _ if raw.len() == limit && limit < SNIFF_RAW_BYTES => limit = SNIFF_RAW_BYTES,
