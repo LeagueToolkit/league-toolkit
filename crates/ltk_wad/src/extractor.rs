@@ -100,8 +100,9 @@
 //! # Parallelism
 //!
 //! [`extract_all`](WadExtractor::extract_all) and
-//! [`extract_chunks`](WadExtractor::extract_chunks) read the archive in order on
-//! the calling thread and hand each chunk to a worker that decompresses and
+//! [`extract_chunks`](WadExtractor::extract_chunks) read the archive on the
+//! calling thread, in the order its chunks are laid out so the whole read is
+//! one forward sweep, and hand each chunk to a worker that decompresses and
 //! writes it. The worker count bounds the channel between the two, so memory
 //! holds a few chunks whatever the archive holds. The resolver, the path
 //! filter and the progress callback run on the calling thread only, so none of
@@ -313,10 +314,11 @@ impl<'a> WadExtractor<'a> {
     }
 
     /// Extract the chunks of `wad` with the given path hashes into
-    /// `output_dir`, in the order given.
+    /// `output_dir`.
     ///
     /// A hash given twice counts once. A hash the archive holds no chunk for
-    /// lands under [`ExtractReport::missing`] and is not an error.
+    /// lands under [`ExtractReport::missing`] and is not an error. The chunks
+    /// are read in the order the archive lays them out.
     ///
     /// # Errors
     ///
@@ -394,11 +396,15 @@ impl<'a> WadExtractor<'a> {
     fn run<S: Read + Seek>(
         &mut self,
         wad: &mut Wad<S>,
-        chunks: Vec<WadChunk>,
+        mut chunks: Vec<WadChunk>,
         missing: Vec<WadHash>,
         output_dir: &Utf8Path,
     ) -> Result<ExtractReport, WadError> {
         let workers = self.workers.map_or_else(default_workers, NonZeroUsize::get);
+
+        /* The archive keeps its chunks in hash order; sorted by offset, the
+        reader's whole pass is one forward sweep. */
+        chunks.sort_unstable_by_key(|chunk| chunk.data_offset);
 
         let recovered = if self.recover_names {
             NameRecovery {
@@ -429,7 +435,11 @@ impl<'a> WadExtractor<'a> {
                 type_filter: self.type_filter.as_deref(),
                 output_dir,
                 directories,
+                output_occupied: std::fs::read_dir(output_dir.as_std_path())
+                    .map(|mut entries| entries.next().is_some())
+                    .unwrap_or(false),
                 claimed: Mutex::default(),
+                created: Mutex::default(),
             },
             report: Mutex::default(),
             failure: Mutex::default(),
@@ -445,6 +455,7 @@ impl<'a> WadExtractor<'a> {
                 done: 0,
                 total,
             },
+            report: ExtractReport::default(),
         };
 
         let cancelled = thread::scope(|scope| {
@@ -479,6 +490,7 @@ impl<'a> WadExtractor<'a> {
             .report
             .into_inner()
             .unwrap_or_else(PoisonError::into_inner);
+        report.merge(reader.report);
         report.cancelled = cancelled;
         report.missing = missing;
         report.recovered = recovered;
@@ -589,6 +601,9 @@ impl Progress<'_, '_> {
 struct Reader<'r, 'a> {
     cancel: Option<&'r AtomicBool>,
     progress: Progress<'r, 'a>,
+    /// The chunks the reader settles without a worker, folded into the shared
+    /// report at the end.
+    report: ExtractReport,
 }
 
 impl Reader<'_, '_> {
@@ -629,7 +644,23 @@ impl Reader<'_, '_> {
                     output_path: None,
                     outcome,
                 };
-                lock(&shared.report).record_chunk(finished.outcome, finished.displaced(issue));
+                self.report
+                    .record_chunk(finished.outcome, finished.displaced(issue));
+                self.progress.report(&finished);
+                continue;
+            }
+
+            /* A chunk the skip policy settles by name alone is never read. */
+            if let Some(written) = shared.writer.probe_skip(&chunk, &path, named) {
+                let finished = Done {
+                    path_hash: chunk.path_hash,
+                    path,
+                    named,
+                    output_path: written.path,
+                    outcome: written.outcome,
+                };
+                self.report
+                    .record_chunk(finished.outcome, finished.displaced(written.issue));
                 self.progress.report(&finished);
                 continue;
             }
@@ -673,9 +704,11 @@ impl Shared<'_> {
     /// them, so a reader blocked on a full channel sees the failure too.
     fn run_worker(&self, receiver: &Mutex<mpsc::Receiver<Job>>, done: &mpsc::Sender<Done>) {
         let mut decoder = ChunkDecoder::new();
+        /* Folded into the shared report once at the end, not a lock per chunk. */
+        let mut report = ExtractReport::default();
         loop {
             let Ok(job) = lock(receiver).recv() else {
-                return;
+                break;
             };
             if self.failed() {
                 continue;
@@ -690,8 +723,7 @@ impl Shared<'_> {
                         output_path: written.path,
                         outcome: written.outcome,
                     };
-                    lock(&self.report)
-                        .record_chunk(finished.outcome, finished.displaced(written.issue));
+                    report.record_chunk(finished.outcome, finished.displaced(written.issue));
                     /* The receiver outlives every worker, so this cannot fail. */
                     let _ = done.send(finished);
                 }
@@ -703,5 +735,6 @@ impl Shared<'_> {
                 }
             }
         }
+        lock(&self.report).merge(report);
     }
 }

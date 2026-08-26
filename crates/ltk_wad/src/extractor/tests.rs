@@ -1009,6 +1009,36 @@ fn skip_policy_leaves_an_existing_file() {
 }
 
 #[test]
+fn skip_policy_never_reads_a_chunk_whose_file_exists() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
+
+    let mut source = MockWadSource::new();
+    let (offset, compressed_size) = source.write_gzip_at(1000, b"payload");
+    let chunk = create_gzip_chunk(0x1111, offset, compressed_size, b"payload".len());
+    let resolver = names(&[(0x1111, "dir/file.txt")]);
+
+    let mut wad = source.into_wad(WadChunks::from_iter([chunk]));
+    WadExtractor::new(&resolver)
+        .extract_all(&mut wad, output_path)
+        .unwrap();
+
+    /* The same archive with its bytes ruined. A skip that still read the
+    chunk could not decompress it, so a clean report proves the chunk was
+    settled by its name alone. */
+    let mut ruined = MockWadSource::new();
+    ruined.write_at(offset, &vec![0xFF; compressed_size]);
+    let mut wad = ruined.into_wad(WadChunks::from_iter([chunk]));
+    let report = WadExtractor::new(&resolver)
+        .with_existing_file_policy(ExistingFilePolicy::Skip)
+        .extract_all(&mut wad, output_path)
+        .unwrap();
+
+    assert_eq!(report.skipped_existing, 1);
+    assert_eq!(report.extracted, 0);
+}
+
+#[test]
 fn overwrite_policy_replaces_an_existing_file() {
     let temp_dir = tempfile::TempDir::new().unwrap();
     let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
