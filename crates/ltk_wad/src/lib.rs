@@ -155,6 +155,7 @@ pub struct Wad<TSource: Read + Seek> {
     #[cfg_attr(feature = "serde", serde(with = "signature_serde"))]
     signature: [u8; 256],
     checksum: u64,
+    #[cfg_attr(feature = "serde", serde(default))]
     subchunk_toc: Option<SubchunkToc>,
     #[cfg_attr(feature = "serde", serde(skip))]
     source: TSource,

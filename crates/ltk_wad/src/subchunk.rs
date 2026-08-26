@@ -33,6 +33,9 @@ pub struct SubchunkToc {
     records: Box<[WadSubchunk]>,
 }
 
+/// The size of one table record on disk.
+const RECORD_SIZE: usize = 16;
+
 impl SubchunkToc {
     /// Parses a table from the decompressed bytes of a `SubChunkTOC` chunk.
     ///
@@ -40,14 +43,14 @@ impl SubchunkToc {
     ///
     /// Fails when the length is not a multiple of the 16-byte record size.
     pub fn from_bytes(data: &[u8]) -> Result<Self, WadError> {
-        if !data.len().is_multiple_of(16) {
+        if !data.len().is_multiple_of(RECORD_SIZE) {
             return Err(WadError::Other(format!(
-                "subchunk toc length {} is not a multiple of 16",
+                "subchunk toc length {} is not a multiple of {RECORD_SIZE}",
                 data.len()
             )));
         }
         let records = data
-            .chunks_exact(16)
+            .chunks_exact(RECORD_SIZE)
             .map(|record| WadSubchunk {
                 compressed_size: u32::from_le_bytes(record[0..4].try_into().unwrap()),
                 uncompressed_size: u32::from_le_bytes(record[4..8].try_into().unwrap()),
@@ -97,10 +100,11 @@ impl SubchunkToc {
     }
 }
 
-/// The table's chunk found by shape: its size is sixteen bytes per frame, and
-/// its records sum to every `ZstdMulti` chunk's sizes. The chunk's own name is
-/// the archive's install path with its extension as `SubChunkTOC`, which a
-/// mounted stream does not know.
+/// Finds the table's chunk by shape: sixteen bytes per frame, records summing
+/// to every `ZstdMulti` chunk's sizes.
+///
+/// By shape because the chunk's own name hashes the archive's install path
+/// with its extension as `SubChunkTOC`, which a mounted stream does not know.
 pub(crate) fn detect_subchunk_toc(
     chunks: &WadChunks,
     mut load: impl FnMut(&WadChunk) -> Result<Box<[u8]>, WadError>,
@@ -112,7 +116,7 @@ pub(crate) fn detect_subchunk_toc(
         .max()?;
     let candidates = chunks
         .iter()
-        .filter(|chunk| chunk.uncompressed_size == frames * 16);
+        .filter(|chunk| chunk.uncompressed_size == frames * RECORD_SIZE);
     for candidate in candidates {
         let Ok(raw) = load(candidate) else { continue };
         let Ok(data) = decompress_raw(
@@ -203,6 +207,37 @@ mod tests {
         assert!(!toc.covers(&out_of_range));
     }
 
+    /// One hardcoded frame, so this decodes under either zstd backend.
+    #[test]
+    fn subchunked_decode_runs_on_either_backend() {
+        let content: Vec<u8> = b"league subchunk ".repeat(4);
+        let frame: &[u8] = &[
+            0x28, 0xb5, 0x2f, 0xfd, 0x00, 0x68, 0xc5, 0x00, 0x00, 0x88, 0x6c, 0x65, 0x61, 0x67,
+            0x75, 0x65, 0x20, 0x73, 0x75, 0x62, 0x63, 0x68, 0x75, 0x6e, 0x6b, 0x20, 0x6c, 0x01,
+            0x00, 0x99, 0x68, 0x2e, 0x01,
+        ];
+        let raw_run = b"raw (\xb5/\xfda fake frame start";
+        let subchunks = [
+            record(raw_run.len() as u32, raw_run.len() as u32),
+            record(frame.len() as u32, content.len() as u32),
+        ];
+        let raw: Vec<u8> = [raw_run.as_slice(), frame].concat();
+        let expected: Vec<u8> = [raw_run.as_slice(), &content].concat();
+
+        let data = crate::decompress_subchunked(&raw, &subchunks, expected.len()).unwrap();
+        assert_eq!(&data[..], &expected[..]);
+
+        let kept = crate::ChunkDecoder::new()
+            .decompress_subchunked(&raw, &subchunks, expected.len())
+            .unwrap();
+        assert_eq!(&kept[..], &expected[..]);
+
+        let head = crate::ChunkDecoder::new()
+            .decompress_subchunked_prefix(&raw, &subchunks, expected.len())
+            .unwrap();
+        assert_eq!(&head[..], &expected[..]);
+    }
+
     /// Mounting finds the table by shape and decodes a chunk whose raw first
     /// subchunk holds the zstd magic, which the frame scan cannot.
     #[test]
@@ -212,7 +247,7 @@ mod tests {
         use byteorder::{WriteBytesExt as _, LE};
         use std::io::Cursor;
 
-        let raw_run = b"raw (\xb5/\xfda fake frame start".to_vec();
+        let raw_run = b"raw (\xb5/\xfda fake frame start";
         let content = b"compressed content".repeat(20);
         let content_frame =
             zstd::encode_all(Cursor::new(&content[..]), 3).expect("encoding cannot fail");

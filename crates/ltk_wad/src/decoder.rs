@@ -267,6 +267,10 @@ impl ChunkDecoder {
     /// The records settle a `ZstdMulti` chunk's layout exactly; without them
     /// [`decompress`](Self::decompress) falls back to scanning for the first
     /// zstd frame.
+    ///
+    /// # Errors
+    ///
+    /// Fails when the chunk's bytes do not decompress to its uncompressed size.
     pub fn decompress_chunk(
         &mut self,
         raw_data: &[u8],
@@ -284,6 +288,10 @@ impl ChunkDecoder {
     /// Decompress a `ZstdMulti` chunk by its subchunk records.
     ///
     /// The same as [`decompress_subchunked`], with the decoder kept.
+    ///
+    /// # Errors
+    ///
+    /// The same as [`decompress_subchunked`]'s.
     pub fn decompress_subchunked(
         &mut self,
         raw_data: &[u8],
@@ -345,8 +353,14 @@ impl ChunkDecoder {
     /// Decompress at most `max_len` bytes from the start of a `ZstdMulti`
     /// chunk, by its subchunk records.
     ///
-    /// `raw_data` may be a prefix of the chunk's raw bytes; input that ends
-    /// mid-subchunk comes back as a shorter result rather than an error.
+    /// `raw_data` may be a prefix of the chunk's raw bytes. With the `zstd`
+    /// feature, input that ends mid-subchunk comes back as a shorter result
+    /// rather than an error; the `ruzstd` backend fails on a frame cut short,
+    /// as [`decompress_prefix`] does.
+    ///
+    /// # Errors
+    ///
+    /// Fails when a subchunk that `raw_data` holds whole does not decode.
     pub fn decompress_subchunked_prefix(
         &mut self,
         raw_data: &[u8],

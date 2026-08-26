@@ -2217,7 +2217,7 @@ fn merging_reports_adds_every_count() {
 /// A `ZstdMulti` chunk whose raw first subchunk holds the zstd magic, with the
 /// table that describes it, and the bytes the chunk holds.
 #[cfg(feature = "zstd")]
-fn zstd_multi_wad(workers: usize) -> (Wad<MockWadSource>, Vec<u8>, NonZeroUsize) {
+fn zstd_multi_wad() -> (Wad<MockWadSource>, Vec<u8>) {
     use crate::{SubchunkToc, WadChunkCompression};
 
     let raw_run = b"raw (\xb5/\xfda fake frame start".to_vec();
@@ -2252,7 +2252,7 @@ fn zstd_multi_wad(workers: usize) -> (Wad<MockWadSource>, Vec<u8>, NonZeroUsize)
 
     let mut wad = source.into_wad(chunks);
     wad.subchunk_toc = Some(SubchunkToc::from_bytes(&toc_data).unwrap());
-    (wad, expected, NonZeroUsize::new(workers).unwrap())
+    (wad, expected)
 }
 
 /// The raw run's fake frame start defeats the magic-scan fallback, so this
@@ -2262,10 +2262,10 @@ fn zstd_multi_wad(workers: usize) -> (Wad<MockWadSource>, Vec<u8>, NonZeroUsize)
 fn a_zstd_multi_chunk_extracts_by_its_subchunk_records() {
     let temp_dir = tempfile::TempDir::new().unwrap();
     let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
-    let (mut wad, expected, workers) = zstd_multi_wad(4);
+    let (mut wad, expected) = zstd_multi_wad();
 
     let report = WadExtractor::new(&names(&[(0x1111, "assets/data.bin")]))
-        .with_workers(workers)
+        .with_workers(NonZeroUsize::new(4).unwrap())
         .extract_all(&mut wad, output_path)
         .unwrap();
 
@@ -2281,11 +2281,11 @@ fn a_zstd_multi_chunk_extracts_by_its_subchunk_records() {
 fn a_zstd_multi_chunk_without_the_table_still_goes_to_the_scan() {
     let temp_dir = tempfile::TempDir::new().unwrap();
     let output_path = Utf8Path::from_path(temp_dir.path()).unwrap();
-    let (mut wad, _, workers) = zstd_multi_wad(1);
+    let (mut wad, _) = zstd_multi_wad();
     wad.subchunk_toc = None;
 
     let result = WadExtractor::new(&names(&[(0x1111, "assets/data.bin")]))
-        .with_workers(workers)
+        .with_workers(NonZeroUsize::new(1).unwrap())
         .extract_all(&mut wad, output_path);
     result.unwrap_err();
 }
