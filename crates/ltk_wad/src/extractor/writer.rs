@@ -84,6 +84,41 @@ impl ChunkWriter<'_> {
         self.write_chunk(&job.chunk, &data, Utf8Path::new(&job.path), job.named)
     }
 
+    /// The skip a chunk gets from its name alone, before its bytes are read.
+    ///
+    /// `Some` claims the path and skips the chunk; `None` sends it down the
+    /// ordinary write path.
+    pub(super) fn probe_skip(
+        &self,
+        chunk: &WadChunk,
+        path: &str,
+        named: bool,
+    ) -> Option<WriteOutcome> {
+        if self.existing != ExistingFilePolicy::Skip
+            || self.type_filter.is_some()
+            || self.layout != ExtractLayout::Paths
+        {
+            return None;
+        }
+        let (relative, renamed) = self.final_path(chunk, Utf8Path::new(path), named, None)?;
+
+        let mut claimed = lock(&self.claimed);
+        if claimed.contains(&relative) {
+            return None;
+        }
+        if !self.output_dir.join(&relative).is_file() {
+            return None;
+        }
+        claimed.insert(relative.clone());
+
+        let issue = renamed.then(|| PathIssue::Renamed(relative.clone()));
+        Some(WriteOutcome {
+            outcome: ChunkOutcome::SkippedExisting,
+            path: Some(relative),
+            issue,
+        })
+    }
+
     fn write_chunk(
         &self,
         chunk: &WadChunk,
@@ -165,11 +200,24 @@ impl ChunkWriter<'_> {
         named: bool,
         chunk_kind: LeagueFileKind,
     ) -> (Utf8PathBuf, bool) {
+        self.final_path(chunk, chunk_path, named, Some(chunk_kind))
+            .expect("a path resolves whenever the chunk's kind is known")
+    }
+
+    /// The file a chunk lands in, or `None` when only the chunk's bytes can
+    /// say and `chunk_kind` is not known yet.
+    fn final_path(
+        &self,
+        chunk: &WadChunk,
+        chunk_path: &Utf8Path,
+        named: bool,
+        chunk_kind: Option<LeagueFileKind>,
+    ) -> Option<(Utf8PathBuf, bool)> {
         let mut final_path = chunk_path.to_path_buf();
 
         /* A nameless chunk is here under its hash. */
         if !named && self.naming == NamingPolicy::Descriptive {
-            if let Some(ext) = chunk_kind.extension() {
+            if let Some(ext) = chunk_kind?.extension() {
                 final_path.set_extension(ext);
             }
         }
@@ -179,17 +227,23 @@ impl ChunkWriter<'_> {
         if !self.directories.holds(final_path.as_str())
             && !self.output_dir.join(&final_path).is_dir()
         {
-            return (final_path, false);
+            return Some((final_path, false));
         }
 
         let renamed = ltk_path(&final_path);
         /* The suffixed name can be a directory too. Nothing is left to suffix
         onto, so the chunk takes its hash. */
         if self.directories.holds(renamed.as_str()) {
-            return (hashed_name(chunk, chunk_kind, self.naming), true);
+            let kind = match self.naming {
+                /* The lossless hash name invents no extension, so it needs no
+                kind. */
+                NamingPolicy::Lossless => chunk_kind.unwrap_or(LeagueFileKind::Unknown),
+                _ => chunk_kind?,
+            };
+            return Some((hashed_name(chunk, kind, self.naming), true));
         }
 
-        (renamed, true)
+        Some((renamed, true))
     }
 
     /// The name this chunk keeps, or `None` when another chunk holds it and

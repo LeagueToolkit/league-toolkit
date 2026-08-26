@@ -640,6 +640,21 @@ impl Reader<'_, '_> {
                 continue;
             }
 
+            /* A chunk the skip policy settles by name alone is never read. */
+            if let Some(written) = shared.writer.probe_skip(&chunk, &path, named) {
+                let finished = Done {
+                    path_hash: chunk.path_hash,
+                    path,
+                    named,
+                    output_path: written.path,
+                    outcome: written.outcome,
+                };
+                lock(&shared.report)
+                    .record_chunk(finished.outcome, finished.displaced(written.issue));
+                self.progress.report(&finished);
+                continue;
+            }
+
             let raw = wad
                 .load_chunk_raw(&chunk)
                 .map_err(|error| WadError::chunk(chunk.path_hash, &path, error))?;
