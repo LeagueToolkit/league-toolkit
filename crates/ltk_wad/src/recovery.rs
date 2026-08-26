@@ -39,7 +39,7 @@ use ltk_file::LeagueFileKind;
 use ltk_hash::{Hash as _, WadHash};
 
 use crate::{
-    extractor::{default_workers, hex_name, lock},
+    extractor::{default_workers, hex_name, lock, resolve_all_checked},
     ChunkDecoder, PathResolver, Wad, WadChunk, WadError,
 };
 
@@ -158,6 +158,36 @@ impl PathResolver for LayeredResolver<'_> {
     fn is_known(&self, path_hash: WadHash) -> bool {
         self.names.is_known(path_hash) || self.fallback.is_known(path_hash)
     }
+
+    /// The recovered names answer first, and what is left goes to the fallback
+    /// as one batch.
+    ///
+    /// An extraction with name recovery on reaches its resolver through this,
+    /// so asking the fallback per hash here would cost every resolver below
+    /// its batch.
+    fn resolve_all(&self, path_hashes: &[WadHash]) -> Vec<Option<String>> {
+        let mut resolved: Vec<Option<String>> = Vec::with_capacity(path_hashes.len());
+        let mut residual = Vec::new();
+        for (index, &path_hash) in path_hashes.iter().enumerate() {
+            let name = self.names.get(path_hash).map(String::from);
+            if name.is_none() {
+                residual.push((index, path_hash));
+            }
+            resolved.push(name);
+        }
+
+        if residual.is_empty() {
+            return resolved;
+        }
+
+        let hashes: Vec<WadHash> = residual.iter().map(|&(_, hash)| hash).collect();
+        let answers = resolve_all_checked(self.fallback, &hashes);
+        for ((index, _), answer) in residual.into_iter().zip(answers) {
+            resolved[index] = answer;
+        }
+
+        resolved
+    }
 }
 
 /// Configuration and execution of a name recovery over one archive.
@@ -203,10 +233,13 @@ impl<'a> NameRecovery<'a> {
     ) -> Result<RecoveredNames, WadError> {
         let chunks: Vec<WadChunk> = wad.chunks().iter().copied().collect();
 
+        let path_hashes: Vec<WadHash> = chunks.iter().map(|chunk| chunk.path_hash).collect();
+        let resolved = resolve_all_checked(resolver, &path_hashes);
+
         let mut unknown = HashSet::new();
         let mut bins: Vec<(WadChunk, String)> = Vec::new();
-        for chunk in &chunks {
-            match resolver.resolve(chunk.path_hash) {
+        for (chunk, resolved) in chunks.iter().zip(resolved) {
+            match resolved {
                 Some(path) => {
                     if is_bin_name(&path) {
                         bins.push((*chunk, path));
@@ -398,6 +431,67 @@ mod tests {
         let mut out = Vec::new();
         for_each_candidate(data, |candidate| out.push(candidate.to_owned()));
         out
+    }
+
+    /// A resolver that records the batches it was asked for.
+    #[derive(Debug, Default)]
+    struct RecordingResolver {
+        names: HashMap<WadHash, String>,
+        batches: Mutex<Vec<Vec<WadHash>>>,
+    }
+
+    impl PathResolver for RecordingResolver {
+        fn resolve(&self, path_hash: WadHash) -> Option<String> {
+            self.names.get(&path_hash).cloned()
+        }
+
+        fn resolve_all(&self, path_hashes: &[WadHash]) -> Vec<Option<String>> {
+            self.batches.lock().unwrap().push(path_hashes.to_vec());
+            path_hashes
+                .iter()
+                .map(|hash| self.names.get(hash).cloned())
+                .collect()
+        }
+    }
+
+    /// The layer is what an extraction with name recovery on reaches its own
+    /// resolver through, so it has to hand the batch down rather than ask per
+    /// hash.
+    #[test]
+    fn the_layer_asks_the_fallback_once_for_what_it_cannot_name() {
+        let recovered_path = "assets/recovered.dds";
+        let fallback_path = "assets/fallback.dds";
+        let mut recovered = RecoveredNames::default();
+        recovered
+            .names
+            .insert(WadHash::hash_str(recovered_path), recovered_path.to_owned());
+        let fallback = RecordingResolver {
+            names: names(&[fallback_path]),
+            ..Default::default()
+        };
+
+        let unknown = WadHash(0x9999);
+        let asked = [
+            WadHash::hash_str(fallback_path),
+            WadHash::hash_str(recovered_path),
+            unknown,
+        ];
+        let resolved = recovered.over(&fallback).resolve_all(&asked);
+
+        assert_eq!(
+            resolved,
+            [
+                Some(fallback_path.to_owned()),
+                Some(recovered_path.to_owned()),
+                None,
+            ],
+            "answers come back against the hashes as asked, not as staged"
+        );
+        assert_eq!(
+            *fallback.batches.lock().unwrap(),
+            [vec![WadHash::hash_str(fallback_path), unknown]],
+            "one batch, holding only what the recovered names did not answer"
+        );
     }
 
     /// A resolver that names the given paths, by their WAD hashes.
