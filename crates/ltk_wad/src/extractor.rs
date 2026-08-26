@@ -455,6 +455,7 @@ impl<'a> WadExtractor<'a> {
                 done: 0,
                 total,
             },
+            report: ExtractReport::default(),
         };
 
         let cancelled = thread::scope(|scope| {
@@ -489,6 +490,7 @@ impl<'a> WadExtractor<'a> {
             .report
             .into_inner()
             .unwrap_or_else(PoisonError::into_inner);
+        report.merge(reader.report);
         report.cancelled = cancelled;
         report.missing = missing;
         report.recovered = recovered;
@@ -599,6 +601,9 @@ impl Progress<'_, '_> {
 struct Reader<'r, 'a> {
     cancel: Option<&'r AtomicBool>,
     progress: Progress<'r, 'a>,
+    /// The chunks the reader settles without a worker, folded into the shared
+    /// report at the end.
+    report: ExtractReport,
 }
 
 impl Reader<'_, '_> {
@@ -639,7 +644,8 @@ impl Reader<'_, '_> {
                     output_path: None,
                     outcome,
                 };
-                lock(&shared.report).record_chunk(finished.outcome, finished.displaced(issue));
+                self.report
+                    .record_chunk(finished.outcome, finished.displaced(issue));
                 self.progress.report(&finished);
                 continue;
             }
@@ -653,7 +659,7 @@ impl Reader<'_, '_> {
                     output_path: written.path,
                     outcome: written.outcome,
                 };
-                lock(&shared.report)
+                self.report
                     .record_chunk(finished.outcome, finished.displaced(written.issue));
                 self.progress.report(&finished);
                 continue;
@@ -698,9 +704,11 @@ impl Shared<'_> {
     /// them, so a reader blocked on a full channel sees the failure too.
     fn run_worker(&self, receiver: &Mutex<mpsc::Receiver<Job>>, done: &mpsc::Sender<Done>) {
         let mut decoder = ChunkDecoder::new();
+        /* Folded into the shared report once at the end, not a lock per chunk. */
+        let mut report = ExtractReport::default();
         loop {
             let Ok(job) = lock(receiver).recv() else {
-                return;
+                break;
             };
             if self.failed() {
                 continue;
@@ -715,8 +723,7 @@ impl Shared<'_> {
                         output_path: written.path,
                         outcome: written.outcome,
                     };
-                    lock(&self.report)
-                        .record_chunk(finished.outcome, finished.displaced(written.issue));
+                    report.record_chunk(finished.outcome, finished.displaced(written.issue));
                     /* The receiver outlives every worker, so this cannot fail. */
                     let _ = done.send(finished);
                 }
@@ -728,5 +735,6 @@ impl Shared<'_> {
                 }
             }
         }
+        lock(&self.report).merge(report);
     }
 }
