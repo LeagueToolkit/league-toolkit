@@ -238,35 +238,39 @@ mod tests {
         assert_eq!(&head[..], &expected[..]);
     }
 
-    /// Mounting finds the table by shape and decodes a chunk whose raw first
-    /// subchunk holds the zstd magic, which the frame scan cannot.
-    #[test]
+    /// A mountable wad: one subchunked chunk whose raw first subchunk holds
+    /// the zstd magic, and the table chunk, with real record checksums.
+    ///
+    /// Returns the wad's bytes, its chunks, and the two runs the subchunked
+    /// chunk decodes to.
     #[cfg(feature = "zstd")]
-    fn mount_detects_the_table_and_decodes_by_it() {
-        use crate::{Wad, WadChunk};
+    fn subchunked_wad() -> (Vec<u8>, [WadChunk; 2], Vec<u8>, Vec<u8>) {
         use byteorder::{WriteBytesExt as _, LE};
         use std::io::Cursor;
+        use xxhash_rust::xxh3::xxh3_64;
 
-        let raw_run = b"raw (\xb5/\xfda fake frame start";
+        let raw_run = b"raw (\xb5/\xfda fake frame start".to_vec();
         let content = b"compressed content".repeat(20);
         let content_frame =
             zstd::encode_all(Cursor::new(&content[..]), 3).expect("encoding cannot fail");
         let chunk_data: Vec<u8> = [raw_run.as_slice(), &content_frame].concat();
-        let expected: Vec<u8> = [raw_run.as_slice(), &content].concat();
 
-        let toc_data = toc_bytes(&[
+        let mut records = [
             record(raw_run.len() as u32, raw_run.len() as u32),
             record(content_frame.len() as u32, content.len() as u32),
-        ]);
+        ];
+        records[0].checksum = xxh3_64(&raw_run);
+        records[1].checksum = xxh3_64(&content_frame);
+        let toc_data = toc_bytes(&records);
 
         /* Header, two 32-byte chunk records, then the data. */
         let data_start = 2 + 1 + 1 + 256 + 8 + 4 + 2 * 32;
-        let mut chunks = [
+        let chunks = [
             WadChunk {
                 path_hash: crate::WadHash(1),
                 data_offset: data_start,
                 compressed_size: chunk_data.len(),
-                uncompressed_size: expected.len(),
+                uncompressed_size: raw_run.len() + content.len(),
                 compression_type: WadChunkCompression::ZstdMulti,
                 is_duplicated: false,
                 frame_count: 2,
@@ -300,12 +304,25 @@ mod tests {
         file.extend_from_slice(&chunk_data);
         file.extend_from_slice(&toc_data);
 
+        (file, chunks, raw_run, content)
+    }
+
+    /// Mounting finds the table by shape and decodes a chunk whose raw first
+    /// subchunk holds the zstd magic, which the frame scan cannot.
+    #[test]
+    #[cfg(feature = "zstd")]
+    fn mount_detects_the_table_and_decodes_by_it() {
+        use crate::Wad;
+        use std::io::Cursor;
+
+        let (file, mut chunks, raw_run, content) = subchunked_wad();
+        let expected: Vec<u8> = [raw_run.as_slice(), &content].concat();
+
         let mut wad = Wad::mount(Cursor::new(file)).unwrap();
         let toc = wad.subchunk_toc().expect("the table is found by shape");
         assert_eq!(toc.records().len(), 2);
 
-        let chunk = chunks[0];
-        let data = wad.load_chunk_decompressed(&chunk).unwrap();
+        let data = wad.load_chunk_decompressed(&chunks[0]).unwrap();
         assert_eq!(&data[..], &expected[..]);
 
         /* Without the table's chunk, mounting finds nothing and the scan
@@ -315,5 +332,36 @@ mod tests {
             Err(WadError::Other(String::from("not read")))
         });
         assert!(no_toc.is_none());
+    }
+
+    /// The partial read: the first subchunk alone, then all of them, with the
+    /// record checksums standing guard.
+    #[test]
+    #[cfg(feature = "zstd")]
+    fn load_subchunks_reads_a_verified_prefix() {
+        use crate::Wad;
+        use std::io::Cursor;
+
+        let (file, chunks, raw_run, content) = subchunked_wad();
+        let chunk = chunks[0];
+
+        let mut wad = Wad::mount(Cursor::new(file.clone())).unwrap();
+        let first = wad.load_subchunks(&chunk, 1).unwrap();
+        assert_eq!(&first[..], &raw_run[..]);
+
+        let all = wad.load_subchunks(&chunk, 2).unwrap();
+        assert_eq!(&all[..], &[raw_run.as_slice(), &content].concat()[..]);
+
+        wad.load_subchunks(&chunk, 0).unwrap_err();
+        wad.load_subchunks(&chunk, 3).unwrap_err();
+        /* A chunk with no records in the table. */
+        wad.load_subchunks(&chunks[1], 1).unwrap_err();
+
+        /* One flipped bit in the first subchunk fails its checksum. */
+        let mut corrupt = file;
+        corrupt[chunk.data_offset] ^= 1;
+        let mut wad = Wad::mount(Cursor::new(corrupt)).unwrap();
+        let error = wad.load_subchunks(&chunk, 1).unwrap_err();
+        assert!(error.to_string().contains("checksum"), "{error}");
     }
 }

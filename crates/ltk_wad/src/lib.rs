@@ -21,6 +21,40 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
+//! # Partial reads: a texture's low-resolution mips
+//!
+//! A [`ZstdMulti`](WadChunkCompression::ZstdMulti) chunk is a run of
+//! subchunks, each decodable on its own, described by the archive's subchunk
+//! table ([`SubchunkToc`]). Riot's `.tex` textures store their mips smallest
+//! first and cut the subchunks on mip boundaries, so the first subchunk is a
+//! complete low-resolution texture: the header plus every mip up to a cutoff.
+//! [`load_subchunks`](Wad::load_subchunks) reads and decodes just those
+//! bytes, a few kilobytes of a texture that may be megabytes:
+//!
+//! ```no_run
+//! use std::fs::File;
+//! use ltk_hash::Hash as _;
+//! use ltk_wad::{Wad, WadHash};
+//!
+//! let file = File::open("archive.wad.client")?;
+//! let mut wad = Wad::mount(file)?;
+//!
+//! let chunk = *wad
+//!     .chunks()
+//!     .get(WadHash::hash_str("assets/some/texture.tex"))
+//!     .unwrap();
+//!
+//! // The header and the smallest mips: enough to render at low detail.
+//! let lowres = wad.load_subchunks(&chunk, 1)?;
+//!
+//! // The whole texture, once the detail is needed.
+//! let full = wad.load_chunk_decompressed(&chunk)?;
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! The mechanism is the archive's, not the texture's: any subchunked chunk
+//! reads this way, `count` subchunks at a time, whatever its bytes hold.
+//!
 //! # Extracting to disk
 //!
 //! ```no_run
@@ -119,6 +153,7 @@ use std::io::{BufReader, Read, Seek, SeekFrom};
 
 use byteorder::{ReadBytesExt as _, LE};
 use sha2::{Digest as _, Sha256};
+use xxhash_rust::xxh3::xxh3_64;
 
 pub use rsa;
 
@@ -284,6 +319,73 @@ impl<TSource: Read + Seek> Wad<TSource> {
         let raw_data = self.load_chunk_raw(chunk)?;
         self.decoder
             .decompress_chunk(&raw_data, chunk, self.subchunk_toc.as_ref())
+    }
+
+    /// Reads and decompresses the first `count` of a chunk's subchunks.
+    ///
+    /// A subchunked chunk's leading subchunks stand on their own, so this
+    /// reads and decodes only the bytes they cover: seek once, read their
+    /// compressed run, decode `count` frames. Riot's `.tex` textures put the
+    /// header and the smallest mips in the first subchunk, so one subchunk of
+    /// a texture is a complete low-resolution texture; the crate root shows
+    /// that use. Each subchunk is checked against its table checksum, the
+    /// verification the game runs on a partial read.
+    ///
+    /// [`WadChunk::frame_count`] says how many subchunks the chunk has.
+    ///
+    /// # Errors
+    ///
+    /// Fails when the archive has no subchunk table or the chunk no records
+    /// in it, when `count` is zero or more than the chunk has, when a
+    /// subchunk fails its checksum, and when one does not decompress.
+    pub fn load_subchunks(
+        &mut self,
+        chunk: &WadChunk,
+        count: usize,
+    ) -> Result<Box<[u8]>, WadError> {
+        let subchunks = self
+            .subchunk_toc
+            .as_ref()
+            .and_then(|toc| toc.subchunks_of(chunk))
+            .ok_or_else(|| WadError::Other(String::from("the chunk has no subchunk records")))?;
+        if count == 0 {
+            return Err(WadError::Other(String::from("asked for no subchunks")));
+        }
+        let subchunks = subchunks.get(..count).ok_or_else(|| {
+            WadError::Other(format!(
+                "asked for {count} subchunks, the chunk has {}",
+                chunk.frame_count
+            ))
+        })?;
+
+        let compressed: usize = subchunks
+            .iter()
+            .map(|sub| sub.compressed_size as usize)
+            .sum();
+        let mut raw = vec![0; compressed];
+        self.source
+            .seek(SeekFrom::Start(chunk.data_offset as u64))?;
+        self.source.read_exact(&mut raw)?;
+
+        let mut offset = 0;
+        for (index, subchunk) in subchunks.iter().enumerate() {
+            let bytes = &raw[offset..offset + subchunk.compressed_size as usize];
+            let actual = xxh3_64(bytes);
+            if actual != subchunk.checksum {
+                return Err(WadError::Other(format!(
+                    "subchunk {index} checksum mismatch: expected {:016x}, got {actual:016x}",
+                    subchunk.checksum
+                )));
+            }
+            offset += subchunk.compressed_size as usize;
+        }
+
+        let uncompressed: usize = subchunks
+            .iter()
+            .map(|sub| sub.uncompressed_size as usize)
+            .sum();
+        self.decoder
+            .decompress_subchunked(&raw, subchunks, uncompressed)
     }
 
     /// The archive's subchunk table, when mounting found one.
