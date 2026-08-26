@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.3](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_wad-v0.5.2...ltk_wad-v0.5.3) - 2026-08-26
+
+### Fixed
+
+- *(wad)* correct SubChunkTOC handling ([#200](https://github.com/LeagueToolkit/league-toolkit/pull/200))
+
+### Other
+
+- *(wad)* tally each thread's report locally, merge once at the end
+- *(wad)* make each output directory once, not once per chunk
+- *(wad)* settle skip-existing chunks by name, without reading them
+- *(wad)* read extraction chunks in archive-offset order
+
 ## [0.5.2](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_wad-v0.5.1...ltk_wad-v0.5.2) - 2026-08-26
 
 ### Added
