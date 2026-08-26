@@ -3,7 +3,10 @@ use std::borrow::Cow;
 use indexmap::Equivalent;
 use ltk_meta::{traits::PropertyExt as _, PropertyValueEnum};
 
-use crate::{ast::diagnostics::RootKind, parse::Span};
+use crate::{
+    ast::{diagnostics::RootKind, AstValue},
+    parse::Span,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RootKindOrUnknown<'a> {
@@ -49,17 +52,17 @@ impl Equivalent<RootKindOrUnknown<'_>> for str {
 }
 
 impl<'a> RootKindOrUnknown<'a> {
-    pub fn from_value(src: &'a str, value: &PropertyValueEnum<Span>) -> Self {
-        let PropertyValueEnum::String(string) = value else {
-            return Self::Unknown(src[*value.meta()].into());
+    pub fn from_value(src: &'a str, value: &AstValue) -> Self {
+        let AstValue::String(string) = value else {
+            return Self::Unknown(src[value.span()].into());
         };
 
-        match string.as_str() {
+        match string.value.as_str() {
             "type" => RootKind::Type.into(),
             "version" => RootKind::Version.into(),
             "linked" => RootKind::Linked.into(),
             "entries" => RootKind::Entries.into(),
-            _ => Self::Unknown(src[*value.meta()].into()),
+            _ => Self::Unknown(src[value.span()].into()),
         }
     }
 }

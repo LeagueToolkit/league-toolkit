@@ -1,3 +1,4 @@
+use ltk_hash::BinHash;
 use ltk_meta::{property::values, traits::PropertyExt as _, PropertyKind, PropertyValueEnum};
 
 use crate::{
@@ -11,16 +12,17 @@ use crate::{
             },
             MaybeSpanDiag,
         },
+        hash::HashedLiteral,
         resolve::literals::{self},
         AstValue,
     },
     cst::Kind,
     parse::{Span, Token, TokenKind},
-    Node, RitoType,
+    Node, RitoType, Spanned,
 };
 
 pub struct RawEntry {
-    pub key: PropertyValueEnum<Span>,
+    pub key: AstValue,
     pub type_span: Option<Span>,
     pub value: AstValue,
 }
@@ -31,7 +33,7 @@ impl<'a> BuildCtx<'a> {
         key_node: &Node,
         parent_value_kind: Option<RitoType>,
         parent_type_span: Option<Span>,
-    ) -> Result<PropertyValueEnum<Span>, Diagnostic> {
+    ) -> Result<AstValue, Diagnostic> {
         let token = key_node
             .children
             .get(self.cst)
@@ -43,10 +45,7 @@ impl<'a> BuildCtx<'a> {
             Some(Token {
                 kind: TokenKind::Name,
                 span,
-            }) => PropertyValueEnum::from(values::String::new_with_meta(
-                self.text[span].into(),
-                *span,
-            )),
+            }) => AstValue::String(Spanned::new(*span, self.text[span].into())),
             Some(Token {
                 kind: TokenKind::String,
                 span,
@@ -62,7 +61,7 @@ impl<'a> BuildCtx<'a> {
                         .unwrap(),
                     );
                 }
-                PropertyValueEnum::from(values::String::new_with_meta(
+                AstValue::from(values::String::new_with_meta(
                     self.text[Span::new(span.start + 1, span.end - 1)].into(),
                     *span,
                 ))
@@ -70,7 +69,7 @@ impl<'a> BuildCtx<'a> {
             Some(Token {
                 kind: TokenKind::HexLit,
                 span,
-            }) => literals::eval_unknown_hash(self.text, *span)?,
+            }) => AstValue::Hash(literals::eval_hash(self.text, *span)?),
             Some(token) => literals::eval(
                 self.text,
                 token,
@@ -153,7 +152,7 @@ impl<'a> BuildCtx<'a> {
 
         let value = match (kind, resolved_val) {
             (None, Some(value)) => value,
-            (None, None) => return Err(MissingType(*key.meta()).into()),
+            (None, None) => return Err(MissingType(key.span()).into()),
             (Some(kind), Some(value)) => match value.kind() == kind.base {
                 true => value,
                 false => {

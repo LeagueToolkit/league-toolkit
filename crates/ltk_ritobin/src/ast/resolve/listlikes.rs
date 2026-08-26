@@ -8,7 +8,7 @@ use crate::{
     },
     cst::{Child, Cst, Kind, Node},
     parse::Span,
-    RitoType,
+    RitoType, Spanned,
 };
 
 use Diagnostic::*;
@@ -135,10 +135,7 @@ impl<'a> BuildCtx<'a> {
             }
             PropertyKind::Color => {
                 let [r, g, b, a] = items.read_u8s::<4>(ListLike::Color)?;
-                AstValue::Color(values::Color::new_with_meta(
-                    ltk_primitives::Color { r, g, b, a },
-                    span,
-                ))
+                AstValue::Color(Spanned::new(span, ltk_primitives::Color { r, g, b, a }))
             }
             PropertyKind::Matrix44 => {
                 let x_axis = items.read_floats::<4>(ListLike::Mat44)?;

@@ -8,6 +8,7 @@ use crate::{
             Diagnostic::{self, *},
             RitoTypeOrVirtual,
         },
+        hash::{HashedLiteral, Originally},
         resolve::literals::{self},
         AstStruct, AstValue, Spanned,
     },
@@ -17,19 +18,26 @@ use crate::{
 };
 
 impl<'a> BuildCtx<'a> {
-    pub(crate) fn resolve_class_hash(&mut self, token: &Token) -> Result<BinHash, Diagnostic> {
+    pub(crate) fn resolve_class_hash(
+        &mut self,
+        token: &Token,
+    ) -> Result<HashedLiteral<BinHash>, Diagnostic> {
         match token {
             Token {
                 kind: TokenKind::Name,
                 span,
-            } => Ok(BinHash::hash_str(&self.text[span])),
+            } => Ok(HashedLiteral::new(
+                *span,
+                crate::ast::hash::Originally::Name,
+                BinHash::hash_str(&self.text[span]),
+            )),
             Token {
                 kind: TokenKind::HexLit,
                 span,
-            } => match literals::eval_unknown_hash(self.text, *span)? {
-                PropertyValueEnum::Hash(hash) => Ok(*hash),
+            } => match AstValue::eval_unknown_hash(self.text, *span)? {
+                AstValue::Hash(hash) => Ok(hash),
                 value => Err(TypeMismatch {
-                    span: *value.meta(),
+                    span: value.span(),
                     expected: RitoType::simple(PropertyKind::Hash),
                     expected_span: None,
                     got: value.rito_type().into(),
@@ -64,7 +72,7 @@ impl<'a> BuildCtx<'a> {
         };
 
         let ast_struct = AstStruct {
-            class_hash: Spanned::new(name_token.span, class_hash),
+            class_hash,
             span: class.span,
             properties,
         };

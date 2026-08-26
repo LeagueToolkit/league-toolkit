@@ -65,8 +65,8 @@ impl<'a> Node<'a> {
         match self {
             // TODO: don't do this
             Node::Object(o) => Span::new(
-                o.path_hash.span.start.min(o.object.span.start),
-                o.object.span.end.max(o.path_hash.span.end),
+                o.path_hash.span().start.min(o.object.span.start),
+                o.object.span.end.max(o.path_hash.span().end),
             ),
             Node::Struct(s) => s.span,
             Node::Property(p) => p.span(),

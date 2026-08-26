@@ -1,19 +1,20 @@
 use std::fmt::Display;
 
-use ltk_hash::BinHash;
+use ltk_hash::{BinHash, WadHash};
 use ltk_meta::{property::values, traits::PropertyExt as _, PropertyKind, PropertyValueEnum};
+use ltk_primitives::Color;
 
 use crate::{
-    ast::{coerce::CoerceFrom as _, AstStruct, Spanned},
+    ast::{hash::HashedLiteral, AstStruct},
     parse::Span,
-    RitoType,
+    RitoType, Spanned,
 };
 
 #[derive(Debug, Clone)]
 pub enum AstValue {
-    None(values::None<Span>),
-    Bool(values::Bool<Span>),
-    BitBool(values::BitBool<Span>),
+    None(Span),
+    Bool(Spanned<bool>),
+    BitBool(Spanned<bool>),
     I8(values::I8<Span>),
     U8(values::U8<Span>),
     I16(values::I16<Span>),
@@ -27,11 +28,11 @@ pub enum AstValue {
     Vector3(values::Vector3<Span>),
     Vector4(values::Vector4<Span>),
     Matrix44(values::Matrix44<Span>),
-    Color(values::Color<Span>),
-    String(values::String<Span>),
-    Hash(values::Hash<Span>),
-    WadChunkLink(values::WadChunkLink<Span>),
-    ObjectLink(values::ObjectLink<Span>),
+    Color(Spanned<Color<u8>>),
+    String(Spanned<String>), // TODO: intern this string when no escapes needed
+    Hash(HashedLiteral<BinHash>),
+    WadChunkLink(HashedLiteral<WadHash>),
+    ObjectLink(HashedLiteral<BinHash>),
     //---------------------
     Struct(AstStruct),
     Embedded(AstStruct),
@@ -131,38 +132,39 @@ impl AstValue {
                 span,
             },
             K::Struct => AstValue::Struct(AstStruct {
-                class_hash: Spanned::new(span, BinHash::default()),
+                class_hash: HashedLiteral::default().with_span(Span::new(span.start, span.start)),
                 span,
                 properties: Vec::new(),
             }),
             K::Embedded => AstValue::Embedded(AstStruct {
-                class_hash: Spanned::new(span, BinHash::default()),
+                class_hash: HashedLiteral::default().with_span(Span::new(span.start, span.start)),
                 span,
                 properties: Vec::new(),
             }),
-            other => AstValue::from({
+            K::Hash => AstValue::Hash(HashedLiteral::default().with_span(span)),
+            K::WadChunkLink => AstValue::WadChunkLink(HashedLiteral::default().with_span(span)),
+            K::ObjectLink => AstValue::ObjectLink(HashedLiteral::default().with_span(span)),
+
+            other => AstValue::try_from({
                 let mut v = other.default_value::<Span>();
                 *v.meta_mut() = span;
                 v
-            }),
+            }).unwrap(/* Safety: all arms that error in try_from should be handled by previous arms in this match. */),
         }
-    }
-
-    pub fn coerce_to(self, to: PropertyKind) -> Option<AstValue> {
-        if self.kind() == to {
-            return Some(self);
-        }
-        let leaf: PropertyValueEnum<Span> = self.to_bin_value();
-        to.coerce_from(leaf).map(AstValue::from)
     }
 }
 
-impl From<PropertyValueEnum<Span>> for AstValue {
-    fn from(value: PropertyValueEnum<Span>) -> Self {
-        match value {
-            PropertyValueEnum::None(v) => AstValue::None(v),
-            PropertyValueEnum::Bool(v) => AstValue::Bool(v),
-            PropertyValueEnum::BitBool(v) => AstValue::BitBool(v),
+impl TryFrom<PropertyValueEnum<Span>> for AstValue {
+    type Error = ();
+    fn try_from(value: PropertyValueEnum<Span>) -> Result<Self, Self::Error> {
+        Ok(match value {
+            PropertyValueEnum::None(values::None { meta }) => AstValue::None(meta),
+            PropertyValueEnum::Bool(values::Bool { value, meta }) => {
+                AstValue::Bool(Spanned::new(meta, value))
+            }
+            PropertyValueEnum::BitBool(values::BitBool { value, meta }) => {
+                AstValue::BitBool(Spanned::new(meta, value))
+            }
             PropertyValueEnum::I8(v) => AstValue::I8(v),
             PropertyValueEnum::U8(v) => AstValue::U8(v),
             PropertyValueEnum::I16(v) => AstValue::I16(v),
@@ -176,45 +178,14 @@ impl From<PropertyValueEnum<Span>> for AstValue {
             PropertyValueEnum::Vector3(v) => AstValue::Vector3(v),
             PropertyValueEnum::Vector4(v) => AstValue::Vector4(v),
             PropertyValueEnum::Matrix44(v) => AstValue::Matrix44(v),
-            PropertyValueEnum::Color(v) => AstValue::Color(v),
-            PropertyValueEnum::String(v) => AstValue::String(v),
-            PropertyValueEnum::Hash(v) => AstValue::Hash(v),
-            PropertyValueEnum::WadChunkLink(v) => AstValue::WadChunkLink(v),
-            PropertyValueEnum::ObjectLink(v) => AstValue::ObjectLink(v),
-            PropertyValueEnum::Struct(s) => AstValue::Struct(AstStruct {
-                class_hash: Spanned::new(s.meta, s.class_hash),
-                span: s.meta,
-                properties: Vec::new(),
-            }),
-            PropertyValueEnum::Embedded(values::Embedded(s)) => AstValue::Embedded(AstStruct {
-                class_hash: Spanned::new(s.meta, s.class_hash),
-                span: s.meta,
-                properties: Vec::new(),
-            }),
-            PropertyValueEnum::Container(c) => AstValue::Container {
-                item_kind: c.item_kind(),
-                span: *c.meta(),
-                items: Vec::new(),
-            },
-            PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(c)) => {
-                AstValue::UnorderedContainer {
-                    item_kind: c.item_kind(),
-                    span: *c.meta(),
-                    items: Vec::new(),
-                }
+            PropertyValueEnum::Color(values::Color { value, meta }) => {
+                AstValue::Color(Spanned::new(meta, value))
             }
-            PropertyValueEnum::Map(m) => AstValue::Map {
-                key_kind: m.key_kind(),
-                value_kind: m.value_kind(),
-                span: m.meta,
-                entries: Vec::new(),
-            },
-            PropertyValueEnum::Optional(o) => AstValue::Optional {
-                item_kind: o.item_kind(),
-                span: *o.meta(),
-                value: None,
-            },
-        }
+            PropertyValueEnum::String(values::String { meta, value }) => {
+                AstValue::String(Spanned::new(meta, value))
+            }
+            _ => return Err(()),
+        })
     }
 }
 
@@ -254,9 +225,9 @@ impl AstValue {
 
     pub fn span(&self) -> Span {
         match self {
-            AstValue::None(v) => v.meta,
-            AstValue::Bool(v) => v.meta,
-            AstValue::BitBool(v) => v.meta,
+            AstValue::None(v) => *v,
+            AstValue::Bool(v) => v.span,
+            AstValue::BitBool(v) => v.span,
             AstValue::I8(v) => v.meta,
             AstValue::U8(v) => v.meta,
             AstValue::I16(v) => v.meta,
@@ -270,11 +241,11 @@ impl AstValue {
             AstValue::Vector3(v) => v.meta,
             AstValue::Vector4(v) => v.meta,
             AstValue::Matrix44(v) => v.meta,
-            AstValue::Color(v) => v.meta,
-            AstValue::String(v) => v.meta,
-            AstValue::Hash(v) => v.meta,
-            AstValue::WadChunkLink(v) => v.meta,
-            AstValue::ObjectLink(v) => v.meta,
+            AstValue::Color(v) => v.span,
+            AstValue::String(v) => v.span,
+            AstValue::Hash(v) => v.span(),
+            AstValue::WadChunkLink(v) => v.span(),
+            AstValue::ObjectLink(v) => v.span(),
             AstValue::Struct(s) | AstValue::Embedded(s) => s.span,
             AstValue::Container { span, .. }
             | AstValue::UnorderedContainer { span, .. }
@@ -304,5 +275,20 @@ impl AstValue {
             },
             _ => RitoType::simple(self.kind()),
         }
+    }
+}
+
+impl AstValue {
+    pub fn bool(span: Span, value: bool) -> Self {
+        Self::Bool(Spanned::new(span, value))
+    }
+    pub fn bitbool(span: Span, value: bool) -> Self {
+        Self::BitBool(Spanned::new(span, value))
+    }
+}
+
+impl From<values::String<Span>> for AstValue {
+    fn from(values::String { value, meta }: values::String<Span>) -> Self {
+        Self::String(Spanned::new(meta, value))
     }
 }

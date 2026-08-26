@@ -2,11 +2,11 @@ use ltk_hash::BinHash;
 
 use crate::{
     ast::{
+        hash::HashedLiteral,
         query::{AstObjectDetail, AstPropertyDetail, AstStructDetail, NodeDetail},
         AstObject, AstProperty, AstStruct, AstValue,
     },
     parse::Span,
-    Spanned,
 };
 
 pub trait NodeExt {
@@ -15,7 +15,7 @@ pub trait NodeExt {
 
     /// This node's own class, if it's an object or struct.
     #[must_use]
-    fn class_hash(&self) -> Option<Spanned<BinHash>>;
+    fn class_hash(&self) -> Option<HashedLiteral<BinHash>>;
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -53,7 +53,7 @@ impl NodeExt for Node<'_> {
         }
     }
 
-    fn class_hash(&self) -> Option<Spanned<BinHash>> {
+    fn class_hash(&self) -> Option<HashedLiteral<BinHash>> {
         match self {
             Node::Object(o) => Some(o.object.class_hash),
             Node::Struct(s) => Some(s.class_hash),
@@ -74,7 +74,7 @@ impl NodeExt for DetailedNode<'_> {
     }
 
     #[inline(always)]
-    fn class_hash(&self) -> Option<Spanned<BinHash>> {
+    fn class_hash(&self) -> Option<HashedLiteral<BinHash>> {
         match self {
             Self::Object(o, _) => Some(o.object.class_hash),
             Self::Struct(s, _) => Some(s.class_hash),
@@ -112,15 +112,15 @@ impl<'a> DetailedNode<'a> {
         Some(match self {
             DetailedNode::Object(v, f) => match f {
                 AstObjectDetail::Node | AstObjectDetail::Trivia => v.span(),
-                AstObjectDetail::PathHash => v.path_hash.span,
+                AstObjectDetail::PathHash => v.path_hash.span(),
             },
             DetailedNode::Struct(v, f) => match f {
                 AstStructDetail::Node | AstStructDetail::Trivia => v.span,
-                AstStructDetail::ClassHash => v.class_hash.span,
+                AstStructDetail::ClassHash => v.class_hash.span(),
             },
             DetailedNode::Property(v, f) => match f {
                 AstPropertyDetail::Node | AstPropertyDetail::Trivia => v.span(),
-                AstPropertyDetail::Name => v.name.span,
+                AstPropertyDetail::Name => v.name.span(),
                 AstPropertyDetail::TypeExpr => v.type_span?,
             },
             DetailedNode::Value(v) => v.span(),

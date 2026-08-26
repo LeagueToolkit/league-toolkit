@@ -1,10 +1,13 @@
 use ltk_hash::BinHash;
 
-use crate::{ast::AstProperty, parse::Span, Spanned};
+use crate::{
+    ast::{hash::HashedLiteral, AstProperty},
+    parse::Span,
+};
 
 #[derive(Debug, Clone)]
 pub struct AstStruct {
-    pub class_hash: Spanned<BinHash>,
+    pub class_hash: HashedLiteral<BinHash>,
     /// The entire `ClassName { .. }` span
     pub span: Span,
     pub properties: Vec<AstProperty>,

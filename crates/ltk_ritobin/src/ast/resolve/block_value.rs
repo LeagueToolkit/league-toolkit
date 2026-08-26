@@ -3,7 +3,6 @@ use ltk_meta::{traits::PropertyExt as _, PropertyKind, PropertyValueEnum};
 use crate::{
     ast::{
         build::BuildCtx,
-        coerce::CoerceFrom as _,
         diagnostics::{Diagnostic::*, MaybeSpanDiag},
         AstProperty, AstValue, Spanned,
     },
@@ -168,11 +167,11 @@ impl<'a> BuildCtx<'a> {
                 Kind::Comment => continue,
                 Kind::Entry => match self.resolve_entry(node, Some(hint), None) {
                     Ok(entry) => {
-                        let key_span = *entry.key.meta();
+                        let key_span = entry.key.span();
                         let key_kind = entry.key.rito_type();
-                        match PropertyKind::Hash.coerce_from(entry.key) {
-                            Some(PropertyValueEnum::Hash(hash)) => properties.push(AstProperty {
-                                name: Spanned::new(key_span, *hash),
+                        match entry.key.coerce_to(PropertyKind::Hash) {
+                            Some(AstValue::Hash(hash)) => properties.push(AstProperty {
+                                name: hash,
                                 type_span: entry.type_span,
                                 value: entry.value,
                             }),
@@ -220,9 +219,9 @@ impl<'a> BuildCtx<'a> {
                 Kind::Comment => continue,
                 Kind::Entry => match self.resolve_entry(node, Some(hint), hint_span) {
                     Ok(entry) => {
-                        let key_span = *entry.key.meta();
+                        let key_span = entry.key.span();
                         let got_key_kind = entry.key.rito_type();
-                        match key_kind.coerce_from(entry.key) {
+                        match entry.key.coerce_to(key_kind) {
                             Some(key) => entries.push((AstValue::from(key), entry.value)),
                             None => self.push(
                                 TypeMismatch {

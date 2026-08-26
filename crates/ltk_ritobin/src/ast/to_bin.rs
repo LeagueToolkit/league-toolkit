@@ -10,6 +10,7 @@ use crate::{
         AstStruct, AstValue,
     },
     parse::Span,
+    Spanned,
 };
 
 pub struct PartialBin {
@@ -74,42 +75,53 @@ fn trust<T>(result: Result<T, MetaError>, fallback: impl FnOnce() -> T) -> T {
 impl AstValue {
     /// Recursively converts this value into an equivalent `PropertyValueEnum<Span>`.
     pub fn to_bin_value(&self) -> PropertyValueEnum<Span> {
+        use PropertyValueEnum as P;
         match self {
-            AstValue::None(v) => PropertyValueEnum::None(*v),
-            AstValue::Bool(v) => PropertyValueEnum::Bool(v.clone()),
-            AstValue::BitBool(v) => PropertyValueEnum::BitBool(v.clone()),
-            AstValue::I8(v) => PropertyValueEnum::I8(v.clone()),
-            AstValue::U8(v) => PropertyValueEnum::U8(v.clone()),
-            AstValue::I16(v) => PropertyValueEnum::I16(v.clone()),
-            AstValue::U16(v) => PropertyValueEnum::U16(v.clone()),
-            AstValue::I32(v) => PropertyValueEnum::I32(v.clone()),
-            AstValue::U32(v) => PropertyValueEnum::U32(v.clone()),
-            AstValue::I64(v) => PropertyValueEnum::I64(v.clone()),
-            AstValue::U64(v) => PropertyValueEnum::U64(v.clone()),
-            AstValue::F32(v) => PropertyValueEnum::F32(v.clone()),
-            AstValue::Vector2(v) => PropertyValueEnum::Vector2(v.clone()),
-            AstValue::Vector3(v) => PropertyValueEnum::Vector3(v.clone()),
-            AstValue::Vector4(v) => PropertyValueEnum::Vector4(v.clone()),
-            AstValue::Matrix44(v) => PropertyValueEnum::Matrix44(v.clone()),
-            AstValue::Color(v) => PropertyValueEnum::Color(v.clone()),
-            AstValue::String(v) => PropertyValueEnum::String(v.clone()),
-            AstValue::Hash(v) => PropertyValueEnum::Hash(v.clone()),
-            AstValue::WadChunkLink(v) => PropertyValueEnum::WadChunkLink(v.clone()),
-            AstValue::ObjectLink(v) => PropertyValueEnum::ObjectLink(v.clone()),
-            AstValue::Struct(s) => PropertyValueEnum::Struct(s.to_bin_value()),
-            AstValue::Embedded(s) => {
-                PropertyValueEnum::Embedded(values::Embedded(s.to_bin_value()))
+            AstValue::None(v) => P::None(values::None::new(*v)),
+            AstValue::Bool(Spanned { value, span }) => {
+                P::Bool(values::Bool::new_with_meta(*value, *span))
             }
+            AstValue::BitBool(Spanned { value, span }) => {
+                P::BitBool(values::BitBool::new_with_meta(*value, *span))
+            }
+            AstValue::I8(v) => P::I8(v.clone()),
+            AstValue::U8(v) => P::U8(v.clone()),
+            AstValue::I16(v) => P::I16(v.clone()),
+            AstValue::U16(v) => P::U16(v.clone()),
+            AstValue::I32(v) => P::I32(v.clone()),
+            AstValue::U32(v) => P::U32(v.clone()),
+            AstValue::I64(v) => P::I64(v.clone()),
+            AstValue::U64(v) => P::U64(v.clone()),
+            AstValue::F32(v) => P::F32(v.clone()),
+            AstValue::Vector2(v) => P::Vector2(v.clone()),
+            AstValue::Vector3(v) => P::Vector3(v.clone()),
+            AstValue::Vector4(v) => P::Vector4(v.clone()),
+            AstValue::Matrix44(v) => P::Matrix44(v.clone()),
+            AstValue::Color(Spanned { value, span }) => {
+                P::Color(values::Color::new_with_meta(*value, *span))
+            }
+            AstValue::String(Spanned { value, span }) => {
+                P::String(values::String::new_with_meta(value.clone(), *span))
+            }
+            AstValue::Hash(v) => P::Hash(values::Hash::new_with_meta(v.value, v.span())),
+            AstValue::WadChunkLink(v) => {
+                P::WadChunkLink(values::WadChunkLink::new_with_meta(v.value, v.span()))
+            }
+            AstValue::ObjectLink(v) => {
+                P::ObjectLink(values::ObjectLink::new_with_meta(v.value, v.span()))
+            }
+            AstValue::Struct(s) => P::Struct(s.to_bin_value()),
+            AstValue::Embedded(s) => P::Embedded(values::Embedded(s.to_bin_value())),
             AstValue::Container {
                 item_kind,
                 items,
                 span,
-            } => PropertyValueEnum::Container(container_from(*item_kind, items, *span)),
+            } => P::Container(container_from(*item_kind, items, *span)),
             AstValue::UnorderedContainer {
                 item_kind,
                 items,
                 span,
-            } => PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(container_from(
+            } => P::UnorderedContainer(values::UnorderedContainer(container_from(
                 *item_kind, items, *span,
             ))),
             AstValue::Map {
@@ -124,7 +136,7 @@ impl AstValue {
                     trust(map.push(key, value), || ());
                 }
                 *map.meta_mut() = *span;
-                PropertyValueEnum::Map(map)
+                P::Map(map)
             }
             AstValue::Optional {
                 item_kind,
@@ -136,7 +148,7 @@ impl AstValue {
                     values::Optional::new_with_meta(*item_kind, inner, *span),
                     || values::Optional::empty(*item_kind).unwrap_or_else(|| none_optional(*span)),
                 );
-                PropertyValueEnum::Optional(optional)
+                P::Optional(optional)
             }
         }
     }

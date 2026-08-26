@@ -5,6 +5,7 @@ use ltk_meta::{traits::PropertyExt as _, PropertyKind, PropertyValueEnum};
 use crate::{
     ast::{
         diagnostics::{Diagnostic, DiagnosticWithSpan, RootKind},
+        hash::HashedLiteral,
         root::RootKindOrUnknown,
         AstStruct, AstValue, Ptr, Spanned,
     },
@@ -26,13 +27,13 @@ pub struct Ast {
 
 #[derive(Debug, Clone)]
 pub struct AstObject {
-    pub path_hash: Spanned<BinHash>,
+    pub path_hash: HashedLiteral<BinHash>,
     pub object: Ptr<AstStruct>,
 }
 
 impl AstObject {
     pub fn span(&self) -> Span {
-        Span::new(self.path_hash.span.start, self.object.span.end)
+        Span::new(self.path_hash.span().start, self.object.span.end)
     }
 }
 
@@ -49,7 +50,7 @@ impl Ast {
 
 #[derive(Debug, Clone)]
 pub(super) struct RawRootEntry {
-    key: PropertyValueEnum<Span>,
+    key: AstValue,
     type_span: Span,
     value: AstValue,
 }
@@ -98,7 +99,7 @@ impl<'a> BuildCtx<'a> {
                 Kind::Comment | Kind::ErrorTree => continue,
                 Kind::Entry => match self.resolve_entry(node, None, None) {
                     Ok(entry) => {
-                        let key_span = *entry.key.meta();
+                        let key_span = entry.key.span();
                         let kind = RootKindOrUnknown::from_value(self.text, &entry.key);
                         if let Some(existing) = roots.insert(
                             kind,
@@ -110,7 +111,7 @@ impl<'a> BuildCtx<'a> {
                         ) {
                             self.push(
                                 ShadowedEntry {
-                                    shadowee: *existing.key.meta(),
+                                    shadowee: existing.key.span(),
                                     shadower: key_span,
                                 }
                                 .unwrap(),
@@ -139,7 +140,7 @@ impl<'a> BuildCtx<'a> {
                 self.push(
                     InvalidRootEntryType {
                         root_kind,
-                        key_span: *entry.key.meta(),
+                        key_span: entry.key.span(),
                         type_span: entry.type_span,
                         got: RitoType::simple(got.kind()),
                         expected: RitoType::simple(expected),
@@ -222,7 +223,7 @@ impl<'a> BuildCtx<'a> {
                         };
                         match value {
                             AstValue::Embedded(s) => Some(AstObject {
-                                path_hash: Spanned::new(path_hash.meta, *path_hash),
+                                path_hash,
                                 object: Ptr::new(s),
                             }),
                             _ => None,
@@ -248,10 +249,10 @@ impl<'a> BuildCtx<'a> {
                     match s.value.as_str() {
                         "PROP" => {}
                         "PTCH" => self
-                            .push(CustomSpan("Patch bins are not supported yet", s.meta).unwrap()),
-                        _ => self.push(CustomSpan("Unknown bin type", s.meta).unwrap()),
+                            .push(CustomSpan("Patch bins are not supported yet", s.span).unwrap()),
+                        _ => self.push(CustomSpan("Unknown bin type", s.span).unwrap()),
                     }
-                    bin_type = Some(s.meta);
+                    bin_type = Some(s.span);
                 }
             }
             None => self.push(
@@ -289,7 +290,7 @@ impl<'a> BuildCtx<'a> {
         for (_, unknown) in roots {
             self.push(
                 UnknownRoot {
-                    span: *unknown.key.meta(),
+                    span: unknown.key.span(),
                 }
                 .default_span(Span::default()),
             );

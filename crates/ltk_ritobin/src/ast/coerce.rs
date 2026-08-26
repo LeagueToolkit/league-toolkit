@@ -2,17 +2,15 @@ use ltk_hash::{BinHash, Hash as _, WadHash};
 use ltk_meta::{property::values, PropertyKind, PropertyValueEnum};
 use std::fmt::Debug;
 
-use crate::RitoType;
+use crate::{
+    ast::{AstValue, Ptr},
+    RitoType,
+};
+
+use super::hash::{HashedLiteral, Originally};
 
 pub trait CanCoerce {
     fn can_coerce(self, from: Self) -> bool;
-}
-
-pub trait CoerceFrom {
-    fn coerce_from<M: Debug + Default>(
-        self,
-        value: PropertyValueEnum<M>,
-    ) -> Option<PropertyValueEnum<M>>;
 }
 
 impl CanCoerce for PropertyKind {
@@ -46,55 +44,55 @@ impl CanCoerce for RitoType {
         true
     }
 }
-impl CoerceFrom for PropertyKind {
-    fn coerce_from<M: Debug + Default>(
-        self,
-        value: PropertyValueEnum<M>,
-    ) -> Option<PropertyValueEnum<M>> {
-        let to = self;
-        match to {
-            to if to == value.kind() => Some(value),
 
-            PropertyKind::Optional => Some(values::Optional::try_from(value).ok()?.into()),
+impl AstValue {
+    pub fn coerce_to(self, to: PropertyKind) -> Option<Self> {
+        Some(match to {
+            to if to == self.kind() => self,
 
-            PropertyKind::Hash => match value {
-                PropertyValueEnum::String(str) => {
-                    Some(values::Hash::new_with_meta(BinHash::hash_str(&str), str.meta).into())
+            PropertyKind::Optional => Self::Optional {
+                item_kind: self.kind(),
+                span: self.span(),
+                value: Some(Ptr::new(self)),
+            },
+
+            PropertyKind::Hash => match self {
+                Self::String(str) => Self::Hash(HashedLiteral::new(
+                    str.span,
+                    Originally::String,
+                    BinHash::hash_str(&str),
+                )),
+                _ => return None,
+            },
+            PropertyKind::ObjectLink => match self {
+                Self::Hash(hash) => Self::ObjectLink(hash),
+                Self::String(str) => Self::ObjectLink(HashedLiteral::new(
+                    str.span,
+                    Originally::String,
+                    BinHash::hash_str(&str),
+                )),
+                _ => return None,
+            },
+            PropertyKind::WadChunkLink => match self {
+                Self::Hash(hash) => {
+                    Self::WadChunkLink(hash.with_value(WadHash((*hash.value).into())))
                 }
-                _ => None,
+                Self::String(str) => Self::WadChunkLink(HashedLiteral::new(
+                    str.span,
+                    Originally::String,
+                    WadHash::hash_str(str.as_str()),
+                )),
+                _ => return None,
             },
-            PropertyKind::ObjectLink => match value {
-                PropertyValueEnum::Hash(hash) => {
-                    Some(values::ObjectLink::new_with_meta(*hash, hash.meta).into())
-                }
-                PropertyValueEnum::String(str) => Some(
-                    values::ObjectLink::new_with_meta(BinHash::hash_str(&str), str.meta).into(),
-                ),
-                _ => None,
+            PropertyKind::BitBool => match self {
+                Self::Bool(bool) => Self::BitBool(bool),
+                _ => return None,
             },
-            PropertyKind::WadChunkLink => match value {
-                PropertyValueEnum::Hash(hash) => Some(
-                    values::WadChunkLink::new_with_meta(WadHash((**hash).into()), hash.meta).into(),
-                ),
-                PropertyValueEnum::String(str) => Some(
-                    values::WadChunkLink::new_with_meta(WadHash::hash_str(str.as_str()), str.meta)
-                        .into(),
-                ),
-                _ => None,
+            PropertyKind::Bool => match self {
+                Self::BitBool(bool) => Self::Bool(bool),
+                _ => return None,
             },
-            PropertyKind::BitBool => match value {
-                PropertyValueEnum::Bool(bool) => {
-                    Some(values::BitBool::new_with_meta(*bool, bool.meta).into())
-                }
-                _ => None,
-            },
-            PropertyKind::Bool => match value {
-                PropertyValueEnum::BitBool(bool) => {
-                    Some(values::Bool::new_with_meta(*bool, bool.meta).into())
-                }
-                _ => None,
-            },
-            _ => None,
-        }
+            _ => return None,
+        })
     }
 }

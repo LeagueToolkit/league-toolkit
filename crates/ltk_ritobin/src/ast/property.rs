@@ -1,10 +1,15 @@
 use ltk_hash::BinHash;
 
-use crate::{ast::AstValue, parse::Span, Spanned};
+use crate::{
+    ast::{hash::HashedLiteral, AstValue},
+    parse::Span,
+    RitoType, Spanned,
+};
 
 #[derive(Debug, Clone)]
 pub struct AstProperty {
-    pub name: Spanned<BinHash>,
+    pub name: HashedLiteral<BinHash>,
+    // pub type_span: Option<Spanned<RitoType>>,
     pub type_span: Option<Span>,
     pub value: AstValue,
 }
@@ -15,6 +20,9 @@ impl AstProperty {
     #[must_use]
     pub fn span(&self) -> Span {
         let value_span = self.value.span();
-        Span::new(self.name.span.start, value_span.end.max(self.name.span.end))
+        Span::new(
+            self.name.span().start,
+            value_span.end.max(self.name.span().end),
+        )
     }
 }

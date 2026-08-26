@@ -1,6 +1,7 @@
 pub mod build;
 pub mod coerce;
 pub mod diagnostics;
+pub mod hash;
 pub mod query;
 pub mod resolve;
 pub mod root;
