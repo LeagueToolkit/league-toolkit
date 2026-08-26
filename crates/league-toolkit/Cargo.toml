@@ -34,6 +34,7 @@ texture = ["dep:ltk_texture"]
 wad = ["dep:ltk_wad"]
 hash = ["dep:ltk_hash"]
 rst = ["dep:ltk_rst"]
+lua = ["dep:ltk_lua"]
 
 [dependencies]
 ltk_anim = { version = "0.3.6", path = "../ltk_anim", optional = true }
@@ -45,6 +46,7 @@ ltk_texture = { version = "0.6.1", path = "../ltk_texture", optional = true }
 ltk_wad = { version = "0.5.3", path = "../ltk_wad", optional = true }
 ltk_hash = { version = "0.4.0", path = "../ltk_hash", optional = true }
 ltk_rst = { version = "0.2.1", path = "../ltk_rst", optional = true }
+ltk_lua = { version = "0.1.0", path = "../ltk_lua", optional = true }
 
 [dev-dependencies]
 image = { version = "0.25.2", default-features = false }
