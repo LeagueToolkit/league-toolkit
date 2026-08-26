@@ -130,6 +130,46 @@ impl Tex {
         self.decode_mipmap_slice(level, 0)
     }
 
+    /// Mip dimensions halve per level with a floor of 1.
+    fn mip_dims(&self, level: u32) -> (usize, usize, usize) {
+        (
+            ((self.width as usize) >> level).max(1),
+            ((self.height as usize) >> level).max(1),
+            ((self.depth as usize).max(1) >> level).max(1),
+        )
+    }
+
+    /// Byte size of a single z-slice of a mip.
+    fn slice_bytes(&self, w: usize, h: usize) -> usize {
+        let (block_w, block_h) = self.format.block_size();
+        w.div_ceil(block_w) * h.div_ceil(block_h) * self.format.bytes_per_block()
+    }
+
+    /// Byte size of a whole mip, all z-slices.
+    fn mip_bytes(&self, level: u32) -> usize {
+        let (w, h, d) = self.mip_dims(level);
+        self.slice_bytes(w, h) * d
+    }
+
+    /// How many mips the payload actually holds, counted from the smallest.
+    ///
+    /// Less than [`Self::mip_count`] when the data is a truncated low-res
+    /// prefix; `mip_count - available_mip_count()` is the first decodable level.
+    #[must_use]
+    pub fn available_mip_count(&self) -> u32 {
+        let mut remaining = self.data.len();
+        let mut available = 0;
+        for level in (0..self.mip_count).rev() {
+            let bytes = self.mip_bytes(level);
+            if bytes > remaining {
+                break;
+            }
+            remaining -= bytes;
+            available += 1;
+        }
+        available
+    }
+
     /// Try to decode a single z-slice of a mipmap. For 2D textures the only valid slice is 0.
     ///
     /// - Mip dimensions halve per level with a floor of 1
@@ -137,46 +177,30 @@ impl Tex {
     /// - Mip levels are stored in reverse order, smallest to largest
     pub fn decode_mipmap_slice(&self, level: u32, slice: u32) -> Result<TexSurface<'_>, DecodeErr> {
         let level = level.min(self.mip_count - 1);
-        let width = self.width as usize;
-        let height = self.height as usize;
-        let depth = (self.depth as usize).max(1);
-        let (block_w, block_h) = self.format.block_size();
-
-        let mip_dims = |level: u32| {
-            (
-                (width >> level).max(1),
-                (height >> level).max(1),
-                (depth >> level).max(1),
-            )
-        };
-        // size of a single z-slice of a mip
-        let slice_bytes = |dims: (usize, usize, usize)| {
-            (dims.0.div_ceil(block_w)) * (dims.1.div_ceil(block_h)) * self.format.bytes_per_block()
-        };
-        let mip_bytes = |dims: (usize, usize, usize)| slice_bytes(dims) * dims.2;
 
         // size of mip
-        let (w, h, d) = mip_dims(level);
+        let (w, h, d) = self.mip_dims(level);
         if slice as usize >= d {
             return Err(DecodeErr::SliceOutOfBounds { slice, depth: d });
         }
 
         // sum all mips before our one
         // (league sorts mips smallest -> largest so our iterator counts up)
+        let slice_len = self.slice_bytes(w, h);
         let off = (level + 1..self.mip_count)
-            .map(|level| mip_bytes(mip_dims(level)))
+            .map(|level| self.mip_bytes(level))
             .sum::<usize>()
-            + slice as usize * slice_bytes((w, h, d));
+            + slice as usize * slice_len;
 
-        let mip_data =
-            self.data
-                .get(off..off + slice_bytes((w, h, d)))
-                .ok_or(DecodeErr::MipOutOfBounds {
-                    level,
-                    start: off,
-                    end: off + slice_bytes((w, h, d)),
-                    len: self.data.len(),
-                })?;
+        let mip_data = self
+            .data
+            .get(off..off + slice_len)
+            .ok_or(DecodeErr::MipOutOfBounds {
+                level,
+                start: off,
+                end: off + slice_len,
+                len: self.data.len(),
+            })?;
 
         // decodes a block-compressed mip to RGBA8 via image_dds
         let decode_image_dds = |image_format| -> Result<Vec<u8>, DecodeErr> {
@@ -543,6 +567,62 @@ mod tests {
         assert!(matches!(
             Tex::encode_rgba_image(&img, EncodeOptions::new(EncodeFormat::Bgra8).with_mipmaps()),
             Err(EncodeError::ZeroSizedImage)
+        ));
+    }
+
+    #[test]
+    fn available_mip_count_tracks_a_truncated_mip_chain() {
+        // 8x8 Bgra8 with mips: smallest-first sizes are 4, 16, 64, 256 bytes
+        let mut file = Vec::new();
+        file.extend_from_slice(b"TEX\0");
+        file.extend_from_slice(&8u16.to_le_bytes()); // width
+        file.extend_from_slice(&8u16.to_le_bytes()); // height
+        file.push(1); // depth
+        file.push(20); // Bgra8
+        file.push(0); // resource type: texture
+        file.push(1); // flags: has mipmaps
+        file.extend_from_slice(&[0u8; 340]);
+
+        let tex = Tex::from_reader(&mut file.as_slice()).unwrap();
+        assert_eq!(tex.mip_count, 4);
+        assert_eq!(tex.available_mip_count(), 4);
+
+        // 1x1 and 2x2 survive; a byte into 4x4 does not make it available
+        for (len, available) in [(12, 0), (12 + 4, 1), (12 + 20, 2), (12 + 21, 2)] {
+            let tex = Tex::from_reader(&mut &file[..len]).unwrap();
+            assert_eq!(tex.available_mip_count(), available, "prefix len {len}");
+        }
+    }
+
+    /// A low-res subchunk prefix: full header, mip chain cut at a mip
+    /// boundary. Surviving mips must decode identically to the full parse.
+    #[test]
+    fn prefix_decodes_surviving_mips_identically() {
+        let mut img = image::RgbaImage::new(16, 16);
+        img.pixels_mut().for_each(|p| p.0 = [255, 0, 0, 255]);
+        let format = EncodeFormat::Bc1 {
+            weigh_colour_by_alpha: false,
+        };
+        let full = Tex::encode_rgba_image(&img, EncodeOptions::new(format).with_mipmaps()).unwrap();
+        assert_eq!(full.mip_count, 5);
+
+        let mut file = Vec::new();
+        full.write(&mut file).unwrap();
+
+        // keep the three smallest BC1 mips: one 8-byte block each
+        let prefix = &file[..12 + 24];
+        let tex = Tex::from_reader(&mut &prefix[..]).unwrap();
+        assert_eq!(tex.mip_count, full.mip_count);
+        assert_eq!(tex.available_mip_count(), 3);
+
+        for level in 2..5 {
+            let low = tex.decode_mipmap(level).unwrap();
+            let all = full.decode_mipmap(level).unwrap();
+            assert_eq!(low.data, all.data, "mip {level}");
+        }
+        assert!(matches!(
+            tex.decode_mipmap(1),
+            Err(DecodeErr::MipOutOfBounds { .. })
         ));
     }
 

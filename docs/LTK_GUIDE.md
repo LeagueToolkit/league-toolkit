@@ -128,6 +128,12 @@ let texture: Texture = Tex::from_reader(&mut cursor)?.into();
 let surface = texture.decode_mipmap(0)?;
 ```
 
+**Partial data**: A `.tex` parses even when its payload holds fewer mips than
+the header declares (e.g. a low-res subchunk prefix from
+`Wad::load_subchunks`). Mips are stored smallest-first;
+`tex.available_mip_count()` reports how many the data actually holds, and
+`mip_count - available_mip_count()` is the first decodable level.
+
 **BC Encoding** (optional): Enable `intel-tex` feature on `ltk_texture` for BC1/BC3 encoding:
 ```toml
 ltk_texture = { version = "0.4", features = ["intel-tex"] }
