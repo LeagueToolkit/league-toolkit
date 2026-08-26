@@ -100,8 +100,9 @@
 //! # Parallelism
 //!
 //! [`extract_all`](WadExtractor::extract_all) and
-//! [`extract_chunks`](WadExtractor::extract_chunks) read the archive in order on
-//! the calling thread and hand each chunk to a worker that decompresses and
+//! [`extract_chunks`](WadExtractor::extract_chunks) read the archive on the
+//! calling thread, in the order its chunks are laid out so the whole read is
+//! one forward sweep, and hand each chunk to a worker that decompresses and
 //! writes it. The worker count bounds the channel between the two, so memory
 //! holds a few chunks whatever the archive holds. The resolver, the path
 //! filter and the progress callback run on the calling thread only, so none of
@@ -313,10 +314,11 @@ impl<'a> WadExtractor<'a> {
     }
 
     /// Extract the chunks of `wad` with the given path hashes into
-    /// `output_dir`, in the order given.
+    /// `output_dir`.
     ///
     /// A hash given twice counts once. A hash the archive holds no chunk for
-    /// lands under [`ExtractReport::missing`] and is not an error.
+    /// lands under [`ExtractReport::missing`] and is not an error. The chunks
+    /// are read in the order the archive lays them out.
     ///
     /// # Errors
     ///
@@ -394,11 +396,15 @@ impl<'a> WadExtractor<'a> {
     fn run<S: Read + Seek>(
         &mut self,
         wad: &mut Wad<S>,
-        chunks: Vec<WadChunk>,
+        mut chunks: Vec<WadChunk>,
         missing: Vec<WadHash>,
         output_dir: &Utf8Path,
     ) -> Result<ExtractReport, WadError> {
         let workers = self.workers.map_or_else(default_workers, NonZeroUsize::get);
+
+        /* The archive keeps its chunks in hash order; sorted by offset, the
+        reader's whole pass is one forward sweep. */
+        chunks.sort_unstable_by_key(|chunk| chunk.data_offset);
 
         let recovered = if self.recover_names {
             NameRecovery {
