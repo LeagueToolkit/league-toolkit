@@ -10,7 +10,7 @@ use crate::{
         },
         hash::{HashedLiteral, Originally},
         resolve::literals::{self},
-        AstStruct, AstValue, Spanned,
+        Object, Spanned, Value,
     },
     cst::Kind,
     parse::{Token, TokenKind},
@@ -34,8 +34,8 @@ impl<'a> Builder<'a> {
             Token {
                 kind: TokenKind::HexLit,
                 span,
-            } => match AstValue::eval_unknown_hash(self.text, *span)? {
-                AstValue::Hash(hash) => Ok(hash),
+            } => match Value::eval_unknown_hash(self.text, *span)? {
+                Value::Hash(hash) => Ok(hash),
                 value => Err(TypeMismatch {
                     span: value.span(),
                     expected: RitoType::simple(PropertyKind::Hash),
@@ -50,7 +50,7 @@ impl<'a> Builder<'a> {
         &mut self,
         class: &Node,
         hint: RitoType,
-    ) -> Result<AstValue, Diagnostic> {
+    ) -> Result<Value, Diagnostic> {
         let children = class.children.get(self.cst);
         let Some(name_token) = children.first().and_then(|c| c.token(self.cst)) else {
             return Err(InvalidHash(class.span));
@@ -71,15 +71,15 @@ impl<'a> Builder<'a> {
             None => Vec::new(),
         };
 
-        let ast_struct = AstStruct {
+        let ast_struct = Object {
             class_hash,
             span: class.span,
             properties,
         };
 
         Ok(match hint.base {
-            PropertyKind::Struct => AstValue::Struct(ast_struct),
-            PropertyKind::Embedded => AstValue::Embedded(ast_struct),
+            PropertyKind::Struct => Value::Struct(ast_struct),
+            PropertyKind::Embedded => Value::Embedded(ast_struct),
             _ => unreachable!(),
         })
     }

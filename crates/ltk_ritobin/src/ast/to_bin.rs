@@ -4,7 +4,7 @@ use ltk_meta::{
 };
 
 use crate::{
-    ast::{diagnostics::DiagnosticWithSpan, Ast, AstObject, AstStruct, AstValue},
+    ast::{diagnostics::DiagnosticWithSpan, Ast, Object, RootObject, Value},
     parse::Span,
     Spanned,
 };
@@ -30,7 +30,7 @@ impl Ast {
         let objects = self
             .objects
             .iter()
-            .map(|AstObject { path_hash, object }| {
+            .map(|RootObject { path_hash, object }| {
                 let struct_val = object.to_bin_value().no_meta();
                 BinObject {
                     path_hash: path_hash.value,
@@ -68,59 +68,59 @@ fn trust<T>(result: Result<T, MetaError>, fallback: impl FnOnce() -> T) -> T {
     }
 }
 
-impl AstValue {
+impl Value {
     /// Recursively converts this value into an equivalent `PropertyValueEnum<Span>`.
     pub fn to_bin_value(&self) -> PropertyValueEnum<Span> {
         use PropertyValueEnum as P;
         match self {
-            AstValue::None(v) => P::None(values::None::new(*v)),
-            AstValue::Bool(Spanned { value, span }) => {
+            Value::None(v) => P::None(values::None::new(*v)),
+            Value::Bool(Spanned { value, span }) => {
                 P::Bool(values::Bool::new_with_meta(*value, *span))
             }
-            AstValue::BitBool(Spanned { value, span }) => {
+            Value::BitBool(Spanned { value, span }) => {
                 P::BitBool(values::BitBool::new_with_meta(*value, *span))
             }
-            AstValue::I8(v) => P::I8(v.clone()),
-            AstValue::U8(v) => P::U8(v.clone()),
-            AstValue::I16(v) => P::I16(v.clone()),
-            AstValue::U16(v) => P::U16(v.clone()),
-            AstValue::I32(v) => P::I32(v.clone()),
-            AstValue::U32(v) => P::U32(v.clone()),
-            AstValue::I64(v) => P::I64(v.clone()),
-            AstValue::U64(v) => P::U64(v.clone()),
-            AstValue::F32(v) => P::F32(v.clone()),
-            AstValue::Vector2(v) => P::Vector2(v.clone()),
-            AstValue::Vector3(v) => P::Vector3(v.clone()),
-            AstValue::Vector4(v) => P::Vector4(v.clone()),
-            AstValue::Matrix44(v) => P::Matrix44(v.clone()),
-            AstValue::Color(Spanned { value, span }) => {
+            Value::I8(v) => P::I8(v.clone()),
+            Value::U8(v) => P::U8(v.clone()),
+            Value::I16(v) => P::I16(v.clone()),
+            Value::U16(v) => P::U16(v.clone()),
+            Value::I32(v) => P::I32(v.clone()),
+            Value::U32(v) => P::U32(v.clone()),
+            Value::I64(v) => P::I64(v.clone()),
+            Value::U64(v) => P::U64(v.clone()),
+            Value::F32(v) => P::F32(v.clone()),
+            Value::Vector2(v) => P::Vector2(v.clone()),
+            Value::Vector3(v) => P::Vector3(v.clone()),
+            Value::Vector4(v) => P::Vector4(v.clone()),
+            Value::Matrix44(v) => P::Matrix44(v.clone()),
+            Value::Color(Spanned { value, span }) => {
                 P::Color(values::Color::new_with_meta(*value, *span))
             }
-            AstValue::String(Spanned { value, span }) => {
+            Value::String(Spanned { value, span }) => {
                 P::String(values::String::new_with_meta(value.clone(), *span))
             }
-            AstValue::Hash(v) => P::Hash(values::Hash::new_with_meta(v.value, v.span())),
-            AstValue::WadChunkLink(v) => {
+            Value::Hash(v) => P::Hash(values::Hash::new_with_meta(v.value, v.span())),
+            Value::WadChunkLink(v) => {
                 P::WadChunkLink(values::WadChunkLink::new_with_meta(v.value, v.span()))
             }
-            AstValue::ObjectLink(v) => {
+            Value::ObjectLink(v) => {
                 P::ObjectLink(values::ObjectLink::new_with_meta(v.value, v.span()))
             }
-            AstValue::Struct(s) => P::Struct(s.to_bin_value()),
-            AstValue::Embedded(s) => P::Embedded(values::Embedded(s.to_bin_value())),
-            AstValue::Container {
+            Value::Struct(s) => P::Struct(s.to_bin_value()),
+            Value::Embedded(s) => P::Embedded(values::Embedded(s.to_bin_value())),
+            Value::Container {
                 item_kind,
                 items,
                 span,
             } => P::Container(container_from(*item_kind, items, *span)),
-            AstValue::UnorderedContainer {
+            Value::UnorderedContainer {
                 item_kind,
                 items,
                 span,
             } => P::UnorderedContainer(values::UnorderedContainer(container_from(
                 *item_kind, items, *span,
             ))),
-            AstValue::Map {
+            Value::Map {
                 key_kind,
                 value_kind,
                 entries,
@@ -134,12 +134,12 @@ impl AstValue {
                 *map.meta_mut() = *span;
                 P::Map(map)
             }
-            AstValue::Optional {
+            Value::Optional {
                 item_kind,
                 value,
                 span,
             } => {
-                let inner = value.as_deref().map(AstValue::to_bin_value);
+                let inner = value.as_deref().map(Value::to_bin_value);
                 let optional = trust(
                     values::Optional::new_with_meta(*item_kind, inner, *span),
                     || values::Optional::empty(*item_kind).unwrap_or_else(|| none_optional(*span)),
@@ -150,11 +150,7 @@ impl AstValue {
     }
 }
 
-fn container_from(
-    item_kind: PropertyKind,
-    items: &[AstValue],
-    span: Span,
-) -> values::Container<Span> {
+fn container_from(item_kind: PropertyKind, items: &[Value], span: Span) -> values::Container<Span> {
     let mut container = trust(values::Container::empty(item_kind), || {
         values::Container::empty(PropertyKind::None).expect("None is always a valid item kind")
     });
@@ -173,7 +169,7 @@ fn none_optional(span: Span) -> values::Optional<Span> {
     optional
 }
 
-impl AstStruct {
+impl Object {
     pub fn to_bin_value(&self) -> values::Struct<Span> {
         values::Struct {
             class_hash: self.class_hash.value,

@@ -4,7 +4,7 @@ use ltk_meta::PropertyKind;
 use crate::{
     ast::{
         diagnostics::{DiagnosticWithSpan, RootKind},
-        node::AstValue,
+        node::Value,
         root::RootKindOrUnknown,
         Ast, Ptr, Spanned,
     },

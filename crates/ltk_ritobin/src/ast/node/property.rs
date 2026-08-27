@@ -1,20 +1,20 @@
 use ltk_hash::BinHash;
 
 use crate::{
-    ast::{hash::HashedLiteral, node::AstValue},
+    ast::{hash::HashedLiteral, node::Value},
     parse::Span,
     RitoType, Spanned,
 };
 
 #[derive(Debug, Clone)]
-pub struct AstProperty {
+pub struct Property {
     pub name: HashedLiteral<BinHash>,
     // pub type_span: Option<Spanned<RitoType>>,
     pub type_span: Option<Span>,
-    pub value: AstValue,
+    pub value: Value,
 }
 
-impl AstProperty {
+impl Property {
     /// Get the span of the whole property
     #[inline(always)]
     #[must_use]

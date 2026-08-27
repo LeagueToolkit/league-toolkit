@@ -4,7 +4,7 @@ use indexmap::Equivalent;
 use ltk_meta::{traits::PropertyExt as _, PropertyValueEnum};
 
 use crate::{
-    ast::{diagnostics::RootKind, AstValue},
+    ast::{diagnostics::RootKind, Value},
     parse::Span,
 };
 
@@ -52,8 +52,8 @@ impl Equivalent<RootKindOrUnknown<'_>> for str {
 }
 
 impl<'a> RootKindOrUnknown<'a> {
-    pub fn from_value(src: &'a str, value: &AstValue) -> Self {
-        let AstValue::String(string) = value else {
+    pub fn from_value(src: &'a str, value: &Value) -> Self {
+        let Value::String(string) = value else {
             return Self::Unknown(src[value.span()].into());
         };
 

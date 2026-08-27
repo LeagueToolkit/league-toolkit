@@ -4,7 +4,7 @@ use crate::{
     ast::{
         builder::Builder,
         diagnostics::{Diagnostic::*, MaybeSpanDiag},
-        AstProperty, AstValue, Spanned,
+        Property, Spanned, Value,
     },
     cst::Kind,
     parse::Span,
@@ -18,7 +18,7 @@ impl<'a> Builder<'a> {
         block: &Node,
         hint: RitoType,
         hint_span: Option<Span>,
-    ) -> Result<AstValue, MaybeSpanDiag> {
+    ) -> Result<Value, MaybeSpanDiag> {
         use PropertyKind as K;
 
         match hint.base {
@@ -29,7 +29,7 @@ impl<'a> Builder<'a> {
                 let key_kind = hint.subtype(0);
                 let value_kind = hint.subtype(1);
                 let entries = self.resolve_body_map_entries(block, key_kind, value_kind, hint_span);
-                Ok(AstValue::Map {
+                Ok(Value::Map {
                     key_kind,
                     value_kind,
                     entries,
@@ -40,12 +40,12 @@ impl<'a> Builder<'a> {
                 let item_kind = hint.subtype(0);
                 let items = self.resolve_body_items(block, item_kind, hint_span);
                 Ok(match hint.base {
-                    K::Container => AstValue::Container {
+                    K::Container => Value::Container {
                         item_kind,
                         items,
                         span: block.span,
                     },
-                    K::UnorderedContainer => AstValue::UnorderedContainer {
+                    K::UnorderedContainer => Value::UnorderedContainer {
                         item_kind,
                         items,
                         span: block.span,
@@ -73,7 +73,7 @@ impl<'a> Builder<'a> {
                     if let [only] = content[..] {
                         if only.kind == Kind::ListItemBlock {
                             let inner = self.resolve_list_item_block(only, item_hint, hint_span)?;
-                            return Ok(AstValue::Optional {
+                            return Ok(Value::Optional {
                                 item_kind,
                                 value: Some(Box::new(inner)),
                                 span: block.span,
@@ -82,7 +82,7 @@ impl<'a> Builder<'a> {
                     }
 
                     if content.is_empty() {
-                        return Ok(AstValue::Optional {
+                        return Ok(Value::Optional {
                             item_kind,
                             value: None,
                             span: block.span,
@@ -90,7 +90,7 @@ impl<'a> Builder<'a> {
                     }
                     // an optional listlike spells its components flat, same as a bare listlike
                     let inner = self.resolve_listlike(block, item_kind, hint_span)?;
-                    return Ok(AstValue::Optional {
+                    return Ok(Value::Optional {
                         item_kind,
                         value: Some(Box::new(inner)),
                         span: block.span,
@@ -138,7 +138,7 @@ impl<'a> Builder<'a> {
                         ),
                     }
                 }
-                Ok(AstValue::Optional {
+                Ok(Value::Optional {
                     item_kind,
                     value: value.map(Box::new),
                     span: block.span,
@@ -157,7 +157,7 @@ impl<'a> Builder<'a> {
         &mut self,
         block: &Node,
         hint: RitoType,
-    ) -> Vec<AstProperty> {
+    ) -> Vec<Property> {
         let mut properties = Vec::new();
         for child in block.children.get(self.cst).iter() {
             let Some(node) = child.tree(self.cst) else {
@@ -170,7 +170,7 @@ impl<'a> Builder<'a> {
                         let key_span = entry.key.span();
                         let key_kind = entry.key.rito_type();
                         match entry.key.coerce_to(PropertyKind::Hash) {
-                            Some(AstValue::Hash(hash)) => properties.push(AstProperty {
+                            Some(Value::Hash(hash)) => properties.push(Property {
                                 name: hash,
                                 type_span: entry.type_span,
                                 value: entry.value,
@@ -208,7 +208,7 @@ impl<'a> Builder<'a> {
         key_kind: PropertyKind,
         value_kind: PropertyKind,
         hint_span: Option<Span>,
-    ) -> Vec<(AstValue, AstValue)> {
+    ) -> Vec<(Value, Value)> {
         let hint = RitoType::map(key_kind, value_kind);
         let mut entries = Vec::new();
         for child in block.children.get(self.cst).iter() {
@@ -222,7 +222,7 @@ impl<'a> Builder<'a> {
                         let key_span = entry.key.span();
                         let got_key_kind = entry.key.rito_type();
                         match entry.key.coerce_to(key_kind) {
-                            Some(key) => entries.push((AstValue::from(key), entry.value)),
+                            Some(key) => entries.push((Value::from(key), entry.value)),
                             None => self.push(
                                 TypeMismatch {
                                     span: key_span,
@@ -255,7 +255,7 @@ impl<'a> Builder<'a> {
         block: &Node,
         item_kind: PropertyKind,
         hint_span: Option<Span>,
-    ) -> Vec<AstValue> {
+    ) -> Vec<Value> {
         let item_hint = RitoType::simple(item_kind);
         let mut items = Vec::new();
         for child in block.children.get(self.cst).iter() {

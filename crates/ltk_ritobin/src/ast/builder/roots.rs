@@ -1,12 +1,12 @@
-use crate::ast::{diagnostics::Diagnostic as D, AstObject};
+use crate::ast::{diagnostics::Diagnostic as D, RootObject};
 
 use super::*;
 
 #[derive(Debug, Clone)]
 pub struct RawRootEntry {
-    key: AstValue,
+    key: Value,
     type_span: Span,
-    value: AstValue,
+    value: Value,
 }
 
 impl<'a> Builder<'a> {
@@ -55,8 +55,8 @@ impl<'a> Builder<'a> {
         root_kind: RootKind,
         entry: RawRootEntry,
         expected: PropertyKind,
-        extract: impl FnOnce(AstValue) -> Result<AstValue, AstValue>,
-    ) -> Option<AstValue> {
+        extract: impl FnOnce(Value) -> Result<Value, Value>,
+    ) -> Option<Value> {
         match extract(entry.value) {
             Ok(v) => Some(v),
             Err(got) => {
@@ -88,17 +88,17 @@ impl<'a> Builder<'a> {
         let dependencies = dependencies
             .and_then(|e| {
                 self.take_root_value(RootKind::Linked, e, PropertyKind::Container, |v| match v {
-                    AstValue::Container { .. } => Ok(v),
+                    Value::Container { .. } => Ok(v),
                     other => Err(other),
                 })
             })
             .map(|v| match v {
-                AstValue::Container { items, .. } => items
+                Value::Container { items, .. } => items
                     .into_iter()
                     .filter_map(|item| {
                         let span = item.span();
                         match item {
-                            AstValue::String(_) => Some(span),
+                            Value::String(_) => Some(span),
                             other => {
                                 self.push(
                                     D::UnexpectedContainerItem {
@@ -130,19 +130,19 @@ impl<'a> Builder<'a> {
         let objects = objects
             .and_then(|e| {
                 self.take_root_value(RootKind::Entries, e, PropertyKind::Map, |v| match v {
-                    AstValue::Map { .. } => Ok(v),
+                    Value::Map { .. } => Ok(v),
                     other => Err(other),
                 })
             })
             .map(|v| match v {
-                AstValue::Map { entries, .. } => entries
+                Value::Map { entries, .. } => entries
                     .into_iter()
                     .filter_map(|(key, value)| {
-                        let AstValue::Hash(path_hash) = key else {
+                        let Value::Hash(path_hash) = key else {
                             return None;
                         };
                         match value {
-                            AstValue::Embedded(s) => Some(AstObject {
+                            Value::Embedded(s) => Some(RootObject {
                                 path_hash,
                                 object: Ptr::new(s),
                             }),
@@ -159,13 +159,11 @@ impl<'a> Builder<'a> {
             Some(e) => {
                 if let Some(v) =
                     self.take_root_value(RootKind::Type, e, PropertyKind::String, |v| match v {
-                        AstValue::String(_) => Ok(v),
+                        Value::String(_) => Ok(v),
                         other => Err(other),
                     })
                 {
-                    let AstValue::String(s) = &v else {
-                        unreachable!()
-                    };
+                    let Value::String(s) = &v else { unreachable!() };
                     match s.value.as_str() {
                         "PROP" => {}
                         "PTCH" => self.push(
@@ -189,11 +187,11 @@ impl<'a> Builder<'a> {
             Some(e) => {
                 if let Some(v) =
                     self.take_root_value(RootKind::Version, e, PropertyKind::U32, |v| match v {
-                        AstValue::U32(_) => Ok(v),
+                        Value::U32(_) => Ok(v),
                         other => Err(other),
                     })
                 {
-                    let AstValue::U32(n) = &v else { unreachable!() };
+                    let Value::U32(n) = &v else { unreachable!() };
                     if n.value != 3 {
                         self.push(D::CustomSpan("Bin version should be '3'", n.meta).unwrap());
                     }

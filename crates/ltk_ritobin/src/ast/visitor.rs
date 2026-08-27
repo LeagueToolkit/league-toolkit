@@ -1,6 +1,6 @@
 use std::ops::ControlFlow::{self, Break, Continue};
 
-use crate::ast::{Ast, AstObject, AstProperty, AstStruct, AstValue};
+use crate::ast::{Ast, Object, Property, RootObject, Value};
 
 pub use crate::cst::visitor::Visit;
 
@@ -8,57 +8,56 @@ pub use crate::cst::visitor::Visit;
 /// [Visitor pattern](https://rust-unofficial.github.io/patterns/patterns/behavioural/visitor.html)
 /// for walking an [`Ast`].
 ///
-/// Every node kind has a matching `enter_*`/`exit_*` pair, and both run for every node that's
-/// entered - even one whose `enter_*` returned [`Visit::Skip`], and even while the walk is
-/// unwinding after a [`Visit::Stop`] elsewhere in the tree - unless a [`Visit::Abort`] cuts the
-/// walk short first, in which case no further callbacks of either kind run.
+/// Every AST node has a matching `enter_*`/`exit_*` pair, which are called before/after walking a
+/// node & it's children.
 ///
-/// [`Visit::Skip`] means something different depending on which callback returns it:
+/// Each method returns a [`Visit`] result, which WIP WIP WIP
+///
+/// [`Visit::Skip`] behaviour depends on which visit method returns it:
 /// - from `enter_*`: this node's children are not visited, but its `exit_*` still runs.
-/// - from `exit_*`: the *parent's* remaining children are pruned - the walk jumps straight to the
-///   parent's `exit_*` and continues from there. What counts as a "child" is spelled out per pair
-///   below.
+/// - from `exit_*`: the walk skips the *parent's* remaining children, and continues from the parent's `exit_*`.
 pub trait Visitor {
-    /// Called on first discovery of an [`AstObject`], before its struct.
-    fn enter_object(&mut self, object: &AstObject) -> Visit {
+    /// Called before walking a [`RootObject`]'s object (see [`Self::enter_object`]).
+    fn enter_root_object(&mut self, object: &RootObject) -> Visit {
         Visit::Continue
     }
-    /// Called after `object`'s struct has been walked, or would have been but was skipped.
+    /// Called after a root object has been walked, or would have been but was skipped.
     ///
     /// A [`Visit::Skip`] here prunes the remaining sibling objects: the walk ends without
     /// visiting any objects after this one.
-    fn exit_object(&mut self, object: &AstObject) -> Visit {
+    fn exit_root_object(&mut self, object: &RootObject) -> Visit {
         Visit::Continue
     }
 
-    /// Called on first discovery of an [`AstStruct`], before its properties.
-    fn enter_struct(&mut self, s: &AstStruct) -> Visit {
+    /// Called before walking an [`Object`]'s properties.
+    /// (see [`Self::enter_property`]).
+    fn enter_object(&mut self, object: &Object) -> Visit {
         Visit::Continue
     }
-    /// Called after a struct's properties have been walked, or would have been but were skipped.
+    /// Called after an [`Object`] has been walked,
+    /// or when unwinding due to a child returning [`Visit::Skip`]/[`Visit::Stop`].
     ///
-    /// A [`Visit::Skip`] here prunes this struct's remaining sibling properties, if any - it has
-    /// no effect on an [`AstObject`]'s struct, which is its only child.
-    fn exit_struct(&mut self, s: &AstStruct) -> Visit {
+    /// Returning [`Visit::Skip`] skips any remaining sibling *properties* for this struct.
+    fn exit_object(&mut self, object: &Object) -> Visit {
         Visit::Continue
     }
 
-    /// Called on first discovery of an [`AstProperty`], before walking its value.
-    fn enter_property(&mut self, property: &AstProperty) -> Visit {
+    /// Called before walking a [`Property`]'s children (its value - see [`Self::enter_value`]).
+    fn enter_property(&mut self, property: &Property) -> Visit {
         Visit::Continue
     }
-    /// Called after a property's value has been walked, or would have been but was skipped.
+    /// Called after a property's value has been walked,
+    /// or when unwinding due to a child returning [`Visit::Skip`]/[`Visit::Stop`].
     ///
-    /// A [`Visit::Skip`] here prunes this property's remaining sibling properties within its
-    /// enclosing struct.
-    fn exit_property(&mut self, property: &AstProperty) -> Visit {
+    /// Returning [`Visit::Skip`] here skips this property's remaining sibling properties.
+    fn exit_property(&mut self, property: &Property) -> Visit {
         Visit::Continue
     }
 
-    /// Called on first discovery of an [`AstValue`], before whatever it contains: a nested
-    /// struct, a container's items, a map's key/value entries, or an optional's inner value.
-    /// Values with no such contents (scalars, an empty optional) have no children to skip.
-    fn enter_value(&mut self, value: &AstValue) -> Visit {
+    /// Called before walking a [`Value`]'s children (if it has any).
+    ///
+    /// Returning [`Visit::Skip`] skips this value's children.
+    fn enter_value(&mut self, value: &Value) -> Visit {
         Visit::Continue
     }
     /// Called after a value has been walked, or would have been but were skipped.
@@ -67,7 +66,7 @@ pub trait Visitor {
     /// container's items, the rest of a map's entries (a map entry's value is itself skippable
     /// this way - it prunes the remaining entries), or for a property's value or an object's
     /// struct, which have no siblings - nothing observable at all.
-    fn exit_value(&mut self, value: &AstValue) -> Visit {
+    fn exit_value(&mut self, value: &Value) -> Visit {
         Visit::Continue
     }
 }
@@ -141,19 +140,23 @@ fn walk_all<V, T>(
     Continue(())
 }
 
-fn walk_object<V: Visitor>(visitor: &mut V, object: &AstObject) -> Walk {
-    walk_inner(visitor, object, V::enter_object, V::exit_object, |v| {
-        walk_struct(v, &object.object).map_continue(|_| ())
-    })
+fn walk_root_object<V: Visitor>(visitor: &mut V, object: &RootObject) -> Walk {
+    walk_inner(
+        visitor,
+        object,
+        V::enter_root_object,
+        V::exit_root_object,
+        |v| walk_object(v, &object.object).map_continue(|_| ()),
+    )
 }
 
-fn walk_struct<V: Visitor>(visitor: &mut V, s: &AstStruct) -> Walk {
-    walk_inner(visitor, s, V::enter_struct, V::exit_struct, |v| {
+fn walk_object<V: Visitor>(visitor: &mut V, s: &Object) -> Walk {
+    walk_inner(visitor, s, V::enter_object, V::exit_object, |v| {
         walk_all(v, &s.properties, walk_property)
     })
 }
 
-fn walk_property<V: Visitor>(visitor: &mut V, property: &AstProperty) -> Walk {
+fn walk_property<V: Visitor>(visitor: &mut V, property: &Property) -> Walk {
     walk_inner(
         visitor,
         property,
@@ -163,18 +166,18 @@ fn walk_property<V: Visitor>(visitor: &mut V, property: &AstProperty) -> Walk {
     )
 }
 
-fn walk_value<V: Visitor>(visitor: &mut V, value: &AstValue) -> Walk {
+fn walk_value<V: Visitor>(visitor: &mut V, value: &Value) -> Walk {
     walk_inner(
         visitor,
         value,
         V::enter_value,
         V::exit_value,
         |v| match value {
-            AstValue::Struct(s) | AstValue::Embedded(s) => walk_struct(v, s).map_continue(|_| ()),
-            AstValue::Container { items, .. } | AstValue::UnorderedContainer { items, .. } => {
+            Value::Struct(s) | Value::Embedded(s) => walk_object(v, s).map_continue(|_| ()),
+            Value::Container { items, .. } | Value::UnorderedContainer { items, .. } => {
                 walk_all(v, items, walk_value)
             }
-            AstValue::Map { entries, .. } => walk_all(v, entries, |v, (key, value)| {
+            Value::Map { entries, .. } => walk_all(v, entries, |v, (key, value)| {
                 match walk_value(v, key)? {
                     Resume::Siblings => {}
                     // the key's exit pruned the entry's remaining sibling (its value) and,
@@ -183,7 +186,7 @@ fn walk_value<V: Visitor>(visitor: &mut V, value: &AstValue) -> Walk {
                 }
                 walk_value(v, value)
             }),
-            AstValue::Optional {
+            Value::Optional {
                 value: Some(inner), ..
             } => walk_value(v, inner).map_continue(|_| ()),
             _ => Continue(()),
@@ -194,6 +197,6 @@ fn walk_value<V: Visitor>(visitor: &mut V, value: &AstValue) -> Walk {
 impl Ast {
     /// Walk a [`Visitor`] implementor over every object in this tree.
     pub fn walk<V: Visitor>(&self, visitor: &mut V) {
-        let _ = walk_all(visitor, &self.objects, walk_object);
+        let _ = walk_all(visitor, &self.objects, walk_root_object);
     }
 }

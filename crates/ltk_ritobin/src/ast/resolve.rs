@@ -15,7 +15,7 @@ use crate::{
             Diagnostic::{self, *},
             RitoTypeOrVirtual,
         },
-        AstValue,
+        Value,
     },
     parse::Span,
     Node, RitoType,
@@ -28,7 +28,7 @@ impl<'a> Builder<'a> {
         node: &Node,
         expected: PropertyKind,
         hint_span: Option<Span>,
-    ) -> Result<AstValue, Diagnostic> {
+    ) -> Result<Value, Diagnostic> {
         match self.resolve_value(node, Some(RitoType::simple(expected)), hint_span)? {
             Some(v) => Ok(v),
             None => Err(TypeMismatch {

@@ -7,7 +7,7 @@ use crate::{
     ast::{
         diagnostics::{Diagnostic, RitoTypeOrVirtual},
         hash::{HashedLiteral, Originally},
-        AstValue,
+        Value,
     },
     parse::{Span, Token, TokenKind},
     RitoType, Spanned,
@@ -15,7 +15,7 @@ use crate::{
 
 use Diagnostic::*;
 
-impl AstValue {
+impl Value {
     pub(crate) fn eval_unknown_hash(text: &str, span: Span) -> Result<Self, Diagnostic> {
         // TODO: better errs here?
         let src = text[span].strip_prefix("0x").ok_or(InvalidHash(span))?;
@@ -47,8 +47,8 @@ fn parse_int<T: std::str::FromStr<Err = std::num::ParseIntError>>(
     txt: &str,
     kind_hint: PropertyKind,
     span: Span,
-    wrap: impl FnOnce(T, Span) -> AstValue,
-) -> Result<AstValue, Diagnostic> {
+    wrap: impl FnOnce(T, Span) -> Value,
+) -> Result<Value, Diagnostic> {
     txt.parse::<T>()
         .map(|v| wrap(v, span))
         .map_err(|e| Diagnostic::ParseNumericError {
@@ -58,7 +58,7 @@ fn parse_int<T: std::str::FromStr<Err = std::num::ParseIntError>>(
         })
 }
 
-impl AstValue {
+impl Value {
     pub(crate) fn eval(
         text: &str,
         token: &Token,
@@ -165,6 +165,6 @@ pub(crate) fn eval(
     token: &Token,
     kind_hint: Option<RitoType>,
     kind_hint_span: Option<Span>,
-) -> Result<Option<AstValue>, Diagnostic> {
-    AstValue::eval(text, token, kind_hint, kind_hint_span)
+) -> Result<Option<Value>, Diagnostic> {
+    Value::eval(text, token, kind_hint, kind_hint_span)
 }

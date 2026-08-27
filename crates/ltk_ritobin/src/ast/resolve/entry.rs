@@ -14,7 +14,7 @@ use crate::{
         },
         hash::HashedLiteral,
         resolve::literals::{self},
-        AstValue,
+        Value,
     },
     cst::Kind,
     parse::{Span, Token, TokenKind},
@@ -22,9 +22,9 @@ use crate::{
 };
 
 pub struct RawEntry {
-    pub key: AstValue,
+    pub key: Value,
     pub type_span: Option<Span>,
-    pub value: AstValue,
+    pub value: Value,
 }
 
 impl<'a> Builder<'a> {
@@ -33,7 +33,7 @@ impl<'a> Builder<'a> {
         key_node: &Node,
         parent_value_kind: Option<RitoType>,
         parent_type_span: Option<Span>,
-    ) -> Result<AstValue, Diagnostic> {
+    ) -> Result<Value, Diagnostic> {
         let token = key_node
             .children
             .get(self.cst)
@@ -45,7 +45,7 @@ impl<'a> Builder<'a> {
             Some(Token {
                 kind: TokenKind::Name,
                 span,
-            }) => AstValue::String(Spanned::new(*span, self.text[span].into())),
+            }) => Value::String(Spanned::new(*span, self.text[span].into())),
             Some(Token {
                 kind: TokenKind::String,
                 span,
@@ -61,7 +61,7 @@ impl<'a> Builder<'a> {
                         .unwrap(),
                     );
                 }
-                AstValue::from(values::String::new_with_meta(
+                Value::from(values::String::new_with_meta(
                     self.text[Span::new(span.start + 1, span.end - 1)].into(),
                     *span,
                 ))
@@ -69,7 +69,7 @@ impl<'a> Builder<'a> {
             Some(Token {
                 kind: TokenKind::HexLit,
                 span,
-            }) => AstValue::Hash(literals::eval_hash(self.text, *span)?),
+            }) => Value::Hash(literals::eval_hash(self.text, *span)?),
             Some(token) => literals::eval(
                 self.text,
                 token,
@@ -124,7 +124,7 @@ impl<'a> Builder<'a> {
                     return Ok(RawEntry {
                         key,
                         type_span: parent_type_span,
-                        value: AstValue::default_for(*parent, value_span),
+                        value: Value::default_for(*parent, value_span),
                     });
                 }
             }
@@ -138,7 +138,7 @@ impl<'a> Builder<'a> {
             Err(e) => match kind {
                 Some(kind) => {
                     self.push(e.default_span(entry.span));
-                    Some(AstValue::default_for(kind, value_span))
+                    Some(Value::default_for(kind, value_span))
                 }
                 None => return Err(e.into()),
             },
@@ -165,7 +165,7 @@ impl<'a> Builder<'a> {
                     .into())
                 }
             },
-            (Some(kind), None) => AstValue::default_for(kind, value_span),
+            (Some(kind), None) => Value::default_for(kind, value_span),
         };
 
         Ok(RawEntry {

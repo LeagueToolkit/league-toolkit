@@ -8,7 +8,7 @@ use crate::{
             MaybeSpanDiag,
         },
         resolve::literals::{self},
-        AstValue,
+        Value,
     },
     cst::Kind,
     parse::Span,
@@ -21,7 +21,7 @@ impl<'a> Builder<'a> {
         wrapper: &Node,
         hint: Option<RitoType>,
         hint_span: Option<Span>,
-    ) -> Result<Option<AstValue>, Diagnostic> {
+    ) -> Result<Option<Value>, Diagnostic> {
         let Some(child) = wrapper.children.get(self.cst).first() else {
             return Ok(None);
         };
@@ -52,7 +52,7 @@ impl<'a> Builder<'a> {
                 let Some(token) = token_child.token(self.cst) else {
                     return Ok(None);
                 };
-                literals::eval(self.text, token, hint, hint_span).map(|v| v.map(AstValue::from))
+                literals::eval(self.text, token, hint, hint_span).map(|v| v.map(Value::from))
             }
             _ => Ok(None),
         }
@@ -63,7 +63,7 @@ impl<'a> Builder<'a> {
         node: &Node,
         hint: RitoType,
         hint_span: Option<Span>,
-    ) -> Result<AstValue, MaybeSpanDiag> {
+    ) -> Result<Value, MaybeSpanDiag> {
         if matches!(hint.base, PropertyKind::Struct | PropertyKind::Embedded) {
             return Err(MissingClassName {
                 span: node.open_brace_span(self.cst),

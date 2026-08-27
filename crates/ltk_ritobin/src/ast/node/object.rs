@@ -1,17 +1,17 @@
 use ltk_hash::BinHash;
 
 use crate::{
-    ast::{hash::HashedLiteral, node::AstStruct, Ptr},
+    ast::{hash::HashedLiteral, node::Object, Ptr},
     parse::Span,
 };
 
 #[derive(Debug, Clone)]
-pub struct AstObject {
+pub struct RootObject {
     pub path_hash: HashedLiteral<BinHash>,
-    pub object: Ptr<AstStruct>,
+    pub object: Ptr<Object>,
 }
 
-impl AstObject {
+impl RootObject {
     #[inline(always)]
     #[must_use]
     pub fn span(&self) -> Span {

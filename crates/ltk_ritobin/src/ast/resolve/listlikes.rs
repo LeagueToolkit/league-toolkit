@@ -4,7 +4,7 @@ use crate::{
     ast::{
         builder::Builder,
         diagnostics::{Diagnostic, ListLike, MaybeSpanDiag, RitoTypeOrVirtual},
-        AstValue,
+        Value,
     },
     cst::{Child, Cst, Kind, Node},
     parse::Span,
@@ -23,7 +23,7 @@ struct ListIter<'a, 'b, 'c> {
 }
 
 impl<'c> ListIter<'_, '_, 'c> {
-    fn next_value(&mut self, expected: PropertyKind) -> Option<Result<AstValue, MaybeSpanDiag>> {
+    fn next_value(&mut self, expected: PropertyKind) -> Option<Result<Value, MaybeSpanDiag>> {
         for child in self.children.by_ref() {
             let Some(node) = child.tree(self.cst) else {
                 continue;
@@ -46,7 +46,7 @@ impl<'c> ListIter<'_, '_, 'c> {
         &mut self,
         expected_kind: PropertyKind,
         expected: ListLike,
-    ) -> Result<AstValue, MaybeSpanDiag> {
+    ) -> Result<Value, MaybeSpanDiag> {
         match self.next_value(expected_kind) {
             Some(v) => v,
             None => Err(NotEnoughItems {
@@ -65,7 +65,7 @@ impl<'c> ListIter<'_, '_, 'c> {
         let mut out = [0.0f32; N];
         for slot in &mut out {
             *slot = match self.expect_next(PropertyKind::F32, expected)? {
-                AstValue::F32(v) => v.value,
+                Value::F32(v) => v.value,
                 other => {
                     return Err(TypeMismatch {
                         span: other.span(),
@@ -84,7 +84,7 @@ impl<'c> ListIter<'_, '_, 'c> {
         let mut out = [0u8; N];
         for slot in &mut out {
             *slot = match self.expect_next(PropertyKind::U8, expected)? {
-                AstValue::U8(v) => v.value,
+                Value::U8(v) => v.value,
                 other => {
                     return Err(TypeMismatch {
                         span: other.span(),
@@ -108,7 +108,7 @@ impl<'a> Builder<'a> {
         block: &Node,
         kind: PropertyKind,
         type_span: Option<Span>,
-    ) -> Result<AstValue, MaybeSpanDiag> {
+    ) -> Result<Value, MaybeSpanDiag> {
         let cst = self.cst();
         let span = block.span;
         let mut items = ListIter {
@@ -123,19 +123,19 @@ impl<'a> Builder<'a> {
         let value = match kind {
             PropertyKind::Vector2 => {
                 let [x, y] = items.read_floats::<2>(ListLike::Vec2)?;
-                AstValue::Vector2(values::Vector2::new_with_meta([x, y].into(), span))
+                Value::Vector2(values::Vector2::new_with_meta([x, y].into(), span))
             }
             PropertyKind::Vector3 => {
                 let [x, y, z] = items.read_floats::<3>(ListLike::Vec3)?;
-                AstValue::Vector3(values::Vector3::new_with_meta([x, y, z].into(), span))
+                Value::Vector3(values::Vector3::new_with_meta([x, y, z].into(), span))
             }
             PropertyKind::Vector4 => {
                 let [x, y, z, w] = items.read_floats::<4>(ListLike::Vec4)?;
-                AstValue::Vector4(values::Vector4::new_with_meta([x, y, z, w].into(), span))
+                Value::Vector4(values::Vector4::new_with_meta([x, y, z, w].into(), span))
             }
             PropertyKind::Color => {
                 let [r, g, b, a] = items.read_u8s::<4>(ListLike::Color)?;
-                AstValue::Color(Spanned::new(span, ltk_primitives::Color { r, g, b, a }))
+                Value::Color(Spanned::new(span, ltk_primitives::Color { r, g, b, a }))
             }
             PropertyKind::Matrix44 => {
                 let x_axis = items.read_floats::<4>(ListLike::Mat44)?;
@@ -149,7 +149,7 @@ impl<'a> Builder<'a> {
                     w_axis.into(),
                 )
                 .transpose();
-                AstValue::Matrix44(values::Matrix44::new_with_meta(mat, span))
+                Value::Matrix44(values::Matrix44::new_with_meta(mat, span))
             }
             _ => unreachable!("resolve_listlike called with a non-listlike kind"),
         };

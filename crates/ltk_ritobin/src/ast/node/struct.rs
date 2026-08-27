@@ -1,19 +1,19 @@
 use ltk_hash::BinHash;
 
 use crate::{
-    ast::{hash::HashedLiteral, node::AstProperty},
+    ast::{hash::HashedLiteral, node::Property},
     parse::Span,
 };
 
 #[derive(Debug, Clone)]
-pub struct AstStruct {
+pub struct Object {
     pub class_hash: HashedLiteral<BinHash>,
     /// The entire `ClassName { .. }` span
     pub span: Span,
-    pub properties: Vec<AstProperty>,
+    pub properties: Vec<Property>,
 }
 
-impl AstStruct {
+impl Object {
     pub fn properties_span(&self) -> Option<Span> {
         self.properties
             .first()

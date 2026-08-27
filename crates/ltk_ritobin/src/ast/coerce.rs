@@ -2,7 +2,7 @@ use ltk_hash::{BinHash, Hash as _, WadHash};
 use ltk_meta::PropertyKind;
 
 use crate::{
-    ast::{node::AstValue, Ptr},
+    ast::{node::Value, Ptr},
     RitoType,
 };
 
@@ -44,7 +44,7 @@ impl CanCoerce for RitoType {
     }
 }
 
-impl AstValue {
+impl Value {
     pub fn coerce_to(self, to: PropertyKind) -> Option<Self> {
         Some(match to {
             to if to == self.kind() => self,

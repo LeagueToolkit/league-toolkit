@@ -6,7 +6,7 @@ use crate::{
             nodes::{NodeRef, SubNodeRef},
             path::iter::{AstFinePathIter, AstPathIter},
         },
-        Ast, AstObject, AstProperty, AstStruct, AstValue,
+        Ast, Object, Property, RootObject, Value,
     },
     parse::Span,
 };
@@ -24,7 +24,7 @@ impl<'a> NodeRef<'a> {
     }
 }
 
-impl AstObject {
+impl RootObject {
     pub fn children<'a>(&'a self) -> impl Iterator<Item = NodeRef<'a>> {
         once(NodeRef::Struct(&self.object))
     }
@@ -38,7 +38,7 @@ impl AstObject {
     }
 }
 
-impl AstStruct {
+impl Object {
     pub fn children<'a>(&'a self) -> impl Iterator<Item = NodeRef<'a>> {
         self.properties.iter().map(NodeRef::Property)
     }
@@ -53,7 +53,7 @@ impl AstStruct {
     }
 }
 
-impl AstProperty {
+impl Property {
     pub fn children<'a>(&'a self) -> impl Iterator<Item = NodeRef<'a>> {
         once(NodeRef::Value(&self.value))
     }
@@ -68,21 +68,19 @@ impl AstProperty {
     }
 }
 
-impl AstValue {
+impl Value {
     pub fn children(&self) -> Box<dyn Iterator<Item = NodeRef<'_>> + '_> {
         match self {
-            AstValue::Struct(s) | AstValue::Embedded(s) => {
-                Box::new(std::iter::once(NodeRef::Struct(s)))
-            }
-            AstValue::Container { items, .. } | AstValue::UnorderedContainer { items, .. } => {
+            Value::Struct(s) | Value::Embedded(s) => Box::new(std::iter::once(NodeRef::Struct(s))),
+            Value::Container { items, .. } | Value::UnorderedContainer { items, .. } => {
                 Box::new(items.iter().map(NodeRef::Value))
             }
-            AstValue::Map { entries, .. } => Box::new(
+            Value::Map { entries, .. } => Box::new(
                 entries
                     .iter()
                     .flat_map(|(k, v)| [NodeRef::Value(k), NodeRef::Value(v)]),
             ),
-            AstValue::Optional {
+            Value::Optional {
                 value: Some(inner), ..
             } => Box::new(std::iter::once(NodeRef::Value(inner))),
             _ => Box::new(std::iter::empty()),

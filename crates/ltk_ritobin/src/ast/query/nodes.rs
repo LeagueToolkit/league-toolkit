@@ -4,7 +4,7 @@ use crate::{
     ast::{
         hash::HashedLiteral,
         query::{AstObjectDetail, AstPropertyDetail, AstStructDetail, NodeDetail},
-        AstObject, AstProperty, AstStruct, AstValue,
+        Object, Property, RootObject, Value,
     },
     parse::Span,
 };
@@ -29,19 +29,19 @@ pub enum NodeKind {
 /// A reference to a node in an [`Ast`].
 #[derive(Debug, Clone, Copy)]
 pub enum NodeRef<'a> {
-    Object(&'a AstObject),
-    Struct(&'a AstStruct),
-    Property(&'a AstProperty),
-    Value(&'a AstValue),
+    Object(&'a RootObject),
+    Struct(&'a Object),
+    Property(&'a Property),
+    Value(&'a Value),
 }
 
 /// A detailed reference to a node in an [`Ast`], down to the field level.
 #[derive(Debug, Clone)]
 pub enum SubNodeRef<'a> {
-    Object(&'a AstObject, AstObjectDetail),
-    Struct(&'a AstStruct, AstStructDetail),
-    Property(&'a AstProperty, AstPropertyDetail),
-    Value(&'a AstValue),
+    Object(&'a RootObject, AstObjectDetail),
+    Struct(&'a Object, AstStructDetail),
+    Property(&'a Property, AstPropertyDetail),
+    Value(&'a Value),
 }
 
 impl NodeExt for NodeRef<'_> {
@@ -129,44 +129,44 @@ impl<'a> SubNodeRef<'a> {
     }
 }
 
-impl<'a> From<&'a AstObject> for NodeRef<'a> {
-    fn from(value: &'a AstObject) -> Self {
+impl<'a> From<&'a RootObject> for NodeRef<'a> {
+    fn from(value: &'a RootObject) -> Self {
         Self::Object(value)
     }
 }
-impl<'a> From<&'a AstStruct> for NodeRef<'a> {
-    fn from(value: &'a AstStruct) -> Self {
+impl<'a> From<&'a Object> for NodeRef<'a> {
+    fn from(value: &'a Object) -> Self {
         Self::Struct(value)
     }
 }
-impl<'a> From<&'a AstProperty> for NodeRef<'a> {
-    fn from(value: &'a AstProperty) -> Self {
+impl<'a> From<&'a Property> for NodeRef<'a> {
+    fn from(value: &'a Property) -> Self {
         Self::Property(value)
     }
 }
-impl<'a> From<&'a AstValue> for NodeRef<'a> {
-    fn from(value: &'a AstValue) -> Self {
+impl<'a> From<&'a Value> for NodeRef<'a> {
+    fn from(value: &'a Value) -> Self {
         Self::Value(value)
     }
 }
 
-impl<'a> From<&'a AstObject> for SubNodeRef<'a> {
-    fn from(value: &'a AstObject) -> Self {
+impl<'a> From<&'a RootObject> for SubNodeRef<'a> {
+    fn from(value: &'a RootObject) -> Self {
         Self::Object(value, AstObjectDetail::Node)
     }
 }
-impl<'a> From<&'a AstStruct> for SubNodeRef<'a> {
-    fn from(value: &'a AstStruct) -> Self {
+impl<'a> From<&'a Object> for SubNodeRef<'a> {
+    fn from(value: &'a Object) -> Self {
         Self::Struct(value, AstStructDetail::Node)
     }
 }
-impl<'a> From<&'a AstProperty> for SubNodeRef<'a> {
-    fn from(value: &'a AstProperty) -> Self {
+impl<'a> From<&'a Property> for SubNodeRef<'a> {
+    fn from(value: &'a Property) -> Self {
         Self::Property(value, AstPropertyDetail::Node)
     }
 }
-impl<'a> From<&'a AstValue> for SubNodeRef<'a> {
-    fn from(value: &'a AstValue) -> Self {
+impl<'a> From<&'a Value> for SubNodeRef<'a> {
+    fn from(value: &'a Value) -> Self {
         Self::Value(value)
     }
 }
