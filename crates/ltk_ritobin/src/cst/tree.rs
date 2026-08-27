@@ -1,7 +1,7 @@
 use std::fmt::{self, Display};
 
 use crate::{
-    ast::{builder::ChildrenExt as _, PartialBin},
+    ast::PartialBin,
     cst::{
         visitor::{Visit, VisitCtx},
         ChildRange, ErrorRange, NodeId, TokenId, Visitor,
@@ -160,6 +160,31 @@ impl Node {
                 .unwrap_or(self.span),
             _ => self.span,
         }
+    }
+}
+
+pub trait ChildrenExt {
+    fn find_tree<'c>(&'c self, cst: &'c Cst, kind: Kind) -> Option<&'c Node>;
+    fn find_token<'c>(&'c self, cst: &'c Cst, kind: TokenKind) -> Option<&'c Token>;
+}
+
+impl ChildrenExt for [Child] {
+    fn find_tree<'c>(&'c self, cst: &'c Cst, kind: Kind) -> Option<&'c Node> {
+        self.iter()
+            .find_map(|c| c.tree(cst).filter(|t| t.kind == kind))
+    }
+    fn find_token<'c>(&'c self, cst: &'c Cst, kind: TokenKind) -> Option<&'c Token> {
+        self.iter()
+            .find_map(|c| c.token(cst).filter(|t| t.kind == kind))
+    }
+}
+
+impl ChildrenExt for ChildRange {
+    fn find_tree<'c>(&'c self, cst: &'c Cst, kind: Kind) -> Option<&'c Node> {
+        self.get(cst).find_tree(cst, kind)
+    }
+    fn find_token<'c>(&'c self, cst: &'c Cst, kind: TokenKind) -> Option<&'c Token> {
+        self.get(cst).find_token(cst, kind)
     }
 }
 

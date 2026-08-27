@@ -8,8 +8,8 @@ use crate::{
         root::RootKindOrUnknown,
         Ast, Ptr, Spanned,
     },
-    cst::{Child, Cst, Kind, Node},
-    parse::{Span, Token, TokenKind},
+    cst::{Cst, Kind},
+    parse::Span,
     RitoType,
 };
 
@@ -31,22 +31,6 @@ pub(super) struct Builder<'a> {
     pub cst: &'a Cst,
     pub text: &'a str,
     pub diagnostics: Vec<DiagnosticWithSpan>,
-}
-
-pub trait ChildrenExt {
-    fn find_tree<'c>(&'c self, cst: &'c Cst, kind: Kind) -> Option<&'c Node>;
-    fn find_token<'c>(&'c self, cst: &'c Cst, kind: TokenKind) -> Option<&'c Token>;
-}
-
-impl ChildrenExt for [Child] {
-    fn find_tree<'c>(&'c self, cst: &'c Cst, kind: Kind) -> Option<&'c Node> {
-        self.iter()
-            .find_map(|c| c.tree(cst).filter(|t| t.kind == kind))
-    }
-    fn find_token<'c>(&'c self, cst: &'c Cst, kind: TokenKind) -> Option<&'c Token> {
-        self.iter()
-            .find_map(|c| c.token(cst).filter(|t| t.kind == kind))
-    }
 }
 
 impl<'a> Builder<'a> {

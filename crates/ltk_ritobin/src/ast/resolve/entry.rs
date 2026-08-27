@@ -2,7 +2,7 @@ use ltk_meta::{property::values, PropertyKind};
 
 use crate::{
     ast::{
-        builder::{Builder, ChildrenExt as _},
+        builder::Builder,
         coerce::CanCoerce as _,
         diagnostics::{
             Diagnostic::{
@@ -14,7 +14,7 @@ use crate::{
         resolve::literals::{self},
         Value,
     },
-    cst::Kind,
+    cst::{ChildrenExt as _, Kind},
     parse::{Span, Token, TokenKind},
     Node, RitoType, Spanned,
 };

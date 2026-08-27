@@ -3,7 +3,7 @@ use ltk_meta::PropertyKind;
 
 use crate::{
     ast::{
-        builder::{Builder, ChildrenExt as _},
+        builder::Builder,
         diagnostics::{
             Diagnostic::{self, *},
             RitoTypeOrVirtual,
@@ -11,9 +11,9 @@ use crate::{
         hash::HashedLiteral,
         Object, Value,
     },
-    cst::Kind,
+    cst::{ChildrenExt as _, Kind},
     parse::{Token, TokenKind},
-    Node, PropertyValueExt as _, RitoType,
+    Node, RitoType,
 };
 
 impl<'a> Builder<'a> {

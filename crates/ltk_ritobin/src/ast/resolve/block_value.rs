@@ -8,7 +8,7 @@ use crate::{
     },
     cst::Kind,
     parse::Span,
-    Node, PropertyValueExt as _, RitoType,
+    Node, RitoType,
 };
 
 impl<'a> Builder<'a> {
