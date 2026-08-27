@@ -2,7 +2,7 @@ use ltk_meta::{property::values, PropertyKind};
 
 use crate::{
     ast::{
-        build::BuildCtx,
+        builder::Builder,
         diagnostics::{Diagnostic, ListLike, MaybeSpanDiag, RitoTypeOrVirtual},
         AstValue,
     },
@@ -14,7 +14,7 @@ use crate::{
 use Diagnostic::*;
 
 struct ListIter<'a, 'b, 'c> {
-    ctx: &'a mut BuildCtx<'b>,
+    ctx: &'a mut Builder<'b>,
     children: std::slice::Iter<'c, Child>,
     cst: &'c Cst,
     span: Span,
@@ -100,7 +100,7 @@ impl<'c> ListIter<'_, '_, 'c> {
     }
 }
 
-impl<'a> BuildCtx<'a> {
+impl<'a> Builder<'a> {
     /// Resolves a `Block`/`ListItemBlock` node whose body is a flat list of bare numbers into
     /// one packed [`AstValue`] of `kind` (`Vector2`/`Vector3`/`Vector4`/`Color`/`Matrix44`).
     pub(super) fn resolve_listlike(

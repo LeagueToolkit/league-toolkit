@@ -2,7 +2,7 @@ use ltk_meta::{traits::PropertyExt as _, PropertyKind, PropertyValueEnum};
 
 use crate::{
     ast::{
-        build::BuildCtx,
+        builder::Builder,
         diagnostics::{Diagnostic::*, MaybeSpanDiag},
         AstProperty, AstValue, Spanned,
     },
@@ -11,7 +11,7 @@ use crate::{
     Node, PropertyValueExt as _, RitoType,
 };
 
-impl<'a> BuildCtx<'a> {
+impl<'a> Builder<'a> {
     /// Attempt to resolve a `Block`/`ListItemBlock` node to a value
     pub(crate) fn resolve_block_value(
         &mut self,

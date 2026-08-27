@@ -1,9 +1,8 @@
 use ltk_hash::{BinHash, Hash as _, WadHash};
-use ltk_meta::{property::values, PropertyKind, PropertyValueEnum};
-use std::fmt::Debug;
+use ltk_meta::PropertyKind;
 
 use crate::{
-    ast::{AstValue, Ptr},
+    ast::{node::AstValue, Ptr},
     RitoType,
 };
 

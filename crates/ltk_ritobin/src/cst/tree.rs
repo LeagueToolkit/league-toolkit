@@ -1,7 +1,7 @@
 use std::fmt::{self, Display};
 
 use crate::{
-    ast::{build::ChildrenExt as _, PartialBin},
+    ast::{builder::ChildrenExt as _, PartialBin},
     cst::{
         visitor::{Visit, VisitCtx},
         ChildRange, ErrorRange, NodeId, TokenId, Visitor,
@@ -233,10 +233,6 @@ impl Cst {
     /// [`PartialBin::finish`] to get a quick Result type.
     pub fn build_bin(&self, text: &str) -> PartialBin {
         self.build_ast(text).into_partial_bin(text)
-    }
-
-    pub fn build_ast(&self, text: &str) -> crate::ast::Ast {
-        crate::ast::Ast::from_cst(self, text)
     }
 
     /// Print this tree to a string for debugging purposes. This does **NOT** output ritobin, see [`crate::Print`] for

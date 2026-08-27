@@ -2,7 +2,7 @@ use ltk_meta::PropertyKind;
 
 use crate::{
     ast::{
-        build::BuildCtx,
+        builder::Builder,
         diagnostics::{
             Diagnostic::{self, *},
             MaybeSpanDiag,
@@ -15,7 +15,7 @@ use crate::{
     Node, RitoType,
 };
 
-impl<'a> BuildCtx<'a> {
+impl<'a> Builder<'a> {
     pub(crate) fn resolve_value(
         &mut self,
         wrapper: &Node,

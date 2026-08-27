@@ -4,11 +4,7 @@ use ltk_meta::{
 };
 
 use crate::{
-    ast::{
-        build::{Ast, AstObject},
-        diagnostics::DiagnosticWithSpan,
-        AstStruct, AstValue,
-    },
+    ast::{diagnostics::DiagnosticWithSpan, Ast, AstObject, AstStruct, AstValue},
     parse::Span,
     Spanned,
 };

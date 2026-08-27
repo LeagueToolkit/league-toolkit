@@ -2,7 +2,7 @@ use ltk_meta::PropertyKind;
 
 use crate::{
     ast::{
-        build::{BuildCtx, ChildrenExt as _},
+        builder::{Builder, ChildrenExt as _},
         diagnostics::Diagnostic::{self, *},
     },
     cst::Kind,
@@ -10,7 +10,7 @@ use crate::{
     Node, RitoType, RitobinName as _,
 };
 
-impl<'a> BuildCtx<'a> {
+impl<'a> Builder<'a> {
     pub fn resolve_type_expr(&mut self, tree: &Node) -> Result<RitoType, Diagnostic> {
         let children = tree.children.get(self.cst);
 

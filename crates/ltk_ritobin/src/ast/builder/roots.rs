@@ -1,92 +1,15 @@
-use indexmap::IndexMap;
-use ltk_hash::BinHash;
-use ltk_meta::{traits::PropertyExt as _, PropertyKind, PropertyValueEnum};
+use crate::ast::{diagnostics::Diagnostic as D, AstObject};
 
-use crate::{
-    ast::{
-        diagnostics::{Diagnostic, DiagnosticWithSpan, RootKind},
-        hash::HashedLiteral,
-        root::RootKindOrUnknown,
-        AstStruct, AstValue, Ptr, Spanned,
-    },
-    cst::{Child, Cst, Kind, Node},
-    parse::{Span, Token, TokenKind},
-    RitoType,
-};
-
-use Diagnostic::*;
+use super::*;
 
 #[derive(Debug, Clone)]
-pub struct Ast {
-    pub bin_type: Option<Span>,
-    pub version: Option<Spanned<u32>>,
-    pub dependencies: Vec<Span>,
-    pub objects: Vec<AstObject>,
-    pub diagnostics: Vec<DiagnosticWithSpan>,
-}
-
-#[derive(Debug, Clone)]
-pub struct AstObject {
-    pub path_hash: HashedLiteral<BinHash>,
-    pub object: Ptr<AstStruct>,
-}
-
-impl AstObject {
-    pub fn span(&self) -> Span {
-        Span::new(self.path_hash.span().start, self.object.span.end)
-    }
-}
-
-impl Ast {
-    pub fn from_cst(cst: &Cst, text: &str) -> Self {
-        let mut ctx = BuildCtx {
-            cst,
-            text,
-            diagnostics: Vec::new(),
-        };
-        ctx.build_root()
-    }
-}
-
-#[derive(Debug, Clone)]
-pub(super) struct RawRootEntry {
+pub struct RawRootEntry {
     key: AstValue,
     type_span: Span,
     value: AstValue,
 }
 
-#[derive(Debug, Clone)]
-pub(super) struct BuildCtx<'a> {
-    pub cst: &'a Cst,
-    pub text: &'a str,
-    pub diagnostics: Vec<DiagnosticWithSpan>,
-}
-
-pub trait ChildrenExt {
-    fn find_tree<'c>(&'c self, cst: &'c Cst, kind: Kind) -> Option<&'c Node>;
-    fn find_token<'c>(&'c self, cst: &'c Cst, kind: TokenKind) -> Option<&'c Token>;
-}
-
-impl ChildrenExt for [Child] {
-    fn find_tree<'c>(&'c self, cst: &'c Cst, kind: Kind) -> Option<&'c Node> {
-        self.iter()
-            .find_map(|c| c.tree(cst).filter(|t| t.kind == kind))
-    }
-    fn find_token<'c>(&'c self, cst: &'c Cst, kind: TokenKind) -> Option<&'c Token> {
-        self.iter()
-            .find_map(|c| c.token(cst).filter(|t| t.kind == kind))
-    }
-}
-
-impl<'a> BuildCtx<'a> {
-    pub(super) fn cst(&self) -> &'a Cst {
-        self.cst
-    }
-
-    pub(super) fn push(&mut self, d: DiagnosticWithSpan) {
-        self.diagnostics.push(d);
-    }
-
+impl<'a> Builder<'a> {
     pub(crate) fn build_root(&mut self) -> Ast {
         let root_node = self.cst.root();
         let mut roots: IndexMap<RootKindOrUnknown, RawRootEntry> = IndexMap::new();
@@ -110,7 +33,7 @@ impl<'a> BuildCtx<'a> {
                             },
                         ) {
                             self.push(
-                                ShadowedEntry {
+                                D::ShadowedEntry {
                                     shadowee: existing.key.span(),
                                     shadower: key_span,
                                 }
@@ -120,14 +43,14 @@ impl<'a> BuildCtx<'a> {
                     }
                     Err(e) => self.push(e.fallback(node.span)),
                 },
-                _ => self.push(RootNonEntry.default_span(node.span)),
+                _ => self.push(D::RootNonEntry.default_span(node.span)),
             }
         }
 
         self.collect_root(roots)
     }
 
-    pub(crate) fn take_root_value(
+    fn take_root_value(
         &mut self,
         root_kind: RootKind,
         entry: RawRootEntry,
@@ -138,7 +61,7 @@ impl<'a> BuildCtx<'a> {
             Ok(v) => Some(v),
             Err(got) => {
                 self.push(
-                    InvalidRootEntryType {
+                    D::InvalidRootEntryType {
                         root_kind,
                         key_span: entry.key.span(),
                         type_span: entry.type_span,
@@ -152,14 +75,11 @@ impl<'a> BuildCtx<'a> {
         }
     }
 
-    pub(crate) fn collect_root(
-        &mut self,
-        mut roots: IndexMap<RootKindOrUnknown, RawRootEntry>,
-    ) -> Ast {
+    fn collect_root(&mut self, mut roots: IndexMap<RootKindOrUnknown, RawRootEntry>) -> Ast {
         let dependencies = roots.swap_remove(&RootKindOrUnknown::Known(RootKind::Linked));
         if dependencies.is_none() {
             self.push(
-                MissingRootEntry {
+                D::MissingRootEntry {
                     root_kind: RootKind::Linked,
                 }
                 .default_span(Span::default()),
@@ -181,7 +101,7 @@ impl<'a> BuildCtx<'a> {
                             AstValue::String(_) => Some(span),
                             other => {
                                 self.push(
-                                    UnexpectedContainerItem {
+                                    D::UnexpectedContainerItem {
                                         span,
                                         expected: RitoType::simple(PropertyKind::String),
                                         expected_span: None,
@@ -201,7 +121,7 @@ impl<'a> BuildCtx<'a> {
         let objects = roots.swap_remove(&RootKindOrUnknown::Known(RootKind::Entries));
         if objects.is_none() {
             self.push(
-                MissingRootEntry {
+                D::MissingRootEntry {
                     root_kind: RootKind::Entries,
                 }
                 .default_span(Span::default()),
@@ -248,15 +168,16 @@ impl<'a> BuildCtx<'a> {
                     };
                     match s.value.as_str() {
                         "PROP" => {}
-                        "PTCH" => self
-                            .push(CustomSpan("Patch bins are not supported yet", s.span).unwrap()),
-                        _ => self.push(CustomSpan("Unknown bin type", s.span).unwrap()),
+                        "PTCH" => self.push(
+                            D::CustomSpan("Patch bins are not supported yet", s.span).unwrap(),
+                        ),
+                        _ => self.push(D::CustomSpan("Unknown bin type", s.span).unwrap()),
                     }
                     bin_type = Some(s.span);
                 }
             }
             None => self.push(
-                MissingRootEntry {
+                D::MissingRootEntry {
                     root_kind: RootKind::Type,
                 }
                 .default_span(Span::default()),
@@ -274,13 +195,13 @@ impl<'a> BuildCtx<'a> {
                 {
                     let AstValue::U32(n) = &v else { unreachable!() };
                     if n.value != 3 {
-                        self.push(CustomSpan("Bin version should be '3'", n.meta).unwrap());
+                        self.push(D::CustomSpan("Bin version should be '3'", n.meta).unwrap());
                     }
                     version = Some(Spanned::new(n.meta, n.value));
                 }
             }
             None => self.push(
-                MissingRootEntry {
+                D::MissingRootEntry {
                     root_kind: RootKind::Version,
                 }
                 .default_span(Span::default()),
@@ -289,7 +210,7 @@ impl<'a> BuildCtx<'a> {
 
         for (_, unknown) in roots {
             self.push(
-                UnknownRoot {
+                D::UnknownRoot {
                     span: unknown.key.span(),
                 }
                 .default_span(Span::default()),

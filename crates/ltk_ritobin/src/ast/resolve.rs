@@ -10,7 +10,7 @@ use ltk_meta::PropertyKind;
 
 use crate::{
     ast::{
-        build::BuildCtx,
+        builder::Builder,
         diagnostics::{
             Diagnostic::{self, *},
             RitoTypeOrVirtual,
@@ -21,7 +21,7 @@ use crate::{
     Node, RitoType,
 };
 
-impl<'a> BuildCtx<'a> {
+impl<'a> Builder<'a> {
     /// `node` is the `ListItem` wrapping the literal.
     pub(crate) fn resolve_numeric(
         &mut self,

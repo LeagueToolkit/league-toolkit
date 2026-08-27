@@ -3,7 +3,7 @@ use ltk_meta::{traits::PropertyExt as _, PropertyKind, PropertyValueEnum};
 
 use crate::{
     ast::{
-        build::{BuildCtx, ChildrenExt as _},
+        builder::{Builder, ChildrenExt as _},
         diagnostics::{
             Diagnostic::{self, *},
             RitoTypeOrVirtual,
@@ -17,7 +17,7 @@ use crate::{
     Node, PropertyValueExt as _, RitoType,
 };
 
-impl<'a> BuildCtx<'a> {
+impl<'a> Builder<'a> {
     pub(crate) fn resolve_class_hash(
         &mut self,
         token: &Token,

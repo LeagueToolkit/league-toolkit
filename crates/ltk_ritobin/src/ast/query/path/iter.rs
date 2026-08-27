@@ -1,5 +1,5 @@
 use crate::ast::{
-    query::nodes::{DetailedNode, Node},
+    query::nodes::{NodeRef, SubNodeRef},
     Ast,
 };
 
@@ -8,7 +8,7 @@ use crate::ast::{
 /// Use [`Ast::coarse_path_to`] to construct this iterator.
 #[derive(Clone)]
 pub struct AstPathIter<'a> {
-    next: Option<Node<'a>>,
+    next: Option<NodeRef<'a>>,
     offset: u32,
 }
 
@@ -19,11 +19,11 @@ impl<'a> AstPathIter<'a> {
                 .objects
                 .iter()
                 .find(|o| o.span().contains(offset))
-                .map(Node::Object),
+                .map(NodeRef::Object),
             offset,
         }
     }
-    pub(crate) fn from_node(node: Node<'a>, offset: u32) -> Self {
+    pub(crate) fn from_node(node: NodeRef<'a>, offset: u32) -> Self {
         Self {
             next: node.span().contains(offset).then_some(node),
             offset,
@@ -32,9 +32,9 @@ impl<'a> AstPathIter<'a> {
 }
 
 impl<'a> Iterator for AstPathIter<'a> {
-    type Item = Node<'a>;
+    type Item = NodeRef<'a>;
 
-    fn next(&mut self) -> Option<Node<'a>> {
+    fn next(&mut self) -> Option<NodeRef<'a>> {
         let current = self.next.take()?;
         self.next = current.children().find(|c| c.span().contains(self.offset));
         Some(current)
@@ -46,7 +46,7 @@ impl<'a> Iterator for AstPathIter<'a> {
 /// Use [`Ast::fine_path_to`] to construct this iterator.
 #[derive(Clone)]
 pub struct AstFinePathIter<'a> {
-    next: Option<DetailedNode<'a>>,
+    next: Option<SubNodeRef<'a>>,
     offset: u32,
 }
 impl<'a> AstFinePathIter<'a> {
@@ -56,7 +56,7 @@ impl<'a> AstFinePathIter<'a> {
                 .objects
                 .iter()
                 .find(|o| o.span().contains(offset))
-                .map(DetailedNode::from),
+                .map(SubNodeRef::from),
             offset,
         }
     }
@@ -69,24 +69,24 @@ impl<'a> AstFinePathIter<'a> {
 }
 
 impl<'a> Iterator for AstFinePathIter<'a> {
-    type Item = DetailedNode<'a>;
+    type Item = SubNodeRef<'a>;
 
-    fn next(&mut self) -> Option<DetailedNode<'a>> {
+    fn next(&mut self) -> Option<SubNodeRef<'a>> {
         let current = self.next.take()?;
 
         // only recurse on nodes with detail = Node, since that means we have more resolution
         if current.detail().is_node() {
             self.next = match current {
-                DetailedNode::Object(v, _) => v
+                SubNodeRef::Object(v, _) => v
                     .detailed_children()
                     .find(|c| c.span().is_some_and(|span| span.contains(self.offset))),
-                DetailedNode::Struct(v, _) => v
+                SubNodeRef::Struct(v, _) => v
                     .detailed_children()
                     .find(|c| c.span().is_some_and(|span| span.contains(self.offset))),
-                DetailedNode::Property(v, _) => v
+                SubNodeRef::Property(v, _) => v
                     .detailed_children()
                     .find(|c| c.span().is_some_and(|span| span.contains(self.offset))),
-                DetailedNode::Value(v) => v
+                SubNodeRef::Value(v) => v
                     .children()
                     .find(|c| c.span().contains(self.offset))
                     .map(|c| c.into()),

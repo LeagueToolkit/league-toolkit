@@ -1,7 +1,7 @@
 use ltk_hash::BinHash;
 
 use crate::{
-    ast::{hash::HashedLiteral, AstValue},
+    ast::{hash::HashedLiteral, node::AstValue},
     parse::Span,
     RitoType, Spanned,
 };

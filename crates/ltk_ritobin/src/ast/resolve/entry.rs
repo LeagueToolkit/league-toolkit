@@ -3,7 +3,7 @@ use ltk_meta::{property::values, traits::PropertyExt as _, PropertyKind, Propert
 
 use crate::{
     ast::{
-        build::{BuildCtx, ChildrenExt as _},
+        builder::{Builder, ChildrenExt as _},
         coerce::CanCoerce as _,
         diagnostics::{
             Diagnostic::{
@@ -27,7 +27,7 @@ pub struct RawEntry {
     pub value: AstValue,
 }
 
-impl<'a> BuildCtx<'a> {
+impl<'a> Builder<'a> {
     pub fn resolve_entry_key(
         &mut self,
         key_node: &Node,
