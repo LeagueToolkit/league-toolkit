@@ -16,7 +16,8 @@ pub struct PartialBin {
 
 impl PartialBin {
     #[allow(clippy::result_large_err)]
-    pub fn finish(self) -> Result<Bin, Self> {
+    #[inline(always)]
+    pub fn into_result(self) -> Result<Bin, Self> {
         if self.diagnostics.is_empty() {
             Ok(self.bin)
         } else {
@@ -58,7 +59,21 @@ impl Ast {
     }
 }
 
-fn trust<T>(result: Result<T, MetaError>, fallback: impl FnOnce() -> T) -> T {
+impl Object {
+    pub fn to_bin_value(&self) -> values::Struct<Span> {
+        values::Struct {
+            class_hash: self.class_hash.value,
+            properties: self
+                .properties
+                .iter()
+                .map(|p| (p.name.value, p.value.to_bin_value()))
+                .collect(),
+            meta: self.span,
+        }
+    }
+}
+
+fn assert<T>(result: Result<T, MetaError>, fallback: impl FnOnce() -> T) -> T {
     match result {
         Ok(v) => v,
         Err(e) => {
@@ -129,7 +144,7 @@ impl Value {
                 let mut map = values::Map::empty(*key_kind, *value_kind);
                 for (k, v) in entries {
                     let (key, value) = (k.to_bin_value(), v.to_bin_value());
-                    trust(map.push(key, value), || ());
+                    assert(map.push(key, value), || ());
                 }
                 *map.meta_mut() = *span;
                 P::Map(map)
@@ -140,7 +155,7 @@ impl Value {
                 span,
             } => {
                 let inner = value.as_deref().map(Value::to_bin_value);
-                let optional = trust(
+                let optional = assert(
                     values::Optional::new_with_meta(*item_kind, inner, *span),
                     || values::Optional::empty(*item_kind).unwrap_or_else(|| none_optional(*span)),
                 );
@@ -151,12 +166,12 @@ impl Value {
 }
 
 fn container_from(item_kind: PropertyKind, items: &[Value], span: Span) -> values::Container<Span> {
-    let mut container = trust(values::Container::empty(item_kind), || {
+    let mut container = assert(values::Container::empty(item_kind), || {
         values::Container::empty(PropertyKind::None).expect("None is always a valid item kind")
     });
     for item in items {
         let value = item.to_bin_value();
-        trust(container.push(value), || ());
+        assert(container.push(value), || ());
     }
     *container.meta_mut() = span;
     container
@@ -167,18 +182,4 @@ fn none_optional(span: Span) -> values::Optional<Span> {
         .expect("None is always a valid item kind for Optional");
     *optional.meta_mut() = span;
     optional
-}
-
-impl Object {
-    pub fn to_bin_value(&self) -> values::Struct<Span> {
-        values::Struct {
-            class_hash: self.class_hash.value,
-            properties: self
-                .properties
-                .iter()
-                .map(|p| (p.name.value, p.value.to_bin_value()))
-                .collect(),
-            meta: self.span,
-        }
-    }
 }
