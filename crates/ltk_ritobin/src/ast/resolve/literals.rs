@@ -73,17 +73,16 @@ impl AstValue {
             } => Self::String(Spanned::new(
                 *span,
                 text[Span::new(span.start + 1, span.end - 1)].into(),
-            ))
-            .into(),
+            )),
 
             Token {
                 kind: TokenKind::True,
                 span,
-            } => Self::bool(*span, true).into(),
+            } => Self::bool(*span, true),
             Token {
                 kind: TokenKind::False,
                 span,
-            } => Self::bool(*span, false).into(),
+            } => Self::bool(*span, false),
 
             Token {
                 kind: TokenKind::HexLit,
