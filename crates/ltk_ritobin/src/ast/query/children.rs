@@ -1,15 +1,8 @@
 use std::iter::once;
 
-use crate::{
-    ast::{
-        query::{
-            nodes::{NodeRef, SubNodeRef},
-            path::iter::{AstFinePathIter, AstPathIter},
-        },
-        Ast, Object, Property, RootObject, Value,
-    },
-    parse::Span,
-};
+use crate::ast::{
+        query::nodes::{NodeRef, SubNodeRef}, Object, Property, RootObject, Value,
+    };
 
 use super::*;
 

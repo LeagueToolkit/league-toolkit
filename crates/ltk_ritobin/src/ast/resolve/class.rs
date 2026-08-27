@@ -1,5 +1,5 @@
 use ltk_hash::{BinHash, Hash as _};
-use ltk_meta::{traits::PropertyExt as _, PropertyKind, PropertyValueEnum};
+use ltk_meta::PropertyKind;
 
 use crate::{
     ast::{
@@ -8,9 +8,8 @@ use crate::{
             Diagnostic::{self, *},
             RitoTypeOrVirtual,
         },
-        hash::{HashedLiteral, Originally},
-        resolve::literals::{self},
-        Object, Spanned, Value,
+        hash::HashedLiteral,
+        Object, Value,
     },
     cst::Kind,
     parse::{Token, TokenKind},

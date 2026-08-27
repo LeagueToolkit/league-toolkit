@@ -1,12 +1,8 @@
 use std::borrow::Cow;
 
 use indexmap::Equivalent;
-use ltk_meta::{traits::PropertyExt as _, PropertyValueEnum};
 
-use crate::{
-    ast::{diagnostics::RootKind, Value},
-    parse::Span,
-};
+use crate::ast::{diagnostics::RootKind, Value};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RootKindOrUnknown<'a> {

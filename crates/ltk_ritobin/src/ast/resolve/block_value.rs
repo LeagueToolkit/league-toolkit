@@ -1,10 +1,10 @@
-use ltk_meta::{traits::PropertyExt as _, PropertyKind, PropertyValueEnum};
+use ltk_meta::PropertyKind;
 
 use crate::{
     ast::{
         builder::Builder,
         diagnostics::{Diagnostic::*, MaybeSpanDiag},
-        Property, Spanned, Value,
+        Property, Value,
     },
     cst::Kind,
     parse::Span,

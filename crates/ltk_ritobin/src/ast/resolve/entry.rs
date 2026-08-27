@@ -1,5 +1,4 @@
-use ltk_hash::BinHash;
-use ltk_meta::{property::values, traits::PropertyExt as _, PropertyKind, PropertyValueEnum};
+use ltk_meta::{property::values, PropertyKind};
 
 use crate::{
     ast::{
@@ -12,7 +11,6 @@ use crate::{
             },
             MaybeSpanDiag,
         },
-        hash::HashedLiteral,
         resolve::literals::{self},
         Value,
     },

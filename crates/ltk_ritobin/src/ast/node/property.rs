@@ -3,7 +3,6 @@ use ltk_hash::BinHash;
 use crate::{
     ast::{hash::HashedLiteral, node::Value},
     parse::Span,
-    RitoType, Spanned,
 };
 
 #[derive(Debug, Clone)]
