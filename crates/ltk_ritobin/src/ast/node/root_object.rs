@@ -6,12 +6,12 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-pub struct RootObject {
+pub struct RootEntry {
     pub path_hash: HashedLiteral<BinHash>,
     pub object: Ptr<Object>,
 }
 
-impl RootObject {
+impl RootEntry {
     #[inline(always)]
     #[must_use]
     pub fn span(&self) -> Span {

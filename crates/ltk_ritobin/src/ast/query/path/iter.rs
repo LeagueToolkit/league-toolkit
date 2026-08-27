@@ -1,5 +1,5 @@
 use crate::ast::{
-    query::nodes::{NodeRef, SubNodeRef},
+    node::{NodeExt as _, NodeRef, SubNodeRef},
     Ast,
 };
 

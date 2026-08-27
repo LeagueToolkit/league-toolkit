@@ -1,6 +1,6 @@
 use super::iter::*;
 use crate::ast::{
-    query::{NodeRef, SubNodeRef},
+    node::{NodeRef, SubNodeRef},
     Ast,
 };
 

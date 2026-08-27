@@ -11,10 +11,8 @@ mod to_bin;
 #[cfg(test)]
 mod tests;
 
-pub use query::{NodeRef, SubNodeRef};
-
 pub use crate::Spanned;
-pub use node::{Object, Property, RootObject, Value};
+pub use node::{Object, Property, RootEntry, Value};
 pub use to_bin::PartialBin;
 
 use crate::{ast::diagnostics::DiagnosticWithSpan, parse::Span, Cst};
@@ -29,7 +27,7 @@ pub struct Ast {
     pub bin_type: Option<Span>,
     pub version: Option<Spanned<u32>>,
     pub dependencies: Vec<Span>,
-    pub objects: Vec<RootObject>,
+    pub objects: Vec<RootEntry>,
     pub diagnostics: Vec<DiagnosticWithSpan>,
 }
 

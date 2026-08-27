@@ -5,9 +5,9 @@ mod nodes;
 pub mod path;
 
 pub use detail::*;
-pub use nodes::*;
 
-use crate::parse::Span;
+use crate::{ast::node::NodeRef, parse::Span};
+
 impl<'a> NodeRef<'a> {
     pub fn span(&self) -> Span {
         match self {

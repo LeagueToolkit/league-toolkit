@@ -1,5 +1,5 @@
 use crate::{
-    ast::{diagnostics::Diagnostic as D, Ptr, RootObject, Value},
+    ast::{diagnostics::Diagnostic as D, Ptr, RootEntry, Value},
     cst::Kind,
     parse::Span,
     RitoType, Spanned,
@@ -152,7 +152,7 @@ impl<'a> Builder<'a> {
                             return None;
                         };
                         match value {
-                            Value::Embedded(s) => Some(RootObject {
+                            Value::Embedded(s) => Some(RootEntry {
                                 path_hash,
                                 object: Ptr::new(s),
                             }),

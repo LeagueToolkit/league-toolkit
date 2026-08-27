@@ -4,7 +4,7 @@ use ltk_meta::{
 };
 
 use crate::{
-    ast::{diagnostics::DiagnosticWithSpan, Ast, Object, RootObject, Value},
+    ast::{diagnostics::DiagnosticWithSpan, Ast, Object, RootEntry, Value},
     parse::Span,
     Spanned,
 };
@@ -31,7 +31,7 @@ impl Ast {
         let objects = self
             .objects
             .iter()
-            .map(|RootObject { path_hash, object }| {
+            .map(|RootEntry { path_hash, object }| {
                 let struct_val = object.to_bin_value().no_meta();
                 BinObject {
                     path_hash: path_hash.value,

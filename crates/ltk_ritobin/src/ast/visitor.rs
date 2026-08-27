@@ -1,6 +1,6 @@
 use std::ops::ControlFlow::{self};
 
-use crate::ast::{Ast, Object, Property, RootObject, Value};
+use crate::ast::{Ast, Object, Property, RootEntry, Value};
 
 #[allow(unused_variables)]
 /// [Visitor pattern](https://rust-unofficial.github.io/patterns/patterns/behavioural/visitor.html)
@@ -13,12 +13,12 @@ use crate::ast::{Ast, Object, Property, RootObject, Value};
 /// children. `exit_*` methods return an [`ExitFlow`], choosing whether to [`Continue`] with the
 /// node's remaining siblings. Both share [`Break`], to stop or abort the walk early.
 pub trait Visitor {
-    /// Called before walking a [`RootObject`]'s object (see [`Self::enter_object`]).
-    fn enter_root_object(&mut self, object: &RootObject) -> EnterFlow {
+    /// Called before walking a [`RootEntry`]'s object (see [`Self::enter_object`]).
+    fn enter_root_entry(&mut self, object: &RootEntry) -> EnterFlow {
         Descend::Children.into()
     }
-    /// Called after a root object has been walked.
-    fn exit_root_object(&mut self, object: &RootObject) -> ExitFlow {
+    /// Called after a [`RootEntry`] has been walked.
+    fn exit_root_entry(&mut self, object: &RootEntry) -> ExitFlow {
         Continue::Siblings.into()
     }
 
@@ -144,12 +144,12 @@ fn walk_all<V, T>(
     ControlFlow::Continue(())
 }
 
-fn walk_root_object<V: Visitor>(visitor: &mut V, object: &RootObject) -> ExitFlow {
+fn walk_root_object<V: Visitor>(visitor: &mut V, object: &RootEntry) -> ExitFlow {
     walk_inner(
         visitor,
         object,
-        V::enter_root_object,
-        V::exit_root_object,
+        V::enter_root_entry,
+        V::exit_root_entry,
         |v| walk_object(v, &object.object).map_continue(|_| ()),
     )
 }

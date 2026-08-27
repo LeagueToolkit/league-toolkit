@@ -1,8 +1,9 @@
 use std::iter::once;
 
 use crate::ast::{
-        query::nodes::{NodeRef, SubNodeRef}, Object, Property, RootObject, Value,
-    };
+    node::{NodeRef, SubNodeRef},
+    Object, Property, RootEntry, Value,
+};
 
 use super::*;
 
@@ -17,7 +18,7 @@ impl<'a> NodeRef<'a> {
     }
 }
 
-impl RootObject {
+impl RootEntry {
     pub fn children<'a>(&'a self) -> impl Iterator<Item = NodeRef<'a>> {
         once(NodeRef::Struct(&self.object))
     }
