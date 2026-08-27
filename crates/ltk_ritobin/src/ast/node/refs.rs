@@ -19,6 +19,21 @@ pub enum NodeRef<'a> {
     Value(&'a Value),
 }
 
+impl<'a> NodeRef<'a> {
+    pub fn span(&self) -> Span {
+        match self {
+            // TODO: don't do this
+            NodeRef::Object(o) => Span::new(
+                o.path_hash.span().start.min(o.object.span.start),
+                o.object.span.end.max(o.path_hash.span().end),
+            ),
+            NodeRef::Struct(s) => s.span,
+            NodeRef::Property(p) => p.span(),
+            NodeRef::Value(v) => v.span(),
+        }
+    }
+}
+
 /// A detailed reference to a node in an [`Ast`], down to the field level.
 #[derive(Debug, Clone)]
 pub enum SubNodeRef<'a> {
