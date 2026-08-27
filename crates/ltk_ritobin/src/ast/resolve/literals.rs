@@ -104,7 +104,7 @@ impl AstValue {
                 };
 
                 let kind_hint = match kind_hint.base {
-                    K::Optional => kind_hint.value_subtype().unwrap(),
+                    K::Optional => kind_hint.value_subtype().unwrap_or(kind_hint.base),
                     base => base,
                 };
 
