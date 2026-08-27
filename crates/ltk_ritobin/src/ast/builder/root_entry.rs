@@ -1,6 +1,16 @@
-use crate::ast::{diagnostics::Diagnostic as D, RootObject};
+use crate::{
+    ast::{diagnostics::Diagnostic as D, Ptr, RootObject, Value},
+    cst::Kind,
+    parse::Span,
+    RitoType, Spanned,
+};
 
 use super::*;
+
+mod root_kind;
+use indexmap::IndexMap;
+use ltk_meta::PropertyKind;
+pub use root_kind::*;
 
 #[derive(Debug, Clone)]
 pub struct RawRootEntry {

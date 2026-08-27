@@ -4,7 +4,6 @@ pub mod hash;
 pub mod node;
 pub mod query;
 pub mod resolve;
-pub mod root;
 pub mod visitor;
 
 mod to_bin;

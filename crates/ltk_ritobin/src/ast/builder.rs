@@ -1,19 +1,10 @@
-use indexmap::IndexMap;
-use ltk_meta::PropertyKind;
-
 use crate::{
-    ast::{
-        diagnostics::{DiagnosticWithSpan, RootKind},
-        node::Value,
-        root::RootKindOrUnknown,
-        Ast, Ptr, Spanned,
-    },
-    cst::{Cst, Kind},
-    parse::Span,
-    RitoType,
+    ast::{diagnostics::DiagnosticWithSpan, Ast},
+    cst::Cst,
 };
 
-mod roots;
+mod root_entry;
+pub use root_entry::*;
 
 impl Ast {
     pub fn from_cst(cst: &Cst, text: &str) -> Self {

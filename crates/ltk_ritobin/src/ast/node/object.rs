@@ -1,20 +1,23 @@
 use ltk_hash::BinHash;
 
 use crate::{
-    ast::{hash::HashedLiteral, node::Object, Ptr},
+    ast::{hash::HashedLiteral, node::Property},
     parse::Span,
 };
 
 #[derive(Debug, Clone)]
-pub struct RootObject {
-    pub path_hash: HashedLiteral<BinHash>,
-    pub object: Ptr<Object>,
+pub struct Object {
+    pub class_hash: HashedLiteral<BinHash>,
+    /// The entire `ClassName { .. }` span
+    pub span: Span,
+    pub properties: Vec<Property>,
 }
 
-impl RootObject {
-    #[inline(always)]
-    #[must_use]
-    pub fn span(&self) -> Span {
-        Span::new(self.path_hash.span().start, self.object.span.end)
+impl Object {
+    pub fn properties_span(&self) -> Option<Span> {
+        self.properties
+            .first()
+            .zip(self.properties.last())
+            .map(|(l, r)| Span::new(l.span().start, r.span().end))
     }
 }

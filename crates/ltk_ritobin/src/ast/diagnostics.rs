@@ -3,37 +3,11 @@ use std::{fmt::Display, num::IntErrorKind};
 use ltk_meta::PropertyKind;
 
 use crate::{
+    ast::builder::RootKind,
     cst,
     parse::{Span, TokenKind},
     ItemShape, RitoType,
 };
-
-/// One of the four entries every ritobin file has at its root.
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub enum RootKind {
-    Type,
-    Version,
-    Linked,
-    Entries,
-}
-
-impl RootKind {
-    /// The name this root entry is written with in a ritobin file.
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            RootKind::Type => "type",
-            RootKind::Version => "version",
-            RootKind::Linked => "linked",
-            RootKind::Entries => "entries",
-        }
-    }
-}
-
-impl Display for RootKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
 
 #[derive(Debug, Clone, Copy)]
 pub enum RitoTypeOrVirtual {

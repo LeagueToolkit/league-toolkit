@@ -1,8 +1,49 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, fmt, str::FromStr};
 
 use indexmap::Equivalent;
 
-use crate::ast::{diagnostics::RootKind, Value};
+use crate::ast::Value;
+
+/// One of the four entries every ritobin file has at its root.
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub enum RootKind {
+    Type,
+    Version,
+    Linked,
+    Entries,
+}
+
+impl RootKind {
+    /// The name this root entry is written with in a ritobin file.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            RootKind::Type => "type",
+            RootKind::Version => "version",
+            RootKind::Linked => "linked",
+            RootKind::Entries => "entries",
+        }
+    }
+}
+
+impl fmt::Display for RootKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for RootKind {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, ()> {
+        Ok(match s {
+            "type" => RootKind::Type,
+            "version" => RootKind::Version,
+            "linked" => RootKind::Linked,
+            "entries" => RootKind::Entries,
+            _ => return Err(()),
+        })
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RootKindOrUnknown<'a> {
@@ -53,12 +94,10 @@ impl<'a> RootKindOrUnknown<'a> {
             return Self::Unknown(src[value.span()].into());
         };
 
-        match string.value.as_str() {
-            "type" => RootKind::Type.into(),
-            "version" => RootKind::Version.into(),
-            "linked" => RootKind::Linked.into(),
-            "entries" => RootKind::Entries.into(),
-            _ => Self::Unknown(src[value.span()].into()),
+        let value = string.value.as_str();
+        match value.parse() {
+            Ok(kind) => Self::Known(kind),
+            Err(_) => Self::Unknown(src[string.span].into()),
         }
     }
 }
