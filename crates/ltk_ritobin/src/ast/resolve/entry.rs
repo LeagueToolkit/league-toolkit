@@ -3,7 +3,6 @@ use ltk_meta::{property::values, PropertyKind};
 use crate::{
     ast::{
         builder::Builder,
-        coerce::CanCoerce as _,
         diagnostics::{
             Diagnostic::{
                 self, CustomSpan, InvalidHash, MissingTree, MissingType, QuotedPropertyName,
@@ -11,6 +10,7 @@ use crate::{
             },
             MaybeSpanDiag,
         },
+        node::value::CanCoerce as _,
         resolve::literals::{self},
         Value,
     },

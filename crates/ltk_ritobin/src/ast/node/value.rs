@@ -4,6 +4,9 @@ use ltk_hash::{BinHash, WadHash};
 use ltk_meta::{property::values, traits::PropertyExt as _, PropertyKind, PropertyValueEnum};
 use ltk_primitives::Color;
 
+mod coerce;
+pub use coerce::CanCoerce;
+
 use crate::{
     ast::{hash::HashedLiteral, Object},
     parse::Span,

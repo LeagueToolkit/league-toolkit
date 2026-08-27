@@ -6,7 +6,7 @@ use crate::{
     RitoType,
 };
 
-use super::hash::{HashedLiteral, Originally};
+use crate::ast::hash::{HashedLiteral, Originally};
 
 pub trait CanCoerce {
     fn can_coerce(self, from: Self) -> bool;

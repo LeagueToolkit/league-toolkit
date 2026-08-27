@@ -1,7 +1,7 @@
 mod object;
 mod property;
 mod r#struct;
-mod value;
+pub mod value;
 
 pub use object::*;
 pub use property::*;

@@ -1,5 +1,4 @@
 pub mod builder;
-pub mod coerce;
 pub mod diagnostics;
 pub mod hash;
 pub mod node;
