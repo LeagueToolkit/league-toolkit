@@ -144,7 +144,7 @@ impl<'a> Builder<'a> {
 
         match (kind, value.as_ref()) {
             (Some(kind), Some(value)) => {
-                if value.kind() != kind.base {
+                if value.kind().is_some_and(|k| k != kind.base) {
                     self.push(
                         TypeMismatch {
                             span: value.span(),

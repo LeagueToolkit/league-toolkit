@@ -11,6 +11,7 @@ use crate::{
 
 #[derive(Debug, Clone, Copy)]
 pub enum RitoTypeOrVirtual {
+    Unknown,
     RitoType(RitoType),
     Numeric,
     StructOrEmbedded,
@@ -24,6 +25,15 @@ impl RitoTypeOrVirtual {
     }
 }
 
+impl From<Option<RitoType>> for RitoTypeOrVirtual {
+    fn from(value: Option<RitoType>) -> Self {
+        match value {
+            Some(value) => value.into(),
+            None => Self::Unknown,
+        }
+    }
+}
+
 impl From<RitoType> for RitoTypeOrVirtual {
     fn from(value: RitoType) -> Self {
         RitoTypeOrVirtual::RitoType(value)
@@ -33,6 +43,7 @@ impl From<RitoType> for RitoTypeOrVirtual {
 impl Display for RitoTypeOrVirtual {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Unknown => f.write_str("unknown type"),
             Self::RitoType(rito_type) => Display::fmt(rito_type, f),
             Self::Numeric => f.write_str("numeric type"),
             Self::StructOrEmbedded => f.write_str("struct/embedded"),
@@ -195,7 +206,7 @@ pub enum Diagnostic {
         root_kind: RootKind,
         key_span: Span,
         type_span: Span,
-        got: RitoType,
+        got: RitoTypeOrVirtual,
         expected: RitoType,
     },
 

@@ -19,6 +19,7 @@ pub enum Value {
         span: Span,
         kind: PropertyKind,
     },
+    Unknown(Span),
     //---------------------
     None(Span),
     Bool(Spanned<bool>),
@@ -61,7 +62,7 @@ pub enum Value {
         span: Span,
     },
     Optional {
-        item_kind: PropertyKind,
+        item_kind: Option<PropertyKind>,
         value: Option<Box<Value>>,
         span: Span,
     },
@@ -71,6 +72,7 @@ impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Value::Unresolved { kind, .. } => write!(f, "unresolved {}", kind.to_rito_name()),
+            Value::Unknown(_) => f.write_str("unknown"),
             Value::None(_) => f.write_str("null"),
             Value::Bool(v) => v.fmt(f),
             Value::BitBool(v) => v.fmt(f),
@@ -136,7 +138,7 @@ impl Value {
                 span,
             },
             K::Optional => Value::Optional {
-                item_kind: kind.subtype(0),
+                item_kind: kind.subtypes[0],
                 value: None,
                 span,
             },
@@ -199,10 +201,12 @@ impl TryFrom<PropertyValueEnum<Span>> for Value {
 }
 
 impl Value {
-    pub fn kind(&self) -> PropertyKind {
+    /// `None` when we are [`Value::Unresolved`].
+    pub fn kind(&self) -> Option<PropertyKind> {
         use PropertyKind as K;
-        match self {
+        Some(match self {
             Value::Unresolved { kind, .. } => *kind,
+            Value::Unknown(_) => return None,
             Value::None(_) => K::None,
             Value::Bool(_) => K::Bool,
             Value::BitBool(_) => K::BitBool,
@@ -230,12 +234,13 @@ impl Value {
             Value::UnorderedContainer { .. } => K::UnorderedContainer,
             Value::Map { .. } => K::Map,
             Value::Optional { .. } => K::Optional,
-        }
+        })
     }
 
     pub fn span(&self) -> Span {
         match self {
             Value::Unresolved { span, .. } => *span,
+            Value::Unknown(span) => *span,
             Value::None(v) => *v,
             Value::Bool(v) => v.span,
             Value::BitBool(v) => v.span,
@@ -265,11 +270,11 @@ impl Value {
         }
     }
 
-    pub fn rito_type(&self) -> RitoType {
-        match self {
+    pub fn rito_type(&self) -> Option<RitoType> {
+        Some(match self {
             Value::Container { item_kind, .. } | Value::UnorderedContainer { item_kind, .. } => {
                 RitoType {
-                    base: self.kind(),
+                    base: self.kind()?,
                     subtypes: [Some(*item_kind), None],
                 }
             }
@@ -278,15 +283,15 @@ impl Value {
                 value_kind,
                 ..
             } => RitoType {
-                base: self.kind(),
+                base: self.kind()?,
                 subtypes: [Some(*key_kind), Some(*value_kind)],
             },
             Value::Optional { item_kind, .. } => RitoType {
-                base: self.kind(),
-                subtypes: [Some(*item_kind), None],
+                base: self.kind()?,
+                subtypes: [*item_kind, None],
             },
-            _ => RitoType::simple(self.kind()),
-        }
+            _ => RitoType::simple(self.kind()?),
+        })
     }
 }
 

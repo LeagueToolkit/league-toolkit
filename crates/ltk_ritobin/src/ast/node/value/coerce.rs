@@ -47,7 +47,12 @@ impl CanCoerce for RitoType {
 impl Value {
     pub fn coerce_to(self, to: PropertyKind) -> Result<Self, Self> {
         Ok(match to {
-            to if to == self.kind() => self,
+            to if self.kind().is_some_and(|k| k == to) => self,
+            // Unknown values can be coerced into any value (as an unresolved variant)
+            to if self.kind().is_none() => Self::Unresolved {
+                span: self.span(),
+                kind: to,
+            },
 
             PropertyKind::Optional => Self::Optional {
                 item_kind: self.kind(),

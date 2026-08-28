@@ -74,10 +74,7 @@ impl<'a> Builder<'a> {
                     ))
                 })
             }
-            Kind::ErrorTree => Err(Diagnostic::CustomSpan(
-                "Cannot resolve value, syntax errors",
-                node.span,
-            )),
+            Kind::ErrorTree => Ok(Value::Unknown(node.span)),
             kind => {
                 eprintln!("cannot resolve {kind:?}");
                 Err(Diagnostic::CustomSpan(

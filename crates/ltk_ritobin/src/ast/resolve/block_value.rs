@@ -88,7 +88,7 @@ impl<'a> Builder<'a> {
                         if only.kind == Kind::ListItemBlock {
                             let inner = self.resolve_list_item_block(only, item_hint, hint_span)?;
                             return Ok(Value::Optional {
-                                item_kind,
+                                item_kind: Some(item_kind),
                                 value: Some(Box::new(inner)),
                                 span: block.span,
                             });
@@ -97,7 +97,7 @@ impl<'a> Builder<'a> {
 
                     if content.is_empty() {
                         return Ok(Value::Optional {
-                            item_kind,
+                            item_kind: Some(item_kind),
                             value: None,
                             span: block.span,
                         });
@@ -105,7 +105,7 @@ impl<'a> Builder<'a> {
                     // an optional listlike spells its components flat, same as a bare listlike
                     let inner = self.resolve_listlike(block, item_kind, hint_span);
                     return Ok(Value::Optional {
-                        item_kind,
+                        item_kind: Some(item_kind),
                         value: Some(Box::new(inner)),
                         span: block.span,
                     });
@@ -119,7 +119,6 @@ impl<'a> Builder<'a> {
                         Kind::Comment => continue,
                         Kind::ListItem => {
                             match self.resolve_value(node, Some(item_hint), hint_span) {
-                                Ok(v) if v.kind() == item_kind => value = Some(v),
                                 Ok(v) => match v.coerce_to(item_kind) {
                                     Ok(coerced) => value = Some(coerced),
                                     Err(v) => self.push(
@@ -152,7 +151,7 @@ impl<'a> Builder<'a> {
                     }
                 }
                 Ok(Value::Optional {
-                    item_kind,
+                    item_kind: Some(item_kind),
                     value: value.map(Box::new),
                     span: block.span,
                 })
@@ -230,7 +229,7 @@ impl<'a> Builder<'a> {
                     Ok(entry) => match entry.key.coerce_to(key_kind) {
                         Ok(key) => {
                             match entry.value.as_ref() {
-                                Some(value) if value.kind() != value_kind => {
+                                Some(value) if value.kind().is_some_and(|k| k != value_kind) => {
                                     self.push(
                                         TypeMismatch {
                                             span: value.span(),

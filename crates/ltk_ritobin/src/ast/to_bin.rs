@@ -88,6 +88,7 @@ impl Value {
     pub fn to_bin_value(&self) -> Option<PropertyValueEnum<Span>> {
         use PropertyValueEnum as P;
         Some(match self {
+            Value::Unknown(_) => return None,
             Value::Unresolved { kind, .. } => kind.default_value(),
             Value::None(v) => P::None(values::None::new(*v)),
             Value::Bool(Spanned { value, span }) => {
@@ -160,9 +161,10 @@ impl Value {
                 span,
             } => {
                 let inner = value.as_deref().and_then(Value::to_bin_value);
+                let item_kind = (*item_kind)?;
                 let optional = assert(
-                    values::Optional::new_with_meta(*item_kind, inner, *span),
-                    || values::Optional::empty(*item_kind).unwrap_or_else(|| none_optional(*span)),
+                    values::Optional::new_with_meta(item_kind, inner, *span),
+                    || values::Optional::empty(item_kind).unwrap_or_else(|| none_optional(*span)),
                 );
                 P::Optional(optional)
             }

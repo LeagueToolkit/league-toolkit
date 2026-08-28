@@ -77,7 +77,7 @@ impl<'a> Builder<'a> {
                         type_span: entry
                             .type_span
                             .unwrap_or_else(|| Span::empty(entry.key.span().end)),
-                        got: RitoType::simple(got.kind()),
+                        got: got.kind().map(RitoType::simple).into(),
                         expected: RitoType::simple(expected),
                     }
                     .unwrap(),

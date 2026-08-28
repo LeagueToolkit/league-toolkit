@@ -71,7 +71,7 @@ impl<'c> ListIter<'_, '_, 'c> {
                         span: other.span(),
                         expected: RitoType::simple(PropertyKind::F32),
                         expected_span: self.type_span,
-                        got: RitoTypeOrVirtual::RitoType(RitoType::simple(other.kind())),
+                        got: other.kind().map(RitoType::simple).into(),
                     }
                     .into())
                 }
@@ -90,7 +90,7 @@ impl<'c> ListIter<'_, '_, 'c> {
                         span: other.span(),
                         expected: RitoType::simple(PropertyKind::U8),
                         expected_span: self.type_span,
-                        got: RitoTypeOrVirtual::RitoType(RitoType::simple(other.kind())),
+                        got: other.kind().map(RitoType::simple).into(),
                     }
                     .into())
                 }
