@@ -56,9 +56,13 @@ fn assert<F: Fn(ObjectBuilder) -> ObjectBuilder>(input: &str, is: F) {
 fn build_errs(input: &str) -> Vec<DiagnosticWithSpan> {
     let input = wrap(input);
     let cst = Cst::parse(&input);
-    let mut str = String::new();
-    cst.print(&mut str, &input);
-    eprintln!("####\n{str}\n#####");
+
+    if option_env!("PRINT_CST").is_some() {
+        let mut str = String::new();
+        cst.print(&mut str, &input);
+        eprintln!("####\n{str}\n#####");
+    }
+
     cst.build_ast(&input).diagnostics
 }
 
