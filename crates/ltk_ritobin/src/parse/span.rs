@@ -1,3 +1,5 @@
+use std::cmp;
+
 /// A span of text in the source file - `[start, end)` in bytes.
 /// `end` marks the offset after the last byte of the span
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -12,6 +14,13 @@ impl Span {
     #[inline]
     pub fn new(start: u32, end: u32) -> Self {
         Self { start, end }
+    }
+
+    #[must_use]
+    #[inline]
+    /// Create a zero-length span at the specified offset (at..at)
+    pub fn empty(at: u32) -> Self {
+        Self { start: at, end: at }
     }
 
     /// Whether this span contains `offset`
@@ -40,6 +49,24 @@ impl Span {
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.end <= self.start
+    }
+
+    /// Extend the span to cover another span
+    #[must_use]
+    #[inline]
+    pub fn cover(self, other: Span) -> Self {
+        let start = cmp::min(self.start, other.start);
+        let end = cmp::max(self.end, other.end);
+        Self::new(start, end)
+    }
+
+    /// Extend the span to cover the given offset
+    #[must_use]
+    #[inline]
+    pub fn cover_offset(self, offset: u32) -> Self {
+        let start = cmp::min(self.start, offset);
+        let end = cmp::max(self.end, offset);
+        Self::new(start, end)
     }
 }
 
