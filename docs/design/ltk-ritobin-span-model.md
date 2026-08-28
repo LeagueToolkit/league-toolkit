@@ -413,9 +413,13 @@ Ritobin is unusually friendly to the flat-tree school of incrementality:
 - **No content token crosses a line break.** Strings become `UnterminatedString` at a
   newline, comments end at the newline. Only the synthetic `Newline` token spans line
   breaks, and it is regenerated from the whitespace run.
-- **The lexer carries exactly one piece of cross-token state**: the previous token's
-  kind, used by `ends_line` to decide synthetic `Newline` emission. Relexing can
-  restart at any token boundary given that one kind.
+- **The lexer carries exactly one bit of cross-token state.** `ends_line` is the
+  only place in `lex` that reads outside the run it is scanning, and it reads the
+  predicate `ends_value(kind)` over the previous token. `Cursor` holds a byte
+  position and nothing else. Relexing can restart at any token boundary given that
+  one bit. This is a property of the lexer rather than of the format, so the
+  incremental spec makes it an explicit `LexState` type with a resync check and a
+  property test.
 
 ### 5.2 The algorithm
 

@@ -216,6 +216,36 @@ impl Cst {
 pub enum EditOutcome { Spliced, Reparsed(SpliceRejected) }
 ```
 
+```rust
+// parse/tokenizer.rs - step D
+
+/// The entire cross-token state of the lexer.
+///
+/// Relexing from a token boundary needs this and nothing else. Any lexer change
+/// that adds cross-token state must add a field here, or the splice loses the
+/// resync guarantee in 8.3 step 2. The fields are private, so a new one is not a
+/// breaking change (C-STRUCT-PRIVATE).
+///
+/// `Default` is the state at the start of a file.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct LexState {
+    /// Whether the previous token ended a value. `ends_line` reads this to decide
+    /// synthetic `Newline` emission.
+    ends_value: bool,
+}
+
+impl LexState {
+    /// The state after `token`.
+    pub fn after(self, token: &Token) -> Self;
+}
+
+/// Lexes from byte offset `at`, which must be a token boundary, in the given state.
+pub fn lex_from(source: &str, at: u32, state: LexState) -> impl Iterator<Item = Token> + '_;
+
+/// Unchanged, and now defined as `lex_from(source, 0, LexState::default()).collect()`.
+pub fn lex(source: &str) -> Vec<Token>;
+```
+
 Naming: `Child::kind` follows the crate vocabulary (`Node.kind`, `Token.kind`) and
 C-GETTER, which spells a getter `field()` and never `get_field()`. `children_of`
 and `errors_of` carry the suffix because `Cst::children` is already the whole
@@ -484,9 +514,16 @@ root-level splice gains nothing. The block holds 2 to 144 items in the corpus an
 a newline and comments end at the newline. Only the synthetic `Newline` token
 spans line breaks, and it regenerates from the whitespace run.
 
-**The lexer carries one piece of cross-token state**, the previous token kind,
-read by `ends_line` for `Newline` emission. Relexing restarts at any token
-boundary given that kind.
+**The lexer carries one bit of cross-token state.** `ends_line` is the only place
+in `lex` that reads anything outside the run it is scanning, and it reads one
+predicate over the previous token: `ends_value(kind)`. `Cursor` is a byte position
+and nothing else. Relexing therefore restarts at any token boundary given that one
+bit, which section 3 names `LexState`.
+
+This is a property of the lexer, not of the ritobin format, so it is an invariant
+to maintain rather than a fact to rely on. String interpolation or nested comments
+would each add state. `LexState` exists so that such a change has to be declared,
+and 8.5 gives it a test.
 
 ### 8.2 The three-array invariant
 
@@ -508,10 +545,14 @@ For an edit replacing `[a, b)` with `n` bytes, `delta = n - (b - a)`:
 1. **Locate.** Descend to the entries `Block`. Binary search its tree children by
    token range for the items touching `[a, b)`. Reject unless exactly one item
    contains the edit and the edit touches none of the block's own tokens.
-2. **Relex.** Restart the lexer at the item's first token boundary in the new
-   text, with the previous token's kind as state. Stop when a produced token
-   realigns with the old stream past the edit. Reject if the realignment point is
-   past the item's end.
+2. **Relex.** Call `lex_from` at the item's first token boundary in the new text,
+   with the `LexState` carried from the token before it. Stop at the first
+   produced token that realigns with the old stream past the edit. **Realignment
+   requires both the token boundary and the `LexState` to match**, never the
+   boundary alone. A boundary-only check is sound today because `LexState` is one
+   bit derived from the token kind, and unsound the moment the lexer gains state
+   the check does not compare. Reject if the realignment point is past the end of
+   the item.
 3. **Reparse** the item with the existing `impls`, building the event stream into
    replacement ranges. Reject if the subtree comes back unbalanced.
 4. **Splice** the four vectors, replacing the item's runs.
@@ -579,9 +620,14 @@ the fallback, which is correct behavior and not a failure to handle.
    reachable because reparsing one item produces what a full parse produces, and
    `None` keeps error ownership local.
 2. A fuzz target over the same property, seeded with the corpus.
-3. The tick meets section 1 on the largest file available, not on the corpus
+3. **`LexState` is complete, as a property test.** For every token boundary `b` in
+   a corpus file, `lex_from(source, b, state_at(b))` yields the same token suffix
+   as `lex(source)` from `b`. This is the invariant 8.1 names, and it is what
+   catches a later lexer change that adds state without adding a field. It also
+   pins `lex(source) == lex_from(source, 0, LexState::default()).collect()`.
+4. The tick meets section 1 on the largest file available, not on the corpus
    (gate 3 in section 9).
-4. `Cst::verify` passes after every splice in the differential test.
+5. `Cst::verify` passes after every splice in the differential test.
 
 ### 8.6 What the splice does not solve
 
