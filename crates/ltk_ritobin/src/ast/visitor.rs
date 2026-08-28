@@ -166,7 +166,13 @@ fn walk_property<V: Visitor>(visitor: &mut V, property: &Property) -> ExitFlow {
         property,
         V::enter_property,
         V::exit_property,
-        |v| walk_value(v, &property.value).map_continue(|_| ()),
+        |v| {
+            property
+                .value
+                .as_ref()
+                .map(|value| walk_value(v, value).map_continue(|_| ()))
+                .unwrap_or(ControlFlow::Continue(()))
+        },
     )
 }
 
@@ -188,7 +194,10 @@ fn walk_value<V: Visitor>(visitor: &mut V, value: &Value) -> ExitFlow {
                     // transitively, the rest of the map's entries
                     Continue::Parent => return Continue::Parent.into(),
                 }
-                walk_value(v, value)
+                match value {
+                    Some(value) => walk_value(v, value),
+                    None => Continue::Siblings.into(),
+                }
             }),
             Value::Optional {
                 value: Some(inner), ..

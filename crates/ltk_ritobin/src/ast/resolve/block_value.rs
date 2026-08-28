@@ -105,10 +105,10 @@ impl<'a> Builder<'a> {
                         Kind::Comment => continue,
                         Kind::ListItem => {
                             match self.resolve_value(node, Some(item_hint), hint_span) {
-                                Ok(Some(v)) if v.kind() == item_kind => value = Some(v),
-                                Ok(Some(v)) => match v.clone().coerce_to(item_kind) {
-                                    Some(coerced) => value = Some(coerced),
-                                    None => self.push(
+                                Ok(v) if v.kind() == item_kind => value = Some(v),
+                                Ok(v) => match v.coerce_to(item_kind) {
+                                    Ok(coerced) => value = Some(coerced),
+                                    Err(v) => self.push(
                                         TypeMismatch {
                                             span: v.span(),
                                             expected: RitoType::simple(item_kind),
@@ -118,7 +118,6 @@ impl<'a> Builder<'a> {
                                         .unwrap(),
                                     ),
                                 },
-                                Ok(None) => {}
                                 Err(e) => self.push(e.default_span(node.span)),
                             }
                         }
@@ -166,26 +165,22 @@ impl<'a> Builder<'a> {
             match node.kind {
                 Kind::Comment => continue,
                 Kind::Entry => match self.resolve_entry(node, Some(hint), None) {
-                    Ok(entry) => {
-                        let key_span = entry.key.span();
-                        let key_kind = entry.key.rito_type();
-                        match entry.key.coerce_to(PropertyKind::Hash) {
-                            Some(Value::Hash(hash)) => properties.push(Property {
-                                name: hash,
-                                type_span: entry.type_span,
-                                value: entry.value,
-                            }),
-                            _ => self.push(
-                                TypeMismatch {
-                                    span: key_span,
-                                    expected: RitoType::simple(PropertyKind::Hash),
-                                    expected_span: None,
-                                    got: key_kind.into(),
-                                }
-                                .unwrap(),
-                            ),
-                        }
-                    }
+                    Ok(entry) => match entry.key.coerce_to(PropertyKind::Hash) {
+                        Ok(Value::Hash(hash)) => properties.push(Property {
+                            name: hash,
+                            type_span: entry.type_span,
+                            value: entry.value,
+                        }),
+                        Ok(value) | Err(value) => self.push(
+                            TypeMismatch {
+                                span: value.span(),
+                                expected: RitoType::simple(PropertyKind::Hash),
+                                expected_span: None,
+                                got: value.rito_type().into(),
+                            }
+                            .unwrap(),
+                        ),
+                    },
                     Err(e) => self.push(e.fallback(node.span)),
                 },
                 Kind::ListItem | Kind::ListItemBlock => self.push(
@@ -208,7 +203,7 @@ impl<'a> Builder<'a> {
         key_kind: PropertyKind,
         value_kind: PropertyKind,
         hint_span: Option<Span>,
-    ) -> Vec<(Value, Value)> {
+    ) -> Vec<(Value, Option<Value>)> {
         let hint = RitoType::map(key_kind, value_kind);
         let mut entries = Vec::new();
         for child in block.children.get(self.cst).iter() {
@@ -218,22 +213,36 @@ impl<'a> Builder<'a> {
             match node.kind {
                 Kind::Comment => continue,
                 Kind::Entry => match self.resolve_entry(node, Some(hint), hint_span) {
-                    Ok(entry) => {
-                        let key_span = entry.key.span();
-                        let got_key_kind = entry.key.rito_type();
-                        match entry.key.coerce_to(key_kind) {
-                            Some(key) => entries.push((Value::from(key), entry.value)),
-                            None => self.push(
-                                TypeMismatch {
-                                    span: key_span,
-                                    expected: RitoType::simple(key_kind),
-                                    expected_span: hint_span,
-                                    got: got_key_kind.into(),
+                    Ok(entry) => match entry.key.coerce_to(key_kind) {
+                        Ok(key) => {
+                            match entry.value.as_ref() {
+                                Some(value) if value.kind() != value_kind => {
+                                    self.push(
+                                        TypeMismatch {
+                                            span: value.span(),
+                                            expected: RitoType::simple(value_kind),
+                                            expected_span: hint_span,
+                                            got: value.rito_type().into(),
+                                        }
+                                        .unwrap(),
+                                    );
                                 }
-                                .unwrap(),
-                            ),
+                                _ => {
+                                    // reporting the error for not having a value should be handled already
+                                }
+                            }
+                            entries.push((key, entry.value));
                         }
-                    }
+                        Err(key) => self.push(
+                            TypeMismatch {
+                                span: key.span(),
+                                expected: RitoType::simple(key_kind),
+                                expected_span: hint_span,
+                                got: key.rito_type().into(),
+                            }
+                            .unwrap(),
+                        ),
+                    },
                     Err(e) => self.push(e.fallback(node.span)),
                 },
                 Kind::ListItem | Kind::ListItemBlock => self.push(
@@ -264,30 +273,23 @@ impl<'a> Builder<'a> {
             };
             match node.kind {
                 Kind::Comment => continue,
-                Kind::ListItem => match self.resolve_value(node, Some(item_hint), hint_span) {
-                    Ok(Some(mut v)) => {
-                        if v.kind() != item_kind {
-                            match v.clone().coerce_to(item_kind) {
-                                Some(coerced) => v = coerced,
-                                None => {
-                                    self.push(
-                                        TypeMismatch {
-                                            span: v.span(),
-                                            expected: RitoType::simple(item_kind),
-                                            expected_span: hint_span,
-                                            got: v.rito_type().into(),
-                                        }
-                                        .unwrap(),
-                                    );
-                                    continue;
-                                }
-                            }
+                Kind::ListItem => {
+                    match self
+                        .resolve_value(node, Some(item_hint), hint_span)
+                        .and_then(|value| {
+                            value.coerce_to(item_kind).map_err(|value| TypeMismatch {
+                                span: value.span(),
+                                expected: RitoType::simple(item_kind),
+                                expected_span: hint_span,
+                                got: value.rito_type().into(),
+                            })
+                        }) {
+                        Ok(value) => {
+                            items.push(value);
                         }
-                        items.push(v);
+                        Err(e) => self.push(e.default_span(node.span)),
                     }
-                    Ok(None) => {}
-                    Err(e) => self.push(e.default_span(node.span)),
-                },
+                }
                 Kind::ListItemBlock => {
                     match self.resolve_list_item_block(node, item_hint, hint_span) {
                         Ok(v) => items.push(v),

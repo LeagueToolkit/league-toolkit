@@ -15,8 +15,8 @@ pub use root_kind::*;
 #[derive(Debug, Clone)]
 pub struct RawRootEntry {
     key: Value,
-    type_span: Span,
-    value: Value,
+    type_span: Option<Span>,
+    value: Option<Value>,
 }
 
 impl<'a> Builder<'a> {
@@ -38,7 +38,7 @@ impl<'a> Builder<'a> {
                             kind,
                             RawRootEntry {
                                 key: entry.key,
-                                type_span: entry.type_span.unwrap_or(key_span),
+                                type_span: entry.type_span,
                                 value: entry.value,
                             },
                         ) {
@@ -67,14 +67,16 @@ impl<'a> Builder<'a> {
         expected: PropertyKind,
         extract: impl FnOnce(Value) -> Result<Value, Value>,
     ) -> Option<Value> {
-        match extract(entry.value) {
+        match extract(entry.value?) {
             Ok(v) => Some(v),
             Err(got) => {
                 self.push(
                     D::InvalidRootEntryType {
                         root_kind,
                         key_span: entry.key.span(),
-                        type_span: entry.type_span,
+                        type_span: entry
+                            .type_span
+                            .unwrap_or_else(|| Span::empty(entry.key.span().end)),
                         got: RitoType::simple(got.kind()),
                         expected: RitoType::simple(expected),
                     }
@@ -152,7 +154,7 @@ impl<'a> Builder<'a> {
                             return None;
                         };
                         match value {
-                            Value::Embedded(s) => Some(RootEntry {
+                            Some(Value::Embedded(s)) => Some(RootEntry {
                                 path_hash,
                                 object: Ptr::new(s),
                             }),

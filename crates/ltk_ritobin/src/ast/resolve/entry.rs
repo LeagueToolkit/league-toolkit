@@ -22,7 +22,7 @@ use crate::{
 pub struct RawEntry {
     pub key: Value,
     pub type_span: Option<Span>,
-    pub value: Value,
+    pub value: Option<Value>,
 }
 
 impl<'a> Builder<'a> {
@@ -107,63 +107,68 @@ impl<'a> Builder<'a> {
             .ok_or(MissingTree(Kind::EntryValue))?;
         let value_span = value_node.span;
 
-        if let Some(parent) = parent_value_kind.as_ref() {
-            if let Some((kind, kind_span)) = kind.as_ref().zip(kind_span) {
-                if !parent.can_coerce(*kind) {
-                    self.push(
-                        TypeMismatch {
-                            span: kind_span,
-                            expected: *parent,
-                            expected_span: parent_type_span,
-                            got: (*kind).into(),
-                        }
-                        .unwrap(),
-                    );
-                    return Ok(RawEntry {
-                        key,
-                        type_span: parent_type_span,
-                        value: Value::default_for(*parent, value_span),
-                    });
-                }
-            }
-        }
+        // if let Some(parent) = parent_value_kind.as_ref() {
+        //     if let Some((kind, kind_span)) = kind.as_ref().zip(kind_span) {
+        //         if !parent.can_coerce(*kind) {
+        //             self.push(
+        //                 TypeMismatch {
+        //                     span: kind_span,
+        //                     expected: *parent,
+        //                     expected_span: parent_type_span,
+        //                     got: (*kind).into(),
+        //                 }
+        //                 .unwrap(),
+        //             );
+        //         }
+        //     }
+        // }
 
         let kind = kind.or(parent_value_kind);
         let type_span = kind_span.or(parent_type_span);
 
-        let resolved_val = match self.resolve_value(value_node, kind, type_span) {
-            Ok(v) => v,
-            Err(e) => match kind {
-                Some(kind) => {
-                    self.push(e.default_span(entry.span));
-                    Some(Value::default_for(kind, value_span))
-                }
-                None => return Err(e.into()),
-            },
+        let value = match self.resolve_value(value_node, kind, type_span) {
+            Ok(v) => Some(v),
+            Err(e) => {
+                self.push(e.default_span(entry.span));
+                None
+            }
         };
 
-        let resolved_val = resolved_val.map(|value| match kind {
-            Some(kind) if value.kind() == kind.base => value,
-            Some(kind) => value.clone().coerce_to(kind.base).unwrap_or(value),
+        let value = value.map(|value| match kind {
+            Some(kind) => match value.coerce_to(kind.base) {
+                Ok(value) => value,
+                Err(value) => value,
+            },
             None => value,
         });
 
-        let value = match (kind, resolved_val) {
-            (None, Some(value)) => value,
-            (None, None) => return Err(MissingType(key.span()).into()),
-            (Some(kind), Some(value)) => match value.kind() == kind.base {
-                true => value,
-                false => {
-                    return Err(TypeMismatch {
-                        span: value.span(),
-                        expected: kind,
-                        expected_span: kind_span,
-                        got: value.rito_type().into(),
-                    }
-                    .into())
+        match (kind, value.as_ref()) {
+            (Some(kind), Some(value)) => {
+                if value.kind() != kind.base {
+                    self.push(
+                        TypeMismatch {
+                            span: value.span(),
+                            expected: kind,
+                            expected_span: kind_span,
+                            got: value.rito_type().into(),
+                        }
+                        .unwrap(),
+                    )
                 }
-            },
-            (Some(kind), None) => Value::default_for(kind, value_span),
+            }
+            (None, None) => {
+                self.push(MissingType(key.span()).unwrap());
+            }
+            (Some(kind), None) => {
+                self.push(
+                    Diagnostic::MissingEntryValue {
+                        key_span: key_node.span,
+                        expected: kind_span.map(|span| Spanned::new(span, kind)),
+                    }
+                    .unwrap(),
+                );
+            }
+            _ => {}
         };
 
         Ok(RawEntry {

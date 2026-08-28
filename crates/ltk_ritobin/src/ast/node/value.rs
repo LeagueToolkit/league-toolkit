@@ -52,7 +52,7 @@ pub enum Value {
     Map {
         key_kind: PropertyKind,
         value_kind: PropertyKind,
-        entries: Vec<(Value, Value)>,
+        entries: Vec<(Value, Option<Value>)>,
         span: Span,
     },
     Optional {

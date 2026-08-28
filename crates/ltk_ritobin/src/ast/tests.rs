@@ -6,7 +6,10 @@ use ltk_meta::{
 };
 
 use crate::{
-    ast::diagnostics::{Diagnostic, DiagnosticWithSpan, RootKind},
+    ast::{
+        builder::RootKind,
+        diagnostics::{Diagnostic, DiagnosticWithSpan},
+    },
     Cst, ItemShape, RitoType,
 };
 

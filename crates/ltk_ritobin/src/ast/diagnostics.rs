@@ -6,7 +6,7 @@ use crate::{
     ast::builder::RootKind,
     cst,
     parse::{Span, TokenKind},
-    ItemShape, RitoType,
+    ItemShape, RitoType, Spanned,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -108,18 +108,6 @@ pub enum Diagnostic {
     UnknownType(Span),
     MissingType(Span),
 
-    MissingRootEntry {
-        root_kind: RootKind,
-    },
-
-    InvalidRootEntryType {
-        root_kind: RootKind,
-        key_span: Span,
-        type_span: Span,
-        got: RitoType,
-        expected: RitoType,
-    },
-
     TypeMismatch {
         span: Span,
         expected: RitoType,
@@ -191,6 +179,26 @@ pub enum Diagnostic {
         /// span of the unrecognised entry's name
         span: Span,
     },
+    MissingRootEntry {
+        root_kind: RootKind,
+    },
+    /// An entry is missing its value
+    MissingEntryValue {
+        key_span: Span,
+        expected: Option<Spanned<RitoType>>,
+    },
+    MissingEntryType {
+        key_span: Span,
+    },
+
+    InvalidRootEntryType {
+        root_kind: RootKind,
+        key_span: Span,
+        type_span: Span,
+        got: RitoType,
+        expected: RitoType,
+    },
+
     ShadowedEntry {
         shadowee: Span,
         shadower: Span,
@@ -243,14 +251,6 @@ impl Display for Diagnostic {
             MissingType(_) => {
                 f.write_str("Missing type - entries are written 'name: type = value'")
             }
-
-            MissingRootEntry { root_kind } => write!(f, "Missing root entry '{root_kind}'"),
-            InvalidRootEntryType {
-                root_kind,
-                got,
-                expected,
-                ..
-            } => write!(f, "Root entry '{root_kind}' must be {expected}, got {got}"),
 
             TypeMismatch { expected, got, .. } => {
                 write!(f, "Type mismatch - expected {expected}, got {got}")
@@ -310,6 +310,24 @@ impl Display for Diagnostic {
 
             RootNonEntry => f.write_str("Top-level bin entries are written 'name: type = value'"),
             UnknownRoot { .. } => f.write_str("Unknown root entry"),
+            MissingRootEntry { root_kind } => write!(f, "Missing root entry '{root_kind}'"),
+            InvalidRootEntryType {
+                root_kind,
+                got,
+                expected,
+                ..
+            } => write!(f, "Root entry '{root_kind}' must be {expected}, got {got}"),
+            MissingEntryValue {
+                key_span: _,
+                expected,
+            } => {
+                f.write_str("Entry is missing value")?;
+                if let Some(expected) = expected {
+                    write!(f, " (expected {})", expected.value)?;
+                }
+                Ok(())
+            }
+            MissingEntryType { key_span: _ } => f.write_str("Entry is missing type expression"),
             ShadowedEntry { .. } => f.write_str("Entry shadows a previous entry with the same key"),
 
             InvalidHash(_) => f.write_str("Invalid hash"),
@@ -348,6 +366,8 @@ impl Diagnostic {
             | QuotedPropertyName { span, .. }
             | MissingType(span)
             | TypeMismatch { span, .. }
+            | MissingEntryType { key_span: span, .. }
+            | MissingEntryValue { key_span: span, .. }
             | ShadowedEntry { shadower: span, .. }
             | InvalidHash(span)
             | AmbiguousNumeric(span)

@@ -45,8 +45,8 @@ impl CanCoerce for RitoType {
 }
 
 impl Value {
-    pub fn coerce_to(self, to: PropertyKind) -> Option<Self> {
-        Some(match to {
+    pub fn coerce_to(self, to: PropertyKind) -> Result<Self, Self> {
+        Ok(match to {
             to if to == self.kind() => self,
 
             PropertyKind::Optional => Self::Optional {
@@ -61,7 +61,7 @@ impl Value {
                     Originally::String,
                     BinHash::hash_str(&str),
                 )),
-                _ => return None,
+                _ => return Err(self),
             },
             PropertyKind::ObjectLink => match self {
                 Self::Hash(hash) => Self::ObjectLink(hash),
@@ -70,7 +70,7 @@ impl Value {
                     Originally::String,
                     BinHash::hash_str(&str),
                 )),
-                _ => return None,
+                _ => return Err(self),
             },
             PropertyKind::WadChunkLink => match self {
                 Self::Hash(hash) => {
@@ -81,17 +81,17 @@ impl Value {
                     Originally::String,
                     WadHash::hash_str(str.as_str()),
                 )),
-                _ => return None,
+                _ => return Err(self),
             },
             PropertyKind::BitBool => match self {
                 Self::Bool(bool) => Self::BitBool(bool),
-                _ => return None,
+                _ => return Err(self),
             },
             PropertyKind::Bool => match self {
                 Self::BitBool(bool) => Self::Bool(bool),
-                _ => return None,
+                _ => return Err(self),
             },
-            _ => return None,
+            _ => return Err(self),
         })
     }
 }

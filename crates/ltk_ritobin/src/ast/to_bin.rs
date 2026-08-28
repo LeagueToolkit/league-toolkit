@@ -66,7 +66,7 @@ impl Object {
             properties: self
                 .properties
                 .iter()
-                .map(|p| (p.name.value, p.value.to_bin_value()))
+                .filter_map(|p| Some((p.name.value, p.value.as_ref()?.to_bin_value())))
                 .collect(),
             meta: self.span,
         }
@@ -143,8 +143,10 @@ impl Value {
             } => {
                 let mut map = values::Map::empty(*key_kind, *value_kind);
                 for (k, v) in entries {
-                    let (key, value) = (k.to_bin_value(), v.to_bin_value());
-                    assert(map.push(key, value), || ());
+                    if let Some(value) = v.as_ref().map(|v| v.to_bin_value()) {
+                        let key = k.to_bin_value();
+                        assert(map.push(key, value), || ());
+                    }
                 }
                 *map.meta_mut() = *span;
                 P::Map(map)

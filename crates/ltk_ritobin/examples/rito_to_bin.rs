@@ -23,7 +23,7 @@ fn main() {
         return;
     }
 
-    let bin = match cst.build_bin(&text).finish() {
+    let bin = match cst.build_bin(&text).into_result() {
         Ok(bin) => bin,
         Err(partial) => {
             eprintln!("Errors while converting to bin:");
