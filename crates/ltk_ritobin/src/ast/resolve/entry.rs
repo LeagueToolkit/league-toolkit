@@ -143,7 +143,7 @@ impl<'a> Builder<'a> {
 
         match (kind, value.as_ref()) {
             (Some(kind), Some(value)) => {
-                if value.kind().is_some_and(|k| k != kind.base) {
+                if value.rito_type().is_some_and(|k| k != kind) {
                     self.push(
                         TypeMismatch {
                             span: value.span(),
