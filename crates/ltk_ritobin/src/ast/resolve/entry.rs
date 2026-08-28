@@ -5,12 +5,10 @@ use crate::{
         builder::Builder,
         diagnostics::{
             Diagnostic::{
-                self, CustomSpan, InvalidHash, MissingTree, MissingType, QuotedPropertyName,
-                TypeMismatch,
+                self, InvalidHash, MissingTree, MissingType, QuotedPropertyName, TypeMismatch,
             },
             MaybeSpanDiag,
         },
-        node::value::CanCoerce as _,
         resolve::literals::{self},
         Value,
     },
@@ -104,7 +102,7 @@ impl<'a> Builder<'a> {
         let value_node = children
             .find_tree(self.cst, Kind::EntryValue)
             .ok_or(MissingTree(Kind::EntryValue))?;
-        let value_span = value_node.span;
+        let _value_span = value_node.span;
 
         // if let Some(parent) = parent_value_kind.as_ref() {
         //     if let Some((kind, kind_span)) = kind.as_ref().zip(kind_span) {

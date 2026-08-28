@@ -5,7 +5,6 @@ use crate::{
             Diagnostic::{self},
             MaybeSpanDiag,
         },
-        resolve::literals::{self},
         Value,
     },
     cst::Kind,

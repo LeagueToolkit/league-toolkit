@@ -3,7 +3,7 @@ use ltk_meta::{property::values, PropertyKind};
 use crate::{
     ast::{
         builder::Builder,
-        diagnostics::{Diagnostic, ListLike, MaybeSpanDiag, RitoTypeOrVirtual},
+        diagnostics::{Diagnostic, ListLike, MaybeSpanDiag},
         Value,
     },
     cst::{Child, Cst, Kind, Node},
