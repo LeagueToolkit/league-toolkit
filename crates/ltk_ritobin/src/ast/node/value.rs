@@ -10,11 +10,16 @@ pub use coerce::CanCoerce;
 use crate::{
     ast::{hash::HashedLiteral, Object},
     parse::Span,
-    RitoType, Spanned,
+    RitoType, RitobinName, Spanned,
 };
 
 #[derive(Debug, Clone)]
 pub enum Value {
+    Unresolved {
+        span: Span,
+        kind: PropertyKind,
+    },
+    //---------------------
     None(Span),
     Bool(Spanned<bool>),
     BitBool(Spanned<bool>),
@@ -65,6 +70,7 @@ pub enum Value {
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Value::Unresolved { kind, .. } => write!(f, "unresolved {}", kind.to_rito_name()),
             Value::None(_) => f.write_str("null"),
             Value::Bool(v) => v.fmt(f),
             Value::BitBool(v) => v.fmt(f),
@@ -196,6 +202,7 @@ impl Value {
     pub fn kind(&self) -> PropertyKind {
         use PropertyKind as K;
         match self {
+            Value::Unresolved { kind, .. } => *kind,
             Value::None(_) => K::None,
             Value::Bool(_) => K::Bool,
             Value::BitBool(_) => K::BitBool,
@@ -228,6 +235,7 @@ impl Value {
 
     pub fn span(&self) -> Span {
         match self {
+            Value::Unresolved { span, .. } => *span,
             Value::None(v) => *v,
             Value::Bool(v) => v.span,
             Value::BitBool(v) => v.span,

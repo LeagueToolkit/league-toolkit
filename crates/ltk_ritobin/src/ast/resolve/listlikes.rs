@@ -101,9 +101,17 @@ impl<'c> ListIter<'_, '_, 'c> {
 }
 
 impl<'a> Builder<'a> {
-    /// Resolves a `Block`/`ListItemBlock` node whose body is a flat list of bare numbers into
-    /// one packed [`AstValue`] of `kind` (`Vector2`/`Vector3`/`Vector4`/`Color`/`Matrix44`).
-    pub(super) fn resolve_listlike(
+    /// `node` is the `ListItem` wrapping the literal.
+    pub(crate) fn resolve_numeric(
+        &mut self,
+        node: &Node,
+        expected: PropertyKind,
+        hint_span: Option<Span>,
+    ) -> Result<Value, Diagnostic> {
+        self.resolve_value(node, Some(RitoType::simple(expected)), hint_span)
+    }
+
+    pub(crate) fn resolve_listlike_fallable(
         &mut self,
         block: &Node,
         kind: PropertyKind,
@@ -172,7 +180,29 @@ impl<'a> Builder<'a> {
             }
             .into());
         }
-
         Ok(value)
+    }
+
+    /// Resolves a `Block`/`ListItemBlock` node whose body is a flat list of bare numbers into
+    /// one packed [`AstValue`] of `kind` (`Vector2`/`Vector3`/`Vector4`/`Color`/`Matrix44`).
+    ///
+    /// Any errors in resolution are automatically pushed, and a [`Value::Unresolved`] is returned.
+    pub(super) fn resolve_listlike(
+        &mut self,
+        block: &Node,
+        kind: PropertyKind,
+        type_span: Option<Span>,
+    ) -> Value {
+        match self.resolve_listlike_fallable(block, kind, type_span) {
+            Ok(value) => value,
+
+            Err(e) => {
+                self.push(e.fallback(block.span));
+                Value::Unresolved {
+                    kind,
+                    span: block.span,
+                }
+            }
+        }
     }
 }

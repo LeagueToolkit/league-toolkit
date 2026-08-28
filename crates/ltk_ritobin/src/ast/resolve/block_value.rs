@@ -22,8 +22,22 @@ impl<'a> Builder<'a> {
         use PropertyKind as K;
 
         match hint.base {
+            K::Struct | K::Embedded => {
+                self.push(
+                    MissingClassName {
+                        span: block.open_brace_span(self.cst),
+                        expected: hint,
+                    }
+                    .unwrap(),
+                );
+
+                Ok(Value::Unresolved {
+                    span: block.span,
+                    kind: hint.base,
+                })
+            }
             K::Vector2 | K::Vector3 | K::Vector4 | K::Color | K::Matrix44 => {
-                self.resolve_listlike(block, hint.base, hint_span)
+                Ok(self.resolve_listlike(block, hint.base, hint_span))
             }
             K::Map => {
                 let key_kind = hint.subtype(0);
@@ -89,7 +103,7 @@ impl<'a> Builder<'a> {
                         });
                     }
                     // an optional listlike spells its components flat, same as a bare listlike
-                    let inner = self.resolve_listlike(block, item_kind, hint_span)?;
+                    let inner = self.resolve_listlike(block, item_kind, hint_span);
                     return Ok(Value::Optional {
                         item_kind,
                         value: Some(Box::new(inner)),

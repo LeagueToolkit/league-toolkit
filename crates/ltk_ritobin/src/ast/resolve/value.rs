@@ -51,12 +51,6 @@ impl<'a> Builder<'a> {
                         node.span,
                     ));
                 };
-                if matches!(hint.base, PropertyKind::Struct | PropertyKind::Embedded) {
-                    return Err(MissingClassName {
-                        span: node.open_brace_span(self.cst),
-                        expected: hint,
-                    });
-                }
                 self.resolve_block_value(node, hint, hint_span)
                     .map_err(|e| e.fallback(node.span).diagnostic)
             }
@@ -80,10 +74,17 @@ impl<'a> Builder<'a> {
                     ))
                 })
             }
-            _ => Err(Diagnostic::CustomSpan(
-                "[resolve_value] cannot resolve this node kind",
+            Kind::ErrorTree => Err(Diagnostic::CustomSpan(
+                "Cannot resolve value, syntax errors",
                 node.span,
             )),
+            kind => {
+                eprintln!("cannot resolve {kind:?}");
+                Err(Diagnostic::CustomSpan(
+                    "[resolve_value] cannot resolve this node kind",
+                    node.span,
+                ))
+            }
         }
     }
 
@@ -93,13 +94,6 @@ impl<'a> Builder<'a> {
         hint: RitoType,
         hint_span: Option<Span>,
     ) -> Result<Value, MaybeSpanDiag> {
-        if matches!(hint.base, PropertyKind::Struct | PropertyKind::Embedded) {
-            return Err(MissingClassName {
-                span: node.open_brace_span(self.cst),
-                expected: hint,
-            }
-            .into());
-        }
         self.resolve_block_value(node, hint, hint_span)
     }
 }

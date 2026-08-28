@@ -20,15 +20,3 @@ use crate::{
     parse::Span,
     Node, RitoType,
 };
-
-impl<'a> Builder<'a> {
-    /// `node` is the `ListItem` wrapping the literal.
-    pub(crate) fn resolve_numeric(
-        &mut self,
-        node: &Node,
-        expected: PropertyKind,
-        hint_span: Option<Span>,
-    ) -> Result<Value, Diagnostic> {
-        self.resolve_value(node, Some(RitoType::simple(expected)), hint_span)
-    }
-}

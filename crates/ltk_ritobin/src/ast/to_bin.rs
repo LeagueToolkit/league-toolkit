@@ -66,7 +66,7 @@ impl Object {
             properties: self
                 .properties
                 .iter()
-                .filter_map(|p| Some((p.name.value, p.value.as_ref()?.to_bin_value())))
+                .filter_map(|p| Some((p.name.value, p.value.as_ref()?.to_bin_value()?)))
                 .collect(),
             meta: self.span,
         }
@@ -85,9 +85,10 @@ fn assert<T>(result: Result<T, MetaError>, fallback: impl FnOnce() -> T) -> T {
 
 impl Value {
     /// Recursively converts this value into an equivalent `PropertyValueEnum<Span>`.
-    pub fn to_bin_value(&self) -> PropertyValueEnum<Span> {
+    pub fn to_bin_value(&self) -> Option<PropertyValueEnum<Span>> {
         use PropertyValueEnum as P;
-        match self {
+        Some(match self {
+            Value::Unresolved { kind, .. } => kind.default_value(),
             Value::None(v) => P::None(values::None::new(*v)),
             Value::Bool(Spanned { value, span }) => {
                 P::Bool(values::Bool::new_with_meta(*value, *span))
@@ -143,9 +144,11 @@ impl Value {
             } => {
                 let mut map = values::Map::empty(*key_kind, *value_kind);
                 for (k, v) in entries {
-                    if let Some(value) = v.as_ref().map(|v| v.to_bin_value()) {
-                        let key = k.to_bin_value();
-                        assert(map.push(key, value), || ());
+                    if let Some((k, v)) = k
+                        .to_bin_value()
+                        .zip(v.as_ref().and_then(|v| v.to_bin_value()))
+                    {
+                        assert(map.push(k, v), || ());
                     }
                 }
                 *map.meta_mut() = *span;
@@ -156,14 +159,14 @@ impl Value {
                 value,
                 span,
             } => {
-                let inner = value.as_deref().map(Value::to_bin_value);
+                let inner = value.as_deref().and_then(Value::to_bin_value);
                 let optional = assert(
                     values::Optional::new_with_meta(*item_kind, inner, *span),
                     || values::Optional::empty(*item_kind).unwrap_or_else(|| none_optional(*span)),
                 );
                 P::Optional(optional)
             }
-        }
+        })
     }
 }
 
@@ -172,8 +175,9 @@ fn container_from(item_kind: PropertyKind, items: &[Value], span: Span) -> value
         values::Container::empty(PropertyKind::None).expect("None is always a valid item kind")
     });
     for item in items {
-        let value = item.to_bin_value();
-        assert(container.push(value), || ());
+        if let Some(value) = item.to_bin_value() {
+            assert(container.push(value), || ());
+        }
     }
     *container.meta_mut() = span;
     container
