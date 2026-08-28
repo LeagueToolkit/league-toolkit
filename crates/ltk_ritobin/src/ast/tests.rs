@@ -8,7 +8,7 @@ use ltk_meta::{
 use crate::{
     ast::{
         builder::RootKind,
-        diagnostics::{Diagnostic, DiagnosticWithSpan},
+        diagnostics::{Diagnostic, DiagnosticWithSpan, RitoTypeOrVirtual},
     },
     Cst, ItemShape, RitoType,
 };
@@ -664,6 +664,26 @@ fn an_entry_in_an_option_is_reported() {
                     base: PropertyKind::Optional,
                     ..
                 },
+                ..
+            }
+        )
+    });
+}
+
+#[test]
+fn bad_option_coerce_is_reported() {
+    assert_one_err(r#"0x1: option[u32] = false"#, |d| {
+        matches!(
+            d,
+            Diagnostic::TypeMismatch {
+                expected: RitoType {
+                    base: PropertyKind::Optional,
+                    subtypes: [Some(PropertyKind::U32), None],
+                },
+                got: RitoTypeOrVirtual::RitoType(RitoType {
+                    base: PropertyKind::Optional,
+                    subtypes: [Some(PropertyKind::Bool), None],
+                }),
                 ..
             }
         )
