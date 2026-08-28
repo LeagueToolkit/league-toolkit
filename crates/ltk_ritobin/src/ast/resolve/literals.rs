@@ -59,14 +59,19 @@ fn parse_int<T: std::str::FromStr<Err = std::num::ParseIntError>>(
 }
 
 impl Value {
+    /// Evaluate a literal token into a value
+    ///
+    /// # Errors
+    /// If the literal does not fit `kind_hint`, or if it is ambiguous and there is no hint to pick
+    /// with - a bare `5` on its own has no type.
     pub(crate) fn eval(
         text: &str,
         token: &Token,
         kind_hint: Option<RitoType>,
         kind_hint_span: Option<Span>,
-    ) -> Result<Option<Self>, Diagnostic> {
+    ) -> Result<Self, Diagnostic> {
         use PropertyKind as K;
-        Ok(Some(match token {
+        Ok(match token {
             Token {
                 kind: TokenKind::String,
                 span,
@@ -155,21 +160,7 @@ impl Value {
                     }
                 }
             }
-            _ => return Ok(None),
-        }))
+            _ => return Err(Diagnostic::ResolveLiteral),
+        })
     }
-}
-
-/// Evaluate a literal token into a value
-///
-/// # Errors
-/// If the literal does not fit `kind_hint`, or if it is ambiguous and there is no hint to pick
-/// with - a bare `5` on its own has no type.
-pub(crate) fn eval(
-    text: &str,
-    token: &Token,
-    kind_hint: Option<RitoType>,
-    kind_hint_span: Option<Span>,
-) -> Result<Option<Value>, Diagnostic> {
-    Value::eval(text, token, kind_hint, kind_hint_span)
 }

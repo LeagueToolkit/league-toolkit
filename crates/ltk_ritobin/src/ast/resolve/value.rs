@@ -1,21 +1,39 @@
-use ltk_meta::PropertyKind;
-
 use crate::{
     ast::{
         builder::Builder,
         diagnostics::{
-            Diagnostic::{self, *},
+            Diagnostic::{self},
             MaybeSpanDiag,
         },
         resolve::literals::{self},
         Value,
     },
     cst::Kind,
-    parse::Span,
+    parse::{Span, Token},
     Node, RitoType,
 };
 
 impl<'a> Builder<'a> {
+    pub(crate) fn resolve_literal(
+        &mut self,
+        text: &str,
+        token: &Token,
+        kind_hint: Option<RitoType>,
+        kind_hint_span: Option<Span>,
+    ) -> Value {
+        match Value::eval(text, token, kind_hint, kind_hint_span) {
+            Ok(value) => value,
+            Err(e) => {
+                self.push(e.default_span(token.span));
+                kind_hint
+                    .map(|k| Value::Unresolved {
+                        span: token.span,
+                        kind: k.base,
+                    })
+                    .unwrap_or(Value::Unknown(token.span))
+            }
+        }
+    }
     pub(crate) fn resolve_value(
         &mut self,
         wrapper: &Node,
@@ -67,12 +85,7 @@ impl<'a> Builder<'a> {
                         wrapper.span,
                     ));
                 };
-                literals::eval(self.text, token, hint, hint_span).and_then(|v| {
-                    v.ok_or(Diagnostic::CustomSpan(
-                        "[resolve_value] literal token failed eval",
-                        token.span,
-                    ))
-                })
+                Ok(self.resolve_literal(self.text, token, hint, hint_span))
             }
             Kind::ErrorTree => Ok(Value::Unknown(node.span)),
             kind => {

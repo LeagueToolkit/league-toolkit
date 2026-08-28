@@ -68,15 +68,14 @@ impl<'a> Builder<'a> {
                 kind: TokenKind::HexLit,
                 span,
             }) => Value::Hash(literals::eval_hash(self.text, *span)?),
-            Some(token) => literals::eval(
+            Some(token) => self.resolve_literal(
                 self.text,
                 token,
                 parent_value_kind
                     .and_then(|k| k.subtypes[0])
                     .map(RitoType::simple),
                 parent_type_span,
-            )?
-            .ok_or(CustomSpan("Unrecognised literal", key_node.span))?,
+            ),
             None => return Err(InvalidHash(key_node.span)),
         })
     }
