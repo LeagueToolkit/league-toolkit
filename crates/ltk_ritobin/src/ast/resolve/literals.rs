@@ -76,6 +76,11 @@ impl Value {
             )),
 
             Token {
+                kind: TokenKind::Null,
+                span,
+            } => Self::None(*span),
+
+            Token {
                 kind: TokenKind::True,
                 span,
             } => Self::bool(*span, true),
