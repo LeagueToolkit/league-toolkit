@@ -39,7 +39,7 @@ impl<'a> Builder<'a> {
                     .iter()
                     .filter_map(|c| c.tree(self.cst).filter(|t| t.kind == Kind::TypeArg))
                     .map(|t| {
-                        let mut resolved = PropertyKind::from_rito_name(&self.text[t.span]);
+                        let resolved = PropertyKind::from_rito_name(&self.text[t.span]);
                         match resolved {
                             None => self.push(UnknownType(t.span).unwrap()),
                             Some(kind) if kind.is_container() => {
@@ -50,7 +50,6 @@ impl<'a> Builder<'a> {
                                     }
                                     .unwrap(),
                                 );
-                                resolved = None;
                             }
                             Some(_) => {}
                         }
