@@ -56,6 +56,9 @@ fn assert<F: Fn(ObjectBuilder) -> ObjectBuilder>(input: &str, is: F) {
 fn build_errs(input: &str) -> Vec<DiagnosticWithSpan> {
     let input = wrap(input);
     let cst = Cst::parse(&input);
+    let mut str = String::new();
+    cst.print(&mut str, &input);
+    eprintln!("####\n{str}\n#####");
     cst.build_ast(&input).diagnostics
 }
 
@@ -305,36 +308,40 @@ fn empty_vec3_reports_not_enough_items() {
 #[test]
 fn empty_color_reports_not_enough_items() {
     let errs = build_errs("0x1: rgba = {}");
-    assert_eq!(errs.len(), 1, "{errs:#?}");
+    assert_eq!(errs.len(), 1, "err count != 1, got: {errs:#?}");
     assert!(
         matches!(
             errs[0].diagnostic,
             Diagnostic::NotEnoughItems { got: 0, .. }
         ),
-        "{:#?}",
-        errs[0]
+        "errors dont match, got: {:#?}",
+        errs
     );
 }
 
 #[test]
 fn empty_mtx44_reports_not_enough_items() {
     let errs = build_errs("0x1: mtx44 = {}");
-    assert_eq!(errs.len(), 1, "{errs:#?}");
+    assert_eq!(errs.len(), 1, "err count != 1, got: {errs:#?}");
     assert!(
         matches!(
             errs[0].diagnostic,
             Diagnostic::NotEnoughItems { got: 0, .. }
         ),
-        "{:#?}",
-        errs[0]
+        "errors dont match, got: {:#?}",
+        errs
     );
 }
 
 /// Asserts `input` produces exactly one diagnostic, and hands it to `is`.
 fn assert_one_err<F: Fn(&Diagnostic) -> bool>(input: &str, is: F) -> DiagnosticWithSpan {
     let errs = build_errs(input);
-    assert_eq!(errs.len(), 1, "{errs:#?}");
-    assert!((is)(&errs[0].diagnostic), "{:#?}", errs[0]);
+    assert_eq!(errs.len(), 1, "err count != 1, got: {errs:#?}");
+    assert!(
+        (is)(&errs[0].diagnostic),
+        "errors dont match, got: {:#?}",
+        errs[0]
+    );
     errs[0]
 }
 
