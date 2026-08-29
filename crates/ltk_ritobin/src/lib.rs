@@ -101,6 +101,18 @@ pub use print::Print;
 
 use crate::parse::Span;
 
+pub trait SpannedExt {
+    fn with_span(self, span: Span) -> Spanned<Self>
+    where
+        Self: Sized;
+}
+
+impl<T> SpannedExt for T {
+    fn with_span(self, span: Span) -> Spanned<Self> {
+        Spanned::new(span, self)
+    }
+}
+
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Spanned<T> {
     pub span: Span,
