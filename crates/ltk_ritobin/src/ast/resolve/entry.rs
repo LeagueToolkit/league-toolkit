@@ -103,7 +103,7 @@ impl<'a> Builder<'a> {
         let value_node = children
             .find_tree(self.cst, Kind::EntryValue)
             .ok_or(MissingTree(Kind::EntryValue))?;
-        let _value_span = value_node.span;
+        let value_span = value_node.span;
 
         // if let Some(parent) = parent_value_kind.as_ref() {
         //     if let Some((kind, kind_span)) = kind.as_ref().zip(kind_span) {
@@ -182,14 +182,27 @@ impl<'a> Builder<'a> {
             key,
             value,
             type_expr: type_expr.with_span(
-                type_expr_span
-                    .or_else(|| {
-                        entry
-                            .children
-                            .find_token(self.cst, TokenKind::Colon)
-                            .map(|t| t.span.cover_offset(key_node.span.start - 1))
-                    })
-                    .unwrap_or(Span::empty(key_node.span.end)),
+                (match type_expr_span {
+                    Some(span) if !span.is_empty() => Some(span),
+                    _ => None,
+                })
+                .unwrap_or_else(|| {
+                    let colon = entry
+                        .children
+                        .find_token(self.cst, TokenKind::Colon)
+                        .map(|t| t.span);
+                    let eq = entry
+                        .children
+                        .find_token(self.cst, TokenKind::Eq)
+                        .map(|t| t.span);
+
+                    match (colon, eq) {
+                        (None, None) => Span::new(key_node.span.end, entry.span.end),
+                        (None, Some(eq)) => Span::new(key_node.span.start, eq.start),
+                        (Some(colon), None) => Span::new(colon.end, entry.span.end),
+                        (Some(colon), Some(eq)) => Span::new(colon.end, eq.start),
+                    }
+                }),
             ),
         })
     }
