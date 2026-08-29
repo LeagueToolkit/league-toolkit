@@ -4,7 +4,7 @@ use crate::{
     ast::{
         hash::HashedLiteral,
         node::{NodeExt, NodeKind},
-        query::{AstObjectDetail, AstPropertyDetail, AstStructDetail, NodeDetail},
+        query::{AstObjectDetail, AstPropertyDetail, AstRootEntryDetail, NodeDetail},
         Object, Property, RootEntry, Value,
     },
     parse::Span,
@@ -13,8 +13,8 @@ use crate::{
 /// A reference to a node in an [`Ast`].
 #[derive(Debug, Clone, Copy)]
 pub enum NodeRef<'a> {
-    Object(&'a RootEntry),
-    Struct(&'a Object),
+    RootEntry(&'a RootEntry),
+    Object(&'a Object),
     Property(&'a Property),
     Value(&'a Value),
 }
@@ -23,11 +23,11 @@ impl<'a> NodeRef<'a> {
     pub fn span(&self) -> Span {
         match self {
             // TODO: don't do this
-            NodeRef::Object(o) => Span::new(
+            NodeRef::RootEntry(o) => Span::new(
                 o.path_hash.span().start.min(o.object.span.start),
                 o.object.span.end.max(o.path_hash.span().end),
             ),
-            NodeRef::Struct(s) => s.span,
+            NodeRef::Object(s) => s.span,
             NodeRef::Property(p) => p.span(),
             NodeRef::Value(v) => v.span(),
         }
@@ -37,8 +37,8 @@ impl<'a> NodeRef<'a> {
 /// A detailed reference to a node in an [`Ast`], down to the field level.
 #[derive(Debug, Clone, Copy)]
 pub enum SubNodeRef<'a> {
-    Object(&'a RootEntry, AstObjectDetail),
-    Struct(&'a Object, AstStructDetail),
+    RootEntry(&'a RootEntry, AstRootEntryDetail),
+    Object(&'a Object, AstObjectDetail),
     Property(&'a Property, AstPropertyDetail),
     Value(&'a Value),
 }
@@ -46,8 +46,8 @@ pub enum SubNodeRef<'a> {
 impl NodeExt for NodeRef<'_> {
     fn kind(&self) -> NodeKind {
         match self {
+            NodeRef::RootEntry(_) => NodeKind::RootEntry,
             NodeRef::Object(_) => NodeKind::Object,
-            NodeRef::Struct(_) => NodeKind::Struct,
             NodeRef::Property(_) => NodeKind::Property,
             NodeRef::Value(_) => NodeKind::Value,
         }
@@ -55,8 +55,8 @@ impl NodeExt for NodeRef<'_> {
 
     fn class_hash(&self) -> Option<HashedLiteral<BinHash>> {
         match self {
-            NodeRef::Object(o) => Some(o.object.class_hash),
-            NodeRef::Struct(s) => Some(s.class_hash),
+            NodeRef::RootEntry(o) => Some(o.object.class_hash),
+            NodeRef::Object(s) => Some(s.class_hash),
             NodeRef::Property(_) | NodeRef::Value(_) => None,
         }
     }
@@ -66,8 +66,8 @@ impl NodeExt for SubNodeRef<'_> {
     #[inline(always)]
     fn kind(&self) -> NodeKind {
         match self {
+            SubNodeRef::RootEntry(_, _) => NodeKind::RootEntry,
             SubNodeRef::Object(_, _) => NodeKind::Object,
-            SubNodeRef::Struct(_, _) => NodeKind::Struct,
             SubNodeRef::Property(_, _) => NodeKind::Property,
             SubNodeRef::Value(_) => NodeKind::Value,
         }
@@ -76,8 +76,8 @@ impl NodeExt for SubNodeRef<'_> {
     #[inline(always)]
     fn class_hash(&self) -> Option<HashedLiteral<BinHash>> {
         match self {
-            Self::Object(o, _) => Some(o.object.class_hash),
-            Self::Struct(s, _) => Some(s.class_hash),
+            Self::RootEntry(o, _) => Some(o.object.class_hash),
+            Self::Object(s, _) => Some(s.class_hash),
             Self::Property(_, _) | Self::Value(_) => None,
         }
     }
@@ -88,8 +88,8 @@ impl<'a> SubNodeRef<'a> {
     #[must_use]
     pub fn detail(&self) -> NodeDetail {
         match self {
+            SubNodeRef::RootEntry(_, d) => (*d).into(),
             SubNodeRef::Object(_, d) => (*d).into(),
-            SubNodeRef::Struct(_, d) => (*d).into(),
             SubNodeRef::Property(_, d) => (*d).into(),
             SubNodeRef::Value(_) => NodeDetail::Value,
         }
@@ -99,8 +99,8 @@ impl<'a> SubNodeRef<'a> {
     #[must_use]
     pub fn trivia_from(node: &NodeRef<'a>) -> Self {
         match node {
+            NodeRef::RootEntry(v) => Self::RootEntry(v, AstRootEntryDetail::Trivia),
             NodeRef::Object(v) => Self::Object(v, AstObjectDetail::Trivia),
-            NodeRef::Struct(v) => Self::Struct(v, AstStructDetail::Trivia),
             NodeRef::Property(v) => Self::Property(v, AstPropertyDetail::Trivia),
             NodeRef::Value(v) => Self::Value(v),
         }
@@ -110,13 +110,13 @@ impl<'a> SubNodeRef<'a> {
     #[must_use]
     pub fn span(&self) -> Span {
         match self {
-            SubNodeRef::Object(v, f) => match f {
-                AstObjectDetail::Node | AstObjectDetail::Trivia => v.span(),
-                AstObjectDetail::PathHash => v.path_hash.span(),
+            SubNodeRef::RootEntry(v, f) => match f {
+                AstRootEntryDetail::Node | AstRootEntryDetail::Trivia => v.span(),
+                AstRootEntryDetail::PathHash => v.path_hash.span(),
             },
-            SubNodeRef::Struct(v, f) => match f {
-                AstStructDetail::Node | AstStructDetail::Trivia => v.span,
-                AstStructDetail::ClassHash => v.class_hash.span(),
+            SubNodeRef::Object(v, f) => match f {
+                AstObjectDetail::Node | AstObjectDetail::Trivia => v.span,
+                AstObjectDetail::ClassHash => v.class_hash.span(),
             },
             SubNodeRef::Property(v, f) => match f {
                 AstPropertyDetail::Node | AstPropertyDetail::Trivia => v.span(),
@@ -130,12 +130,12 @@ impl<'a> SubNodeRef<'a> {
 
 impl<'a> From<&'a RootEntry> for NodeRef<'a> {
     fn from(value: &'a RootEntry) -> Self {
-        Self::Object(value)
+        Self::RootEntry(value)
     }
 }
 impl<'a> From<&'a Object> for NodeRef<'a> {
     fn from(value: &'a Object) -> Self {
-        Self::Struct(value)
+        Self::Object(value)
     }
 }
 impl<'a> From<&'a Property> for NodeRef<'a> {
@@ -151,12 +151,12 @@ impl<'a> From<&'a Value> for NodeRef<'a> {
 
 impl<'a> From<&'a RootEntry> for SubNodeRef<'a> {
     fn from(value: &'a RootEntry) -> Self {
-        Self::Object(value, AstObjectDetail::Node)
+        Self::RootEntry(value, AstRootEntryDetail::Node)
     }
 }
 impl<'a> From<&'a Object> for SubNodeRef<'a> {
     fn from(value: &'a Object) -> Self {
-        Self::Struct(value, AstStructDetail::Node)
+        Self::Object(value, AstObjectDetail::Node)
     }
 }
 impl<'a> From<&'a Property> for SubNodeRef<'a> {
@@ -172,8 +172,8 @@ impl<'a> From<&'a Value> for SubNodeRef<'a> {
 impl<'a> From<NodeRef<'a>> for SubNodeRef<'a> {
     fn from(value: NodeRef<'a>) -> Self {
         match value {
+            NodeRef::RootEntry(v) => v.into(),
             NodeRef::Object(v) => v.into(),
-            NodeRef::Struct(v) => v.into(),
             NodeRef::Property(v) => v.into(),
             NodeRef::Value(v) => v.into(),
         }

@@ -1,22 +1,22 @@
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub enum AstObjectDetail {
+pub enum AstRootEntryDetail {
     Node,
     PathHash,
     Trivia,
 }
-impl AstObjectDetail {
+impl AstRootEntryDetail {
     pub fn is_node(&self) -> bool {
         matches!(self, Self::Node)
     }
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub enum AstStructDetail {
+pub enum AstObjectDetail {
     Node,
     ClassHash,
     Trivia,
 }
-impl AstStructDetail {
+impl AstObjectDetail {
     pub fn is_node(&self) -> bool {
         matches!(self, Self::Node)
     }
@@ -37,8 +37,8 @@ impl AstPropertyDetail {
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum NodeDetail {
-    Object(AstObjectDetail),
-    Struct(AstStructDetail),
+    Object(AstRootEntryDetail),
+    Struct(AstObjectDetail),
     Property(AstPropertyDetail),
     Value,
 }
@@ -53,13 +53,13 @@ impl NodeDetail {
     }
 }
 
-impl From<AstObjectDetail> for NodeDetail {
-    fn from(value: AstObjectDetail) -> Self {
+impl From<AstRootEntryDetail> for NodeDetail {
+    fn from(value: AstRootEntryDetail) -> Self {
         Self::Object(value)
     }
 }
-impl From<AstStructDetail> for NodeDetail {
-    fn from(value: AstStructDetail) -> Self {
+impl From<AstObjectDetail> for NodeDetail {
+    fn from(value: AstObjectDetail) -> Self {
         Self::Struct(value)
     }
 }
