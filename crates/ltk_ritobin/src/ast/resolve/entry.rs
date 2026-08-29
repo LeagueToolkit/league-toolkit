@@ -9,20 +9,18 @@ use crate::{
             },
             MaybeSpanDiag,
         },
-        resolve::{
-            literals::{self},
-            type_expr::TypeExpr,
-        },
+        node::TypeExpr,
+        resolve::literals::{self},
         Value,
     },
     cst::{ChildrenExt as _, Kind},
     parse::{Span, Token, TokenKind},
-    Node, RitoType, Spanned,
+    Node, RitoType, Spanned, SpannedExt,
 };
 
 pub struct RawEntry {
     pub key: Value,
-    pub type_span: Option<Span>,
+    pub type_expr: Spanned<Option<TypeExpr>>,
     pub value: Option<Value>,
 }
 
@@ -98,9 +96,9 @@ impl<'a> Builder<'a> {
             .and_then(|p| p.value_subtype())
             .map(RitoType::simple);
 
-        let kind_node = children.find_tree(self.cst, Kind::TypeExpr);
-        let kind_span = kind_node.map(|k| k.span);
-        let rito_type = kind_node.and_then(|t| self.resolve_type_expr(t));
+        let type_expr_node = children.find_tree(self.cst, Kind::TypeExpr);
+        let type_expr_span = type_expr_node.map(|k| k.span);
+        let type_expr = type_expr_node.and_then(|t| self.resolve_type_expr(t));
 
         let value_node = children
             .find_tree(self.cst, Kind::EntryValue)
@@ -123,23 +121,26 @@ impl<'a> Builder<'a> {
         //     }
         // }
 
-        let kind = rito_type.or(parent_value_kind.map(|k| k.into()));
-        let type_span = kind_span.or(parent_type_span);
+        let desired_kind = type_expr.or(parent_value_kind.map(|k| k.into()));
+        let type_span = type_expr_span.or(parent_type_span);
 
-        let value =
-            match self.resolve_value(value_node, kind.and_then(|k| k.as_resolved()), type_span) {
-                Ok(v) => Some(v),
-                Err(e) => {
-                    if !matches!(kind, Some(TypeExpr::Unresolved)) {
-                        // don't report the value error if the type expr was unresolved - we have
-                        // bigger fish to fry, so reporting this error isn't needed
-                        self.push(e.default_span(entry.span));
-                    }
-                    None
+        let value = match self.resolve_value(
+            value_node,
+            desired_kind.and_then(|k| k.as_resolved()),
+            type_span,
+        ) {
+            Ok(v) => Some(v),
+            Err(e) => {
+                if !matches!(desired_kind, Some(TypeExpr::Unresolved)) {
+                    // don't report the value error if the type expr was unresolved - we have
+                    // bigger fish to fry, so reporting this error isn't needed
+                    self.push(e.default_span(entry.span));
                 }
-            };
+                None
+            }
+        };
 
-        let value = value.map(|value| match kind {
+        let value = value.map(|value| match desired_kind {
             Some(TypeExpr::Resolved(kind)) => match value.coerce_to(kind.base) {
                 Ok(value) => value,
                 Err(value) => value,
@@ -147,14 +148,14 @@ impl<'a> Builder<'a> {
             _ => value,
         });
 
-        match (kind, value.as_ref()) {
+        match (desired_kind, value.as_ref()) {
             (Some(kind), Some(value)) => {
                 if value.rito_type().is_some_and(|k| k != kind) {
                     self.push(
                         TypeMismatch {
                             span: value.span(),
                             expected: kind.into(),
-                            expected_span: kind_span,
+                            expected_span: type_expr_span,
                             got: value.rito_type().into(),
                         }
                         .unwrap(),
@@ -169,7 +170,7 @@ impl<'a> Builder<'a> {
                 self.push(
                     Diagnostic::MissingEntryValue {
                         key_span: key_node.span,
-                        expected: kind_span.map(|span| Spanned::new(span, kind)),
+                        expected: type_expr_span.map(|span| Spanned::new(span, kind)),
                     }
                     .unwrap(),
                 );
@@ -180,7 +181,16 @@ impl<'a> Builder<'a> {
         Ok(RawEntry {
             key,
             value,
-            type_span,
+            type_expr: type_expr.with_span(
+                type_expr_span
+                    .or_else(|| {
+                        entry
+                            .children
+                            .find_token(self.cst, TokenKind::Colon)
+                            .map(|t| t.span.cover_offset(key_node.span.start - 1))
+                    })
+                    .unwrap_or(Span::empty(key_node.span.end)),
+            ),
         })
     }
 }

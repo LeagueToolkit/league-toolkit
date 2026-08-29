@@ -1,5 +1,5 @@
 use crate::{
-    ast::{diagnostics::Diagnostic as D, Ptr, RootEntry, Value},
+    ast::{diagnostics::Diagnostic as D, node::TypeExpr, Ptr, RootEntry, Value},
     cst::Kind,
     parse::Span,
     RitoType, Spanned,
@@ -15,7 +15,7 @@ pub use root_kind::*;
 #[derive(Debug, Clone)]
 pub struct RawRootEntry {
     key: Value,
-    type_span: Option<Span>,
+    type_expr: Spanned<Option<TypeExpr>>,
     value: Option<Value>,
 }
 
@@ -38,7 +38,7 @@ impl<'a> Builder<'a> {
                             kind,
                             RawRootEntry {
                                 key: entry.key,
-                                type_span: entry.type_span,
+                                type_expr: entry.type_expr,
                                 value: entry.value,
                             },
                         ) {
@@ -74,9 +74,7 @@ impl<'a> Builder<'a> {
                     D::InvalidRootEntryType {
                         root_kind,
                         key_span: entry.key.span(),
-                        type_span: entry
-                            .type_span
-                            .unwrap_or_else(|| Span::empty(entry.key.span().end)),
+                        type_span: entry.type_expr.span,
                         got: got.kind().map(RitoType::simple).into(),
                         expected: RitoType::simple(expected),
                     }

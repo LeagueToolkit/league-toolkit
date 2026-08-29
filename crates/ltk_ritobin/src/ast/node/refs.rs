@@ -108,8 +108,8 @@ impl<'a> SubNodeRef<'a> {
 
     #[inline(always)]
     #[must_use]
-    pub fn span(&self) -> Option<Span> {
-        Some(match self {
+    pub fn span(&self) -> Span {
+        match self {
             SubNodeRef::Object(v, f) => match f {
                 AstObjectDetail::Node | AstObjectDetail::Trivia => v.span(),
                 AstObjectDetail::PathHash => v.path_hash.span(),
@@ -121,10 +121,10 @@ impl<'a> SubNodeRef<'a> {
             SubNodeRef::Property(v, f) => match f {
                 AstPropertyDetail::Node | AstPropertyDetail::Trivia => v.span(),
                 AstPropertyDetail::Name => v.name.span(),
-                AstPropertyDetail::TypeExpr => v.type_span?,
+                AstPropertyDetail::TypeExpr => v.type_expr.span,
             },
             SubNodeRef::Value(v) => v.span(),
-        })
+        }
     }
 }
 

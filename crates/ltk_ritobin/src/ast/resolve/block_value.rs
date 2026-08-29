@@ -181,7 +181,7 @@ impl<'a> Builder<'a> {
                     Ok(entry) => match entry.key.coerce_to(PropertyKind::Hash) {
                         Ok(Value::Hash(hash)) => properties.push(Property {
                             name: hash,
-                            type_span: entry.type_span,
+                            type_expr: entry.type_expr,
                             value: entry.value,
                         }),
                         Ok(value) | Err(value) => self.push(

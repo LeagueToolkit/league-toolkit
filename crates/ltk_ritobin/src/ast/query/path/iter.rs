@@ -79,18 +79,15 @@ impl<'a> Iterator for AstFinePathIter<'a> {
         // only recurse on nodes with detail = Node, since that means we have more resolution
         if current.detail().is_node() {
             self.next = match current {
-                SubNodeRef::Object(v, _) => v.detailed_children().find(|c| {
-                    c.span()
-                        .is_some_and(|span| span.contains_inclusive(self.offset))
-                }),
-                SubNodeRef::Struct(v, _) => v.detailed_children().find(|c| {
-                    c.span()
-                        .is_some_and(|span| span.contains_inclusive(self.offset))
-                }),
-                SubNodeRef::Property(v, _) => v.detailed_children().find(|c| {
-                    c.span()
-                        .is_some_and(|span| span.contains_inclusive(self.offset))
-                }),
+                SubNodeRef::Object(v, _) => v
+                    .detailed_children()
+                    .find(|c| c.span().contains_inclusive(self.offset)),
+                SubNodeRef::Struct(v, _) => v
+                    .detailed_children()
+                    .find(|c| c.span().contains_inclusive(self.offset)),
+                SubNodeRef::Property(v, _) => v
+                    .detailed_children()
+                    .find(|c| c.span().contains_inclusive(self.offset)),
                 SubNodeRef::Value(v) => v
                     .children()
                     .find(|c| c.span().contains_inclusive(self.offset))
