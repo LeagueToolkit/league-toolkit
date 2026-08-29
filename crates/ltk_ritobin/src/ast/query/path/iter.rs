@@ -1,5 +1,5 @@
 use crate::ast::{
-    node::{NodeExt as _, NodeRef, SubNodeRef},
+    node::{NodeRef, SubNodeRef},
     Ast,
 };
 
@@ -18,14 +18,14 @@ impl<'a> AstPathIter<'a> {
             next: ast
                 .objects
                 .iter()
-                .find(|o| o.span().contains(offset))
+                .find(|o| o.span().contains_inclusive(offset))
                 .map(NodeRef::Object),
             offset,
         }
     }
     pub(crate) fn from_node(node: NodeRef<'a>, offset: u32) -> Self {
         Self {
-            next: node.span().contains(offset).then_some(node),
+            next: node.span().contains_inclusive(offset).then_some(node),
             offset,
         }
     }
@@ -36,7 +36,9 @@ impl<'a> Iterator for AstPathIter<'a> {
 
     fn next(&mut self) -> Option<NodeRef<'a>> {
         let current = self.next.take()?;
-        self.next = current.children().find(|c| c.span().contains(self.offset));
+        self.next = current
+            .children()
+            .find(|c| c.span().contains_inclusive(self.offset));
         Some(current)
     }
 }
@@ -55,7 +57,7 @@ impl<'a> AstFinePathIter<'a> {
             next: ast
                 .objects
                 .iter()
-                .find(|o| o.span().contains(offset))
+                .find(|o| o.span().contains_inclusive(offset))
                 .map(SubNodeRef::from),
             offset,
         }
@@ -77,18 +79,21 @@ impl<'a> Iterator for AstFinePathIter<'a> {
         // only recurse on nodes with detail = Node, since that means we have more resolution
         if current.detail().is_node() {
             self.next = match current {
-                SubNodeRef::Object(v, _) => v
-                    .detailed_children()
-                    .find(|c| c.span().is_some_and(|span| span.contains(self.offset))),
-                SubNodeRef::Struct(v, _) => v
-                    .detailed_children()
-                    .find(|c| c.span().is_some_and(|span| span.contains(self.offset))),
-                SubNodeRef::Property(v, _) => v
-                    .detailed_children()
-                    .find(|c| c.span().is_some_and(|span| span.contains(self.offset))),
+                SubNodeRef::Object(v, _) => v.detailed_children().find(|c| {
+                    c.span()
+                        .is_some_and(|span| span.contains_inclusive(self.offset))
+                }),
+                SubNodeRef::Struct(v, _) => v.detailed_children().find(|c| {
+                    c.span()
+                        .is_some_and(|span| span.contains_inclusive(self.offset))
+                }),
+                SubNodeRef::Property(v, _) => v.detailed_children().find(|c| {
+                    c.span()
+                        .is_some_and(|span| span.contains_inclusive(self.offset))
+                }),
                 SubNodeRef::Value(v) => v
                     .children()
-                    .find(|c| c.span().contains(self.offset))
+                    .find(|c| c.span().contains_inclusive(self.offset))
                     .map(|c| c.into()),
             };
         }

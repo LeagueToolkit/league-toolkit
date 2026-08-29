@@ -57,7 +57,7 @@ impl Property {
             SubNodeRef::Property(self, AstPropertyDetail::TypeExpr),
         ]
         .into_iter()
-        .chain(self.value.as_ref().map(SubNodeRef::Value).into_iter())
+        .chain(self.value.as_ref().map(SubNodeRef::Value))
         .chain(once(SubNodeRef::Property(self, AstPropertyDetail::Trivia)))
     }
 }
@@ -69,9 +69,11 @@ impl Value {
             Value::Container { items, .. } | Value::UnorderedContainer { items, .. } => {
                 Box::new(items.iter().map(NodeRef::Value))
             }
-            Value::Map { entries, .. } => Box::new(entries.iter().flat_map(|(k, v)| {
-                once(NodeRef::Value(k)).chain(v.as_ref().map(NodeRef::Value).into_iter())
-            })),
+            Value::Map { entries, .. } => {
+                Box::new(entries.iter().flat_map(|(k, v)| {
+                    once(NodeRef::Value(k)).chain(v.as_ref().map(NodeRef::Value))
+                }))
+            }
             Value::Optional {
                 value: Some(inner), ..
             } => Box::new(std::iter::once(NodeRef::Value(inner))),
