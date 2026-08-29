@@ -9,7 +9,10 @@ use crate::{
             },
             MaybeSpanDiag,
         },
-        resolve::literals::{self},
+        resolve::{
+            literals::{self},
+            type_expr::TypeExpr,
+        },
         Value,
     },
     cst::{ChildrenExt as _, Kind},
@@ -97,7 +100,7 @@ impl<'a> Builder<'a> {
 
         let kind_node = children.find_tree(self.cst, Kind::TypeExpr);
         let kind_span = kind_node.map(|k| k.span);
-        let kind = kind_node.map(|t| self.resolve_type_expr(t)).transpose()?;
+        let rito_type = kind_node.and_then(|t| self.resolve_type_expr(t));
 
         let value_node = children
             .find_tree(self.cst, Kind::EntryValue)
@@ -120,23 +123,28 @@ impl<'a> Builder<'a> {
         //     }
         // }
 
-        let kind = kind.or(parent_value_kind);
+        let kind = rito_type.or(parent_value_kind.map(|k| k.into()));
         let type_span = kind_span.or(parent_type_span);
 
-        let value = match self.resolve_value(value_node, kind, type_span) {
-            Ok(v) => Some(v),
-            Err(e) => {
-                self.push(e.default_span(entry.span));
-                None
-            }
-        };
+        let value =
+            match self.resolve_value(value_node, kind.and_then(|k| k.as_resolved()), type_span) {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    if !matches!(kind, Some(TypeExpr::Unresolved)) {
+                        // don't report the value error if the type expr was unresolved - we have
+                        // bigger fish to fry, so reporting this error isn't needed
+                        self.push(e.default_span(entry.span));
+                    }
+                    None
+                }
+            };
 
         let value = value.map(|value| match kind {
-            Some(kind) => match value.coerce_to(kind.base) {
+            Some(TypeExpr::Resolved(kind)) => match value.coerce_to(kind.base) {
                 Ok(value) => value,
                 Err(value) => value,
             },
-            None => value,
+            _ => value,
         });
 
         match (kind, value.as_ref()) {
@@ -145,7 +153,7 @@ impl<'a> Builder<'a> {
                     self.push(
                         TypeMismatch {
                             span: value.span(),
-                            expected: kind,
+                            expected: kind.into(),
                             expected_span: kind_span,
                             got: value.rito_type().into(),
                         }
@@ -156,7 +164,8 @@ impl<'a> Builder<'a> {
             (None, None) => {
                 self.push(MissingType(key.span()).unwrap());
             }
-            (Some(kind), None) => {
+            // only report missing value if the type expression resolved properly (bigger fish)
+            (Some(TypeExpr::Resolved(kind)), None) => {
                 self.push(
                     Diagnostic::MissingEntryValue {
                         key_span: key_node.span,

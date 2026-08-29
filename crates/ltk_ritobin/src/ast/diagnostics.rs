@@ -121,7 +121,7 @@ pub enum Diagnostic {
 
     TypeMismatch {
         span: Span,
-        expected: RitoType,
+        expected: RitoTypeOrVirtual,
         expected_span: Option<Span>,
         got: RitoTypeOrVirtual,
     },

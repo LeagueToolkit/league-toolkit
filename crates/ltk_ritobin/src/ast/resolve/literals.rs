@@ -153,7 +153,7 @@ impl Value {
                     _ => {
                         return Err(TypeMismatch {
                             span: *span,
-                            expected: RitoType::simple(kind_hint),
+                            expected: RitoType::simple(kind_hint).into(),
                             expected_span: kind_hint_span,
                             got: RitoTypeOrVirtual::numeric(),
                         });

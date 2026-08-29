@@ -3,15 +3,75 @@ use ltk_meta::PropertyKind;
 use crate::{
     ast::{
         builder::Builder,
-        diagnostics::Diagnostic::{self, *},
+        diagnostics::{
+            Diagnostic::{self, *},
+            RitoTypeOrVirtual,
+        },
     },
     cst::{ChildrenExt as _, Kind},
     parse::{Span, TokenKind},
     Node, RitoType, RitobinName as _,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TypeExpr {
+    Unresolved,
+    Resolved(RitoType),
+}
+
+impl TypeExpr {
+    pub fn as_resolved(self) -> Option<RitoType> {
+        match self {
+            TypeExpr::Unresolved => None,
+            TypeExpr::Resolved(rito_type) => Some(rito_type),
+        }
+    }
+}
+
+impl PartialEq<RitoType> for TypeExpr {
+    fn eq(&self, other: &RitoType) -> bool {
+        match self {
+            TypeExpr::Unresolved => false,
+            TypeExpr::Resolved(rito_type) => rito_type.eq(other),
+        }
+    }
+}
+impl PartialEq<TypeExpr> for RitoType {
+    fn eq(&self, other: &TypeExpr) -> bool {
+        other == self
+    }
+}
+
+impl From<RitoType> for TypeExpr {
+    fn from(value: RitoType) -> Self {
+        Self::Resolved(value)
+    }
+}
+
+impl From<TypeExpr> for RitoTypeOrVirtual {
+    fn from(value: TypeExpr) -> Self {
+        match value {
+            TypeExpr::Unresolved => Self::Unknown,
+            TypeExpr::Resolved(rito_type) => rito_type.into(),
+        }
+    }
+}
+
 impl<'a> Builder<'a> {
-    pub fn resolve_type_expr(&mut self, tree: &Node) -> Result<RitoType, Diagnostic> {
+    pub fn resolve_type_expr(&mut self, tree: &Node) -> Option<TypeExpr> {
+        match self.resolve_type_expr_fallable(tree) {
+            Ok(rito) => Some(TypeExpr::Resolved(rito)),
+            Err(e @ MissingToken(_)) => {
+                self.push(e.default_span(tree.span));
+                None
+            }
+            Err(e) => {
+                self.push(e.default_span(tree.span));
+                Some(TypeExpr::Unresolved)
+            }
+        }
+    }
+    pub fn resolve_type_expr_fallable(&mut self, tree: &Node) -> Result<RitoType, Diagnostic> {
         let children = tree.children.get(self.cst);
 
         let base = children

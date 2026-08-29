@@ -124,7 +124,7 @@ impl<'a> Builder<'a> {
                                     Err(v) => self.push(
                                         TypeMismatch {
                                             span: v.span(),
-                                            expected: RitoType::simple(item_kind),
+                                            expected: RitoType::simple(item_kind).into(),
                                             expected_span: hint_span,
                                             got: v.rito_type().into(),
                                         }
@@ -187,7 +187,7 @@ impl<'a> Builder<'a> {
                         Ok(value) | Err(value) => self.push(
                             TypeMismatch {
                                 span: value.span(),
-                                expected: RitoType::simple(PropertyKind::Hash),
+                                expected: RitoType::simple(PropertyKind::Hash).into(),
                                 expected_span: None,
                                 got: value.rito_type().into(),
                             }
@@ -233,7 +233,7 @@ impl<'a> Builder<'a> {
                                     self.push(
                                         TypeMismatch {
                                             span: value.span(),
-                                            expected: RitoType::simple(value_kind),
+                                            expected: RitoType::simple(value_kind).into(),
                                             expected_span: hint_span,
                                             got: value.rito_type().into(),
                                         }
@@ -249,7 +249,7 @@ impl<'a> Builder<'a> {
                         Err(key) => self.push(
                             TypeMismatch {
                                 span: key.span(),
-                                expected: RitoType::simple(key_kind),
+                                expected: RitoType::simple(key_kind).into(),
                                 expected_span: hint_span,
                                 got: key.rito_type().into(),
                             }
@@ -292,7 +292,7 @@ impl<'a> Builder<'a> {
                         .and_then(|value| {
                             value.coerce_to(item_kind).map_err(|value| TypeMismatch {
                                 span: value.span(),
-                                expected: RitoType::simple(item_kind),
+                                expected: RitoType::simple(item_kind).into(),
                                 expected_span: hint_span,
                                 got: value.rito_type().into(),
                             })

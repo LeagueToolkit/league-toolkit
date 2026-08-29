@@ -69,7 +69,7 @@ impl<'c> ListIter<'_, '_, 'c> {
                 other => {
                     return Err(TypeMismatch {
                         span: other.span(),
-                        expected: RitoType::simple(PropertyKind::F32),
+                        expected: RitoType::simple(PropertyKind::F32).into(),
                         expected_span: self.type_span,
                         got: other.kind().map(RitoType::simple).into(),
                     }
@@ -88,7 +88,7 @@ impl<'c> ListIter<'_, '_, 'c> {
                 other => {
                     return Err(TypeMismatch {
                         span: other.span(),
-                        expected: RitoType::simple(PropertyKind::U8),
+                        expected: RitoType::simple(PropertyKind::U8).into(),
                         expected_span: self.type_span,
                         got: other.kind().map(RitoType::simple).into(),
                     }

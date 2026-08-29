@@ -677,10 +677,10 @@ fn bad_option_coerce_is_reported() {
         matches!(
             d,
             Diagnostic::TypeMismatch {
-                expected: RitoType {
+                expected: RitoTypeOrVirtual::RitoType(RitoType {
                     base: PropertyKind::Optional,
                     subtypes: [Some(PropertyKind::U32), None],
-                },
+                }),
                 got: RitoTypeOrVirtual::RitoType(RitoType {
                     base: PropertyKind::Optional,
                     subtypes: [Some(PropertyKind::Bool), None],
@@ -698,10 +698,10 @@ fn a_property_name_that_cannot_be_hashed_is_reported() {
         matches!(
             d,
             Diagnostic::TypeMismatch {
-                expected: RitoType {
+                expected: RitoTypeOrVirtual::RitoType(RitoType {
                     base: PropertyKind::Hash,
                     ..
-                },
+                }),
                 ..
             }
         )

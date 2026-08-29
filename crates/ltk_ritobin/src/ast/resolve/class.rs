@@ -37,7 +37,7 @@ impl<'a> Builder<'a> {
                 Value::Hash(hash) => Ok(hash),
                 value => Err(TypeMismatch {
                     span: value.span(),
-                    expected: RitoType::simple(PropertyKind::Hash),
+                    expected: RitoType::simple(PropertyKind::Hash).into(),
                     expected_span: None,
                     got: value.rito_type().into(),
                 }),
@@ -59,7 +59,7 @@ impl<'a> Builder<'a> {
         if !matches!(hint.base, PropertyKind::Struct | PropertyKind::Embedded) {
             return Err(TypeMismatch {
                 span: name_token.span,
-                expected: RitoType::simple(hint.base),
+                expected: RitoType::simple(hint.base).into(),
                 expected_span: None,
                 got: RitoTypeOrVirtual::StructOrEmbedded,
             });
