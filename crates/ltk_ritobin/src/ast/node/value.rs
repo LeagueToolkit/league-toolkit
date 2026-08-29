@@ -68,6 +68,21 @@ pub enum Value {
     },
 }
 
+impl Value {
+    #[inline(always)]
+    #[must_use]
+    /// Whether the value is container-like - (unordered) container, map, optional
+    pub fn is_containerlike(&self) -> bool {
+        matches!(
+            self,
+            Value::Container { .. }
+                | Value::UnorderedContainer { .. }
+                | Value::Map { .. }
+                | Value::Optional { .. }
+        )
+    }
+}
+
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
