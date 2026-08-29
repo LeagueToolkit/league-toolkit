@@ -35,7 +35,7 @@ impl<'a> NodeRef<'a> {
 }
 
 /// A detailed reference to a node in an [`Ast`], down to the field level.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum SubNodeRef<'a> {
     Object(&'a RootEntry, AstObjectDetail),
     Struct(&'a Object, AstStructDetail),
