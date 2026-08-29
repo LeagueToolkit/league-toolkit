@@ -23,11 +23,17 @@ impl Span {
         Self { start: at, end: at }
     }
 
-    /// Whether this span contains `offset`
+    /// Whether this span contains `offset`. The end index is considered excluded.
     #[must_use]
     #[inline]
     pub fn contains(&self, offset: u32) -> bool {
         self.start <= offset && offset < self.end
+    }
+    /// Whether this span contains `offset`. The end index is considered included.
+    #[must_use]
+    #[inline]
+    pub fn contains_inclusive(&self, offset: u32) -> bool {
+        self.start <= offset && offset <= self.end
     }
 
     /// Whether two span ranges intersect
