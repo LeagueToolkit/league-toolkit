@@ -51,6 +51,26 @@ let tree = Bin::new(
 
 [`NoMeta`]: crate::property::NoMeta
 
+### Streaming a bin file
+
+Reading everything is the wrong shape for harvesting hashes across thousands of files or
+peeking at one header. The [`stream`] module mounts a `PROP` file the way `ltk_wad::Wad`
+mounts an archive and reads only what is asked for:
+
+```no_run
+use std::fs::File;
+use ltk_meta::concrete::BinStream;
+
+let mut stream = BinStream::mount(File::open("data.bin")?)?;
+println!("version {}, {} objects", stream.version(), stream.class_hashes().len());
+
+for entry in stream.entries() {
+    let entry = entry?;
+    println!("{:08x}: {:08x}", entry.path_hash, entry.class_hash);
+}
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
 ### Modifying a bin file
 
 ```no_run
@@ -179,6 +199,9 @@ pub use data_override::{
 
 mod file;
 pub use file::{BinFile, BinKind};
+
+pub mod stream;
+pub use stream::{BinStream, BinToc, Entries, ObjectEntry, ObjectStream, Objects, SizeDiscrepancy};
 
 mod error;
 pub use error::*;
