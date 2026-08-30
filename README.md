@@ -99,24 +99,27 @@ println!("Submeshes: {}", mesh.ranges().len());
 ### Working with Property Bins
 
 ```rust
-use ltk_meta::{BinTree, BinTreeObject, value::*};
+use ltk_meta::concrete::{values, Bin, BinObject};
+use std::fs::File;
 
 // Read
-let tree = BinTree::from_reader(&mut file)?;
-for (hash, object) in &tree.objects {
-    println!("Object 0x{:08x}", hash);
+let bin = Bin::from_reader(&mut File::open("data.bin")?)?;
+for (path_hash, object) in &bin.objects {
+    println!("Object {path_hash:08x}");
 }
 
 // Create
-let tree = BinTree::builder()
+let bin = Bin::builder()
     .dependency("shared/data.bin")
     .object(
-        BinTreeObject::builder(0x12345678, 0xABCDEF00)
-            .property(0x1111, I32Value(42))
+        BinObject::builder(0x12345678u32, 0xABCDEF00u32)
+            .property(0x1111, values::I32::new(42))
             .build()
     )
     .build();
 ```
+
+See the [`ltk_meta` README](crates/ltk_meta/README.md) for the full surface: property paths, override bins (`PTCH`), typed values, and round-trip writing.
 
 ---
 

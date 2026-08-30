@@ -4,7 +4,7 @@ version = "0.8.0"
 edition = "2021"
 description = "Metadata formats and utilities for League Toolkit"
 license = "MIT OR Apache-2.0"
-readme = "../../README.md"
+readme = "README.md"
 
 [lints]
 workspace = true
