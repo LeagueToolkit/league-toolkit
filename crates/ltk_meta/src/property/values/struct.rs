@@ -2,14 +2,13 @@ use std::io;
 
 use crate::{
     property::{Kind, NoMeta},
-    traits::{
-        PropertyExt, PropertyValueExt, ReadProperty, ReaderExt as _, WriteProperty, WriterExt as _,
-    },
-    Error, PropertyValueEnum,
+    stream::{layout::Numbering, owned},
+    traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty, WriterExt as _},
+    PropertyValueEnum,
 };
-use byteorder::{ReadBytesExt as _, WriteBytesExt as _, LE};
+use byteorder::{WriteBytesExt as _, LE};
 use indexmap::IndexMap;
-use ltk_hash::{BinHash, ReadBytesExt as _, WriteBytesExt as _};
+use ltk_hash::{BinHash, WriteBytesExt as _};
 use ltk_io_ext::{measure, window_at};
 
 #[cfg_attr(
@@ -72,35 +71,12 @@ impl<M: Default> ReadProperty for Struct<M> {
         reader: &mut R,
         legacy: bool,
     ) -> Result<Self, crate::Error> {
-        let class_hash = reader.read_bin_hash::<LE>()?;
-        if *class_hash == 0 {
-            return Ok(Self {
-                class_hash,
-                ..Default::default()
-            });
-        }
-
-        let size = reader.read_u32::<LE>()?;
-
-        let (real_size, value) = measure(reader, |reader| {
-            let prop_count = reader.read_u16::<LE>()?;
-            let mut properties = IndexMap::with_capacity(prop_count as _);
-            for _ in 0..prop_count {
-                let (name_hash, value) = reader.read_property::<M>(legacy)?;
-                properties.insert(name_hash, value);
-            }
-            Ok::<_, Error>(Self {
-                class_hash,
-                properties,
-                meta: M::default(),
-            })
-        })?;
-
-        if size as u64 != real_size {
-            return Err(crate::Error::InvalidSize(size as _, real_size));
-        }
-
-        Ok(value)
+        owned::read_from(
+            reader,
+            Kind::Struct,
+            Numbering::from_legacy(legacy),
+            owned::read_struct,
+        )
     }
 }
 impl<M: Clone> WriteProperty for Struct<M> {

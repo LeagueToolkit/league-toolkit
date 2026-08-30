@@ -71,6 +71,29 @@ for entry in stream.entries() {
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
+Descending into an object buffers its declared byte range once and views it in place, so
+iteration and descent to any depth cost no I/O and materialize nothing:
+
+```no_run
+use std::fs::File;
+use ltk_meta::{concrete::BinStream, stream::ValueView};
+
+let mut stream = BinStream::mount(File::open("data.bin")?)?;
+let mut objects = stream.objects();
+
+while let Some(mut object) = objects.next()? {
+    for property in object.view()?.properties() {
+        if let ValueView::String(text) = property?.value_view()? {
+            println!("{text}");
+        }
+    }
+}
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+[`Bin::from_reader`] is itself `BinStream::mount` plus [`BinStream::into_bin`], so the eager
+tree and the streaming surface are one parser and cannot drift.
+
 ### Modifying a bin file
 
 ```no_run
@@ -201,7 +224,10 @@ mod file;
 pub use file::{BinFile, BinKind};
 
 pub mod stream;
-pub use stream::{BinStream, BinToc, Entries, ObjectEntry, ObjectStream, Objects};
+pub use stream::{
+    BatchObjects, BinStream, BinToc, Entries, Numbering, ObjectEntry, ObjectStream, ObjectView,
+    Objects, PropertyView, ValueView,
+};
 
 mod error;
 pub use error::*;

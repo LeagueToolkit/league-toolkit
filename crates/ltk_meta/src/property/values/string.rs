@@ -1,9 +1,10 @@
 use crate::{
     property::{Kind, NoMeta},
+    stream::{layout::Numbering, owned},
     traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty},
 };
 use byteorder::LE;
-use ltk_io_ext::{ReaderExt, WriterExt};
+use ltk_io_ext::WriterExt;
 
 #[cfg_attr(
     feature = "serde",
@@ -69,12 +70,14 @@ impl<M> PropertyExt for String<M> {
 impl<M: Default> ReadProperty for String<M> {
     fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
-        _legacy: bool,
+        legacy: bool,
     ) -> Result<Self, crate::Error> {
-        Ok(Self {
-            value: reader.read_sized_string_u16::<LE>()?,
-            meta: M::default(),
-        })
+        owned::read_from(
+            reader,
+            Kind::String,
+            Numbering::from_legacy(legacy),
+            owned::read_string,
+        )
     }
 }
 

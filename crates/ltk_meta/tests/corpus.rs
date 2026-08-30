@@ -8,7 +8,9 @@
 //! It is the permanent replacement for the scratch tooling the design was written from: every
 //! `PTCH` chunk in the install has to read, re-write byte for byte, and have every one of its
 //! records resolve against the real objects those records name. Every `PROP` chunk additionally
-//! has to stream: mounting and sweeping it harvests the same object set the eager parse holds.
+//! has to stream: mounting and sweeping it harvests the same object set the eager parse holds,
+//! every object views cleanly, and every property's wire shape and decoded value agree with what
+//! the eager parse holds for it.
 
 use std::{
     cell::Cell,
@@ -23,7 +25,7 @@ use std::{
 use ltk_hash::BinHash;
 use ltk_meta::{
     concrete::BinStream,
-    path::{PatchError, ResolveErrorKind},
+    path::{PatchError, ResolveErrorKind, ValueShape},
     traits::PropertyExt as _,
     Bin, BinKind, BinObject, BinOverride,
 };
@@ -279,16 +281,30 @@ struct StreamCounts {
     prop_chunks: usize,
     objects: usize,
     properties: usize,
+    viewed: usize,
+    batched: usize,
+    legacy_chunks: usize,
 }
 
 impl fmt::Display for StreamCounts {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "{} wad archives", self.wads)?;
         writeln!(f, "{} PROP chunks mounted and swept", self.prop_chunks)?;
-        write!(
+        writeln!(
             f,
             "{} objects harvested / {} properties measured",
             self.objects, self.properties
+        )?;
+        writeln!(
+            f,
+            "{} properties viewed, shaped and decoded against the eager parse",
+            self.viewed
+        )?;
+        writeln!(f, "{} objects opened through a batch", self.batched)?;
+        write!(
+            f,
+            "{} chunks latched onto the legacy kind numbering",
+            self.legacy_chunks
         )
     }
 }
@@ -383,6 +399,91 @@ fn check_stream_parity(wad_path: &Path, data: &[u8], counts: &mut StreamCounts) 
             context()
         );
     }
+
+    // Every object, viewed: the borrowed renderer and the owned one over the same bytes agree
+    // with each other and with the eager parse, property for property.
+    let mut cursor = stream.objects();
+    while let Some(mut object) = cursor
+        .next()
+        .unwrap_or_else(|e| panic!("{}: the cursor failed: {e}", context()))
+    {
+        let path_hash = object.path_hash();
+        let view = object
+            .view()
+            .unwrap_or_else(|e| panic!("{}: object {path_hash:08x} did not view: {e}", context()));
+
+        let expected = &eager.objects[&path_hash];
+        assert_eq!(
+            view.property_count() as usize,
+            expected.properties.len(),
+            "{}: object {path_hash:08x}",
+            context()
+        );
+
+        for (property, (name_hash, value)) in view.properties().zip(expected.properties.iter()) {
+            let property = property
+                .unwrap_or_else(|e| panic!("{}: object {path_hash:08x} property: {e}", context()));
+            let where_ = || format!("{}: object {path_hash:08x} {name_hash:08x}", context());
+
+            assert_eq!(property.name_hash(), *name_hash, "{}", where_());
+            assert_eq!(property.kind(), value.kind(), "{}", where_());
+            assert_eq!(property.raw().len(), value.size_no_header(), "{}", where_());
+            assert_eq!(
+                property
+                    .shape()
+                    .unwrap_or_else(|e| panic!("{}: the shape did not read: {e}", where_())),
+                ValueShape::of(value),
+                "{}",
+                where_()
+            );
+            assert_eq!(
+                &property
+                    .value()
+                    .unwrap_or_else(|e| panic!("{}: the value did not decode: {e}", where_())),
+                value,
+                "{}",
+                where_()
+            );
+            counts.viewed += 1;
+        }
+    }
+
+    if stream.numbering().is_legacy() {
+        counts.legacy_chunks += 1;
+    }
+
+    // A batch opens the same objects as the per-hash lookups, in file order.
+    let sample: Vec<BinHash> = eager.objects.keys().rev().take(8).copied().collect();
+    let one_by_one: Vec<BinObject> = sample
+        .iter()
+        .map(|&hash| {
+            stream
+                .object(hash)
+                .unwrap_or_else(|e| panic!("{}: object lookup failed: {e}", context()))
+                .unwrap_or_else(|| panic!("{}: {hash:08x} is not in the TOC", context()))
+                .read()
+                .unwrap_or_else(|e| panic!("{}: {hash:08x} did not read: {e}", context()))
+        })
+        .collect();
+
+    let mut in_file_order: Vec<BinObject> = Vec::with_capacity(sample.len());
+    let mut batch = stream.objects_batch(sample.iter().copied());
+    while let Some(mut object) = batch
+        .next()
+        .unwrap_or_else(|e| panic!("{}: the batch failed: {e}", context()))
+    {
+        in_file_order.push(
+            object
+                .read()
+                .unwrap_or_else(|e| panic!("{}: a batched object did not read: {e}", context())),
+        );
+    }
+    assert!(batch.missing().is_empty(), "{}", context());
+
+    let mut expected = one_by_one;
+    expected.sort_by_key(|object| eager.objects.get_index_of(&object.path_hash));
+    assert_eq!(in_file_order, expected, "{}", context());
+    counts.batched += in_file_order.len();
 
     counts.prop_chunks += 1;
     counts.objects += entries.len();

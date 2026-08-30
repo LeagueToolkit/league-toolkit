@@ -1,9 +1,10 @@
 use crate::{
     property::{values::ContainerItem, Kind, NoMeta, ValueSlot},
-    traits::{PropertyExt, PropertyValueExt, ReadProperty, ReaderExt, WriteProperty, WriterExt},
+    stream::{layout::Numbering, owned},
+    traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty, WriterExt},
     Error, PropertyValueEnum,
 };
-use ltk_io_ext::{ReaderExt as _, WriterExt as _};
+use ltk_io_ext::WriterExt as _;
 
 /// At most one value of a declared [`Kind`].
 ///
@@ -250,21 +251,12 @@ impl<M: Default> ReadProperty for Optional<M> {
         reader: &mut R,
         legacy: bool,
     ) -> Result<Self, Error> {
-        let item_kind = reader.read_property_kind(legacy)?;
-        if item_kind.is_container() {
-            return Err(Error::InvalidNesting(item_kind));
-        }
-
-        let value = match reader.read_bool()? {
-            true => Some(Box::new(item_kind.read(reader, legacy)?)),
-            false => None,
-        };
-
-        Ok(Self {
-            item_kind,
-            value,
-            meta: M::default(),
-        })
+        owned::read_from(
+            reader,
+            Kind::Optional,
+            Numbering::from_legacy(legacy),
+            owned::read_optional,
+        )
     }
 }
 

@@ -26,3 +26,6 @@ Reference-Folder/
 
 # Windows Zone.Identifier ADS files
 *:Zone.Identifier
+
+# Agent worktrees, created and removed by the tooling.
+.claude/worktrees/

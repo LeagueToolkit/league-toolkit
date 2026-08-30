@@ -13,6 +13,8 @@ Two kinds of file share the `.bin` extension and this crate reads both:
 | --- | --- |
 | `Bin`, `BinObject` | The object tree: read (`from_reader`), build (`builder()`), edit, write (`to_writer`) |
 | `BinStream`, `BinToc`, `ObjectEntry` | Streaming access: mount a file, sweep object descriptors, random access by path hash - without parsing values |
+| `stream::ObjectView`, `PropertyView`, `ValueView` | Zero-copy views over one buffered object: iterate, look up and descend to any depth without materializing anything |
+| `stream::ObjectCache`, `NoCache`, `LruObjectCache` | The opt-in lookup cache `BinStream::cached_object` resolves through |
 | `property::values`, `PropertyValueEnum`, `PropertyKind` | One typed value struct per wire kind (`I32`, `String`, `Vector3`, `Container`, `Map`, `Struct`, `Embedded`, `Optional`, …) and the enum over them |
 | `concrete` | The same types with the metadata parameter pinned, so nothing generic needs spelling - start here |
 | `path::PropertyPath` | Property addressing (`Position.Anchors.Anchor`, `Elements[3]`, `Lookup{"weapon"}`), with `Bin::resolve` and `Bin::patch` |
@@ -69,6 +71,65 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 The `entries()` sweep populates a `BinToc` (`Clone`, serializable with the `serde` feature) as a side effect, so `toc()` and `object(hash)` after a sweep cost no further reads.
+
+`Bin::from_reader` is itself `BinStream::mount` plus `into_bin()`, so the streaming surface and the eager tree are one parser and cannot drift.
+
+### Reading inside an object
+
+Descending buffers the object's declared byte range once and views it in place. Iteration, lookup by name hash and descent into nested values are all slice arithmetic from there; nothing decodes until it is touched and nothing allocates until an *owned* value is asked for.
+
+```rust
+use std::fs::File;
+use ltk_meta::{concrete::BinStream, stream::ValueView};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut stream = BinStream::mount(File::open("data.bin")?)?;
+    let mut objects = stream.objects();
+
+    while let Some(mut object) = objects.next()? {
+        let view = object.view()?;
+
+        // Every string in the object, borrowed straight out of the buffer.
+        for property in view.properties() {
+            if let ValueView::String(text) = property?.value_view()? {
+                println!("{text}");
+            }
+        }
+
+        // `Elements[3].Position`, without materializing a single sibling.
+        if let Some(elements) = view.property(0x1234_5678u32)? {
+            if let ValueView::Container(list) = elements.value_view()? {
+                if let Some(ValueView::Embedded(embed)) = list.get(3)? {
+                    println!("{:?}", embed.property(0x9abc_def0u32)?.map(|p| p.kind()));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+```
+
+`ObjectStream::read()` gives the owned `BinObject` instead, and `BinStream::cached_object()` resolves through an installed `ObjectCache` (`NoCache` by default, `LruObjectCache` shipped) and hands back an `Arc`.
+
+### Opening many objects at once
+
+`object(hash)` answers one question per seek. `objects_batch` takes the whole request up front, so a cold handle resolves it during one forward scan that stops at the last hit, and a warm one visits the rows in offset order. Yield order is file order; `missing()` reports the hashes the file does not hold.
+
+```rust
+use std::fs::File;
+use ltk_meta::concrete::BinStream;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut stream = BinStream::mount(File::open("data.bin")?)?;
+    let mut batch = stream.objects_batch([0x4a47c414u32, 0x1a2b3c4du32]);
+
+    while let Some(mut object) = batch.next()? {
+        println!("{:08x}: {} properties", object.path_hash(), object.property_count()?);
+    }
+    println!("not in this bin: {:?}", batch.missing());
+    Ok(())
+}
+```
 
 ## Creating one programmatically
 

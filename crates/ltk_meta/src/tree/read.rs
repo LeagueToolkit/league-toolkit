@@ -1,15 +1,18 @@
 use std::io::{self, SeekFrom};
 
-use crate::{BinKind, Error};
+use crate::{stream::BinStream, Error};
 
 use super::{Bin, BinObject};
 use byteorder::{ReadBytesExt as _, LE};
 use indexmap::IndexMap;
 use ltk_hash::{BinHash, ReadBytesExt as _};
-use ltk_io_ext::ReaderExt;
 
 impl Bin {
     /// Reads a BinTree from a reader.
+    ///
+    /// Mounts the reader as a [`BinStream`] and drains it, so the eager tree and the streaming
+    /// surface are the same parser and can never drift. The reader is buffered internally and
+    /// is not left at a defined position afterwards.
     ///
     /// # Arguments
     ///
@@ -20,45 +23,11 @@ impl Bin {
     /// Returns [`Error::UnexpectedBinKind`] for a `PTCH` file - read those with
     /// [`BinOverride::from_reader`](crate::BinOverride::from_reader), or with
     /// [`BinFile::from_reader`](crate::BinFile::from_reader) when the kind is not known in
-    /// advance.
+    /// advance. See [`BinStream::into_bin`] for what a malformed `PROP` file raises.
     pub fn from_reader<R: io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
     ) -> Result<Self, Error> {
-        match BinKind::from_magic_u32(reader.read_u32::<LE>()?) {
-            Some(BinKind::Prop) => {}
-            Some(found) => {
-                return Err(Error::UnexpectedBinKind {
-                    expected: BinKind::Prop,
-                    found,
-                })
-            }
-            None => return Err(Error::InvalidFileSignature),
-        }
-
-        let version = reader.read_u32::<LE>()?;
-        if !matches!(version, 1..=3) {
-            return Err(Error::InvalidFileVersion(version));
-        }
-
-        let dependencies = match version {
-            2.. => {
-                let dep_count = reader.read_u32::<LE>()?;
-                let mut dependencies = Vec::with_capacity(dep_count as _);
-                for _ in 0..dep_count {
-                    dependencies.push(reader.read_sized_string_u16::<LE>()?);
-                }
-                dependencies
-            }
-            _ => Vec::new(),
-        };
-
-        let (objects, _legacy) = read_objects(reader)?;
-
-        Ok(Self {
-            version,
-            objects,
-            dependencies,
-        })
+        BinStream::mount(reader)?.into_bin()
     }
 }
 

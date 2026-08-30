@@ -2,7 +2,7 @@
 
 mod builder;
 pub use builder::Builder;
-use ltk_hash::{BinHash, ReadBytesExt as _, WriteBytesExt as _};
+use ltk_hash::{BinHash, WriteBytesExt as _};
 
 use std::io;
 
@@ -11,11 +11,12 @@ use ltk_io_ext::{measure, window_at};
 
 use crate::{
     property::NoMeta,
-    traits::{ReaderExt as _, WriterExt as _},
+    stream::{layout::Numbering, owned},
+    traits::WriterExt as _,
 };
 
 use super::super::{Error, PropertyValueEnum};
-use byteorder::{ReadBytesExt as _, WriteBytesExt as _, LE};
+use byteorder::{WriteBytesExt as _, LE};
 
 /// A node/object in the bin tree.
 ///
@@ -108,6 +109,11 @@ impl<M> BinObject<M> {
     /// * `reader` - A reader that implements [`io::Read`] and [`io::Seek`].
     /// * `class_hash` - The hash of the class of the object.
     /// * `legacy` - Whether to read in legacy format.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSize`] if the object's declared size disagrees with what its property
+    /// counts consumed, or whatever the value model raises for a property it refuses.
     pub fn from_reader<R: io::Read + io::Seek + ?Sized>(
         reader: &mut R,
         class_hash: BinHash,
@@ -116,28 +122,10 @@ impl<M> BinObject<M> {
     where
         M: Default,
     {
-        let size = reader.read_u32::<LE>()?;
-        let (real_size, value) = measure(reader, |reader| {
-            let path_hash = reader.read_bin_hash::<LE>()?;
-
-            let prop_count = reader.read_u16::<LE>()? as usize;
-            let mut properties = IndexMap::with_capacity(prop_count);
-            for _ in 0..prop_count {
-                let (name_hash, value) = reader.read_property::<M>(legacy)?;
-                properties.insert(name_hash, value);
-            }
-
-            Ok::<_, Error>(Self {
-                path_hash,
-                class_hash,
-                properties,
-            })
-        })?;
-
-        if size as u64 != real_size {
-            return Err(Error::InvalidSize(size as _, real_size));
-        }
-        Ok(value)
+        // The object's size field bounds its bytes, so they are taken in one read and decoded
+        // through the layout core - the same code path the stream's `read()` and `into_bin()`
+        // take for the same object.
+        owned::read_object_from(reader, class_hash, Numbering::from_legacy(legacy))
     }
 
     /// Writes this object to a writer.

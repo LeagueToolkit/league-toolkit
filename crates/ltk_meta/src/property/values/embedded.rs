@@ -1,5 +1,6 @@
 use crate::{
     property::{Kind, NoMeta},
+    stream::{layout::Numbering, owned},
     traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty},
 };
 
@@ -43,7 +44,12 @@ impl<M: Default> ReadProperty for Embedded<M> {
         reader: &mut R,
         legacy: bool,
     ) -> Result<Self, crate::Error> {
-        Struct::<M>::from_reader(reader, legacy).map(Self)
+        owned::read_from(
+            reader,
+            Kind::Embedded,
+            Numbering::from_legacy(legacy),
+            |cur| owned::read_struct(cur).map(Self),
+        )
     }
 }
 impl<M: Clone> WriteProperty for Embedded<M> {

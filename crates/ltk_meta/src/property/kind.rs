@@ -155,6 +155,43 @@ impl Kind {
         self.subtype_count() > 0
     }
 
+    /// The fixed serialized width of a value of this kind, if it has one.
+    ///
+    /// `None` for [`Kind::String`], which is length-prefixed, and for every complex kind, which
+    /// is either self-sized or - in [`Kind::Optional`]'s case - as wide as what it holds.
+    /// [`Kind::None`] occupies no bytes at all, so it is `Some(0)` rather than `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ltk_meta::PropertyKind;
+    ///
+    /// assert_eq!(PropertyKind::Vector3.fixed_width(), Some(12));
+    /// assert_eq!(PropertyKind::None.fixed_width(), Some(0));
+    /// assert_eq!(PropertyKind::String.fixed_width(), None);
+    /// ```
+    #[must_use]
+    pub fn fixed_width(&self) -> Option<usize> {
+        use Kind as K;
+        match self {
+            K::None => Some(0),
+            K::Bool | K::I8 | K::U8 | K::BitBool => Some(1),
+            K::I16 | K::U16 => Some(2),
+            K::I32 | K::U32 | K::F32 | K::Color | K::Hash | K::ObjectLink => Some(4),
+            K::I64 | K::U64 | K::Vector2 | K::WadChunkLink => Some(8),
+            K::Vector3 => Some(12),
+            K::Vector4 => Some(16),
+            K::Matrix44 => Some(64),
+            K::String
+            | K::Container
+            | K::UnorderedContainer
+            | K::Struct
+            | K::Embedded
+            | K::Optional
+            | K::Map => None,
+        }
+    }
+
     #[inline(always)]
     #[must_use]
     pub fn subtype_count(&self) -> u8 {
