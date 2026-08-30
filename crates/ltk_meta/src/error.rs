@@ -5,6 +5,7 @@ use super::property::Kind;
 use crate::{path::PropertyPathError, BinKind};
 
 #[derive(Debug, thiserror::Error, Diagnostic)]
+#[non_exhaustive]
 pub enum Error {
     #[error("Invalid file signature")]
     InvalidFileSignature,

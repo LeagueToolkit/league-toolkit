@@ -212,6 +212,8 @@ fn every_shipped_patch_reads_rewrites_and_resolves() {
                         _ => counts.unexpected.push(skipped.to_string()),
                     },
                     PatchError::TypeMismatch { .. } => counts.unexpected.push(skipped.to_string()),
+                    // `PatchError` is non-exhaustive; any kind added later is unexpected too.
+                    _ => counts.unexpected.push(skipped.to_string()),
                 }
             }
         }

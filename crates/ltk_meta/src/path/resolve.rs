@@ -140,6 +140,7 @@ impl ResolveError {
 /// The kinds of [`ResolveError`].
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
 pub enum ResolveErrorKind {
     /// The bin has no object with this path hash. Only [`Bin::resolve`] produces this.
     #[error("no object {0:08x}")]
@@ -179,6 +180,7 @@ pub enum ResolveErrorKind {
 /// Why a patch record does not apply.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
 pub enum PatchError {
     /// The path does not name a value in the object.
     #[error(transparent)]

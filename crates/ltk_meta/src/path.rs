@@ -395,6 +395,7 @@ impl PropertyPathError {
 
 /// The kinds of [`PropertyPathError`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
 pub enum PropertyPathErrorKind {
     /// A segment has no name, as in `A..B`, `.A`, `A.` or the empty path.
     #[error("expected a property name")]

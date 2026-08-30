@@ -979,3 +979,12 @@ record never mismatches a type, subscripts something unsubscriptable, runs off t
 container or walks into a null pointer. The first two rows reproduce section 14.1 exactly. The
 "no such object" count is lower than section 2.1's 173 because that measurement resolved only
 against `uibase` in the same directory, where this one reaches every object in the archive.
+
+### 15.5 Non-exhaustive error enums
+
+Decided at merge time, prompted by the bin-streaming design review (its section 13): the
+streaming work will add error variants during `ltk_meta` 0.8.0's breaking window, so the
+public error enums are marked `#[non_exhaustive]` now, while the break is free. That covers
+`Error`, and the three enums this design introduced: `PropertyPathErrorKind`,
+`ResolveErrorKind` and `PatchError`. Crate-internal exhaustive matches still compile;
+downstream matches need a wildcard arm.
