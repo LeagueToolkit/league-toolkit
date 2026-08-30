@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_meta-v0.7.0...ltk_meta-v0.8.0) - 2026-08-30
+
+### Added
+
+- *(meta)* [**breaking**] mark the public error enums non-exhaustive
+- *(meta)* add concrete aliases for the metadata-free value model
+- *(meta)* [**breaking**] validate map kinds, seal ContainerItem, fix builder meta
+- *(meta)* resolve property paths and apply PTCH patches
+- *(meta)* [**breaking**] gate container item kinds behind ValueSlot
+
+### Other
+
+- *(meta)* bump the ltk_wad dev-dependency to 0.5.4
+- *(meta)* fix two broken intra-doc links
+- *(meta)* document the resolver and apply
+- *(meta)* [**breaking**] store container and option items as PropertyValueEnum
+
 ## [0.7.0](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_meta-v0.6.1...ltk_meta-v0.7.0) - 2026-08-25
 
 ### Added
