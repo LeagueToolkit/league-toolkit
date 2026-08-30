@@ -1,7 +1,7 @@
 ---
 issue: 211
 title: "Bin streaming: delta write-back (the editor's save path)"
-labels: crate:ltk_meta, enhancement, format:bin, area:writing, blocked
+labels: crate:ltk_meta, enhancement, format:bin, area:writing
 ---
 
 Part of #192 (design: `docs/design/bin-streaming.md` section 15). Saving an edit as a rewritten `.bin`. PTCH authoring is explicitly out of scope — a delta is upstream of either output form, and nothing here forecloses rendering one as patch records later.
@@ -43,8 +43,6 @@ impl<R: io::Read + io::Seek, M: Default + Clone> BinStream<R, M> {
 - **Not an in-place file update.** The write always produces a complete new stream; the consumer saves to a temp file and renames over, then remounts (the mounted handle still describes the old bytes).
 
 This completes the bin editor's loop end to end: mount → TOC rows → `view()` to browse → `read()` on first edit → mutate through the value-slot surface → `write_patched` to a temp file → rename → remount. (The editing path takes `read()`, never `cached_object()` — the cache hands out shared `Arc`s, and an edit wants exclusive ownership; `Arc::make_mut` is the escape hatch when both are wanted.)
-
-Blocked by #209 (owned decode + eager writer; TOC ranges from #207).
 
 - [ ] An empty delta reproduces the input byte-for-byte, for every PROP chunk in an install (corpus test)
 - [ ] A one-property edit re-reads equal to the same edit applied to the eager tree, and every other object's bytes are unchanged

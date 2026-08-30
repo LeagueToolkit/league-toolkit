@@ -1,7 +1,7 @@
 ---
 issue: 210
 title: "Bin streaming: PTCH stream"
-labels: crate:ltk_meta, enhancement, format:bin, area:reading, blocked
+labels: crate:ltk_meta, enhancement, format:bin, area:reading
 ---
 
 Part of #192 (design: `docs/design/bin-streaming.md` section 5). The same treatment for patch bins, including reading the outer header's delete list correctly (`count × u32` entry hashes — fixing the eager reader's historical mis-skip).
@@ -78,8 +78,6 @@ impl<R: io::Read + io::Seek, M: Default> BinFileStream<R, M> {
 `PatchStream::path()` returns `&PropertyPath`, not `&str` — `PropertyPatch::path` is already a `PropertyPath`, so anything less would force callers to re-parse. `BinOverride::from_reader` joins the single decode path (mount + `into_bin_override`).
 
 Demoable: every shipped PTCH file in an install streams — headers, objects, all records — and drains to an eager value equal to the direct eager parse.
-
-Blocked by #209 (and #208 for the value-view surface on records).
 
 - [ ] All shipped PTCH chunks in an install (238 at last count) mount, stream every record, and `into_bin_override()` equals the eager parse
 - [ ] A record's object hash, kind and path are readable with the value left untouched; skipping advances by payload size
