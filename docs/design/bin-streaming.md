@@ -393,6 +393,67 @@ Design points:
   returning owned values as drafted.
 - Dispatch is one vtable call per lookup — noise next to the parse it saves.
 
+### 4.5 Batch lookup (added 2026-08-30)
+
+`object(hash)` answers one question per seek; a consumer that wants fifty objects out of
+one bin pays fifty seeks in whatever order it asked. `objects_batch` takes the whole
+request up front so the handle can schedule the I/O:
+
+```rust
+impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
+    /// Opens the objects with the given path hashes, visiting them in file order.
+    ///
+    /// Takes the whole request up front so the reads can be scheduled: before the
+    /// TOC exists, the requests resolve during its one forward scan of the object
+    /// table, which stops as soon as every requested hash is found; with the TOC
+    /// built, the requested entries are visited in offset order, so every seek is
+    /// forward. Duplicate hashes in the request resolve once.
+    pub fn objects_batch(
+        &mut self,
+        hashes: impl IntoIterator<Item = impl Into<BinHash>>,
+    ) -> BatchObjects<'_, R, M>;
+}
+
+/// Lending cursor over a requested set of objects, in file order.
+#[must_use = "cursors are lazy and read nothing until advanced"]
+pub struct BatchObjects<'a, R: io::Read + io::Seek, M = NoMeta> { /* … */ }
+
+impl<'a, R: io::Read + io::Seek, M: Default> BatchObjects<'a, R, M> {
+    /// Advances to the next requested object the table contains.
+    pub fn next(&mut self) -> Result<Option<ObjectStream<'_, R, M>>, Error>;
+
+    /// The requested hashes the object table does not contain.
+    ///
+    /// Complete once `next` has returned `Ok(None)`; before that it only holds
+    /// what the scan has already ruled out.
+    pub fn missing(&self) -> &[BinHash];
+}
+```
+
+The decisions:
+
+- **The schedule key is the file offset, never the hash.** Hash order has no relationship
+  to where objects sit in the file, so sorting a request by hash would still seek
+  randomly. Offset order is what the internal buffer and the OS readahead reward — and it
+  is also simply file order, which is why both the cold and the warm path can promise the
+  same yield order.
+- **Yield order is file order, documented.** A caller that needs request order collects
+  and reorders — it has the hashes. Promising request order would force the handle back
+  into random seeks and cost the whole point.
+- **Cold handles finish early.** `object()` completes the full TOC scan before answering.
+  A batch knows its request set, so the scan can stop at the last hit — on a request for
+  objects near the front of a large bin, most of the table is never read. The rows the
+  scan did pass still land in the TOC as always.
+- **Misses are data, not yields.** `next` skips absent hashes; `missing()` reports them
+  after exhaustion. Yielding a `None`-per-miss in file order would be unanswerable (a
+  miss has no file position).
+- **One open object at a time**, same lending shape as [`Objects`] and for the same
+  borrow reason.
+
+The API lands with the foundation surface but earns its keep once `view()`/`read()`
+(sections 4.2–4.3) exist: descriptors alone are answered by the TOC without seeking, and
+it is batch *body* reads where the monotonic schedule pays.
+
 ## 5. API surface — `PTCH`
 
 ```rust
