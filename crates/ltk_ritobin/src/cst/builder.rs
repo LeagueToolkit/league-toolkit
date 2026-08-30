@@ -663,7 +663,7 @@ mod test {
                     BinObject::<NoMeta>::builder(0xDEADBEEF, 0x12344321)
                         .property(
                             0x9191919,
-                            values::Container::new(vec![
+                            values::Container::from(vec![
                                 values::U64::new(5),
                                 values::U64::new(6),
                                 values::U64::new(7),
@@ -671,7 +671,7 @@ mod test {
                         )
                         .property(
                             0x9191918,
-                            values::UnorderedContainer(values::Container::new(vec![
+                            values::UnorderedContainer(values::Container::from(vec![
                                 values::U32::new(5),
                                 values::U32::new(6),
                                 values::U32::new(7),

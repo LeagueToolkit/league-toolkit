@@ -1,0 +1,5 @@
+---
+source: crates/ltk_meta/tests/resolve.rs
+expression: "format!(\"{report}\")"
+---
+"109 applied (5 inserted), 0 skipped, 0 deleted, 0 added, 0 replaced"

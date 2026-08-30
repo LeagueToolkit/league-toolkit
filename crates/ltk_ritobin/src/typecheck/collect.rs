@@ -77,6 +77,7 @@ impl<'a> TypeChecker<'a> {
             })
             .map(|list| {
                 list.into_items()
+                    .into_iter()
                     .filter_map(|value| {
                         let span = *value.meta();
                         let PropertyValueEnum::String(dependency) =

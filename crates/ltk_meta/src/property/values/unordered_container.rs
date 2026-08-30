@@ -11,7 +11,7 @@ use super::Container;
     serde(bound = "for <'dee> M: serde::Serialize + serde::Deserialize<'dee>")
 )]
 #[derive(Clone, PartialEq, Debug, Default)]
-pub struct UnorderedContainer<M>(pub Container<M>);
+pub struct UnorderedContainer<M = NoMeta>(pub Container<M>);
 
 impl<M> UnorderedContainer<M> {
     pub fn no_meta(self) -> UnorderedContainer<NoMeta> {

@@ -11,84 +11,96 @@ Bin(
       properties: {
         BinHash(2257500010): PropertyValueEnum(
           kind: Container,
-          value: Struct(
+          value: Container(
+            item_kind: Struct,
             items: [
-              Struct(
-                class_hash: BinHash(164488258),
-                properties: {
-                  BinHash(431879391): PropertyValueEnum(
-                    kind: U8,
-                    value: U8(
-                      value: 0,
-                      meta: NoMeta,
-                    ),
-                  ),
-                  BinHash(607245356): PropertyValueEnum(
-                    kind: Optional,
-                    value: F32(
-                      value: Some(F32(
-                        value: 10.0,
+              PropertyValueEnum(
+                kind: Struct,
+                value: Struct(
+                  class_hash: BinHash(164488258),
+                  properties: {
+                    BinHash(431879391): PropertyValueEnum(
+                      kind: U8,
+                      value: U8(
+                        value: 0,
                         meta: NoMeta,
-                      )),
-                      meta: NoMeta,
+                      ),
                     ),
-                  ),
-                  BinHash(895082843): PropertyValueEnum(
-                    kind: BitBool,
-                    value: BitBool(
-                      value: true,
-                      meta: NoMeta,
-                    ),
-                  ),
-                  BinHash(1013213428): PropertyValueEnum(
-                    kind: String,
-                    value: String(
-                      value: "ASSETS/Characters/Leona/Skins/Base/Particles/common_Black.dds",
-                      meta: NoMeta,
-                    ),
-                  ),
-                  BinHash(1025882318): PropertyValueEnum(
-                    kind: String,
-                    value: String(
-                      value: "empty",
-                      meta: NoMeta,
-                    ),
-                  ),
-                  BinHash(1376955374): PropertyValueEnum(
-                    kind: Optional,
-                    value: F32(
-                      value: Some(F32(
-                        value: 1.0,
+                    BinHash(607245356): PropertyValueEnum(
+                      kind: Optional,
+                      value: Optional(
+                        item_kind: F32,
+                        value: Some(PropertyValueEnum(
+                          kind: F32,
+                          value: F32(
+                            value: 10.0,
+                            meta: NoMeta,
+                          ),
+                        )),
                         meta: NoMeta,
-                      )),
-                      meta: NoMeta,
+                      ),
                     ),
-                  ),
-                  BinHash(2927860839): PropertyValueEnum(
-                    kind: Embedded,
-                    value: Embedded(Struct(
-                      class_hash: BinHash(70254680),
-                      properties: {
-                        BinHash(3031705514): PropertyValueEnum(
+                    BinHash(895082843): PropertyValueEnum(
+                      kind: BitBool,
+                      value: BitBool(
+                        value: true,
+                        meta: NoMeta,
+                      ),
+                    ),
+                    BinHash(1013213428): PropertyValueEnum(
+                      kind: String,
+                      value: String(
+                        value: "ASSETS/Characters/Leona/Skins/Base/Particles/common_Black.dds",
+                        meta: NoMeta,
+                      ),
+                    ),
+                    BinHash(1025882318): PropertyValueEnum(
+                      kind: String,
+                      value: String(
+                        value: "empty",
+                        meta: NoMeta,
+                      ),
+                    ),
+                    BinHash(1376955374): PropertyValueEnum(
+                      kind: Optional,
+                      value: Optional(
+                        item_kind: F32,
+                        value: Some(PropertyValueEnum(
                           kind: F32,
                           value: F32(
                             value: 1.0,
                             meta: NoMeta,
                           ),
-                        ),
-                      },
-                      meta: NoMeta,
-                    )),
-                  ),
-                  BinHash(3043919889): PropertyValueEnum(
-                    kind: String,
-                    value: String(
-                      value: "ASSETS/Characters/Leona/Skins/Base/Particles/common_Black.dds",
-                      meta: NoMeta,
+                        )),
+                        meta: NoMeta,
+                      ),
                     ),
-                  ),
-                },
-                meta: NoMeta,
+                    BinHash(2927860839): PropertyValueEnum(
+                      kind: Embedded,
+                      value: Embedded(Struct(
+                        class_hash: BinHash(70254680),
+                        properties: {
+                          BinHash(3031705514): PropertyValueEnum(
+                            kind: F32,
+                            value: F32(
+                              value: 1.0,
+                              meta: NoMeta,
+                            ),
+                          ),
+                        },
+                        meta: NoMeta,
+                      )),
+                    ),
+                    BinHash(3043919889): PropertyValueEnum(
+                      kind: String,
+                      value: String(
+                        value: "ASSETS/Characters/Leona/Skins/Base/Particles/common_Black.dds",
+                        meta: NoMeta,
+                      ),
+                    ),
+                  },
+                  meta: NoMeta,
+                ),
               ),
             ],
             meta: NoMeta,

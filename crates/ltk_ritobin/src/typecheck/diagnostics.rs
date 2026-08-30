@@ -78,6 +78,18 @@ pub enum ListLike {
 }
 
 impl ListLike {
+    /// The listlike `kind` spells out, if it is one.
+    pub fn from_kind(kind: PropertyKind) -> Option<Self> {
+        Some(match kind {
+            PropertyKind::Color => ListLike::Color,
+            PropertyKind::Vector2 => ListLike::Vec2,
+            PropertyKind::Vector3 => ListLike::Vec3,
+            PropertyKind::Vector4 => ListLike::Vec4,
+            PropertyKind::Matrix44 => ListLike::Mat44,
+            _ => return None,
+        })
+    }
+
     pub fn needed_children(&self) -> u8 {
         match self {
             ListLike::Color => 4,

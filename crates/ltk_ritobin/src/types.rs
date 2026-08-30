@@ -156,9 +156,9 @@ impl RitoType {
 
     pub fn make_default<M: Default>(&self, span: M) -> PropertyValueEnum<M> {
         let mut value = match self.base {
-            PropertyKind::Map => {
-                PropertyValueEnum::Map(values::Map::empty(self.subtype(0), self.subtype(1)))
-            }
+            PropertyKind::Map => PropertyValueEnum::Map(
+                values::Map::empty(self.subtype(0), self.subtype(1)).unwrap_or_default(),
+            ),
             PropertyKind::UnorderedContainer => {
                 PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(
                     values::Container::empty(self.subtype(0)).unwrap_or_default(),

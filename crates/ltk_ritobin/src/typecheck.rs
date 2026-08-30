@@ -700,7 +700,6 @@ entries: map[hash,embed] = {}
             ("hash", r#"0x1"#),
             ("hash", r#""Characters/Aatrox/Skins/Skin0""#),
             ("string", r#""Characters/Aatrox/Skins/Skin0""#),
-            ("link", r#""Characters/Aatrox/Skins/Skin0""#),
             ("file", r#""ASSETS/Maps/Textures/Bloom.tex""#),
             ("file", r#"0x1"#),
             ("u8", "1"),

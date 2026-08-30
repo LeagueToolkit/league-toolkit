@@ -97,8 +97,8 @@ impl<M> BinObject<M> {
     pub fn builder(
         path_hash: impl Into<BinHash>,
         class_hash: impl Into<BinHash>,
-    ) -> builder::Builder {
-        builder::Builder::new(path_hash, class_hash)
+    ) -> builder::Builder<M> {
+        builder::Builder::<M>::new(path_hash, class_hash)
     }
 
     /// Reads a BinObject from a reader.

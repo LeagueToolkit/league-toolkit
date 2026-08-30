@@ -25,15 +25,17 @@ for (path_hash, object) in &tree.objects {
 
 ### Creating a bin file programmatically
 
+The [`concrete`] module pins the metadata parameter to [`NoMeta`], so nothing
+generic needs spelling:
+
 ```
-use ltk_meta::{Bin, BinObject};
-use ltk_meta::property::{values, NoMeta};
+use ltk_meta::concrete::{values, Bin, BinObject};
 
 // Using the builder pattern
 let tree = Bin::builder()
     .dependency("common.bin")
     .object(
-        BinObject::<NoMeta>::builder(0x12345678, 0xABCDEF00)
+        BinObject::builder(0x12345678u32, 0xABCDEF00u32)
             .property(0x1111, values::I32::new(42))
             .property(0x2222, values::String::from("hello"))
             .build()
@@ -42,10 +44,12 @@ let tree = Bin::builder()
 
 // Or using the simple constructor
 let tree = Bin::new(
-    [BinObject::<NoMeta>::new(0x1234, 0x5678)],
+    [BinObject::new(0x1234u32, 0x5678u32)],
     ["dependency.bin"],
 );
 ```
+
+[`NoMeta`]: crate::property::NoMeta
 
 ### Modifying a bin file
 
@@ -88,6 +92,54 @@ for patch in &patch_bin.patches {
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
+### Applying an override bin
+
+A patch only means something over the bin it patches. [`BinOverride::apply`] lays it over one,
+in the order the client does, and reports what it could not apply instead of failing - which is
+also what the client does with a stale path. [`BinOverride::check`] answers the same question
+without touching anything, which is what to ask after a game update.
+
+```no_run
+use std::fs::File;
+use ltk_meta::{Bin, BinOverride};
+
+let mut base = Bin::from_reader(&mut File::open("uibase.bin")?)?;
+let patch_bin = BinOverride::from_reader(&mut File::open("uiflipped.bin")?)?;
+
+// Does it still fit?
+let report = patch_bin.check(&base);
+println!("{report}"); // "109 applied (5 inserted), 0 skipped, ..."
+
+if report.is_clean() {
+    patch_bin.apply(&mut base);
+}
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+### Addressing a property by path
+
+[`PropertyPath`](path::PropertyPath) is the language a patch record uses to name what it
+overrides, and it works on any object: `Position.UIRect.Size`, `Elements[3]`,
+`Lookup{"weapon"}`.
+
+```no_run
+use std::fs::File;
+use ltk_meta::{path::PropertyPath, property::values, Bin};
+
+let mut bin = Bin::from_reader(&mut File::open("uibase.bin")?)?;
+let anchor = PropertyPath::new("Position.Anchors.Anchor")?;
+
+println!("{:?}", bin.resolve(0x4a47c414_u32, &anchor)?);
+
+// `patch` follows the client's type rule: the shape has to match, or nothing changes.
+bin.patch(
+    0x4a47c414_u32,
+    &anchor,
+    values::Vector2::new(glam::Vec2::new(0.0, 1.0)).into(),
+)?;
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
 ### Reading a `.bin` of unknown kind
 
 The extension does not say which kind a file is, so either read it as a [`BinFile`] and
@@ -112,15 +164,18 @@ match BinKind::identify_from_reader(&mut file)? {
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 */
+pub mod concrete;
 pub mod path;
 pub mod property;
-pub use property::{Kind as PropertyKind, PropertyValueEnum};
+pub use property::{Kind as PropertyKind, PropertyValueEnum, ValueSlot};
 
 mod tree;
 pub use tree::*;
 
 mod data_override;
-pub use data_override::{BinOverride, Builder as BinOverrideBuilder, PropertyPatch};
+pub use data_override::{
+    ApplyReport, BinOverride, Builder as BinOverrideBuilder, PropertyPatch, SkippedPatch,
+};
 
 mod file;
 pub use file::{BinFile, BinKind};

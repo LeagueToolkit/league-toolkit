@@ -312,7 +312,7 @@ fn test_object_link_property_roundtrip() {
 fn test_container_empty_roundtrip() {
     let prop = make_prop(
         0x1234,
-        PropertyValueEnum::Container(values::Container::empty_const::<values::I32>()),
+        PropertyValueEnum::Container(values::Container::empty(Kind::I32).unwrap()),
     );
     let result = roundtrip_property(&prop);
     assert_eq!(prop, result);
@@ -438,7 +438,7 @@ fn test_optional_some_struct_roundtrip() {
 fn test_map_empty_roundtrip() {
     let prop = make_prop(
         0x1234,
-        PropertyValueEnum::Map(values::Map::empty(Kind::U32, Kind::String)),
+        PropertyValueEnum::Map(values::Map::empty(Kind::U32, Kind::String).unwrap()),
     );
     let result = roundtrip_property(&prop);
     assert_eq!(prop, result);
@@ -895,4 +895,24 @@ fn test_all_primitive_kinds_in_container() {
         let result = roundtrip_property(&prop);
         assert_eq!(prop, result, "Failed for kind {:?}", kind);
     }
+}
+
+/// [`Object::builder`] carries the metadata type through, the way [`Bin::builder`] does.
+///
+/// It used to return `Builder<NoMeta>` whatever `M` was, which made `Object::builder(..)`
+/// uninferrable and made an explicit `Object::<M>::builder(..)` silently produce the wrong type.
+#[test]
+fn object_builder_propagates_its_meta_type() {
+    use crate::traits::PropertyExt;
+
+    let spanned: Object<u32> = Object::builder(0x1234, 0x5678)
+        .property(0x1111, values::I32::new_with_meta(1, 7u32))
+        .build();
+
+    let property = spanned.properties.get(&BinHash::from(0x1111u32)).unwrap();
+    assert_eq!(*property.meta(), 7u32);
+
+    // The turbofished form still means what it says.
+    let plain: Object<NoMeta> = Object::<NoMeta>::builder(0x1234, 0x5678).build();
+    assert!(plain.is_empty());
 }

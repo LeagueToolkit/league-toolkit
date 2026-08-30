@@ -301,6 +301,8 @@ for joint in rig.joints() {
 - `PropertyValueEnum` / `property::values::*` - Property value types (I32, F32, String, Vector3, Container, etc.)
 - `BinOverride` - Top-level container of a `PTCH` file: a patch applied over one base `Bin`
 - `PropertyPatch` / `path::PropertyPath` - One override record and the property path it addresses
+- `ApplyReport` - What laying a `BinOverride` over a `Bin` did, or would do
+- `ValueSlot` - A mutable handle on one value, carrying the kind its container declared
 - `BinFile` / `BinKind` - Either kind of file, chosen by the file's magic
 
 **Property bins** are hierarchical data structures containing game data (champions, items, abilities, etc.).
@@ -375,7 +377,37 @@ their `_mut` and `into_` forms, plus `objects()` for the object table both kinds
 
 `PropertyPath` is validated on construction and keeps its text byte for byte;
 `path.segments()` walks it, and `Segment::name_hash()` gives the FNV-1a hash a name resolves to.
-Resolving a path against a base bin and applying a patch are not implemented yet.
+
+**Resolving a path**: `resolve` / `resolve_mut` walk a path through a value tree, and exist on
+`Bin`, `BinObject`, `PropertyValueEnum` and the `Struct` and `Embedded` value types. A `.name`
+piece descends a pointer or an embed, `[i]` indexes a list, list2 or option, and `{k}` keys a map.
+`resolve_mut` returns a `ValueSlot`, which checks a whole-value replace against whatever kind its
+holder declared and lets you edit the value in place without one.
+
+**Applying a patch**: `BinOverride::apply` lays a patch over a base, in the client's order -
+deletions, then the patch's own objects, then the records - and returns an `ApplyReport` naming
+what it could not apply. Nothing is fatal, because a stale record is something the client skips
+silently. `check` answers the same question without changing anything.
+
+```rust
+use ltk_meta::{path::PropertyPath, property::values, Bin, BinOverride};
+
+let anchor = PropertyPath::new("Position.Anchors.Anchor")?;
+println!("{:?}", base.resolve(0x4a47c414_u32, &anchor)?);
+
+// `patch` follows the client's type rule: the shape has to match, or nothing changes.
+// It returns the replaced value, or `None` when the leaf did not exist and was created.
+base.patch(0x4a47c414_u32, &anchor, values::Vector2::new(v).into())?;
+
+let report = patch_bin.check(&base);
+println!("{report}"); // "109 applied (5 inserted), 0 skipped, 0 deleted, 0 added, 0 replaced"
+if report.is_clean() {
+    patch_bin.apply(&mut base);
+}
+```
+
+`crates/ltk_meta/tests/corpus.rs` runs all of this over an installed client; it is `#[ignore]`d
+unless `LTK_LOL_GAME_DIR` is set.
 
 **Path/Name Hashing**: Object paths and property names are stored as FNV-1a hashes. Use community hash databases or `ltk_hash::fnv1a::hash_lower()` to compute hashes.
 
