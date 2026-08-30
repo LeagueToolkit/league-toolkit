@@ -236,6 +236,13 @@ pub enum Diagnostic {
         /// the container-shaped type that cannot be nested
         kind: RitoType,
     },
+    /// A map's declared key type cannot key a map, such as `map[link,u32]`
+    InvalidMapKey {
+        /// span of the offending key subtype token
+        span: Span,
+        /// the type that cannot key a map
+        kind: RitoType,
+    },
 }
 
 impl Display for Diagnostic {
@@ -351,6 +358,9 @@ impl Display for Diagnostic {
             InvalidNesting { kind, .. } => {
                 write!(f, "{kind} cannot be nested inside a container")
             }
+            InvalidMapKey { kind, .. } => {
+                write!(f, "{kind} is not a valid map key type")
+            }
         }
     }
 }
@@ -386,6 +396,7 @@ impl Diagnostic {
             | NotEnoughItems { span, .. }
             | TooManyItems { span, .. }
             | InvalidNesting { span, .. }
+            | InvalidMapKey { span, .. }
             | InvalidRootEntryType { key_span: span, .. } => Some(span),
         }
     }

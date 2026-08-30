@@ -434,6 +434,17 @@ fn nested_map_key_type_fails() {
 }
 
 #[test]
+fn non_primitive_map_key_type_fails() {
+    let errs = build_errs(r#"0x1: map[link,u32] = {}"#);
+    assert_eq!(errs.len(), 1, "{errs:#?}");
+    assert!(
+        matches!(errs[0].diagnostic, Diagnostic::InvalidMapKey { .. }),
+        "{:#?}",
+        errs[0]
+    );
+}
+
+#[test]
 fn nested_optional_type_fails() {
     let errs = build_errs(r#"0x1: option[map] = {}"#);
     assert_eq!(errs.len(), 1, "{errs:#?}");
@@ -762,7 +773,9 @@ fn map_keys_of_every_key_type_keep_their_pair() {
         ("hash", r#"0x1"#),
         ("hash", r#""Characters/Aatrox/Skins/Skin0""#),
         ("string", r#""Characters/Aatrox/Skins/Skin0""#),
-        ("link", r#""Characters/Aatrox/Skins/Skin0""#),
+        // `link` is deliberately absent: no shipped bin keys a map on it, and ltk_meta's
+        // map constructors reject it (Kind::is_valid_map_key) - see
+        // non_primitive_map_key_type_fails.
         ("file", r#""ASSETS/Maps/Textures/Bloom.tex""#),
         ("file", r#"0x1"#),
         ("u8", "1"),

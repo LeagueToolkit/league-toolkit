@@ -52,13 +52,25 @@ impl<'a> Builder<'a> {
                     .get(self.cst)
                     .iter()
                     .filter_map(|c| c.tree(self.cst).filter(|t| t.kind == Kind::TypeArg))
-                    .map(|t| {
+                    .enumerate()
+                    .map(|(i, t)| {
                         let resolved = PropertyKind::from_rito_name(&self.text[t.span]);
                         match resolved {
                             None => self.push(UnknownType(t.span).unwrap()),
                             Some(kind) if kind.is_container() => {
                                 self.push(
                                     InvalidNesting {
+                                        span: t.span,
+                                        kind: RitoType::simple(kind),
+                                    }
+                                    .unwrap(),
+                                );
+                            }
+                            Some(kind)
+                                if base == PropertyKind::Map && i == 0 && !kind.is_primitive() =>
+                            {
+                                self.push(
+                                    InvalidMapKey {
                                         span: t.span,
                                         kind: RitoType::simple(kind),
                                     }
