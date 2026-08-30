@@ -120,6 +120,59 @@
 //! })?;
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
+//!
+//! # Rebasing a WAD: rewriting one in place
+//!
+//! Rebuilding an archive to change a few of its chunks costs its whole size.
+//! Rebasing costs the changed bytes instead: keep the region the file already
+//! holds, put the changed chunks somewhere, and rewrite the TOC over the top.
+//!
+//! [`WadRebasePlan::tail`] is the cheapest way to do that, and the strategy
+//! the crate has today - the changed chunks go past the kept region:
+//!
+//! ```text
+//! [header][chunk count][TOC: 32 bytes x toc_capacity]
+//! [data region - the bytes the file keeps, untouched]
+//! [tail        - one entry per changed or new chunk]
+//! ```
+//!
+//! Every TOC entry carries an absolute `data_offset`, so a chunk's bytes can sit
+//! anywhere in the file: an edit is only ever "append the bytes, repoint the
+//! entry", and dropping a replacement reverts by repointing back at the region,
+//! which still holds the original. [`WadTailLayout`] records that geometry.
+//!
+//! Rewriting in place is destructive, so it happens in two steps: the plan runs
+//! every check that does not need the file, and the caller commits - truncating
+//! a file, or growing an entry in an archive - only once it holds one.
+//!
+//! ```no_run
+//! use std::collections::BTreeMap;
+//! use std::fs::OpenOptions;
+//! use ltk_wad::{EncodedChunk, WadChunk, WadHash, WadRebasePlan, WadRebaseReport, WadTailLayout};
+//!
+//! fn rebase(
+//!     path: &str,
+//!     // Recorded when the WAD was laid out, with the TOC entries its data
+//!     // region holds and the chunks whose bytes are being rewritten.
+//!     layout: &WadTailLayout,
+//!     base_entries: BTreeMap<WadHash, WadChunk>,
+//!     tail: &[(WadHash, EncodedChunk)],
+//! ) -> Result<WadRebaseReport, Box<dyn std::error::Error>> {
+//!     // Every check the rebase can make without touching the file.
+//!     let plan = WadRebasePlan::tail(layout, base_entries, tail)?;
+//!
+//!     // Only now is the file committed to: cut back to where its tail starts,
+//!     // which is what makes room for a tail shorter than the one it holds.
+//!     let mut file = OpenOptions::new().read(true).write(true).open(path)?;
+//!     file.set_len(layout.tail_offset)?;
+//!
+//!     Ok(plan.write(&mut file, 0)?)
+//! }
+//! ```
+//!
+//! The `0` is where the WAD begins inside whatever holds it, so a WAD packed
+//! inside a container is rebased where it lies: it shifts every seek the write
+//! makes and no offset it records.
 
 mod builder;
 mod chunk;
@@ -128,6 +181,7 @@ mod decoder;
 mod error;
 mod extractor;
 mod file_ext;
+mod rebase;
 mod recovery;
 mod subchunk;
 
@@ -138,6 +192,7 @@ pub use decoder::*;
 pub use error::*;
 pub use extractor::*;
 pub use file_ext::*;
+pub use rebase::*;
 pub use recovery::*;
 pub use subchunk::*;
 
