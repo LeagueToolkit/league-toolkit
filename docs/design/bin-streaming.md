@@ -16,7 +16,7 @@ section 15 ([#211](https://github.com/LeagueToolkit/league-toolkit/issues/211)).
 ## 1. Summary
 
 `ltk_meta` today reads a `.bin` all-or-nothing: `Bin::from_reader` parses every property of
-every object into a tree. That is the wrong shape for the consumers #192 names — harvesting
+every object into a tree. That is the wrong shape for the consumers #192 names - harvesting
 object path hashes for a grep index over 42,306 files, reading a header without touching the
 body, resolving one object out of a file on demand.
 
@@ -24,28 +24,28 @@ The client's own loader is the model. `MetaFile_readEntry` is a one-pass streami
 walks the object table front to back, deserializes each sized entry as it arrives, and uses
 the size fields only to seek past what it will not parse (dead-listed entries, unresolvable
 classes). It never builds a whole-file tree. Streaming is therefore the canonical reading
-model for this format, and the eager `Bin` is the derived convenience — the new API is named
+model for this format, and the eager `Bin` is the derived convenience - the new API is named
 and layered accordingly.
 
 The proposal adds a `ltk_meta::stream` module:
 
-- **`BinStream<R: Read + Seek>`** — an owning handle over a `PROP` stream, mounted the way
+- **`BinStream<R: Read + Seek>`** - an owning handle over a `PROP` stream, mounted the way
   `ltk_wad::Wad` is. Mounting reads the header, dependencies and class-hash table (all
   sequential, no seeking) and stops.
 - **A cursor at the file level, zero-copy views at the object level.** `objects()` sweeps
   the object table yielding one `ObjectStream` at a time; what is not descended into is
   skipped by size, exactly as the client skips. Descending buffers the object's declared
-  byte range (one read, reused buffer) and hands back an `ObjectView` — a lazily-decoded
+  byte range (one read, reused buffer) and hands back an `ObjectView` - a lazily-decoded
   view over those bytes: `std` iterators over properties, a borrowed `ValueView` mirror of
   `PropertyValueEnum` to any depth, nothing materialized until asked for. Owning is one
-  call away (`read()` → `BinObject`, `value()` → `PropertyValueEnum`).
+  call away (`read()` -> `BinObject`, `value()` -> `PropertyValueEnum`).
 - **A plain-data layer over the cursors.** `entries()` is a `std::iter::Iterator` of
   `ObjectEntry` descriptors for ergonomic harvesting; `object(path_hash)` gives random
   access, building the offset table transparently on first use.
 - **Opt-in lookup caching.** The handle holds a cache provider (`NoCache` by default) and
   `cached_object()` hands out `Arc<BinObject<M>>`, so a consumer resolving the same objects
   repeatedly pays each parse once.
-- **`BinOverrideStream<R>`** — the same treatment for `PTCH` files, including streaming the
+- **`BinOverrideStream<R>`** - the same treatment for `PTCH` files, including streaming the
   patch records that the eager reader also parses, and exposing the outer header's delete
   list.
 - **One decode path.** `Bin::from_reader` is reimplemented as mount + drain
@@ -57,27 +57,27 @@ The proposal adds a `ltk_meta::stream` module:
 | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Handle model         | Owns the reader: `BinStream<R: Read + Seek>::mount(source)`                                                                                                                                                                 |
 | Scan timing          | Lazy and transparent: mount reads header + class table only; the offset index is built on first random access; iteration streams without it                                                                                 |
-| Laziness granularity | Value-level, to any depth: an object's bytes are buffered once and viewed zero-copy; `ValueView` descends without materializing (revised — section 14)                                                                      |
-| Property access      | `std` iterators and random access over the buffered `ObjectView`; owned values on request (revised from forward-only cursors — section 14)                                                                                  |
-| Iteration shape      | Streaming cursor at the file level; plain-descriptor `std` iterator over it; buffered views inside an object (revised — section 14)                                                                                         |
+| Laziness granularity | Value-level, to any depth: an object's bytes are buffered once and viewed zero-copy; `ValueView` descends without materializing (revised - section 14)                                                                      |
+| Property access      | `std` iterators and random access over the buffered `ObjectView`; owned values on request (revised from forward-only cursors - section 14)                                                                                  |
+| Iteration shape      | Streaming cursor at the file level; plain-descriptor `std` iterator over it; buffered views inside an object (revised - section 14)                                                                                         |
 | Layout core          | One byte-level module owns offsets, shapes, skips and leaf codecs; the eager `ReadProperty` impls and the views are two renderers over it (section 9)                                                                       |
 | Naming               | `BinStream` / `BinOverrideStream` / `BinFileStream` in `ltk_meta::stream`, `mount()` constructor matching `Wad`                                                                                                             |
 | Layering             | Single decode path: `Bin::from_reader` becomes `BinStream::mount` + `into_bin`                                                                                                                                              |
-| Strictness           | Counts drive the parse, declared sizes drive the skips; a size that disagrees with the count-driven walk is `Error::InvalidSize`, the same error the eager readers raise (revised — section 7)                              |
+| Strictness           | Counts drive the parse, declared sizes drive the skips; a size that disagrees with the count-driven walk is `Error::InvalidSize`, the same error the eager readers raise (revised - section 7)                              |
 | Scope                | `PROP` and `PTCH`, reading only; `into_bin()` upgrade; the rebase/delta (surgical rewrite) pipeline is a later stage this design must not preclude                                                                          |
-| Metadata parameter   | Handle-level: `BinStream<R, M = NoMeta>`, pinned once through `concrete` aliases — revisited from the first draft's method-level `M`, see section 12                                                                        |
+| Metadata parameter   | Handle-level: `BinStream<R, M = NoMeta>`, pinned once through `concrete` aliases - revisited from the first draft's method-level `M`, see section 12                                                                        |
 | Buffering            | The handle wraps its source in `BufReader` and seeks with `seek_relative`; callers hand over the bare `File`                                                                                                                |
-| Caching              | Opt-in provider on the handle: `Box<dyn ObjectCache<M> + Send>`, `NoCache` default, `LruObjectCache` shipped, `Arc<BinObject<M>>` returns — section 4.4                                                                     |
+| Caching              | Opt-in provider on the handle: `Box<dyn ObjectCache<M> + Send>`, `NoCache` default, `LruObjectCache` shipped, `Arc<BinObject<M>>` returns - section 4.4                                                                     |
 | Error surface        | `Error` gains `#[non_exhaustive]` in the 0.8.0 release #187 opens, so the stream (and later work) grows variants in minor releases                                                                                          |
 | Write-back           | An edit saves as a rewritten `.bin` via the delta contract (section 15): untouched objects raw-copied byte-exactly, edited ones re-encoded. PTCH authoring is explicitly out of scope until that layer is designed for mods |
 
 ## 3. Wire facts the design leans on
 
 - **The class table is free, path hashes are not.** The object table is
-  `u32 count`, then `count × u32 class_hash`, then `count × (u32 size, u32 path_hash,
-  u16 prop_count, properties…)`. After the sequential header read the handle already holds
+  `u32 count`, then `count x u32 class_hash`, then `count x (u32 size, u32 path_hash,
+  u16 prop_count, properties...)`. After the sequential header read the handle already holds
   every class hash. Harvesting path hashes takes one seek-hop per object reading 8 bytes
-  (`size`, `path_hash`), which is also the moment each object's `(offset, size)` is learned —
+  (`size`, `path_hash`), which is also the moment each object's `(offset, size)` is learned -
   so the sweep that harvests is the sweep that indexes.
 - **Every complex value carries its byte size.** Objects, `Struct`/`Embedded`, containers and
   maps store a size ahead of their body; primitives have fixed widths and strings a length
@@ -89,7 +89,7 @@ The proposal adds a `ltk_meta::stream` module:
   the whole object table in legacy numbering when a kind byte fails to decode. A streaming
   reader discovers this mid-sweep; section 8 defines the latch.
 
-## 4. API surface — `PROP`
+## 4. API surface - `PROP`
 
 All types live in `ltk_meta::stream` and are re-exported from the crate root. Signatures are
 the design; doc comments are abbreviated. `M` is the same property-meta parameter the eager
@@ -114,13 +114,13 @@ impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
     /// [`Error::UnexpectedBinKind`] for a `PTCH` stream.
     pub fn mount(source: R) -> Result<Self, Error>;
 
-    // ── header facts, free after mount ──────────────────────────────────────
+    // -- header facts, free after mount --------------------------------------
     pub fn version(&self) -> u32;
     pub fn dependencies(&self) -> &[String];
     /// Class hash of every object, in file order. `class_hashes().len()` is the object count.
     pub fn class_hashes(&self) -> &[BinHash];
 
-    // ── sweeping ────────────────────────────────────────────────────────────
+    // -- sweeping ------------------------------------------------------------
     /// A cursor over the object table. Every call starts a fresh sweep from the top;
     /// cursors hold no state between calls. Objects not descended into are skipped
     /// by their size field.
@@ -130,7 +130,7 @@ impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
     /// Equivalent to `objects()` without ever descending; restarts the same way.
     pub fn entries(&mut self) -> Entries<'_, R, M>;
 
-    // ── random access ───────────────────────────────────────────────────────
+    // -- random access -------------------------------------------------------
     /// The table of contents: every object's `(path_hash, class_hash, offset, size)`.
     ///
     /// Built by one harvest sweep on first use, then cached. `objects()` / `entries()`
@@ -141,7 +141,7 @@ impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
     pub fn object(&mut self, path_hash: impl Into<BinHash>)
         -> Result<Option<ObjectStream<'_, R, M>>, Error>;
 
-    // ── cached lookup (section 4.4) ─────────────────────────────────────────
+    // -- cached lookup (section 4.4) -----------------------------------------
     /// Resolves an object through the installed [`ObjectCache`]: a hit is an `Arc`
     /// clone with no I/O, a miss parses and inserts. Under the default [`NoCache`]
     /// this parses on every call.
@@ -151,7 +151,7 @@ impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
     /// Installs a cache provider. The default is [`NoCache`].
     pub fn set_cache(&mut self, cache: Box<dyn ObjectCache<M> + Send>);
 
-    // ── upgrade / teardown ──────────────────────────────────────────────────
+    // -- upgrade / teardown --------------------------------------------------
     /// Parses the remaining file into an eager [`Bin`], consuming the handle.
     ///
     /// Always processes the whole object table from the top, regardless of cursor
@@ -205,7 +205,7 @@ impl<'a, R: io::Read + io::Seek, M: Default> Objects<'a, R, M> {
     pub fn next(&mut self) -> Result<Option<ObjectStream<'_, R, M>>, Error>;
 }
 
-/// `std` iterator of plain [`ObjectEntry`] descriptors — `Objects` without descent.
+/// `std` iterator of plain [`ObjectEntry`] descriptors - `Objects` without descent.
 #[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct Entries<'a, R: io::Read + io::Seek, M = NoMeta> { /* Objects<'a, R, M> */ }
 
@@ -220,7 +220,7 @@ impl<R: io::Read + io::Seek, M: Default> Iterator for Entries<'_, R, M> {
 ```rust
 /// A view of one object positioned in the stream. Dropping it without descending
 /// costs nothing; the parent cursor skips by size.
-pub struct ObjectStream<'a, R: io::Read + io::Seek, M = NoMeta> { /* … */ }
+pub struct ObjectStream<'a, R: io::Read + io::Seek, M = NoMeta> { /* ... */ }
 
 impl<'a, R: io::Read + io::Seek, M: Default> ObjectStream<'a, R, M> {
     pub fn path_hash(&self) -> BinHash;
@@ -234,8 +234,8 @@ impl<'a, R: io::Read + io::Seek, M: Default> ObjectStream<'a, R, M> {
     pub fn property_count(&mut self) -> Result<u16, Error>;
 
     /// Buffers the object's declared byte range (one read into the handle's reused
-    /// buffer) and returns a zero-copy view over it. Everything inside the object —
-    /// iteration, random access, descent — happens in memory from here (section 4.3).
+    /// buffer) and returns a zero-copy view over it. Everything inside the object -
+    /// iteration, random access, descent - happens in memory from here (section 4.3).
     pub fn view(&mut self) -> Result<ObjectView<'_>, Error>;
 
     /// Parses the whole object into an eager [`BinObject`]. (`read`, not `parse`:
@@ -267,7 +267,7 @@ impl<'a, M: Default> ObjectView<'a, M> {
     /// a header's kind byte can fail to decode.
     pub fn properties(&self) -> impl Iterator<Item = Result<PropertyView<'a, M>, Error>>;
 
-    /// Random access by name hash — an in-memory walk, no index needed.
+    /// Random access by name hash - an in-memory walk, no index needed.
     pub fn property(&self, name_hash: impl Into<BinHash>)
         -> Result<Option<PropertyView<'a, M>>, Error>;
 
@@ -282,8 +282,8 @@ impl<'a, M: Default> PropertyView<'a, M> {
     pub fn name_hash(&self) -> BinHash;
     pub fn kind(&self) -> PropertyKind;
 
-    /// The value's wire shape — a container's item kind, a map's key and value kinds,
-    /// an embed's class — from the few header bytes ahead of the body. Returns the
+    /// The value's wire shape - a container's item kind, a map's key and value kinds,
+    /// an embed's class - from the few header bytes ahead of the body. Returns the
     /// same [`ValueShape`] the resolver's type rule uses (#187), filled by the rules
     /// of `ValueShape::of` (a pointer's class is not recorded).
     pub fn shape(&self) -> Result<ValueShape, Error>;
@@ -297,7 +297,7 @@ impl<'a, M: Default> PropertyView<'a, M> {
     /// Descends into the value without materializing it.
     pub fn value_view(&self) -> Result<ValueView<'a, M>, Error>;
 
-    /// Decodes the value — the whole subtree — into the existing owned representation.
+    /// Decodes the value - the whole subtree - into the existing owned representation.
     pub fn value(&self) -> Result<PropertyValueEnum<M>, Error>;
 }
 ```
@@ -312,7 +312,7 @@ same shape `ValueMut` (#187) takes for mutation:
 pub enum ValueView<'a, M = NoMeta> {
     None,
     Bool(bool),
-    I8(i8), /* … */ U64(u64), F32(f32),
+    I8(i8), /* ... */ U64(u64), F32(f32),
     Vector2(Vec2), Vector3(Vec3), Vector4(Vec4), Matrix44(Mat4),
     Color(Color),
     String(&'a str),
@@ -354,8 +354,8 @@ reserved is now simply *open*: `Elements[3].Position` is a `ContainerView::get` 
 
 ### 4.4 The object cache
 
-Repeated lookups into one file — the bin editor chasing `ObjectLink`s, the manager resolving
-the same scene objects across requests — should not re-parse. The handle holds one cache
+Repeated lookups into one file - the bin editor chasing `ObjectLink`s, the manager resolving
+the same scene objects across requests - should not re-parse. The handle holds one cache
 provider behind a dyn-compatible trait; the provider *is* the policy, so there is no
 separate policy enum and no third type parameter on the handle. Custom providers
 (bytes-bounded, TTL, shared across handles) are the user's to write.
@@ -374,7 +374,7 @@ pub struct NoCache;
 
 /// Least-recently-used cache bounded by object count.
 #[derive(Debug)]
-pub struct LruObjectCache { /* capacity: NonZeroUsize, … */ }
+pub struct LruObjectCache { /* capacity: NonZeroUsize, ... */ }
 
 impl LruObjectCache {
     pub fn new(capacity: NonZeroUsize) -> Self;
@@ -396,7 +396,7 @@ Design points:
 - **Only `cached_object()` consults it.** The cursors and `object()` never touch the cache;
   a sweep does not evict what a consumer is holding hot, and the uncached paths keep
   returning owned values as drafted.
-- Dispatch is one vtable call per lookup — noise next to the parse it saves.
+- Dispatch is one vtable call per lookup - noise next to the parse it saves.
 
 ### 4.5 Batch lookup (added 2026-08-30)
 
@@ -421,7 +421,7 @@ impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
 
 /// Lending cursor over a requested set of objects, in file order.
 #[must_use = "cursors are lazy and read nothing until advanced"]
-pub struct BatchObjects<'a, R: io::Read + io::Seek, M = NoMeta> { /* … */ }
+pub struct BatchObjects<'a, R: io::Read + io::Seek, M = NoMeta> { /* ... */ }
 
 impl<'a, R: io::Read + io::Seek, M: Default> BatchObjects<'a, R, M> {
     /// Advances to the next requested object the table contains.
@@ -439,14 +439,14 @@ The decisions:
 
 - **The schedule key is the file offset, never the hash.** Hash order has no relationship
   to where objects sit in the file, so sorting a request by hash would still seek
-  randomly. Offset order is what the internal buffer and the OS readahead reward — and it
+  randomly. Offset order is what the internal buffer and the OS readahead reward - and it
   is also simply file order, which is why both the cold and the warm path can promise the
   same yield order.
 - **Yield order is file order, documented.** A caller that needs request order collects
-  and reorders — it has the hashes. Promising request order would force the handle back
+  and reorders - it has the hashes. Promising request order would force the handle back
   into random seeks and cost the whole point.
 - **Cold handles finish early.** `object()` completes the full TOC scan before answering.
-  A batch knows its request set, so the scan can stop at the last hit — on a request for
+  A batch knows its request set, so the scan can stop at the last hit - on a request for
   objects near the front of a large bin, most of the table is never read. The rows the
   scan did pass still land in the TOC as always.
 - **Misses are data, not yields.** `next` skips absent hashes; `missing()` reports them
@@ -456,21 +456,21 @@ The decisions:
   borrow reason.
 
 The API lands with the foundation surface but earns its keep once `view()`/`read()`
-(sections 4.2–4.3) exist: descriptors alone are answered by the TOC without seeking, and
+(sections 4.2-4.3) exist: descriptors alone are answered by the TOC without seeking, and
 it is batch *body* reads where the monotonic schedule pays.
 
-## 5. API surface — `PTCH`
+## 5. API surface - `PTCH`
 
 ```rust
 /// A mounted `PTCH` stream: outer header, delete list, and the inner `PROP` header
 /// are parsed; embedded objects and patch records stream on demand.
-pub struct BinOverrideStream<R: io::Read + io::Seek, M = NoMeta> { /* … */ }
+pub struct BinOverrideStream<R: io::Read + io::Seek, M = NoMeta> { /* ... */ }
 
 impl<R: io::Read + io::Seek, M: Default> BinOverrideStream<R, M> {
     pub fn mount(source: R) -> Result<Self, Error>;
 
-    /// Entry hashes the layer deletes from its base bin — the outer header's
-    /// `count × u32` list, mirroring `BinOverride::deleted`.
+    /// Entry hashes the layer deletes from its base bin - the outer header's
+    /// `count x u32` list, mirroring `BinOverride::deleted`.
     pub fn deleted(&self) -> &[BinHash];
 
     // Inner-`PROP` accessors and cursors, same shape as `BinStream`:
@@ -493,7 +493,7 @@ impl<R: io::Read + io::Seek, M: Default> BinOverrideStream<R, M> {
 }
 
 #[must_use = "cursors are lazy and read nothing until advanced"]
-pub struct Patches<'a, R: io::Read + io::Seek, M = NoMeta> { /* … */ }
+pub struct Patches<'a, R: io::Read + io::Seek, M = NoMeta> { /* ... */ }
 
 impl<'a, R: io::Read + io::Seek, M: Default> Patches<'a, R, M> {
     pub fn next(&mut self) -> Result<Option<PatchStream<'_, R, M>>, Error>;
@@ -501,7 +501,7 @@ impl<'a, R: io::Read + io::Seek, M: Default> Patches<'a, R, M> {
 
 /// One patch record: the addressing half is read, the value is not. A record is
 /// self-delimiting via its payload size, so skipping is a seek.
-pub struct PatchStream<'a, R: io::Read + io::Seek, M = NoMeta> { /* … */ }
+pub struct PatchStream<'a, R: io::Read + io::Seek, M = NoMeta> { /* ... */ }
 
 impl<'a, R: io::Read + io::Seek, M: Default> PatchStream<'a, R, M> {
     pub fn object_hash(&self) -> BinHash;
@@ -542,10 +542,10 @@ the view. Same rules, two costs, one implementation in the layout core (section 
 ## 7. Strictness: counts drive the parse, sizes drive the skips, disagreement is an error
 
 *(Revised 2026-08-30: the first draft recorded size mismatches in a tolerant side-channel
-log — `discrepancies()` / `discrepancy_count()` / `SizeDiscrepancy` — on the "mirror the
+log - `discrepancies()` / `discrepancy_count()` / `SizeDiscrepancy` - on the "mirror the
 client" rationale. That was the wrong frame: a declared size that disagrees with the
 count-driven walk means the file's skip path and parse path no longer describe the same
-bytes, which is exactly when continuing is unsafe — the TOC and every `byte_range` are
+bytes, which is exactly when continuing is unsafe - the TOC and every `byte_range` are
 built from sizes the parse just proved wrong. The corpus attests shipped files never
 exhibit the mismatch, so the tolerance bought complexity and a silent-corruption hazard
 in exchange for nothing. The log is gone; the walk raises.)*
@@ -553,12 +553,12 @@ in exchange for nothing. The log is gone; the walk raises.)*
 The two paths and their trust model:
 
 - **Skip path**: the declared size is the seek distance. There is nothing else to trust,
-  and a value the parse path would reject still skips cleanly by its size — which is
+  and a value the parse path would reject still skips cleanly by its size - which is
   also what the client does with it.
 - **Parse path**: counts drive the walk over the buffered bytes, exactly as they drive
   the client's parser. A sized region's declared size is compared against what the
   counts consumed after the fact, and a disagreement is `Error::InvalidSize(declared,
-  consumed)` — the same variant the eager readers have always raised for this condition.
+  consumed)` - the same variant the eager readers have always raised for this condition.
   One condition, one error, on both paths.
 
 That unification is what keeps `Bin::from_reader`'s behavior unchanged when it is rebuilt
@@ -567,7 +567,7 @@ check are the same check raising the same error. The homogeneity failures stay w
 are, hard errors from the value model's checked constructors (`InvalidNesting`,
 `InvalidKeyType`, `MismatchedContainerTypes`).
 
-A consumer surveying broken or hand-crafted files catches the error per chunk — tooling
+A consumer surveying broken or hand-crafted files catches the error per chunk - tooling
 built on the error, not state built into the core. After a mismatch the handle's
 sequential sweep is not trustworthy (the mismatch is the proof of that); random access
 through the already-harvested TOC rows remains valid, since those offsets tiled correctly
@@ -582,11 +582,11 @@ re-reading the whole object table with the legacy mapping. The stream latches in
 - When decoding a kind byte fails (`Error::InvalidPropertyTypePrimitive`) during any parse
   or skip, the current *object* is re-read from its own start in legacy numbering. If that
   succeeds, the handle latches legacy for the rest of its life. With buffered objects the
-  retry is a re-walk of bytes already in memory — no I/O. A view captures the flag at
+  retry is a re-walk of bytes already in memory - no I/O. A view captures the flag at
   creation, so a view handed out before the latch keeps the numbering it was built under.
 - Objects yielded before the latch are not revisited; a streaming consumer that already
   acted on them acted on data parsed under the wrong mapping only if those objects happened
-  to parse cleanly both ways — the same ambiguity the eager retry has, narrowed to a prefix.
+  to parse cleanly both ways - the same ambiguity the eager retry has, narrowed to a prefix.
 - `into_bin()` removes the asymmetry: on latch it restarts the drain from the top of the
   object table, reproducing the eager reader's behavior exactly.
 
@@ -600,10 +600,10 @@ a function parameter.
 
 ## 9. Layering: one layout core under two renderers
 
-With views in the design there are two ways to decode a value — borrowed from bytes, and
+With views in the design there are two ways to decode a value - borrowed from bytes, and
 owned into `PropertyValueEnum`. The single-decode-path rule therefore moves down one
-level: **one module owns the wire** — offsets, headers, `ValueShape`, skip distances, and
-the leaf codecs over `&[u8]` — and both surfaces are renderers over it:
+level: **one module owns the wire** - offsets, headers, `ValueShape`, skip distances, and
+the leaf codecs over `&[u8]` - and both surfaces are renderers over it:
 
 ```text
        layout core (offsets, shape, skip, leaf codecs over &[u8])
@@ -623,7 +623,7 @@ pub fn from_reader<R: io::Read + io::Seek + ?Sized>(reader: &mut R) -> Result<Se
 ```
 
 (with `BinStream` implemented over `R: Read + Seek + ?Sized`-friendly internals, or a thin
-`&mut R` shim — implementation detail). `BinOverride::from_reader` likewise drains a
+`&mut R` shim - implementation detail). `BinOverride::from_reader` likewise drains a
 `BinOverrideStream`. The `ReadProperty` impls are rebuilt over the layout core's codecs
 rather than reading `io::Read` directly; the top-level loops exist once, in the stream.
 
@@ -631,10 +631,10 @@ Two refactors this forces, visible in #187's code:
 
 - The `ReadProperty` impls verify sizes *inline* today (`Container::from_reader` measures
   its body and returns `Error::InvalidSize` itself). Under section 7 that check moves
-  into the layout core's walk, which raises the same `Error::InvalidSize` — one check, one
+  into the layout core's walk, which raises the same `Error::InvalidSize` - one check, one
   place. The homogeneity checks (`InvalidNesting`, `InvalidKeyType`,
-  `MismatchedContainerTypes`) stay in the value model — they are model invariants, not
-  stream policy — and the views surface the same errors from the same core.
+  `MismatchedContainerTypes`) stay in the value model - they are model invariants, not
+  stream policy - and the views surface the same errors from the same core.
 - Leaf decoding moves from `io::Read` methods to `&[u8]` codecs, with the eager path
   feeding them from its buffer. That is what guarantees a `ValueView::String` and an
   owned `values::String` can never disagree about the same bytes.
@@ -643,46 +643,46 @@ Two refactors this forces, visible in #187's code:
 for every `PROP` and `PTCH` chunk in an install, (a) `entries()` harvests the same
 `(path, class)` set the eager parse holds, (b) `into_bin()` equals `Bin::from_reader`,
 (c) `object(hash)` on a sample equals the eager lookup, and (d) every declared size equals
-`PropertyExt::size` over the parsed values — attesting that shipped files are size-clean,
+`PropertyExt::size` over the parsed values - attesting that shipped files are size-clean,
 not just parse-clean.
 
 ## 10. What this deliberately does not do (yet)
 
-- **Streaming `resolve`.** Lazy descent itself is no longer deferred — `ValueView`
-  delivers it (section 4.3) — but `ObjectStream::resolve(&PropertyPath)`, the loop that
+- **Streaming `resolve`.** Lazy descent itself is no longer deferred - `ValueView`
+  delivers it (section 4.3) - but `ObjectStream::resolve(&PropertyPath)`, the loop that
   walks a path over the views with the resolver's traversal and type rules
   ([#187](https://github.com/LeagueToolkit/league-toolkit/pull/187)), stays a *named
   follow-on issue*: it is now thin, and thin is exactly when it should wait for a consumer.
-- **Writing, in v1.** The stream itself stays read-only. The write-back *contract* — a
+- **Writing, in v1.** The stream itself stays read-only. The write-back *contract* - a
   delta rewrite of a whole `.bin` by copy-through of untouched objects' raw bytes plus
-  re-serialization of edited ones — is now specified in section 15, because the bin
+  re-serialization of edited ones - is now specified in section 15, because the bin
   editor's flow depends on its shape; its implementation is still a stage after v1.
 - **Parallel access.** One cursor at a time per handle, `&mut self` throughout. The
   fan-out workloads parallelize per file, not within one.
 - **Caching by default.** `object()` and the cursors parse on every call and return owned
   data. Caching exists only as the opt-in `cached_object()` path through the installed
   [`ObjectCache`] provider (section 4.4), whose implementation may trail v1 if it does not
-  stay a small self-contained addition — the API shape is committed either way. A consumer
+  stay a small self-contained addition - the API shape is committed either way. A consumer
   that wants a resident tree uses `into_bin()`.
 
 ## 11. Resolutions (design review, 2026-08-30)
 
 Every open question from the first draft was settled in the follow-up review round, along
-with the decisions the review added. The surface in sections 4–7 reflects all of them.
-(A later round revised the per-object layer itself — section 14 — which supersedes the
+with the decisions the review added. The surface in sections 4-7 reflects all of them.
+(A later round revised the per-object layer itself - section 14 - which supersedes the
 rows here that speak of property cursors and the reserved lazy-descent door.)
 
 | Question                                  | Resolution                                                                                                                                                                                                                                                          |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `M` on methods or on the handle?          | On the handle: `BinStream<R, M = NoMeta>` with `concrete` aliases. `concrete` can only pin type-position generics, so method-level `M` would force a turbofish at every call site.                                                                                  |
-| Buffering                                 | Internal `BufReader` + `seek_relative`; callers hand over the bare source, `into_inner()` unwraps. A caller-supplied `BufReader` is worse than nothing (plain `seek` discards its buffer), and the type system cannot catch that — so the handle owns the problem.  |
+| Buffering                                 | Internal `BufReader` + `seek_relative`; callers hand over the bare source, `into_inner()` unwraps. A caller-supplied `BufReader` is worse than nothing (plain `seek` discards its buffer), and the type system cannot catch that - so the handle owns the problem.  |
 | `Entries` without `&mut`?                 | Already answered by `toc()`: `&BinToc` iterates shared once built, and `BinToc: Clone` lets a consumer detach it. The streaming `entries()` keeps its value (early exit without the full sweep).                                                                    |
-| `SizeDiscrepancy` bounding                | Superseded (revision, 2026-08-30): the discrepancy log was removed entirely — a size that disagrees with the count-driven walk is `Error::InvalidSize` (section 7), so there is nothing to bound.                                                                    |
-| `read()` vs `parse()`                     | `read()` — it does I/O, and the crate's vocabulary is `from_reader` / `ReadProperty`; `parse` appears nowhere in the API today.                                                                                                                                     |
-| Streaming `resolve(&PropertyPath)` in v1? | No — named follow-on issue; `value_range()` is the v1 commitment (section 10).                                                                                                                                                                                      |
+| `SizeDiscrepancy` bounding                | Superseded (revision, 2026-08-30): the discrepancy log was removed entirely - a size that disagrees with the count-driven walk is `Error::InvalidSize` (section 7), so there is nothing to bound.                                                                    |
+| `read()` vs `parse()`                     | `read()` - it does I/O, and the crate's vocabulary is `from_reader` / `ReadProperty`; `parse` appears nowhere in the API today.                                                                                                                                     |
+| Streaming `resolve(&PropertyPath)` in v1? | No - named follow-on issue; `value_range()` is the v1 commitment (section 10).                                                                                                                                                                                      |
 | Cursor restart semantics                  | `objects()` / `entries()` always restart from the top of the table. Idempotent, no hidden state; resumption is what the TOC and `object(hash)` are for.                                                                                                             |
-| New `Error` variants are breaking         | `Error` gains `#[non_exhaustive]` in the 0.8.0 release #187 opens — the free breaking moment — so this and later work grow variants in minors.                                                                                                                      |
-| Lookup caching (added in review)          | Designed now (section 4.4), implemented in v1 only if it stays cheap. `Box<dyn ObjectCache<M> + Send>` on the handle, `NoCache` as the default real provider, `LruObjectCache` shipped, `Arc<BinObject<M>>` returns — the one choice that could not be retrofitted. |
+| New `Error` variants are breaking         | `Error` gains `#[non_exhaustive]` in the 0.8.0 release #187 opens - the free breaking moment - so this and later work grow variants in minors.                                                                                                                      |
+| Lookup caching (added in review)          | Designed now (section 4.4), implemented in v1 only if it stays cheap. `Box<dyn ObjectCache<M> + Send>` on the handle, `NoCache` as the default real provider, `LruObjectCache` shipped, `Arc<BinObject<M>>` returns - the one choice that could not be retrofitted. |
 | PTCH outer-header round-trip              | Answered by #187's `corpus.rs`: the outer header, delete list included, already round-trips byte-exactly (section 12).                                                                                                                                              |
 
 ## 12. Interaction with #187
@@ -747,7 +747,7 @@ A review of the branch itself, beyond what section 12 already covers, adopted fo
 into this design and raised one action item on the PR:
 
 - **`ValueShape` is the streaming peek** (section 4.3). The resolver's type-rule descriptor
-  — kind, item kind, key kind, embed class — is exactly what a complex value's wire header
+  - kind, item kind, key kind, embed class - is exactly what a complex value's wire header
   carries ahead of its body, so `PropertyStream::shape()` returns it (filled by
   `ValueShape::of`'s rules) at skip cost. One vocabulary for "what is this value" across
   the resolver, the patch checker and the stream; `item_count()` rides in the same bytes.
@@ -755,7 +755,7 @@ into this design and raised one action item on the PR:
   centralized; the stream feeds the flag from handle state.
 - **`corpus.rs` is where stream parity lives** (section 9): the harness already sweeps an
   install; the stream adds its equivalence checks there rather than growing a second one.
-  `PropertyExt::size(include_header)` — values computing their own serialized width — is
+  `PropertyExt::size(include_header)` - values computing their own serialized width - is
   additionally the natural debug-assert cross-check for skip distances, and later the
   measuring half of the rebase/write stage.
 
@@ -765,41 +765,41 @@ where they are (section 7).
 
 **Action item on #187 while its breaking window is open:** the `Error` enum is still
 exhaustive on the branch. Section 2's error-surface decision (`#[non_exhaustive]` in 0.8.0)
-belongs *in that PR*, not in the stream's later one — and its new public enums
+belongs *in that PR*, not in the stream's later one - and its new public enums
 (`ResolveErrorKind`, `PatchError`) are candidates for the same attribute at the same
 moment, which is the maintainer's call.
 
 ## 14. Revision: buffered object views (2026-08-30)
 
 The per-object layer was revised in a second design round, after measuring the owned value
-model (`PropertyValueEnum` is 96 bytes per node, align 16 — a wire `f32` costs 96 bytes
+model (`PropertyValueEnum` is 96 bytes per node, align 16 - a wire `f32` costs 96 bytes
 materialized). The first draft streamed *properties* through forward-only lending cursors
 over the reader; the revision buffers one object's declared byte range into a handle-owned
-reused buffer and views it zero-copy (sections 4.2–4.3).
+reused buffer and views it zero-copy (sections 4.2-4.3).
 
 What changed and why:
 
-- **Cursors → views.** The lending cursors existed to avoid materializing anything, and
+- **Cursors -> views.** The lending cursors existed to avoid materializing anything, and
   paid for it: no `std` iterators, one property at a time, no backtracking. An object's
   size is known before descending and objects are KB-scale, so buffering one object keeps
   the memory bound tight while dissolving every one of those restrictions. The *file*
-  level is untouched — the object-table sweep still streams and skips by size, which is
+  level is untouched - the object-table sweep still streams and skips by size, which is
   where the constant-memory guarantee actually matters.
 - **`ValueView` replaces the reserved door.** The first draft deferred lazy descent and
   reserved `value_range()`; the borrowed mirror of `PropertyValueEnum` makes descent to
   any depth the natural surface instead, and a read-only consumer now materializes
-  nothing at all — the 96-byte node cost is simply not paid.
+  nothing at all - the 96-byte node cost is simply not paid.
 - **The single-decode-path rule moved down a level** (section 9): one layout core over
   `&[u8]`, with the owned `ReadProperty` impls and the views as its two renderers.
 - **Strictness got simpler** (section 7): buffering by declared size means skip, view and
   parse all land on the same next-offset, so the skip-versus-parse divergence the first
-  draft documented as a hazard no longer exists in our reader — a walk that disagrees
+  draft documented as a hazard no longer exists in our reader - a walk that disagrees
   with its declared size surfaces as `Error::InvalidSize` instead of desyncing anything.
 
 Alternatives not taken: keeping both cursor and view APIs (two per-object models to keep
 in agreement, and views subsume the cursor's uses); typed accessors without a `ValueView`
 enum (stops one level down); views delegating to the existing `io::Read`-based readers
-through `io::Cursor` (owned allocation per leaf — zero-copy in name only).
+through `io::Cursor` (owned allocation per leaf - zero-copy in name only).
 
 Cost accepted: a pathological file whose single object is enormous buffers that object.
 The eager reader materializes a multiple of the same bytes, so this is still the smaller
@@ -807,9 +807,9 @@ footprint everywhere it matters.
 
 ## 15. The write-back contract: delta rewrite of a `.bin`
 
-Added for the bin editor's flow (expand → lazily read one object → edit → save). The save
+Added for the bin editor's flow (expand -> lazily read one object -> edit -> save). The save
 target is a **rewritten `.bin` file**. Authoring the edit as a `PTCH` layer is explicitly
-out of scope: that layer is not yet designed for mods, and nothing here forecloses it —
+out of scope: that layer is not yet designed for mods, and nothing here forecloses it -
 a delta is upstream of either output form.
 
 This section fixes the *contract*; the implementation is a stage after v1 (section 10).
@@ -817,16 +817,16 @@ This section fixes the *contract*; the implementation is a stage after v1 (secti
 ### 15.1 The editor flow over this API
 
 1. **Expand / navigate**: `mount()` + `toc()` give the object rows (path, class, size)
-   without parsing; browsing an object read-only is `object(hash)` → `view()`.
-2. **Read for editing**: `object(hash)?.read()` → an owned `BinObject<M>`. The editing
-   path takes `read()`, never `cached_object()` — the cache hands out shared `Arc`s, and
+   without parsing; browsing an object read-only is `object(hash)` -> `view()`.
+2. **Read for editing**: `object(hash)?.read()` -> an owned `BinObject<M>`. The editing
+   path takes `read()`, never `cached_object()` - the cache hands out shared `Arc`s, and
    an edit wants exclusive ownership. (Cache for viewing, `read()` for editing;
    `Arc::make_mut` is the escape hatch when both are wanted.)
-3. **Edit**: #187's mutation surface — `resolve_mut(&PropertyPath)` → `ValueSlot` →
+3. **Edit**: #187's mutation surface - `resolve_mut(&PropertyPath)` -> `ValueSlot` ->
    `ValueMut`, or structured operations that are shape-for-shape the editor's patch table.
    The edited object goes into the document's delta; undo is inverse patches over it.
 4. **Save**: `write_patched` to a temp file, rename over. After a rename-over, the mounted
-   handle still describes the *old* bytes — the consumer remounts.
+   handle still describes the *old* bytes - the consumer remounts.
 
 ### 15.2 The types
 
@@ -859,16 +859,16 @@ impl<R: io::Read + io::Seek, M: Default + Clone> BinStream<R, M> {
 ### 15.3 Invariants
 
 - **Untouched means bit-identical.** An object the delta does not name is never
-  deserialized — its bytes are copied from `byte_range()`. This is a stronger guarantee
+  deserialized - its bytes are copied from `byte_range()`. This is a stronger guarantee
   than the editor's current "the backend owns the tree" model: a kind with no widget, a
-  hash no table names, a container order, a duplicate key — none of it can be lost,
+  hash no table names, a container order, a duplicate key - none of it can be lost,
   because none of it is interpreted.
 - **The version passes through.** The header writes the version that was read, so saving
-  one edit does not upgrade the file — the version-3-rewrite hazard the editor documents
+  one edit does not upgrade the file - the version-3-rewrite hazard the editor documents
   applies only to objects that were actually edited (which re-encode through the current
   writer), not to the file.
 - **A legacy-latched base refuses the delta write.** Raw-copied objects would keep the
-  legacy kind numbering while re-encoded ones wrote modern numbering — a mixed, corrupt
+  legacy kind numbering while re-encoded ones wrote modern numbering - a mixed, corrupt
   file. A legacy-latched handle gets a dedicated error; the consumer falls back to a full
   `into_bin()` + `to_writer` transcode, or opens read-only. Shipped files are modern, so
   this is a guard, not a path.
@@ -879,8 +879,8 @@ impl<R: io::Read + io::Seek, M: Default + Clone> BinStream<R, M> {
 
 ### 15.4 What this deliberately is not
 
-- **Not `PTCH` authoring.** A `BinDelta` could later *also* render as patch records —
-  the operations are shape-compatible — but that output form waits until the patch layer
+- **Not `PTCH` authoring.** A `BinDelta` could later *also* render as patch records -
+  the operations are shape-compatible - but that output form waits until the patch layer
   is designed for mods.
 - **Not a mutable view.** No `ValueViewMut` over the buffered bytes: in-place byte
   mutation only works for fixed-width leaves (a string edit shifts every size field above
@@ -893,24 +893,24 @@ impl<R: io::Read + io::Seek, M: Default + Clone> BinStream<R, M> {
 ## 16. Implementation notes (views, owned decode and batch lookup)
 
 Recorded the way `ptch-property-patches.md` section 15.3 records its corrections: what
-building sections 4.2–4.5 and 9 taught that the design as written did not say. Sections
-4–9 above are the proposal; this is where the proposal turned out to need a decision it
+building sections 4.2-4.5 and 9 taught that the design as written did not say. Sections
+4-9 above are the proposal; this is where the proposal turned out to need a decision it
 had not made.
 
 **The byte-level module is `stream::layout`, and it is crate-internal.** Section 9's name for
 it did not survive contact: "wire" says which side of the I/O boundary the bytes are on, which
-is the least interesting thing about the module. What it actually owns is the *layout* — where
-a value starts, how far it runs, what its header declares — so that is what it is called, and
+is the least interesting thing about the module. What it actually owns is the *layout* - where
+a value starts, how far it runs, what its header declares - so that is what it is called, and
 the sections above have been reworded to match. Nothing outside the crate uses it, and
 publishing a thirty-method cursor would pin it under semver for no one's benefit, so only
-`Numbering` is re-exported — it is what the latch reports.
+`Numbering` is re-exported - it is what the latch reports.
 
 **The numbering is cursor state, and every walk is a method.** Section 6 and section 8 wrote
 the layout operations as free functions over a cursor, each taking `legacy: bool`. Both halves
 of that were wrong. Every one of them had the cursor as its subject, so they are methods:
 `cur.skip_value(kind)`, `cur.walk_value(kind)`, `cur.walk_object()`, `cur.value_shape(kind)`,
-`cur.sized_region(…)`. And the flag never varied within one cursor's life — it is the context
-the bytes were written in, not an argument to each operation — so `Cursor` carries a
+`cur.sized_region(...)`. And the flag never varied within one cursor's life - it is the context
+the bytes were written in, not an argument to each operation - so `Cursor` carries a
 [`Numbering`] instead, and the flag disappears from twelve signatures in the owned renderer
 and from a field in all six view types. A slice and its numbering now travel together and
 cannot be paired up wrongly.
@@ -920,7 +920,7 @@ cannot be paired up wrongly.
 one call away when the boolean is what a caller wants.
 
 **`fixed_width` moved to `Kind`.** It was the one layout operation with no cursor subject,
-because it is a fact about a kind rather than about a position — and `Kind` already carries
+because it is a fact about a kind rather than about a position - and `Kind` already carries
 `is_primitive`, `subtype_count` and `is_valid_map_key`, which are the same sort of fact.
 `Kind::fixed_width()` leaves the layout module as exactly one type and one enum.
 
@@ -935,7 +935,7 @@ first touched: the latch has to be settled before any view is handed out (a view
 the numbering at creation), and a view cannot flip the handle's latch from behind a shared
 reference. So `view()` walks the object once as it lands. That walk is also where section
 7's `Error::InvalidSize` is raised, which means a view is only ever handed out over bytes
-whose declared sizes and property counts already agree — the lazy surfaces inside it need no
+whose declared sizes and property counts already agree - the lazy surfaces inside it need no
 size checks of their own.
 
 The *owned* path does not need that walk, though, and paying it there was a mistake the first
@@ -956,7 +956,7 @@ capture anyway; the named types also carry `Debug`, `Clone`, `FusedIterator` and
 
 **`LruObjectCache` carries `M`.** Section 4.4 sketches it without a parameter, but it holds
 `Arc<BinObject<M>>`, so it is `LruObjectCache<M = NoMeta>`. Recency is the map's own order,
-which makes an access `O(capacity)` in bookkeeping — noise beside the parse it saves, at the
+which makes an access `O(capacity)` in bookkeeping - noise beside the parse it saves, at the
 sizes this is for.
 
 **`item_count()` is `None` for an option.** Section 4.3 says containers and maps, and that
@@ -968,7 +968,7 @@ rebuilt over the layout core's `&[u8]` codecs. The trait's signature is public a
 breaking window is closed, so it still takes an `io::Read + io::Seek`. Only the layout core
 knows how far a value reaches, so the impls for the self-sized kinds gather their bytes by
 growing a buffer until `wire::walk_value` can cross it, then wind the reader back over the
-over-read — which keeps the extent rules in one place rather than inventing a second set.
+over-read - which keeps the extent rules in one place rather than inventing a second set.
 Driving that probe with the *walk* rather than the *skip* is what preserves
 `Error::InvalidSize`: a declared size the counts disagree with still raises, instead of
 being turned into an early EOF. `BinObject::from_reader` needs no probe at all, since the
@@ -976,7 +976,7 @@ object's own size field bounds it.
 
 The fixed-width primitives keep their direct reader codecs. Routing them through the bridge
 would tighten their bounds (they read from a bare `io::Read` today) and allocate per leaf,
-for no behavioural gain — and nothing on the parse path reaches them any more. A unit test
+for no behavioural gain - and nothing on the parse path reaches them any more. A unit test
 pins the two codec families to each other so they cannot drift unnoticed.
 
 **Two behaviour changes fell out of the unification**, both of them the byte-level codec's
@@ -997,5 +997,5 @@ now. Documented on both methods rather than paid for.
 runs over every property rather than a sample: 392 archives, 48,912 `PROP` chunks, 454,073
 objects, and all 2,472,864 properties viewed, shaped and decoded against the eager parse,
 with a batch of sampled hashes per chunk opening the same objects the per-hash lookups do.
-Nothing in the install latches onto the legacy numbering, which is what section 8 expected —
+Nothing in the install latches onto the legacy numbering, which is what section 8 expected -
 the latch is a guard, not a path.
