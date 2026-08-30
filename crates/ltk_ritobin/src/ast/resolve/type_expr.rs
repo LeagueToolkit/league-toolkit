@@ -67,7 +67,9 @@ impl<'a> Builder<'a> {
                                 );
                             }
                             Some(kind)
-                                if base == PropertyKind::Map && i == 0 && !kind.is_primitive() =>
+                                if base == PropertyKind::Map
+                                    && i == 0
+                                    && !kind.is_valid_map_key() =>
                             {
                                 self.push(
                                     InvalidMapKey {
