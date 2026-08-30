@@ -119,4 +119,4 @@ Blocked by #207.
 - [ ] `shape()` agrees with `ValueShape::of` on the parsed value for every corpus object sampled
 - [ ] Fixed-width container items index in O(1); others by walk
 - [ ] A synthetic legacy-numbered file latches, re-walks, parses; `is_legacy()` reports it
-- [ ] Size-lying synthetic input surfaces in the discrepancy report instead of failing the walk
+- [ ] Size-lying synthetic input fails the walk with `Error::InvalidSize`

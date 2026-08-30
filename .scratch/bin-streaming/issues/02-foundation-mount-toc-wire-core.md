@@ -49,12 +49,6 @@ impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
 
     /// Returns the underlying source, discarding the internal buffer.
     pub fn into_inner(self) -> R;
-
-    /// Size discrepancies observed so far: regions whose declared size did not match
-    /// what parsing consumed. Empty on a well-formed file. Bounded: first 64 kept.
-    pub fn discrepancies(&self) -> &[SizeDiscrepancy];
-    /// Total discrepancies observed, including those past the retention cap.
-    pub fn discrepancy_count(&self) -> u64;
 }
 ```
 
@@ -78,13 +72,6 @@ pub struct BinToc { /* Vec<ObjectEntry> + HashMap<BinHash, usize> */ }
 impl BinToc {
     pub fn entries(&self) -> &[ObjectEntry];
     pub fn entry(&self, path_hash: impl Into<BinHash>) -> Option<&ObjectEntry>;
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SizeDiscrepancy {
-    pub offset: u64,
-    pub declared: u64,
-    pub consumed: u64,
 }
 ```
 
@@ -113,7 +100,7 @@ impl<R: io::Read + io::Seek, M: Default> Iterator for Entries<'_, R, M> {
 
 ## Beneath it: the wire core
 
-One byte-level module owns the wire (expand phase — existing readers untouched): value shapes (`ValueShape` from the wire header), skip distances for every kind, leaf codecs over `&[u8]`, legacy numbering threading via `Kind::unpack`, and the bounded size-discrepancy recording above. Skip semantics mirror `MetaValue_skipByType`: primitives by fixed width, strings by length prefix, complex values by their stored byte size; the parse path trusts counts and never re-verifies sizes — mismatches are recorded, not raised (section 7).
+One byte-level module owns the wire (expand phase — existing readers untouched): value shapes (`ValueShape` from the wire header), skip distances for every kind, leaf codecs over `&[u8]`, and legacy numbering threading via `Kind::unpack`. Skip semantics mirror `MetaValue_skipByType`: primitives by fixed width, strings by length prefix, complex values by their stored byte size. The parse path is driven by counts; a declared size that disagrees with what the counts consumed is `Error::InvalidSize`, the same error the eager readers raise for it (section 7).
 
 Demoable: a corpus test harvests `(path_hash, class_hash)` for every PROP chunk in an install and matches the eager parse — the grep-index workload end to end.
 

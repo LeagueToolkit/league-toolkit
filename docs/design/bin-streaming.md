@@ -58,7 +58,7 @@ The proposal adds a `ltk_meta::stream` module:
 | Wire core            | One byte-level module owns offsets, shapes, skips and leaf codecs; the eager `ReadProperty` impls and the views are two renderers over it (section 9)                                                                       |
 | Naming               | `BinStream` / `BinOverrideStream` / `BinFileStream` in `ltk_meta::stream`, `mount()` constructor matching `Wad`                                                                                                             |
 | Layering             | Single decode path: `Bin::from_reader` becomes `BinStream::mount` + `into_bin`                                                                                                                                              |
-| Strictness           | Mirror the client: trust counts on the parse path, use sizes only to skip; a separate sanity check reports size discrepancies instead of failing the read                                                                   |
+| Strictness           | Counts drive the parse, declared sizes drive the skips; a size that disagrees with the count-driven walk is `Error::InvalidSize`, the same error the eager readers raise (revised — section 7)                              |
 | Scope                | `PROP` and `PTCH`, reading only; `into_bin()` upgrade; the rebase/delta (surgical rewrite) pipeline is a later stage this design must not preclude                                                                          |
 | Metadata parameter   | Handle-level: `BinStream<R, M = NoMeta>`, pinned once through `concrete` aliases — revisited from the first draft's method-level `M`, see section 12                                                                        |
 | Buffering            | The handle wraps its source in `BufReader` and seeks with `seek_relative`; callers hand over the bare `File`                                                                                                                |
@@ -150,7 +150,7 @@ impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
     /// Parses the remaining file into an eager [`Bin`], consuming the handle.
     ///
     /// Always processes the whole object table from the top, regardless of cursor
-    /// position. This is the strict path: size discrepancies are errors, exactly as
+    /// position. Size mismatches are [`Error::InvalidSize`], exactly as
     /// `Bin::from_reader` errors today (section 7).
     pub fn into_bin(self) -> Result<Bin<M>, Error>;
 
@@ -473,58 +473,39 @@ allocates or decodes value contents.
 At the file level a skip is a seek; inside a buffered object it is slice arithmetic over
 the view. Same rules, two costs, one implementation in the wire core (section 9).
 
-## 7. Strictness: mirror the client, report on the side
+## 7. Strictness: counts drive the parse, sizes drive the skips, disagreement is an error
 
-The stream takes the client's semantics:
+*(Revised 2026-08-30: the first draft recorded size mismatches in a tolerant side-channel
+log — `discrepancies()` / `discrepancy_count()` / `SizeDiscrepancy` — on the "mirror the
+client" rationale. That was the wrong frame: a declared size that disagrees with the
+count-driven walk means the file's skip path and parse path no longer describe the same
+bytes, which is exactly when continuing is unsafe — the TOC and every `byte_range` are
+built from sizes the parse just proved wrong. The corpus attests shipped files never
+exhibit the mismatch, so the tolerance bought complexity and a silent-corruption hazard
+in exchange for nothing. The log is gone; the walk raises.)*
 
-- **Skip path**: the declared size is the seek distance. There is nothing else to trust.
-- **Parse path**: counts drive the walk over the buffered bytes; the declared size is
-  *not* re-verified and a mismatch does not fail the read.
+The two paths and their trust model:
 
-Buffering makes advancement *more* consistent than the client's: an object is buffered by
-its declared size, so the object-table sweep lands on the same next-offset whether the
-object was skipped, viewed or parsed. (The client, which never buffers, continues from
-wherever parsing ended — on a size-lying file the two diverge, and the client's later
-entries desync where ours stay aligned to the declared sizes.) What the walk observes
-instead is the mismatch itself: a value walk that overruns its buffer or ends short of it
-is exactly a declared-versus-consumed disagreement, and the stream records it as data:
+- **Skip path**: the declared size is the seek distance. There is nothing else to trust,
+  and a value the parse path would reject still skips cleanly by its size — which is
+  also what the client does with it.
+- **Parse path**: counts drive the walk over the buffered bytes, exactly as they drive
+  the client's parser. A sized region's declared size is compared against what the
+  counts consumed after the fact, and a disagreement is `Error::InvalidSize(declared,
+  consumed)` — the same variant the eager readers have always raised for this condition.
+  One condition, one error, on both paths.
 
-```rust
-impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
-    /// Size discrepancies observed so far: regions whose declared size did not match
-    /// what parsing consumed. Empty on a well-formed file.
-    ///
-    /// Bounded: the first 64 are kept; [`Self::discrepancy_count`] keeps counting past
-    /// the cap, so a hostile file cannot grow memory through its own corruption.
-    pub fn discrepancies(&self) -> &[SizeDiscrepancy];
+That unification is what keeps `Bin::from_reader`'s behavior unchanged when it is rebuilt
+over the stream (section 9): the inline checks in the `ReadProperty` impls and the walk's
+check are the same check raising the same error. The homogeneity failures stay where they
+are, hard errors from the value model's checked constructors (`InvalidNesting`,
+`InvalidKeyType`, `MismatchedContainerTypes`).
 
-    /// Total discrepancies observed, including those past the retention cap.
-    pub fn discrepancy_count(&self) -> u64;
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SizeDiscrepancy {
-    pub offset: u64,
-    pub declared: u64,
-    pub consumed: u64,
-}
-```
-
-This is the "separate sanity check": survey tooling reads `discrepancies()` after a sweep;
-strict consumers treat a non-zero count as an error. `into_bin()` does exactly that, which is how
-`Bin::from_reader` keeps its current `Error::InvalidSize` behavior unchanged through the
-reimplementation (single decode path, no semver-visible change to the eager API).
-
-Only *size* verification is relaxed. Failures the value model cannot represent stay hard
-errors on the parse path exactly as they are today: a kind byte that does not decode, a
-nested container (`Error::InvalidNesting`), a non-primitive map key (`Error::InvalidKeyType`),
-a heterogeneous container (`Error::MismatchedContainerTypes`). Those are #187's homogeneity
-checks, and the stream parses through the same checked constructors (section 9). The skip
-path is unaffected either way — a value the parse path would reject still skips cleanly by
-its size, which is also what the client does with it.
-
-The report follows the conventions #187's `ApplyReport` set: self-contained plain data,
-`Display` for the one-line summary, serde behind the feature flag.
+A consumer surveying broken or hand-crafted files catches the error per chunk — tooling
+built on the error, not state built into the core. After a mismatch the handle's
+sequential sweep is not trustworthy (the mismatch is the proof of that); random access
+through the already-harvested TOC rows remains valid, since those offsets tiled correctly
+up to the failure.
 
 ## 8. The legacy-numbering latch
 
@@ -583,9 +564,9 @@ rather than reading `io::Read` directly; the top-level loops exist once, in the 
 Two refactors this forces, visible in #187's code:
 
 - The `ReadProperty` impls verify sizes *inline* today (`Container::from_reader` measures
-  its body and returns `Error::InvalidSize` itself). Under section 7 those checks move
-  into the wire core's walk, which records a `SizeDiscrepancy` instead; `into_bin()`
-  re-raises. The homogeneity checks (`InvalidNesting`, `InvalidKeyType`,
+  its body and returns `Error::InvalidSize` itself). Under section 7 that check moves
+  into the wire core's walk, which raises the same `Error::InvalidSize` — one check, one
+  place. The homogeneity checks (`InvalidNesting`, `InvalidKeyType`,
   `MismatchedContainerTypes`) stay in the value model — they are model invariants, not
   stream policy — and the views surface the same errors from the same core.
 - Leaf decoding moves from `io::Read` methods to `&[u8]` codecs, with the eager path
@@ -595,8 +576,9 @@ Two refactors this forces, visible in #187's code:
 `corpus.rs` (#187's harness, gated on `LTK_LOL_GAME_DIR`) grows the stream parity sweep:
 for every `PROP` and `PTCH` chunk in an install, (a) `entries()` harvests the same
 `(path, class)` set the eager parse holds, (b) `into_bin()` equals `Bin::from_reader`,
-(c) `object(hash)` on a sample equals the eager lookup, and (d) `discrepancy_count()` is 0 —
-attesting that shipped files are size-clean, not just parse-clean.
+(c) `object(hash)` on a sample equals the eager lookup, and (d) every declared size equals
+`PropertyExt::size` over the parsed values — attesting that shipped files are size-clean,
+not just parse-clean.
 
 ## 10. What this deliberately does not do (yet)
 
@@ -629,7 +611,7 @@ rows here that speak of property cursors and the reserved lazy-descent door.)
 | `M` on methods or on the handle?          | On the handle: `BinStream<R, M = NoMeta>` with `concrete` aliases. `concrete` can only pin type-position generics, so method-level `M` would force a turbofish at every call site.                                                                                  |
 | Buffering                                 | Internal `BufReader` + `seek_relative`; callers hand over the bare source, `into_inner()` unwraps. A caller-supplied `BufReader` is worse than nothing (plain `seek` discards its buffer), and the type system cannot catch that — so the handle owns the problem.  |
 | `Entries` without `&mut`?                 | Already answered by `toc()`: `&BinToc` iterates shared once built, and `BinToc: Clone` lets a consumer detach it. The streaming `entries()` keeps its value (early exit without the full sweep).                                                                    |
-| `SizeDiscrepancy` bounding                | Bounded: first 64 records retained, `discrepancy_count()` counts past the cap.                                                                                                                                                                                      |
+| `SizeDiscrepancy` bounding                | Superseded (revision, 2026-08-30): the discrepancy log was removed entirely — a size that disagrees with the count-driven walk is `Error::InvalidSize` (section 7), so there is nothing to bound.                                                                    |
 | `read()` vs `parse()`                     | `read()` — it does I/O, and the crate's vocabulary is `from_reader` / `ReadProperty`; `parse` appears nowhere in the API today.                                                                                                                                     |
 | Streaming `resolve(&PropertyPath)` in v1? | No — named follow-on issue; `value_range()` is the v1 commitment (section 10).                                                                                                                                                                                      |
 | Cursor restart semantics                  | `objects()` / `entries()` always restart from the top of the table. Idempotent, no hidden state; resumption is what the TOC and `object(hash)` are for.                                                                                                             |
@@ -705,8 +687,6 @@ into this design and raised one action item on the PR:
   the resolver, the patch checker and the stream; `item_count()` rides in the same bytes.
 - **`Kind::unpack(raw, legacy)` is the latch** (section 8). The legacy fudging is already
   centralized; the stream feeds the flag from handle state.
-- **`ApplyReport`'s conventions shape the discrepancy report** (section 7): nothing-fatal,
-  self-contained plain data, `Display`, serde behind the flag.
 - **`corpus.rs` is where stream parity lives** (section 9): the harness already sweeps an
   install; the stream adds its equivalence checks there rather than growing a second one.
   `PropertyExt::size(include_header)` — values computing their own serialized width — is
@@ -747,8 +727,8 @@ What changed and why:
   `&[u8]`, with the owned `ReadProperty` impls and the views as its two renderers.
 - **Strictness got simpler** (section 7): buffering by declared size means skip, view and
   parse all land on the same next-offset, so the skip-versus-parse divergence the first
-  draft documented as a hazard no longer exists in our reader — it survives only as the
-  discrepancy report's account of what the *client* would have done differently.
+  draft documented as a hazard no longer exists in our reader — a walk that disagrees
+  with its declared size surfaces as `Error::InvalidSize` instead of desyncing anything.
 
 Alternatives not taken: keeping both cursor and view APIs (two per-object models to keep
 in agreement, and views subsume the cursor's uses); typed accessors without a `ValueView`
@@ -826,9 +806,10 @@ impl<R: io::Read + io::Seek, M: Default + Clone> BinStream<R, M> {
   file. `is_legacy()` handles get a dedicated error; the consumer falls back to a full
   `into_bin()` + `to_writer` transcode, or opens read-only. Shipped files are modern, so
   this is a guard, not a path.
-- **Size discrepancies veto nothing here.** A base object with a lying size field is
-  copied exactly as its declared range states, which reproduces the input byte for byte —
-  the report (section 7) still tells the consumer the file is suspect.
+- **Size mismatches cannot reach this path.** Raw copy-through never walks an unedited
+  object, so a lying size field in one is copied exactly as its declared range states,
+  reproducing the input byte for byte. An *edited* object was necessarily read, and a
+  size mismatch there already failed the read with `Error::InvalidSize` (section 7).
 
 ### 15.4 What this deliberately is not
 

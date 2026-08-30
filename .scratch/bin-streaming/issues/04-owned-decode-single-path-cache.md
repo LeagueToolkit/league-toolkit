@@ -19,8 +19,8 @@ impl<'a, R: io::Read + io::Seek, M: Default> ObjectStream<'a, R, M> {
 impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
     /// Parses the remaining file into an eager [`Bin`], consuming the handle.
     ///
-    /// Always processes the whole object table from the top. This is the strict path:
-    /// size discrepancies are errors, exactly as `Bin::from_reader` errors today.
+    /// Always processes the whole object table from the top. Size mismatches are
+    /// [`Error::InvalidSize`], exactly as `Bin::from_reader` errors today.
     pub fn into_bin(self) -> Result<Bin<M>, Error>;
 
     /// Resolves an object through the installed [`ObjectCache`]: a hit is an `Arc`
@@ -42,7 +42,7 @@ pub fn from_reader<R: io::Read + io::Seek + ?Sized>(reader: &mut R) -> Result<Se
 }
 ```
 
-The existing `ReadProperty` impls are rebuilt over the wire core's `&[u8]` codecs (contract phase of the refactor started in #207); the top-level loops exist once, in the stream. Their inline size checks (`Container::from_reader` measuring its own body) move into the walk layer, recorded as discrepancies — `into_bin()` re-raises them, so the eager API's strict `Error::InvalidSize` behavior is unchanged. The homogeneity checks (`InvalidNesting`, `InvalidKeyType`, `MismatchedContainerTypes`) stay in the value model: the stream parses through the same checked constructors, so there is never a second, unchecked way to build a container.
+The existing `ReadProperty` impls are rebuilt over the wire core's `&[u8]` codecs (contract phase of the refactor started in #207); the top-level loops exist once, in the stream. Their inline size checks (`Container::from_reader` measuring its own body) move into the walk layer, which raises the same `Error::InvalidSize` — one check, one place, and the eager API's behavior is unchanged. The homogeneity checks (`InvalidNesting`, `InvalidKeyType`, `MismatchedContainerTypes`) stay in the value model: the stream parses through the same checked constructors, so there is never a second, unchecked way to build a container.
 
 ## The cache
 
