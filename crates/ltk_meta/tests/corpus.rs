@@ -7,19 +7,24 @@
 //!
 //! It is the permanent replacement for the scratch tooling the design was written from: every
 //! `PTCH` chunk in the install has to read, re-write byte for byte, and have every one of its
-//! records resolve against the real objects those records name.
+//! records resolve against the real objects those records name. Every `PROP` chunk additionally
+//! has to stream: mounting and sweeping it harvests the same object set the eager parse holds.
 
 use std::{
+    cell::Cell,
     collections::{HashMap, HashSet},
     fmt,
     fs::File,
-    io::Cursor,
+    io::{self, Cursor, Read, Seek},
     path::{Path, PathBuf},
+    rc::Rc,
 };
 
 use ltk_hash::BinHash;
 use ltk_meta::{
+    concrete::BinStream,
     path::{PatchError, ResolveErrorKind},
+    traits::PropertyExt as _,
     Bin, BinKind, BinObject, BinOverride,
 };
 use ltk_wad::Wad;
@@ -234,4 +239,186 @@ fn every_shipped_patch_reads_rewrites_and_resolves() {
         "records skipped for a reason section 2.1 measured as zero:\n{}",
         counts.unexpected.join("\n")
     );
+}
+
+/// Counts the reads that reach the wrapped source, to catch a sweep that re-harvests.
+struct CountingReads<R> {
+    inner: R,
+    reads: Rc<Cell<usize>>,
+}
+
+impl<R> CountingReads<R> {
+    fn new(inner: R) -> (Self, Rc<Cell<usize>>) {
+        let reads = Rc::new(Cell::new(0));
+        (
+            Self {
+                inner,
+                reads: Rc::clone(&reads),
+            },
+            reads,
+        )
+    }
+}
+
+impl<R: Read> Read for CountingReads<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.reads.set(self.reads.get() + 1);
+        self.inner.read(buf)
+    }
+}
+
+impl<R: Seek> Seek for CountingReads<R> {
+    fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64> {
+        self.inner.seek(pos)
+    }
+}
+
+#[derive(Default)]
+struct StreamCounts {
+    wads: usize,
+    prop_chunks: usize,
+    objects: usize,
+    properties: usize,
+}
+
+impl fmt::Display for StreamCounts {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "{} wad archives", self.wads)?;
+        writeln!(f, "{} PROP chunks mounted and swept", self.prop_chunks)?;
+        write!(
+            f,
+            "{} objects harvested / {} properties measured",
+            self.objects, self.properties
+        )
+    }
+}
+
+/// The streaming harvest against the eager parse, for one `PROP` chunk.
+fn check_stream_parity(wad_path: &Path, data: &[u8], counts: &mut StreamCounts) {
+    let context = || format!("{}", wad_path.display());
+
+    let eager = Bin::from_reader(&mut Cursor::new(data))
+        .unwrap_or_else(|e| panic!("{}: the eager parse failed: {e}", context()));
+
+    let (source, reads) = CountingReads::new(Cursor::new(data));
+    let mut stream = BinStream::mount(source)
+        .unwrap_or_else(|e| panic!("{}: the stream did not mount: {e}", context()));
+
+    // Header facts, free after mount.
+    assert_eq!(stream.version(), eager.version, "{}", context());
+    assert_eq!(stream.dependencies(), eager.dependencies, "{}", context());
+    assert_eq!(
+        stream.class_hashes(),
+        eager
+            .objects
+            .values()
+            .map(|o| o.class_hash)
+            .collect::<Vec<_>>(),
+        "{}",
+        context()
+    );
+
+    // The harvest sweep sees the object set the eager parse holds, in file order.
+    let entries: Vec<_> = stream
+        .entries()
+        .collect::<Result<_, _>>()
+        .unwrap_or_else(|e| panic!("{}: the sweep failed: {e}", context()));
+    assert_eq!(
+        entries
+            .iter()
+            .map(|e| (e.path_hash, e.class_hash))
+            .collect::<Vec<_>>(),
+        eager
+            .objects
+            .values()
+            .map(|o| (o.path_hash, o.class_hash))
+            .collect::<Vec<_>>(),
+        "{}",
+        context()
+    );
+
+    // Every declared object size agrees with `PropertyExt::size` over the parsed values.
+    // The wire-core unit tests pin skip distances to `size` for every kind on constructed
+    // values; this closes the loop by pinning `size` to the shipped bytes.
+    for (entry, object) in entries.iter().zip(eager.objects.values()) {
+        let measured: usize = 6 + object
+            .properties
+            .values()
+            .map(|p| p.size(true))
+            .sum::<usize>();
+        assert_eq!(
+            u64::from(entry.size),
+            measured as u64,
+            "{}: object {:08x} declares a size PropertyExt::size disagrees with",
+            context(),
+            entry.path_hash
+        );
+        counts.properties += object.properties.len();
+    }
+
+    // The sweep populated the TOC; asking for it (or sweeping again) reads nothing more.
+    let reads_after_sweep = reads.get();
+    let toc = stream
+        .toc()
+        .unwrap_or_else(|e| panic!("{}: the TOC did not build: {e}", context()));
+    assert_eq!(toc.entries(), entries, "{}", context());
+    assert_eq!(
+        reads.get(),
+        reads_after_sweep,
+        "{}: a second harvest pass ran",
+        context()
+    );
+
+    // Random access lands on the same object the eager map holds.
+    if let Some((&path_hash, object)) = eager.objects.first() {
+        let mut streamed = stream
+            .object(path_hash)
+            .unwrap_or_else(|e| panic!("{}: object lookup failed: {e}", context()))
+            .unwrap_or_else(|| panic!("{}: {:08x} is not in the TOC", context(), path_hash));
+        assert_eq!(streamed.class_hash(), object.class_hash, "{}", context());
+        assert_eq!(
+            streamed.property_count().expect("the count reads") as usize,
+            object.properties.len(),
+            "{}",
+            context()
+        );
+    }
+
+    counts.prop_chunks += 1;
+    counts.objects += entries.len();
+}
+
+#[test]
+#[ignore = "needs an installed client; set LTK_LOL_GAME_DIR"]
+fn every_shipped_prop_streams_the_same_object_set() {
+    let Ok(game_dir) = std::env::var(GAME_DIR) else {
+        panic!("set {GAME_DIR} to the client's Game directory");
+    };
+
+    let mut wad_files = Vec::new();
+    wad_paths(Path::new(&game_dir), &mut wad_files);
+    wad_files.sort();
+    assert!(!wad_files.is_empty(), "no .wad.client under {game_dir}");
+
+    let mut counts = StreamCounts::default();
+    for wad_path in &wad_files {
+        counts.wads += 1;
+
+        let source = File::open(wad_path).expect("the wad opens");
+        let mut wad = Wad::mount(source).expect("the wad mounts");
+        let chunks: Vec<_> = wad.chunks().as_slice().to_vec();
+
+        for chunk in &chunks {
+            let Ok(data) = wad.load_chunk_decompressed(chunk) else {
+                continue;
+            };
+            if BinKind::identify_from_bytes(&data) != Some(BinKind::Prop) {
+                continue;
+            }
+            check_stream_parity(wad_path, &data, &mut counts);
+        }
+    }
+
+    println!("{counts}");
+    assert!(counts.prop_chunks > 0, "no PROP chunks in {game_dir}");
 }

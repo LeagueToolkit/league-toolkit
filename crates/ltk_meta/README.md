@@ -12,6 +12,7 @@ Two kinds of file share the `.bin` extension and this crate reads both:
 | Item | What it is |
 | --- | --- |
 | `Bin`, `BinObject` | The object tree: read (`from_reader`), build (`builder()`), edit, write (`to_writer`) |
+| `BinStream`, `BinToc`, `ObjectEntry` | Streaming access: mount a file, sweep object descriptors, random access by path hash - without parsing values |
 | `property::values`, `PropertyValueEnum`, `PropertyKind` | One typed value struct per wire kind (`I32`, `String`, `Vector3`, `Container`, `Map`, `Struct`, `Embedded`, `Optional`, …) and the enum over them |
 | `concrete` | The same types with the metadata parameter pinned, so nothing generic needs spelling - start here |
 | `path::PropertyPath` | Property addressing (`Position.Anchors.Anchor`, `Elements[3]`, `Lookup{"weapon"}`), with `Bin::resolve` and `Bin::patch` |
@@ -40,6 +41,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+## Streaming a bin
+
+`Bin::from_reader` parses everything. When you only need the object table - harvesting hashes across thousands of files, or pulling one object's facts out of a big bin - `BinStream` mounts the file, reads just the header, and skips object bodies by their size fields. Hand `mount` the bare `File`; buffering is internal.
+
+```rust
+use std::fs::File;
+use ltk_meta::concrete::BinStream;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut stream = BinStream::mount(File::open("data.bin")?)?;
+    println!("version {}, {} objects", stream.version(), stream.class_hashes().len());
+
+    // Sweep the object table: one descriptor per object, no value parsing.
+    for entry in stream.entries() {
+        let entry = entry?;
+        println!("{:08x}: {:08x}", entry.path_hash, entry.class_hash);
+    }
+
+    // Random access by path hash, served from the table of contents the sweep built.
+    if let Some(mut object) = stream.object(0x4a47c414u32)? {
+        println!("{} properties", object.property_count()?);
+    }
+    Ok(())
+}
+```
+
+The `entries()` sweep populates a `BinToc` (`Clone`, serializable with the `serde` feature) as a side effect, so `toc()` and `object(hash)` after a sweep cost no further reads.
 
 ## Creating one programmatically
 

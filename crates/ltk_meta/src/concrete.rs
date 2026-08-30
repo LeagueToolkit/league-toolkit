@@ -30,6 +30,7 @@
 
 pub type Bin = crate::Bin;
 pub type BinObject = crate::BinObject;
+pub type BinStream<R> = crate::stream::BinStream<R>;
 pub type BinFile = crate::BinFile;
 pub type BinOverride = crate::BinOverride;
 pub type PropertyPatch = crate::PropertyPatch;
