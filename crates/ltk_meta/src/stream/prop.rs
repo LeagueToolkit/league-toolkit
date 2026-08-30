@@ -9,9 +9,7 @@ use ltk_io_ext::ReaderExt as _;
 
 use crate::{
     property::NoMeta,
-    stream::{
-        BinToc, DiscrepancyLog, Entries, ObjectEntry, ObjectStream, Objects, SizeDiscrepancy,
-    },
+    stream::{BinToc, Entries, ObjectEntry, ObjectStream, Objects},
     BinKind, Error,
 };
 
@@ -53,7 +51,6 @@ pub struct BinStream<R: io::Read + io::Seek, M = NoMeta> {
     /// [`Kind::unpack`](crate::PropertyKind::unpack) as the `legacy` argument.
     #[expect(dead_code, reason = "read once the value-parsing layer lands")]
     legacy: bool,
-    discrepancies: DiscrepancyLog,
     meta: PhantomData<fn() -> M>,
 }
 
@@ -115,7 +112,6 @@ impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
             objects_start,
             toc: BinToc::default(),
             legacy: false,
-            discrepancies: DiscrepancyLog::new(),
             meta: PhantomData,
         })
     }
@@ -193,25 +189,6 @@ impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
             Some(&entry) => Ok(Some(ObjectStream::new(self, entry))),
             None => Ok(None),
         }
-    }
-
-    // ── the strictness report (see the `discrepancy` module) ────────────────
-
-    /// Size discrepancies observed so far: regions whose declared size did not match what
-    /// parsing consumed. Empty on a well-formed file.
-    ///
-    /// Bounded: the first [`DiscrepancyLog::RETAINED`] are kept;
-    /// [`BinStream::discrepancy_count`] keeps counting past the cap, so a hostile file cannot
-    /// grow memory through its own corruption.
-    #[must_use]
-    pub fn discrepancies(&self) -> &[SizeDiscrepancy] {
-        self.discrepancies.retained()
-    }
-
-    /// Total discrepancies observed, including those past the retention cap.
-    #[must_use]
-    pub fn discrepancy_count(&self) -> u64 {
-        self.discrepancies.total()
     }
 
     // ── teardown ────────────────────────────────────────────────────────────

@@ -8,18 +8,13 @@
 //! [`Kind::BitBool`] is one byte.
 //!
 //! Nothing here allocates or decodes value contents to move past a value. Decoding happens only
-//! when a leaf codec on [`Cursor`] is asked for, and the walk that does parse
-//! ([`walk_value`]) trusts counts, using declared sizes only to realign — a mismatch is
-//! recorded in a [`DiscrepancyLog`], not raised (see [`SizeDiscrepancy`]).
+//! when a leaf codec on [`Cursor`] is asked for. The walk that does parse ([`walk_value`]) is
+//! driven by counts; a declared size that disagrees with what the counts consumed is
+//! [`Error::InvalidSize`], the same error the eager readers raise for it.
 
 use ltk_hash::{BinHash, WadHash};
 
-use crate::{
-    path::ValueShape,
-    property::Kind,
-    stream::{DiscrepancyLog, SizeDiscrepancy},
-    Error,
-};
+use crate::{path::ValueShape, property::Kind, Error};
 
 /// A reading position over a byte slice.
 ///
@@ -284,26 +279,20 @@ pub fn value_shape(mut cur: Cursor<'_>, kind: Kind, legacy: bool) -> Result<Valu
     })
 }
 
-/// Walks one value of `kind` by its counts, recording size discrepancies instead of raising.
+/// Walks one value of `kind` by its counts, verifying declared sizes along the way.
 ///
-/// This is the strict-by-counts walk of the stream's parse path: element and property counts
-/// drive it, and a sized region's declared size is compared against what the walk consumed
-/// only after the fact. On a mismatch a [`SizeDiscrepancy`] is recorded in `log` — with
-/// offsets made absolute by adding `base_offset`, the stream offset of the slice's first
-/// byte — and the cursor realigns to the declared next-offset, so the walk lands exactly
-/// where a skip would have.
+/// This is the parse path's walk: element and property counts drive it, exactly as they
+/// drive the client's parser. A sized region's declared size is compared against what the
+/// walk consumed after the fact — the two describing different bytes means the file is
+/// internally inconsistent (its skip path and parse path disagree), so the walk fails
+/// rather than guessing which one to believe.
 ///
 /// # Errors
 ///
+/// [`Error::InvalidSize`] if a declared size disagrees with what the counts consumed,
 /// [`Error::IOError`] if the walk runs past the end of the slice, or
 /// [`Error::InvalidPropertyTypePrimitive`] if a kind byte does not decode.
-pub fn walk_value(
-    cur: &mut Cursor<'_>,
-    kind: Kind,
-    legacy: bool,
-    base_offset: u64,
-    log: &mut DiscrepancyLog,
-) -> Result<(), Error> {
+pub fn walk_value(cur: &mut Cursor<'_>, kind: Kind, legacy: bool) -> Result<(), Error> {
     use Kind as K;
     if let Some(width) = fixed_width(kind) {
         return cur.skip(width);
@@ -315,10 +304,10 @@ pub fn walk_value(
         }
         K::Container | K::UnorderedContainer => {
             let item_kind = cur.kind(legacy)?;
-            sized_region(cur, base_offset, log, |cur, log| {
+            sized_region(cur, |cur| {
                 let count = cur.u32()?;
                 for _ in 0..count {
-                    walk_value(cur, item_kind, legacy, base_offset, log)?;
+                    walk_value(cur, item_kind, legacy)?;
                 }
                 Ok(())
             })
@@ -326,11 +315,11 @@ pub fn walk_value(
         K::Map => {
             let key_kind = cur.kind(legacy)?;
             let value_kind = cur.kind(legacy)?;
-            sized_region(cur, base_offset, log, |cur, log| {
+            sized_region(cur, |cur| {
                 let count = cur.u32()?;
                 for _ in 0..count {
-                    walk_value(cur, key_kind, legacy, base_offset, log)?;
-                    walk_value(cur, value_kind, legacy, base_offset, log)?;
+                    walk_value(cur, key_kind, legacy)?;
+                    walk_value(cur, value_kind, legacy)?;
                 }
                 Ok(())
             })
@@ -340,12 +329,12 @@ pub fn walk_value(
             if class == 0 {
                 return Ok(());
             }
-            sized_region(cur, base_offset, log, |cur, log| {
+            sized_region(cur, |cur| {
                 let prop_count = cur.u16()?;
                 for _ in 0..prop_count {
                     cur.skip(4)?; // name hash
                     let kind = cur.kind(legacy)?;
-                    walk_value(cur, kind, legacy, base_offset, log)?;
+                    walk_value(cur, kind, legacy)?;
                 }
                 Ok(())
             })
@@ -353,7 +342,7 @@ pub fn walk_value(
         K::Optional => {
             let item_kind = cur.kind(legacy)?;
             match cur.bool()? {
-                true => walk_value(cur, item_kind, legacy, base_offset, log),
+                true => walk_value(cur, item_kind, legacy),
                 false => Ok(()),
             }
         }
@@ -361,32 +350,21 @@ pub fn walk_value(
     }
 }
 
-/// Reads a `u32` size field, runs `body`, and reconciles declared against consumed.
-///
-/// A disagreement is recorded, and the cursor lands on the declared next-offset either way
-/// (clamped to the slice when the declared size overruns it).
+/// Reads a `u32` size field, runs `body`, and verifies declared against consumed.
 fn sized_region(
     cur: &mut Cursor<'_>,
-    base_offset: u64,
-    log: &mut DiscrepancyLog,
-    body: impl FnOnce(&mut Cursor<'_>, &mut DiscrepancyLog) -> Result<(), Error>,
+    body: impl FnOnce(&mut Cursor<'_>) -> Result<(), Error>,
 ) -> Result<(), Error> {
-    let size_field = cur.position();
     let declared = cur.u32()? as usize;
     let start = cur.position();
 
-    body(cur, log)?;
+    body(cur)?;
 
     let consumed = cur.position() - start;
-    if consumed != declared {
-        log.record(SizeDiscrepancy {
-            offset: base_offset + size_field as u64,
-            declared: declared as u64,
-            consumed: consumed as u64,
-        });
-        cur.pos = usize::min(start + declared, cur.buf.len());
+    match consumed == declared {
+        true => Ok(()),
+        false => Err(Error::InvalidSize(declared as u64, consumed as u64)),
     }
-    Ok(())
 }
 
 #[cfg(test)]
@@ -494,15 +472,13 @@ mod tests {
             );
 
             let mut cur = Cursor::new(&bytes);
-            let mut log = DiscrepancyLog::new();
-            walk_value(&mut cur, value.kind(), false, 0, &mut log).expect("the value walks");
+            walk_value(&mut cur, value.kind(), false).expect("the value walks");
             assert_eq!(
                 cur.position(),
                 bytes.len(),
                 "{:?}: walk distance is not the serialized size",
                 value.kind()
             );
-            assert!(log.is_empty(), "{:?}: a clean value logged", value.kind());
         }
     }
 
@@ -529,7 +505,7 @@ mod tests {
     }
 
     #[test]
-    fn a_lying_size_is_recorded_and_realigned_not_raised() {
+    fn a_lying_size_is_an_invalid_size_error() {
         let list: PropertyValueEnum =
             values::Container::from(vec![values::I32::new(1), values::I32::new(2)]).into();
         let mut bytes = body(&list);
@@ -538,26 +514,14 @@ mod tests {
         bytes.extend_from_slice(&[0xFF; 8]); // the 8 padding bytes the lie claims
 
         let mut cur = Cursor::new(&bytes);
-        let mut log = DiscrepancyLog::new();
-        walk_value(
-            &mut cur,
-            crate::PropertyKind::Container,
-            false,
-            0x100,
-            &mut log,
-        )
-        .expect("the walk records instead of failing");
-
-        assert_eq!(
-            log.retained(),
-            [SizeDiscrepancy {
-                offset: 0x101,
-                declared: 20,
-                consumed: 12,
-            }]
+        let error = walk_value(&mut cur, crate::PropertyKind::Container, false)
+            .expect_err("the counts disagree with the declared size");
+        assert!(
+            matches!(error, Error::InvalidSize(20, 12)),
+            "unexpected error: {error}"
         );
-        // The walk lands where a skip would: on the declared next-offset.
-        assert_eq!(cur.position(), bytes.len());
+
+        // The skip path is unaffected: the declared size is still the skip distance.
         let mut cur = Cursor::new(&bytes);
         skip_value(&mut cur, crate::PropertyKind::Container, false).expect("skips");
         assert_eq!(cur.position(), bytes.len());

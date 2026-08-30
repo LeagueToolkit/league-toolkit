@@ -384,9 +384,6 @@ fn check_stream_parity(wad_path: &Path, data: &[u8], counts: &mut StreamCounts) 
         );
     }
 
-    // Shipped files are size-clean; the sweep observed nothing to report.
-    assert_eq!(stream.discrepancy_count(), 0, "{}", context());
-
     counts.prop_chunks += 1;
     counts.objects += entries.len();
 }

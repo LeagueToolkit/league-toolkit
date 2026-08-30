@@ -30,9 +30,6 @@
 mod cursor;
 pub use cursor::{Entries, ObjectStream, Objects};
 
-mod discrepancy;
-pub use discrepancy::{DiscrepancyLog, SizeDiscrepancy};
-
 mod prop;
 pub use prop::BinStream;
 

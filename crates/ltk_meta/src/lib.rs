@@ -201,7 +201,7 @@ mod file;
 pub use file::{BinFile, BinKind};
 
 pub mod stream;
-pub use stream::{BinStream, BinToc, Entries, ObjectEntry, ObjectStream, Objects, SizeDiscrepancy};
+pub use stream::{BinStream, BinToc, Entries, ObjectEntry, ObjectStream, Objects};
 
 mod error;
 pub use error::*;

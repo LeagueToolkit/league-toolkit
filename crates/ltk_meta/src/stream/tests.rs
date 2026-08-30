@@ -149,9 +149,6 @@ fn entries_harvest_what_the_eager_parse_holds() {
         entries.last().expect("three entries").byte_range().end,
         bytes.len() as u64
     );
-
-    assert_eq!(stream.discrepancy_count(), 0);
-    assert!(stream.discrepancies().is_empty());
 }
 
 #[test]
