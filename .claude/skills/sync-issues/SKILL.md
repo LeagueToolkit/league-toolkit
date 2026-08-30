@@ -54,10 +54,10 @@ notifications, so change a title only when the user asks.
 ## Issue body format
 
 Issues are **API proposals**, written the way the design docs write their API-surface
-sections (see `docs/design/bin-streaming.md` §4–§5 for the model). Structure, in order:
+sections (see `docs/design/bin-streaming.md` sections 4-5 for the model). Structure, in order:
 
 1. One short paragraph: what this delivers and which umbrella issue / design doc it
-   belongs to (e.g. "Part of #192 (design: `docs/design/bin-streaming.md` §5)").
+   belongs to (e.g. "Part of #192 (design: `docs/design/bin-streaming.md` section 5)").
 2. `## Proposed surface` — Rust signature blocks lifted from the design doc, not
    paraphrased into prose. Keep the abbreviated doc comments; elide private internals
    with `/* … */`. If the design doc has the signatures, extract them verbatim; prose

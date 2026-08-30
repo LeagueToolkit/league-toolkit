@@ -4,7 +4,7 @@ title: "Bin streaming foundation: mount, TOC, harvest, and the wire core"
 labels: crate:ltk_meta, enhancement, format:bin, area:reading, blocked
 ---
 
-First slice of #192 (design: `docs/design/bin-streaming.md` §4, §6–§7, §9). A consumer can mount a real `.bin` and read everything that costs no value parsing. Everything lives in `ltk_meta::stream`, re-exported from the crate root; `M` sits on the handle and `concrete` grows stream aliases that pin it at the mount call.
+First slice of #192 (design: `docs/design/bin-streaming.md` section 4, sections 6-7, section 9). A consumer can mount a real `.bin` and read everything that costs no value parsing. Everything lives in `ltk_meta::stream`, re-exported from the crate root; `M` sits on the handle and `concrete` grows stream aliases that pin it at the mount call.
 
 ## Proposed surface
 
@@ -113,7 +113,7 @@ impl<R: io::Read + io::Seek, M: Default> Iterator for Entries<'_, R, M> {
 
 ## Beneath it: the wire core
 
-One byte-level module owns the wire (expand phase — existing readers untouched): value shapes (`ValueShape` from the wire header), skip distances for every kind, leaf codecs over `&[u8]`, legacy numbering threading via `Kind::unpack`, and the bounded size-discrepancy recording above. Skip semantics mirror `MetaValue_skipByType`: primitives by fixed width, strings by length prefix, complex values by their stored byte size; the parse path trusts counts and never re-verifies sizes — mismatches are recorded, not raised (§7).
+One byte-level module owns the wire (expand phase — existing readers untouched): value shapes (`ValueShape` from the wire header), skip distances for every kind, leaf codecs over `&[u8]`, legacy numbering threading via `Kind::unpack`, and the bounded size-discrepancy recording above. Skip semantics mirror `MetaValue_skipByType`: primitives by fixed width, strings by length prefix, complex values by their stored byte size; the parse path trusts counts and never re-verifies sizes — mismatches are recorded, not raised (section 7).
 
 Demoable: a corpus test harvests `(path_hash, class_hash)` for every PROP chunk in an install and matches the eager parse — the grep-index workload end to end.
 

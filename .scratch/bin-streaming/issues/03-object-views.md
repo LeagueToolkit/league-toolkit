@@ -4,7 +4,7 @@ title: "Bin streaming: zero-copy object views"
 labels: crate:ltk_meta, enhancement, format:bin, area:reading, blocked
 ---
 
-Part of #192 (design: `docs/design/bin-streaming.md` §4.2–§4.3, §8, §14). Descending into an object buffers its declared byte range once (one read, handle-owned reused buffer) and everything inside — iteration, random access, descent — happens in memory, zero-copy. Nothing decodes until touched, nothing allocates until an owned value is asked for.
+Part of #192 (design: `docs/design/bin-streaming.md` sections 4.2-4.3, section 8, section 14). Descending into an object buffers its declared byte range once (one read, handle-owned reused buffer) and everything inside — iteration, random access, descent — happens in memory, zero-copy. Nothing decodes until touched, nothing allocates until an owned value is asked for.
 
 ## Proposed surface
 
@@ -104,11 +104,11 @@ impl<'a, M: Default> StructView<'a, M> {
 // OptionalView: item_kind() / get() -> Result<Option<ValueView>, Error>.
 ```
 
-Because `ValueView` descends to any depth, `Elements[3].Position` is a `ContainerView::get` and two `StructView::property` calls, none of which materialize a sibling. (The rationale for views over forward-only cursors: `PropertyValueEnum` is 96 bytes per node, align 16 — a wire `f32` costs 96 bytes materialized. Buffering one KB-scale object dissolves the cursor restrictions while the file-level sweep keeps the constant-memory guarantee. §14.)
+Because `ValueView` descends to any depth, `Elements[3].Position` is a `ContainerView::get` and two `StructView::property` calls, none of which materialize a sibling. (The rationale for views over forward-only cursors: `PropertyValueEnum` is 96 bytes per node, align 16 — a wire `f32` costs 96 bytes materialized. Buffering one KB-scale object dissolves the cursor restrictions while the file-level sweep keeps the constant-memory guarantee. section 14.)
 
 ## The legacy-numbering latch
 
-Lands at this layer (§8): a kind byte that fails to decode re-walks the already-buffered object in legacy numbering (no I/O), latches the handle for the rest of its life, and reports via `is_legacy()`. A view captures the flag at creation. Mechanically it is the `legacy` argument `Kind::unpack(raw, legacy)` already takes, fed from handle state.
+Lands at this layer (section 8): a kind byte that fails to decode re-walks the already-buffered object in legacy numbering (no I/O), latches the handle for the rest of its life, and reports via `is_legacy()`. A view captures the flag at creation. Mechanically it is the `legacy` argument `Kind::unpack(raw, legacy)` already takes, fed from handle state.
 
 Demoable: a corpus example greps field-level — every property of a chosen shape (e.g. `String` equal to a target, or `Container[ObjectLink]`) across an install — with zero owned values built.
 

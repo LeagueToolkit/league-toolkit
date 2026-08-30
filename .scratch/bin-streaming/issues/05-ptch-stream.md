@@ -4,7 +4,7 @@ title: "Bin streaming: PTCH stream"
 labels: crate:ltk_meta, enhancement, format:bin, area:reading, blocked
 ---
 
-Part of #192 (design: `docs/design/bin-streaming.md` §5). The same treatment for patch bins, including reading the outer header's delete list correctly (`count × u32` entry hashes — fixing the eager reader's historical mis-skip).
+Part of #192 (design: `docs/design/bin-streaming.md` section 5). The same treatment for patch bins, including reading the outer header's delete list correctly (`count × u32` entry hashes — fixing the eager reader's historical mis-skip).
 
 ## Proposed surface
 
