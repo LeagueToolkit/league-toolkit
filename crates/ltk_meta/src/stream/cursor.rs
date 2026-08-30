@@ -4,8 +4,8 @@ use ltk_hash::BinHash;
 
 use crate::{
     property::NoMeta,
-    stream::{BinStream, ObjectEntry},
-    Error,
+    stream::{BinStream, ObjectEntry, ObjectView},
+    BinObject, Error,
 };
 
 /// Streaming cursor over the object table.
@@ -145,5 +145,38 @@ impl<'a, R: io::Read + io::Seek, M: Default> ObjectStream<'a, R, M> {
         let count = self.stream.read_property_count(self.entry.offset + 8)?;
         self.property_count = Some(count);
         Ok(count)
+    }
+
+    /// Buffers the object's declared byte range and returns a zero-copy view over it.
+    ///
+    /// One read into the handle's reused buffer, then everything inside the object —
+    /// iteration, random access, descent to any depth — happens in memory. Nothing decodes
+    /// until it is touched.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSize`] if the object's declared size disagrees with what its property
+    /// counts consume, [`Error::InvalidPropertyTypePrimitive`] if a kind byte decodes under
+    /// neither numbering, or an I/O error from the source.
+    pub fn view(&mut self) -> Result<ObjectView<'_, M>, Error> {
+        let entry = self.entry;
+        ObjectView::new(entry, self.stream.view_object(entry)?)
+    }
+
+    /// Parses the whole object into an eager [`BinObject`].
+    ///
+    /// `read`, not `parse`: it does I/O, and the crate's vocabulary is `from_reader` /
+    /// [`ReadProperty`](crate::traits::ReadProperty). Equivalent to [`ObjectStream::view`] plus
+    /// an owned decode through the layout core, and the right call for an editor, which wants an
+    /// object it owns outright rather than the shared `Arc`
+    /// [`BinStream::cached_object`](crate::stream::BinStream::cached_object) hands out.
+    ///
+    /// # Errors
+    ///
+    /// The same as [`ObjectStream::view`], plus whatever the value model raises for a container
+    /// it refuses: [`Error::InvalidNesting`], [`Error::InvalidKeyType`],
+    /// [`Error::MismatchedContainerTypes`].
+    pub fn read(&mut self) -> Result<BinObject<M>, Error> {
+        self.stream.read_object(self.entry)
     }
 }

@@ -2,10 +2,11 @@ use std::io;
 
 use crate::{
     property::{Kind, NoMeta},
-    traits::{PropertyExt, PropertyValueExt, ReadProperty, ReaderExt, WriteProperty, WriterExt},
+    stream::{layout::Numbering, owned},
+    traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty, WriterExt},
     Error, PropertyValueEnum, ValueSlot,
 };
-use byteorder::{ReadBytesExt, WriteBytesExt, LE};
+use byteorder::{WriteBytesExt, LE};
 use ltk_io_ext::{measure, window_at};
 
 mod item;
@@ -216,30 +217,12 @@ impl<M: Default> ReadProperty for Container<M> {
         reader: &mut R,
         legacy: bool,
     ) -> Result<Self, Error> {
-        let item_kind = reader.read_property_kind(legacy)?;
-        if item_kind.is_container() {
-            return Err(Error::InvalidNesting(item_kind));
-        }
-
-        let size = reader.read_u32::<LE>()?;
-        let (real_size, items) = measure(reader, |reader| {
-            let count = reader.read_u32::<LE>()?;
-            let mut items = Vec::with_capacity(count as _);
-            for _ in 0..count {
-                items.push(item_kind.read(reader, legacy)?);
-            }
-            Ok::<_, Error>(items)
-        })?;
-
-        if size as u64 != real_size {
-            return Err(Error::InvalidSize(size as _, real_size));
-        }
-
-        Ok(Self {
-            item_kind,
-            items,
-            meta: M::default(),
-        })
+        owned::read_from(
+            reader,
+            Kind::Container,
+            Numbering::from_legacy(legacy),
+            owned::read_container,
+        )
     }
 }
 

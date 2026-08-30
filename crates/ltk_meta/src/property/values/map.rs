@@ -2,10 +2,11 @@ use std::{hash::Hash, io};
 
 use crate::{
     property::{Kind, NoMeta},
-    traits::{PropertyExt, PropertyValueExt, ReadProperty, ReaderExt, WriteProperty, WriterExt},
+    stream::{layout::Numbering, owned},
+    traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty, WriterExt},
     Error, PropertyValueEnum, ValueSlot,
 };
-use byteorder::{ReadBytesExt, WriteBytesExt, LE};
+use byteorder::{WriteBytesExt, LE};
 use ltk_io_ext::{measure, window_at};
 
 // FIXME (alan): do with hash here what we do with Eq
@@ -203,41 +204,12 @@ impl<M: Default> ReadProperty for Map<M> {
         reader: &mut R,
         legacy: bool,
     ) -> Result<Self, Error> {
-        let key_kind = reader.read_property_kind(legacy)?;
-        if !key_kind.is_valid_map_key() {
-            return Err(Error::InvalidKeyType(key_kind));
-        }
-
-        let value_kind = reader.read_property_kind(legacy)?;
-        if value_kind.is_container() {
-            return Err(Error::InvalidNesting(value_kind));
-        }
-
-        let size = reader.read_u32::<LE>()?;
-        let (real_size, value) = measure(reader, |reader| {
-            let len = reader.read_u32::<LE>()? as _;
-            let mut entries: Vec<(PropertyValueEnum<M>, PropertyValueEnum<M>)> =
-                Vec::with_capacity(len);
-            for _ in 0..len {
-                entries.push((
-                    key_kind.read(reader, legacy)?,
-                    value_kind.read(reader, legacy)?,
-                ));
-            }
-
-            Ok::<_, Error>(Self {
-                key_kind,
-                value_kind,
-                entries,
-                meta: M::default(),
-            })
-        })?;
-
-        if size as u64 != real_size {
-            return Err(Error::InvalidSize(size as _, real_size));
-        }
-
-        Ok(value)
+        owned::read_from(
+            reader,
+            Kind::Map,
+            Numbering::from_legacy(legacy),
+            owned::read_map,
+        )
     }
 }
 impl<M: Clone> WriteProperty for Map<M> {

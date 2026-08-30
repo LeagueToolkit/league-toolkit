@@ -1,16 +1,22 @@
 use std::{
+    fmt,
     io::{self, Seek as _},
     marker::PhantomData,
+    sync::Arc,
 };
 
 use byteorder::{ReadBytesExt as _, LE};
+use indexmap::IndexMap;
 use ltk_hash::{BinHash, ReadBytesExt as _};
 use ltk_io_ext::ReaderExt as _;
 
 use crate::{
     property::NoMeta,
-    stream::{BinToc, Entries, ObjectEntry, ObjectStream, Objects},
-    BinKind, Error,
+    stream::{
+        layout::{Cursor, Numbering},
+        owned, BinToc, Entries, NoCache, ObjectCache, ObjectEntry, ObjectStream, Objects,
+    },
+    Bin, BinKind, BinObject, Error,
 };
 
 /// A mounted `PROP` stream: the header is parsed, the object table is read on demand.
@@ -36,7 +42,6 @@ use crate::{
 /// }
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-#[derive(Debug)]
 pub struct BinStream<R: io::Read + io::Seek, M = NoMeta> {
     reader: io::BufReader<R>,
     version: u32,
@@ -46,12 +51,26 @@ pub struct BinStream<R: io::Read + io::Seek, M = NoMeta> {
     objects_start: u64,
     /// Grows as sweeps discover rows; complete once it holds every object.
     toc: BinToc,
-    /// The legacy kind-numbering latch. Mounting starts in current numbering; the latch that
-    /// flips this mid-sweep arrives with value parsing, which threads it into
-    /// [`Kind::unpack`](crate::PropertyKind::unpack) as the `legacy` argument.
-    #[expect(dead_code, reason = "read once the value-parsing layer lands")]
-    legacy: bool,
+    /// One object's declared byte range, reused across descents.
+    buffer: Vec<u8>,
+    /// The kind-numbering latch. Mounting starts in the current numbering, and the first
+    /// object whose kind bytes only make sense in the old one flips it for good.
+    numbering: Numbering,
+    cache: Box<dyn ObjectCache<M> + Send>,
     meta: PhantomData<fn() -> M>,
+}
+
+impl<R: io::Read + io::Seek + fmt::Debug, M> fmt::Debug for BinStream<R, M> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("BinStream")
+            .field("reader", &self.reader)
+            .field("version", &self.version)
+            .field("dependencies", &self.dependencies)
+            .field("objects", &self.class_hashes.len())
+            .field("harvested", &self.toc.entries().len())
+            .field("numbering", &self.numbering)
+            .finish_non_exhaustive()
+    }
 }
 
 impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
@@ -111,7 +130,9 @@ impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
             class_hashes,
             objects_start,
             toc: BinToc::default(),
-            legacy: false,
+            buffer: Vec::new(),
+            numbering: Numbering::Current,
+            cache: Box::new(NoCache),
             meta: PhantomData,
         })
     }
@@ -134,6 +155,19 @@ impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
     #[must_use]
     pub fn class_hashes(&self) -> &[BinHash] {
         &self.class_hashes
+    }
+
+    /// Which property-kind numbering the handle is reading under.
+    ///
+    /// Mounting starts at [`Numbering::Current`]. The first object whose kind bytes only
+    /// decode as [`Numbering::Legacy`] latches this for the rest of the handle's life, and
+    /// views created before the flip keep the numbering they were built under.
+    ///
+    /// As with the eager reader's retry, a genuinely desynced file can be reinterpreted as
+    /// legacy rather than reported as broken; this is how to tell that happened.
+    #[must_use]
+    pub fn numbering(&self) -> Numbering {
+        self.numbering
     }
 
     // ── sweeping ────────────────────────────────────────────────────────────
@@ -191,7 +225,68 @@ impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
         }
     }
 
-    // ── teardown ────────────────────────────────────────────────────────────
+    // ── cached lookup ───────────────────────────────────────────────────────
+
+    /// Resolves an object through the installed [`ObjectCache`].
+    ///
+    /// A hit is an [`Arc`] clone with no I/O; a miss parses and inserts. Under the default
+    /// [`NoCache`] every call is a miss, so every call parses.
+    ///
+    /// Only this path consults the cache. The cursors and [`BinStream::object`] never do, so a
+    /// sweep cannot evict what a consumer is holding hot — and an editor that wants exclusive
+    /// ownership of an object takes [`ObjectStream::read`] rather than a shared `Arc`.
+    ///
+    /// # Errors
+    ///
+    /// The same as [`ObjectStream::read`], plus an I/O error from the TOC harvest.
+    pub fn cached_object(
+        &mut self,
+        path_hash: impl Into<BinHash>,
+    ) -> Result<Option<Arc<BinObject<M>>>, Error> {
+        let path_hash = path_hash.into();
+        if let Some(hit) = self.cache.get(path_hash) {
+            return Ok(Some(hit));
+        }
+
+        let object = match self.object(path_hash)? {
+            Some(mut object) => object.read()?,
+            None => return Ok(None),
+        };
+
+        let object = Arc::new(object);
+        self.cache.put(path_hash, Arc::clone(&object));
+        Ok(Some(object))
+    }
+
+    /// Installs a cache provider, dropping whatever the previous one held.
+    ///
+    /// The default is [`NoCache`].
+    pub fn set_cache(&mut self, cache: Box<dyn ObjectCache<M> + Send>) {
+        self.cache = cache;
+    }
+
+    // ── upgrade / teardown ──────────────────────────────────────────────────
+
+    /// Parses the whole file into an eager [`Bin`], consuming the handle.
+    ///
+    /// Always processes the object table from the top, whatever the cursors did before it.
+    /// This is what [`Bin::from_reader`] is: the stream is the crate's only parser, so the two
+    /// can never drift.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidSize`] if an object's declared size disagrees with what its property
+    /// counts consumed, whatever the value model raises for a container it refuses
+    /// ([`Error::InvalidNesting`], [`Error::InvalidKeyType`],
+    /// [`Error::MismatchedContainerTypes`]), or an I/O error from the source.
+    pub fn into_bin(mut self) -> Result<Bin<M>, Error> {
+        let objects = self.drain_objects()?;
+        Ok(Bin {
+            version: self.version,
+            objects,
+            dependencies: self.dependencies,
+        })
+    }
 
     /// Returns the underlying source, discarding the internal buffer.
     #[must_use]
@@ -199,11 +294,122 @@ impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
         self.reader.into_inner()
     }
 
+    /// Reads every object in the table, from the top.
+    ///
+    /// A latch onto the legacy numbering part-way through invalidates everything read so far,
+    /// so the drain starts over — which reproduces the eager reader's whole-table retry. The
+    /// latch only ever flips once, so the restart happens at most once.
+    fn drain_objects(&mut self) -> Result<IndexMap<BinHash, BinObject<M>>, Error> {
+        let mut objects = IndexMap::with_capacity(self.class_hashes.len());
+
+        let mut index = 0;
+        while index < self.class_hashes.len() {
+            let entry = match self.toc_row(index) {
+                Some(&entry) => entry,
+                None => self.harvest(index)?,
+            };
+
+            let before = self.numbering;
+            let object = self.read_object(entry)?;
+            if self.numbering != before {
+                objects.clear();
+                index = 0;
+                continue;
+            }
+
+            objects.insert(object.path_hash, object);
+            index += 1;
+        }
+
+        Ok(objects)
+    }
+
     // ── internals shared with the cursors ───────────────────────────────────
 
     /// The TOC row at table position `index`, if a sweep has reached it.
     pub(crate) fn toc_row(&self, index: usize) -> Option<&ObjectEntry> {
         self.toc.entries().get(index)
+    }
+
+    /// Buffers `entry` and walks it, returning a cursor over the bytes it proved.
+    ///
+    /// The walk is what proves the object before anything reads inside it: it settles the
+    /// numbering latch and raises [`Error::InvalidSize`] for a declared size the property
+    /// counts disagree with. A view handed out from here therefore never has to check a size
+    /// of its own.
+    pub(crate) fn view_object(&mut self, entry: ObjectEntry) -> Result<Cursor<'_>, Error> {
+        self.load_object(entry)?;
+        self.settle(entry.path_hash, |mut cur| cur.walk_object())?;
+        Ok(self.buffered())
+    }
+
+    /// Buffers `entry` and decodes it.
+    ///
+    /// No separate walk: the decode is count-driven over the same sized regions, so it raises
+    /// everything the walk would and the eager path crosses each object's bytes once.
+    pub(crate) fn read_object(&mut self, entry: ObjectEntry) -> Result<BinObject<M>, Error> {
+        self.load_object(entry)?;
+        self.settle(entry.path_hash, |mut cur| {
+            owned::read_object(&mut cur, entry.class_hash)
+        })
+    }
+
+    /// Reads `entry`'s declared byte range into the reused buffer.
+    fn load_object(&mut self, entry: ObjectEntry) -> Result<(), Error> {
+        let range = entry.byte_range();
+        self.seek_to(range.start)?;
+
+        // The declared size is the file's word, not a fact, so the buffer grows to it a chunk
+        // at a time rather than reserving it up front: a lying size costs a short read, not a
+        // gigabyte of zeroed memory.
+        let want = (range.end - range.start) as usize;
+        self.buffer.clear();
+        owned::fill_to(&mut self.reader, &mut self.buffer, want)?;
+        match self.buffer.len() < want {
+            true => Err(Error::IOError(io::Error::from(
+                io::ErrorKind::UnexpectedEof,
+            ))),
+            false => Ok(()),
+        }
+    }
+
+    /// A cursor over the buffered object, under the handle's numbering.
+    fn buffered(&self) -> Cursor<'_> {
+        Cursor::new(&self.buffer, self.numbering)
+    }
+
+    /// Runs `attempt` over the buffered object, latching onto the legacy numbering if that is
+    /// the only one the bytes make sense under.
+    ///
+    /// Only a kind byte can mean "this file uses the old numbering", and only if the handle
+    /// has not already settled the question. The retry costs no I/O - the bytes are already in
+    /// memory - and the latch only ever flips one way, so this asks at most once per handle.
+    fn settle<T>(
+        &mut self,
+        path_hash: BinHash,
+        attempt: impl Fn(Cursor<'_>) -> Result<T, Error>,
+    ) -> Result<T, Error> {
+        let error = match attempt(self.buffered()) {
+            Ok(value) => return Ok(value),
+            Err(error @ Error::InvalidPropertyTypePrimitive(_)) if !self.numbering.is_legacy() => {
+                error
+            }
+            Err(error) => return Err(error),
+        };
+
+        match attempt(Cursor::new(&self.buffer, Numbering::Legacy)) {
+            Ok(value) => {
+                log::warn!(
+                    "object {path_hash:08x}: invalid property kind, reading the rest of this \
+                     bin with the legacy numbering"
+                );
+                self.numbering = Numbering::Legacy;
+                Ok(value)
+            }
+            // The legacy numbering does not explain it either, so the original complaint is
+            // the honest one.
+            Err(_) => Err(error),
+        }
     }
 
     /// Reads the 8-byte object header (`size`, `path_hash`) of the first row the TOC does

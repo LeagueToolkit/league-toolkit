@@ -1,6 +1,6 @@
 use crate::{
     property::{Kind, NoMeta},
-    traits::{PropertyExt, ReadProperty as _, WriteProperty as _},
+    traits::{PropertyExt, WriteProperty as _},
     Error,
 };
 use std::io;
@@ -55,16 +55,30 @@ macro_rules! create_enum {
 
 
         impl<M: Default> PropertyValueEnum<M> {
+            /// Reads one value of `kind`, leaving `reader` immediately past it.
+            ///
+            /// Decoded through the same layout core the stream reads with, so this and a
+            /// [`ValueView`](crate::stream::ValueView) over the same bytes can never
+            /// disagree.
+            ///
+            /// # Errors
+            ///
+            /// [`Error::InvalidSize`] if a declared size disagrees with what the counts
+            /// consumed, [`Error::InvalidNesting`] / [`Error::InvalidKeyType`] for a container
+            /// the value model refuses, [`Error::InvalidPropertyTypePrimitive`] for a kind byte
+            /// that does not decode, [`Error::Utf8Error`] for a string that is not UTF-8, or an
+            /// I/O error from the source.
             pub fn from_reader<R: io::Read + std::io::Seek + ?Sized>(
                 reader: &mut R,
                 kind: Kind,
                 legacy: bool,
             ) -> Result<Self, Error> {
-                Ok(match kind {
-                    $(Kind::$variant => values::$variant::from_reader(reader, legacy)?.into()),*
-                })
+                crate::stream::owned::read_value_from(
+                    reader,
+                    kind,
+                    crate::stream::layout::Numbering::from_legacy(legacy),
+                )
             }
-
         }
         impl<M: Clone> PropertyValueEnum<M> {
             pub fn to_writer<W: io::Write + io::Seek + ?Sized>(

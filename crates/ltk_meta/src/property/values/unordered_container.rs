@@ -1,5 +1,6 @@
 use crate::{
     property::{Kind, NoMeta},
+    stream::{layout::Numbering, owned},
     traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty},
 };
 
@@ -42,7 +43,12 @@ impl<M: Default> ReadProperty for UnorderedContainer<M> {
         reader: &mut R,
         legacy: bool,
     ) -> Result<Self, crate::Error> {
-        Ok(Self(Container::<M>::from_reader(reader, legacy)?))
+        owned::read_from(
+            reader,
+            Kind::UnorderedContainer,
+            Numbering::from_legacy(legacy),
+            |cur| owned::read_container(cur).map(Self),
+        )
     }
 }
 
