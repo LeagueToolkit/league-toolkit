@@ -19,6 +19,15 @@ pub enum NodeRef<'a> {
     Value(&'a Value),
 }
 
+/// A detailed reference to a node in an [`Ast`], down to the field level.
+#[derive(Debug, Clone, Copy)]
+pub enum SubNodeRef<'a> {
+    RootEntry(&'a RootEntry, AstRootEntryDetail),
+    Object(&'a Object, AstObjectDetail),
+    Property(&'a Property, AstPropertyDetail),
+    Value(&'a Value),
+}
+
 impl<'a> NodeRef<'a> {
     pub fn span(&self) -> Span {
         match self {
@@ -33,56 +42,6 @@ impl<'a> NodeRef<'a> {
         }
     }
 }
-
-/// A detailed reference to a node in an [`Ast`], down to the field level.
-#[derive(Debug, Clone, Copy)]
-pub enum SubNodeRef<'a> {
-    RootEntry(&'a RootEntry, AstRootEntryDetail),
-    Object(&'a Object, AstObjectDetail),
-    Property(&'a Property, AstPropertyDetail),
-    Value(&'a Value),
-}
-
-impl NodeExt for NodeRef<'_> {
-    fn kind(&self) -> NodeKind {
-        match self {
-            NodeRef::RootEntry(_) => NodeKind::RootEntry,
-            NodeRef::Object(_) => NodeKind::Object,
-            NodeRef::Property(_) => NodeKind::Property,
-            NodeRef::Value(_) => NodeKind::Value,
-        }
-    }
-
-    fn class_hash(&self) -> Option<HashedLiteral<BinHash>> {
-        match self {
-            NodeRef::RootEntry(o) => Some(o.object.class_hash),
-            NodeRef::Object(s) => Some(s.class_hash),
-            NodeRef::Property(_) | NodeRef::Value(_) => None,
-        }
-    }
-}
-
-impl NodeExt for SubNodeRef<'_> {
-    #[inline(always)]
-    fn kind(&self) -> NodeKind {
-        match self {
-            SubNodeRef::RootEntry(_, _) => NodeKind::RootEntry,
-            SubNodeRef::Object(_, _) => NodeKind::Object,
-            SubNodeRef::Property(_, _) => NodeKind::Property,
-            SubNodeRef::Value(_) => NodeKind::Value,
-        }
-    }
-
-    #[inline(always)]
-    fn class_hash(&self) -> Option<HashedLiteral<BinHash>> {
-        match self {
-            Self::RootEntry(o, _) => Some(o.object.class_hash),
-            Self::Object(s, _) => Some(s.class_hash),
-            Self::Property(_, _) | Self::Value(_) => None,
-        }
-    }
-}
-
 impl<'a> SubNodeRef<'a> {
     #[inline(always)]
     #[must_use]
@@ -124,6 +83,46 @@ impl<'a> SubNodeRef<'a> {
                 AstPropertyDetail::TypeExpr => v.type_expr.span,
             },
             SubNodeRef::Value(v) => v.span(),
+        }
+    }
+}
+
+impl NodeExt for NodeRef<'_> {
+    fn kind(&self) -> NodeKind {
+        match self {
+            NodeRef::RootEntry(_) => NodeKind::RootEntry,
+            NodeRef::Object(_) => NodeKind::Object,
+            NodeRef::Property(_) => NodeKind::Property,
+            NodeRef::Value(_) => NodeKind::Value,
+        }
+    }
+
+    fn class_hash(&self) -> Option<HashedLiteral<BinHash>> {
+        match self {
+            NodeRef::RootEntry(o) => Some(o.object.class_hash),
+            NodeRef::Object(s) => Some(s.class_hash),
+            NodeRef::Property(_) | NodeRef::Value(_) => None,
+        }
+    }
+}
+
+impl NodeExt for SubNodeRef<'_> {
+    #[inline(always)]
+    fn kind(&self) -> NodeKind {
+        match self {
+            SubNodeRef::RootEntry(_, _) => NodeKind::RootEntry,
+            SubNodeRef::Object(_, _) => NodeKind::Object,
+            SubNodeRef::Property(_, _) => NodeKind::Property,
+            SubNodeRef::Value(_) => NodeKind::Value,
+        }
+    }
+
+    #[inline(always)]
+    fn class_hash(&self) -> Option<HashedLiteral<BinHash>> {
+        match self {
+            Self::RootEntry(o, _) => Some(o.object.class_hash),
+            Self::Object(s, _) => Some(s.class_hash),
+            Self::Property(_, _) | Self::Value(_) => None,
         }
     }
 }
