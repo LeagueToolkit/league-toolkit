@@ -12,12 +12,15 @@ Two kinds of file share the `.bin` extension and this crate reads both:
 | Item | What it is |
 | --- | --- |
 | `Bin`, `BinObject` | The object tree: read (`from_reader`), build (`builder()`), edit, write (`to_writer`) |
-| `BinStream`, `BinToc`, `ObjectEntry` | Streaming access: mount a file, sweep object descriptors, random access by path hash - without parsing values |
+| `BinStream`, `BinToc`, `ObjectEntry`, `BatchObjects` | Streaming access: mount a file, sweep object descriptors, random access by path hash, and whole batches of them at once - without parsing values |
 | `stream::ObjectView`, `PropertyView`, `ValueView` | Zero-copy views over one buffered object: iterate, look up and descend to any depth without materializing anything |
 | `stream::ObjectCache`, `NoCache`, `LruObjectCache` | The opt-in lookup cache `BinStream::cached_object` resolves through |
+| `stream::Numbering` | Which property-kind numbering a file is being read under, and whether the legacy latch has flipped |
 | `property::values`, `PropertyValueEnum`, `PropertyKind` | One typed value struct per wire kind (`I32`, `String`, `Vector3`, `Container`, `Map`, `Struct`, `Embedded`, `Optional`, …) and the enum over them |
+| `ValueSlot` | A mutable handle on one value, carrying the kind its holder pins it to - what `resolve_mut` hands back |
 | `concrete` | The same types with the metadata parameter pinned, so nothing generic needs spelling - start here |
-| `path::PropertyPath` | Property addressing (`Position.Anchors.Anchor`, `Elements[3]`, `Lookup{"weapon"}`), with `Bin::resolve` and `Bin::patch` |
+| `path::PropertyPath` | Property addressing (`Position.Anchors.Anchor`, `Elements[3]`, `Lookup{"weapon"}`), with `Bin::resolve`, `resolve_mut` and `Bin::patch` |
+| `path::ValueShape` | What a value is - kind, item kind, map key kind, embed class - as the resolver's type rule and the streaming header peek both speak it |
 | `BinOverride`, `ApplyReport` | PTCH files: read, build, `check` against / `apply` onto a base `Bin` |
 | `BinFile`, `BinKind` | Reading a `.bin` when you don't know which kind it is |
 | `traits` | `ReadProperty` / `WriteProperty` / `PropertyExt` (serialized size), for generic code over values |
@@ -109,7 +112,64 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-`ObjectStream::read()` gives the owned `BinObject` instead, and `BinStream::cached_object()` resolves through an installed `ObjectCache` (`NoCache` by default, `LruObjectCache` shipped) and hands back an `Arc`.
+`ObjectStream::read()` gives the owned `BinObject` instead, and `BinStream::cached_object()` resolves through an installed `ObjectCache` (`NoCache` by default, `LruObjectCache` shipped) and hands back an `Arc`. `ObjectStream::byte_range()` gives the object's extent in the file, for copying one out verbatim.
+
+### Asking what a value is without reading it
+
+A complex value declares its shape in the few header bytes ahead of its body, so a `PropertyView` can say what it holds - and how many - at skip cost, without descending. `shape()` returns the same `ValueShape` the resolver's type rule uses, so "is this a `Container[ObjectLink]`?" is one comparison rather than a parse.
+
+```rust
+use std::fs::File;
+use ltk_meta::{concrete::BinStream, PropertyKind};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut stream = BinStream::mount(File::open("data.bin")?)?;
+    let mut objects = stream.objects();
+
+    while let Some(mut object) = objects.next()? {
+        let view = object.view()?;
+
+        for property in view.properties() {
+            let property = property?;
+            let shape = property.shape()?;
+
+            // Every list of object links, and how long each one is.
+            if shape.kind == PropertyKind::Container && shape.item_kind == Some(PropertyKind::ObjectLink) {
+                // e.g. `1a2b3c4d: Container[ObjectLink] of Some(12)`
+                println!("{:08x}: {shape} of {:?}", property.name_hash(), property.item_count()?);
+            }
+        }
+    }
+    Ok(())
+}
+```
+
+`item_count()` answers for containers and maps and is `None` for everything else, an option included - whether an option holds anything is `OptionalView::is_some`.
+
+### Legacy kind numbering
+
+Bins written before `WadChunkLink` existed number the complex kinds one lower. A handle mounts as `Numbering::Current` and stays there until it meets a kind byte that only decodes as `Numbering::Legacy`: that object is re-walked from the bytes already in memory, and the handle is latched for the rest of its life. Nothing is re-read, and a genuinely desynced file can be reinterpreted this way rather than reported as broken - so `numbering()` is how to tell it happened.
+
+```rust
+use std::fs::File;
+use ltk_meta::{concrete::BinStream, stream::Numbering};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut stream = BinStream::mount(File::open("data.bin")?)?;
+    let mut objects = stream.objects();
+
+    while let Some(mut object) = objects.next()? {
+        object.view()?;
+    }
+
+    if stream.numbering() == Numbering::Legacy {
+        println!("this file was written before WadChunkLink existed");
+    }
+    Ok(())
+}
+```
+
+A view carries the numbering it was built under, so one handed out before the flip keeps reading the way it started.
 
 ### Opening many objects at once
 
@@ -213,6 +273,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &anchor,
         values::Vector2::new(glam::Vec2::new(0.0, 1.0)).into(),
     )?;
+    Ok(())
+}
+```
+
+`resolve_mut` is the unchecked way in: it hands back a `ValueSlot` on whatever is there and applies no type rule, where `patch` reproduces the client's. The slot carries the kind its holder pins the value to - a container declares its item kind once, ahead of the values, so `set` refuses a value of another kind there. Editing in place through `as_mut` needs no check at all, because it cannot change the kind.
+
+```rust
+use std::fs::File;
+use ltk_meta::{path::PropertyPath, property::ValueMut, Bin};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut bin = Bin::from_reader(&mut File::open("uibase.bin")?)?;
+    let mut slot = bin.resolve_mut(0x4a47c414_u32, &PropertyPath::new("Elements[0]")?)?;
+
+    println!("pinned to {:?}", slot.pinned_kind()); // whatever the list declared its items to be
+
+    if let ValueMut::I32(count) = slot.as_mut() {
+        count.value += 1;
+    }
     Ok(())
 }
 ```
