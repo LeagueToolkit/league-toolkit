@@ -143,7 +143,10 @@ impl Value {
                 entries,
                 span,
             } => {
-                let mut map = values::Map::empty(*key_kind, *value_kind);
+                let mut map = assert(values::Map::empty(*key_kind, *value_kind), || {
+                    values::Map::empty(PropertyKind::None, PropertyKind::None)
+                        .expect("None is always a valid map key and value kind")
+                });
                 for (k, v) in entries {
                     if let Some((k, v)) = k
                         .to_bin_value()
@@ -164,7 +167,7 @@ impl Value {
                 let item_kind = (*item_kind)?;
                 let optional = assert(
                     values::Optional::new_with_meta(item_kind, inner, *span),
-                    || values::Optional::empty(item_kind).unwrap_or_else(|| none_optional(*span)),
+                    || values::Optional::empty(item_kind).unwrap_or_else(|_| none_optional(*span)),
                 );
                 P::Optional(optional)
             }
