@@ -12,7 +12,7 @@ Part of #192 (design: `docs/design/bin-streaming.md` section 4.2, section 4.4, s
 impl<'a, R: io::Read + io::Seek, M: Default> ObjectStream<'a, R, M> {
     /// Parses the whole object into an eager [`BinObject`]. (`read`, not `parse`:
     /// it does I/O, and the crate's vocabulary is `from_reader` / `ReadProperty`.)
-    /// Equivalent to `view()` plus an owned decode through the wire core.
+    /// Equivalent to `view()` plus an owned decode through the layout core.
     pub fn read(&mut self) -> Result<BinObject<M>, Error>;
 }
 
@@ -42,7 +42,7 @@ pub fn from_reader<R: io::Read + io::Seek + ?Sized>(reader: &mut R) -> Result<Se
 }
 ```
 
-The existing `ReadProperty` impls are rebuilt over the wire core's `&[u8]` codecs (contract phase of the refactor started in #207); the top-level loops exist once, in the stream. Their inline size checks (`Container::from_reader` measuring its own body) move into the walk layer, which raises the same `Error::InvalidSize` — one check, one place, and the eager API's behavior is unchanged. The homogeneity checks (`InvalidNesting`, `InvalidKeyType`, `MismatchedContainerTypes`) stay in the value model: the stream parses through the same checked constructors, so there is never a second, unchecked way to build a container.
+The existing `ReadProperty` impls are rebuilt over the layout core's `&[u8]` codecs (contract phase of the refactor started in #207); the top-level loops exist once, in the stream. Their inline size checks (`Container::from_reader` measuring its own body) move into the walk layer, which raises the same `Error::InvalidSize` — one check, one place, and the eager API's behavior is unchanged. The homogeneity checks (`InvalidNesting`, `InvalidKeyType`, `MismatchedContainerTypes`) stay in the value model: the stream parses through the same checked constructors, so there is never a second, unchecked way to build a container.
 
 ## The cache
 
@@ -61,11 +61,16 @@ pub trait ObjectCache<M> {
 pub struct NoCache;
 
 /// Least-recently-used cache bounded by object count.
+///
+/// Carries the metadata parameter because it holds `Arc<BinObject<M>>`.
 #[derive(Debug)]
-pub struct LruObjectCache { /* capacity: NonZeroUsize, … */ }
+pub struct LruObjectCache<M = NoMeta> { /* capacity: NonZeroUsize, … */ }
 
-impl LruObjectCache {
+impl<M> LruObjectCache<M> {
     pub fn new(capacity: NonZeroUsize) -> Self;
+    pub fn capacity(&self) -> NonZeroUsize;
+    pub fn len(&self) -> usize;
+    pub fn is_empty(&self) -> bool;
 }
 ```
 
@@ -75,7 +80,7 @@ impl LruObjectCache {
 
 Demoable: the full existing test suite passes with `from_reader` running through the stream, plus an install-wide equivalence sweep.
 
-Blocked by #207. Can run in parallel with #208.
+Can run in parallel with #208.
 
 - [ ] All existing `ltk_meta` snapshot and round-trip tests pass unmodified
 - [ ] Corpus sweep: `into_bin()` equals the pre-change eager parse for every PROP chunk in an install
@@ -83,3 +88,4 @@ Blocked by #207. Can run in parallel with #208.
 - [ ] Homogeneity errors (nesting, key type, mismatched container types) still raise from the same inputs
 - [ ] `cached_object` hit returns without I/O; eviction never invalidates a held `Arc`; handle stays `Send` with a cache installed
 - [ ] Under `NoCache`, `cached_object` parses per call (documented, tested)
+- [ ] `cargo fmt`, `clippy --all-targets`, `doc --no-deps` clean

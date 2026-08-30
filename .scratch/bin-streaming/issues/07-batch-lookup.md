@@ -49,8 +49,6 @@ The decisions, from the design doc:
 
 This earns its keep once `view()`/`read()` (#208, #209) exist — descriptors alone are answered by the TOC without seeking; it is batch *body* reads where the monotonic schedule pays.
 
-Blocked by #207.
-
 - [ ] A batch on a cold handle resolves during one forward scan that stops at the last hit (attested with a read/seek-counting wrapper)
 - [ ] A batch on a warm handle visits entries in offset order, forward seeks only
 - [ ] `missing()` is exact after exhaustion; duplicate request hashes resolve once
