@@ -14,7 +14,8 @@ use crate::{
     property::NoMeta,
     stream::{
         layout::{Cursor, Numbering},
-        owned, BinToc, Entries, NoCache, ObjectCache, ObjectEntry, ObjectStream, Objects,
+        owned, BatchObjects, BinToc, Entries, NoCache, ObjectCache, ObjectEntry, ObjectStream,
+        Objects,
     },
     Bin, BinKind, BinObject, Error,
 };
@@ -225,6 +226,40 @@ impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
         }
     }
 
+    /// Opens the objects with the given path hashes, visiting them in file order.
+    ///
+    /// Taking the whole request up front is what lets the reads be scheduled. Before the TOC
+    /// exists the requests resolve during its one forward scan of the object table, which stops
+    /// as soon as every requested hash is found — a request for objects near the front of a
+    /// large bin never reads the rest of the table. With the TOC built, the requested entries
+    /// are visited in offset order, so every seek is forward. Duplicate hashes resolve once.
+    ///
+    /// Yield order is file order, not request order: hash order has no relationship to where
+    /// objects sit in the file, so promising request order would put the random seeks back.
+    /// A caller that needs its own order collects and reorders — it has the hashes.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::fs::File;
+    /// use ltk_meta::concrete::BinStream;
+    ///
+    /// let mut stream = BinStream::mount(File::open("data.bin")?)?;
+    /// let mut batch = stream.objects_batch([0x1111_1111_u32, 0x2222_2222]);
+    ///
+    /// while let Some(mut object) = batch.next()? {
+    ///     println!("{:08x}: {} properties", object.path_hash(), object.property_count()?);
+    /// }
+    /// println!("not in this bin: {:?}", batch.missing());
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn objects_batch(
+        &mut self,
+        hashes: impl IntoIterator<Item = impl Into<BinHash>>,
+    ) -> BatchObjects<'_, R, M> {
+        BatchObjects::new(self, hashes)
+    }
+
     // ── cached lookup ───────────────────────────────────────────────────────
 
     /// Resolves an object through the installed [`ObjectCache`].
@@ -329,6 +364,16 @@ impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
     /// The TOC row at table position `index`, if a sweep has reached it.
     pub(crate) fn toc_row(&self, index: usize) -> Option<&ObjectEntry> {
         self.toc.entries().get(index)
+    }
+
+    /// The TOC row for `path_hash`, if a sweep has reached it.
+    pub(crate) fn toc_entry(&self, path_hash: BinHash) -> Option<&ObjectEntry> {
+        self.toc.entry(path_hash)
+    }
+
+    /// Whether every object in the table has a TOC row.
+    pub(crate) fn is_toc_complete(&self) -> bool {
+        self.toc.entries().len() == self.class_hashes.len()
     }
 
     /// Buffers `entry` and walks it, returning a cursor over the bytes it proved.

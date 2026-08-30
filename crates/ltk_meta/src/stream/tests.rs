@@ -15,7 +15,7 @@ use crate::{
     concrete::values,
     path::ValueShape,
     property::values::{Embedded, UnorderedContainer},
-    stream::{LruObjectCache, Numbering, ValueView},
+    stream::{layout::Numbering, LruObjectCache, ValueView},
     traits::PropertyExt as _,
     Bin, BinKind, BinObject, Error, PropertyKind, PropertyValueEnum,
 };
@@ -883,4 +883,135 @@ fn the_default_cache_parses_on_every_call() {
 fn a_handle_with_a_cache_installed_is_still_send() {
     fn assert_send<T: Send>() {}
     assert_send::<BinStream<io::Cursor<Vec<u8>>>>();
+}
+
+// =============================================================================
+// Batch lookup
+// =============================================================================
+
+/// A five-object bin, and its path hashes in file order.
+fn five_object_bin() -> (Vec<BinHash>, Vec<u8>) {
+    let bin = Bin::new(
+        (0..5u32).map(|index| {
+            BinObject::builder(0x4444_0000u32 + index, 0xDDDD_0000u32 + index)
+                .property(0x0001u32, values::U32::new(index))
+                .build()
+        }),
+        std::iter::empty::<&str>(),
+    );
+
+    let mut cursor = io::Cursor::new(Vec::new());
+    bin.to_writer(&mut cursor).expect("the bin writes");
+    (bin.objects.keys().copied().collect(), cursor.into_inner())
+}
+
+#[test]
+fn a_cold_batch_scans_once_and_stops_at_the_last_hit() {
+    let (hashes, bytes) = five_object_bin();
+
+    let mut stream = BinStream::mount(io::Cursor::new(&bytes)).expect("the stream mounts");
+    let mut batch = stream.objects_batch([hashes[1], hashes[0]]);
+
+    let mut opened = Vec::new();
+    while let Some(object) = batch.next().expect("the scan advances") {
+        opened.push(object.path_hash());
+    }
+    assert!(batch.missing().is_empty());
+
+    // File order, not request order.
+    assert_eq!(opened, [hashes[0], hashes[1]]);
+
+    // The scan stopped at the last hit: the rows past it were never harvested.
+    assert!(!stream.is_toc_complete());
+    assert!(stream.toc_row(2).is_none());
+}
+
+#[test]
+fn a_warm_batch_visits_the_requested_rows_in_offset_order() {
+    let (hashes, bytes) = five_object_bin();
+
+    let mut stream = BinStream::mount(io::Cursor::new(&bytes)).expect("the stream mounts");
+    stream.toc().expect("the TOC builds");
+
+    // Requested back to front, with a duplicate and an absent hash mixed in.
+    let mut batch = stream.objects_batch([
+        hashes[4],
+        hashes[2],
+        BinHash(0xDEAD_BEEF),
+        hashes[4],
+        hashes[0],
+    ]);
+
+    let mut offsets = Vec::new();
+    let mut opened = Vec::new();
+    while let Some(object) = batch.next().expect("the cursor advances") {
+        offsets.push(object.entry().offset);
+        opened.push(object.path_hash());
+    }
+
+    assert_eq!(opened, [hashes[0], hashes[2], hashes[4]], "not file order");
+    assert!(
+        offsets.windows(2).all(|pair| pair[0] < pair[1]),
+        "the cursor seeked backwards: {offsets:?}"
+    );
+    assert_eq!(batch.missing(), [BinHash(0xDEAD_BEEF)]);
+}
+
+#[test]
+fn a_batch_reports_what_the_table_does_not_hold() {
+    let (hashes, bytes) = five_object_bin();
+
+    let mut stream = BinStream::mount(io::Cursor::new(&bytes)).expect("the stream mounts");
+    let mut batch = stream.objects_batch([0x1u32, 0x2u32]);
+
+    assert!(
+        batch.missing().is_empty(),
+        "a scan rules nothing out before it has run"
+    );
+    assert!(batch.next().expect("the scan runs").is_none());
+    assert_eq!(batch.missing(), [BinHash(1), BinHash(2)]);
+
+    // An empty request finds nothing, misses nothing, and reads nothing.
+    let harvested = stream.toc_row(0).is_some();
+    let mut batch = stream.objects_batch(Vec::<BinHash>::new());
+    assert!(batch.next().expect("the scan runs").is_none());
+    assert!(batch.missing().is_empty());
+    assert_eq!(
+        stream.toc_row(0).is_some(),
+        harvested,
+        "an empty request swept the table"
+    );
+
+    let mut batch = stream.objects_batch(hashes.clone());
+    let mut seen = 0;
+    while batch.next().expect("the cursor advances").is_some() {
+        seen += 1;
+    }
+    assert_eq!(seen, hashes.len());
+}
+
+#[test]
+fn a_batch_opens_the_same_objects_as_per_hash_lookups() {
+    let (hashes, bytes) = five_object_bin();
+
+    let mut stream = BinStream::mount(io::Cursor::new(&bytes)).expect("the stream mounts");
+    let one_by_one: Vec<_> = hashes
+        .iter()
+        .map(|&hash| {
+            stream
+                .object(hash)
+                .expect("the TOC builds")
+                .expect("the object exists")
+                .read()
+                .expect("the object reads")
+        })
+        .collect();
+
+    let mut batched = Vec::new();
+    let mut batch = stream.objects_batch(hashes.iter().rev().copied());
+    while let Some(mut object) = batch.next().expect("the cursor advances") {
+        batched.push(object.read().expect("the object reads"));
+    }
+
+    assert_eq!(batched, one_by_one);
 }

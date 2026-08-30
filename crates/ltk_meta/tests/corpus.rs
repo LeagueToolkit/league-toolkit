@@ -282,6 +282,7 @@ struct StreamCounts {
     objects: usize,
     properties: usize,
     viewed: usize,
+    batched: usize,
     legacy_chunks: usize,
 }
 
@@ -299,6 +300,7 @@ impl fmt::Display for StreamCounts {
             "{} properties viewed, shaped and decoded against the eager parse",
             self.viewed
         )?;
+        writeln!(f, "{} objects opened through a batch", self.batched)?;
         write!(
             f,
             "{} chunks latched onto the legacy kind numbering",
@@ -449,6 +451,39 @@ fn check_stream_parity(wad_path: &Path, data: &[u8], counts: &mut StreamCounts) 
     if stream.numbering().is_legacy() {
         counts.legacy_chunks += 1;
     }
+
+    // A batch opens the same objects as the per-hash lookups, in file order.
+    let sample: Vec<BinHash> = eager.objects.keys().rev().take(8).copied().collect();
+    let one_by_one: Vec<BinObject> = sample
+        .iter()
+        .map(|&hash| {
+            stream
+                .object(hash)
+                .unwrap_or_else(|e| panic!("{}: object lookup failed: {e}", context()))
+                .unwrap_or_else(|| panic!("{}: {hash:08x} is not in the TOC", context()))
+                .read()
+                .unwrap_or_else(|e| panic!("{}: {hash:08x} did not read: {e}", context()))
+        })
+        .collect();
+
+    let mut in_file_order: Vec<BinObject> = Vec::with_capacity(sample.len());
+    let mut batch = stream.objects_batch(sample.iter().copied());
+    while let Some(mut object) = batch
+        .next()
+        .unwrap_or_else(|e| panic!("{}: the batch failed: {e}", context()))
+    {
+        in_file_order.push(
+            object
+                .read()
+                .unwrap_or_else(|e| panic!("{}: a batched object did not read: {e}", context())),
+        );
+    }
+    assert!(batch.missing().is_empty(), "{}", context());
+
+    let mut expected = one_by_one;
+    expected.sort_by_key(|object| eager.objects.get_index_of(&object.path_hash));
+    assert_eq!(in_file_order, expected, "{}", context());
+    counts.batched += in_file_order.len();
 
     counts.prop_chunks += 1;
     counts.objects += entries.len();

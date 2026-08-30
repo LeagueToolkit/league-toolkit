@@ -111,6 +111,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 `ObjectStream::read()` gives the owned `BinObject` instead, and `BinStream::cached_object()` resolves through an installed `ObjectCache` (`NoCache` by default, `LruObjectCache` shipped) and hands back an `Arc`.
 
+### Opening many objects at once
+
+`object(hash)` answers one question per seek. `objects_batch` takes the whole request up front, so a cold handle resolves it during one forward scan that stops at the last hit, and a warm one visits the rows in offset order. Yield order is file order; `missing()` reports the hashes the file does not hold.
+
+```rust
+use std::fs::File;
+use ltk_meta::concrete::BinStream;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut stream = BinStream::mount(File::open("data.bin")?)?;
+    let mut batch = stream.objects_batch([0x4a47c414u32, 0x1a2b3c4du32]);
+
+    while let Some(mut object) = batch.next()? {
+        println!("{:08x}: {} properties", object.path_hash(), object.property_count()?);
+    }
+    println!("not in this bin: {:?}", batch.missing());
+    Ok(())
+}
+```
+
 ## Creating one programmatically
 
 The `concrete` module pins the metadata parameter, which is what you want unless you are attaching per-node metadata of your own:

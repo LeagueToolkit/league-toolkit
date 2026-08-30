@@ -225,8 +225,8 @@ pub use file::{BinFile, BinKind};
 
 pub mod stream;
 pub use stream::{
-    BinStream, BinToc, Entries, Numbering, ObjectEntry, ObjectStream, ObjectView, Objects,
-    PropertyView, ValueView,
+    BatchObjects, BinStream, BinToc, Entries, Numbering, ObjectEntry, ObjectStream, ObjectView,
+    Objects, PropertyView, ValueView,
 };
 
 mod error;

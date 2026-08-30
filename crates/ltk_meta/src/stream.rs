@@ -9,7 +9,8 @@
 //! - [`BinStream::entries`] sweeps the object table, yielding one [`ObjectEntry`] descriptor
 //!   per object and skipping every body by its size field.
 //! - [`BinStream::toc`] caches the sweep as a [`BinToc`], so random access by path hash
-//!   ([`BinStream::object`]) costs one harvest at most.
+//!   ([`BinStream::object`]) costs one harvest at most, and
+//!   [`BinStream::objects_batch`] resolves a whole set of hashes on one forward schedule.
 //! - [`ObjectStream::view`] buffers one object's declared byte range and views it zero-copy:
 //!   [`ObjectView`] iterates and looks up properties, and [`ValueView`] descends into a value
 //!   to any depth without materializing anything.
@@ -36,6 +37,9 @@
 //! [`Bin::from_reader`](crate::Bin::from_reader) is [`BinStream::mount`] plus
 //! [`BinStream::into_bin`] — so the crate has one parser, and the eager tree and the streaming
 //! surface cannot drift.
+
+mod batch;
+pub use batch::BatchObjects;
 
 mod cache;
 pub use cache::{LruObjectCache, NoCache, ObjectCache};
