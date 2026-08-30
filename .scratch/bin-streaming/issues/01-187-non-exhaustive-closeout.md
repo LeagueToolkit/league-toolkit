@@ -29,4 +29,4 @@ This issue also acts as the gate for the streaming tickets: none of them start u
 
 - [x] `Error` carries `#[non_exhaustive]`; crate-internal exhaustive matches still compile
 - [x] Decision recorded for `PropertyPathErrorKind` / `ResolveErrorKind` / `PatchError`: all four gained the attribute (design doc section 15.5)
-- [ ] #187 merged (a32182c); the 0.8.0 release train includes the change (release pending)
+- [x] #187 merged (a32182c); the 0.8.0 release train includes the change (released in #212)
