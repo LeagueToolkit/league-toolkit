@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Issue Sync
+
+GitHub issues are rendered from the ticket files in `.scratch/*/issues/` (frontmatter `issue: N` maps each ticket to its issue). When a task changes a design doc under `docs/design/` or a ticket file, run the `sync-issues` skill before finishing so the issues never drift from the repo. Anything published to GitHub (issues, PR bodies, commits) is written in the maintainer's voice — no AI attribution of any kind.
+
 ## Project Overview
 
 League Toolkit is a Rust workspace for parsing, editing, and writing League of Legends file formats. It consists of 13 individual `ltk_*` crates plus one umbrella `league-toolkit` crate that re-exports them via feature flags.
