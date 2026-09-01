@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_meta-v0.8.0...ltk_meta-v0.8.1) - 2026-09-01
+
+### Added
+
+- *(meta)* re-export the streaming surface from the crate root
+- *(meta)* batch object lookup
+- *(meta)* read bin objects through one internal layout core
+- *(meta)* bin streaming foundation - mount, TOC harvest, and the wire core
+
+### Other
+
+- *(meta)* bring the README up to the shipped surface
+- *(meta)* document the streaming surface in the README
+- *(meta)* raise size mismatches as errors, drop the discrepancy log
+- *(meta)* stream-parity sweep over every shipped PROP chunk
+- *(meta)* crate-scoped README with the public surface and examples
+
 ## [0.8.0](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_meta-v0.7.0...ltk_meta-v0.8.0) - 2026-08-30
 
 ### Added
