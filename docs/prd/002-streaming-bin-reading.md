@@ -129,7 +129,12 @@ Facts the format imposes, read off the client's loader
 - **Parallel access within one file.** One cursor at a time per handle, `&mut self` throughout. The
   fan-out workloads parallelize per file.
 - **Caching by default.** The uncached paths parse on every call; caching is the opt-in provider of
-  FR-10.
+  FR-10, and measurement says that split is the right one. A hit is 286x cheaper than a miss, but
+  the only access pattern a shipped install attests - an editor chasing links - revisits little
+  enough to buy 1.2x, while a re-requested working set buys 8.3x. The payoff is the consumer's hit
+  rate rather than the crate's, which is what makes `NoCache` the right default and caching the
+  wrong thing to impose: `bin-streaming.md` [appendix B](../design/bin-streaming.md#appendix-b) has
+  the numbers and the method.
 
 ## <a id="s8"></a>8. Acceptance
 

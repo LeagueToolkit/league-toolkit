@@ -910,3 +910,50 @@ same objects the per-hash lookups do.
 The last row is the interesting one: nothing in a shipped install is written in the legacy
 numbering, which is what [section 8](#s8) expects. The latch is a guard, not a path - it exists for
 files older than anything Riot currently ships, and it is untested against real data by definition.
+
+## <a id="appendix-b"></a>Appendix B. Cache measurements, 2026-09-01
+
+What [section 4.4](#s4.4) is worth, measured rather than assumed. Run against a live install
+(40 of its 392 archives, 2,740 `PROP` chunks), with the sampled chunks written to disk and
+mounted as files, so a miss pays the seek and the read a real consumer pays. Best of five runs.
+
+**What a hit saves.** The 150 heaviest link sequences, 41.7 MB:
+
+| | per object |
+| --- | --- |
+| miss - seek, read, parse | 30,010 ns |
+| hit - an `Arc` clone | 105 ns |
+| saved per hit | 29,905 ns (286x) |
+
+**Pattern 1, harvested: an editor chasing `ObjectLink`s.** Every in-file link target in
+traversal order, which is the only cache-relevant access pattern a shipped file can attest to:
+
+| measurement | result |
+| --- | --- |
+| files carrying in-file links | 1,833 of 2,740 |
+| link references followed | 20,412 |
+| distinct targets | 17,321 |
+| ceiling hit rate, unbounded cache | 15.1% |
+| files where any target is referenced twice | 385 (21%) |
+| most references to one target | 499 |
+| `NoCache` to `LruObjectCache(32)` | 1.14x |
+| `NoCache` to `LruObjectCache(128)` | 1.20x |
+
+**Pattern 2, modelled: a working set re-requested.** The manager's "same objects across
+requests" has no signature in a file, so it is modelled rather than harvested - 16 objects per
+file, requested 8 times each. Labelled as a model on purpose:
+
+| policy | vs `NoCache` |
+| --- | --- |
+| `LruObjectCache(16)` | 8.29x |
+
+**What ties them.** From the two costs above, speedup is approximately `1 / (1 - hit_rate)`.
+That predicts 1.18x at pattern 1's 15.1% and 7.81x at pattern 2's 87.5%, against 1.14x-1.20x
+and 8.29x measured - so a consumer can predict its own payoff from its own hit rate without
+re-running any of this.
+
+Two things the numbers do not say. The miss cost is warm: the file is in the page cache by the
+second run, so 286x is a floor rather than a ceiling. And pattern 1 is the weak one - the
+corpus attests 1.2x, not 8x. The case for the cache is that it costs a consumer who does not
+want it nothing, because `NoCache` is the default and only `cached_object` consults it
+([section 4.4](#s4.4), rule S14), while paying 8x for the interactive consumers ADR-0011 names.
