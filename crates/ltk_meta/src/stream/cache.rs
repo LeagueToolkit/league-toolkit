@@ -19,7 +19,7 @@ use crate::{property::NoMeta, BinObject};
 ///
 /// [`Arc<BinObject<M>>`](Arc) is the currency: a hit is an `Arc` clone, so callers keep values
 /// as long as they like, eviction never invalidates anything, and the values cross threads.
-pub trait ObjectCache<M> {
+pub trait ObjectCache<M = NoMeta> {
     /// The cached object for `key`, if the provider holds one.
     fn get(&mut self, key: BinHash) -> Option<Arc<BinObject<M>>>;
 

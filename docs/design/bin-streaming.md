@@ -119,11 +119,16 @@ Every term this document uses in a specific sense.
 
 ## <a id="s4"></a>4. API surface - `PROP`
 
-All types live in `ltk_meta::stream` and are re-exported from the crate root. Signatures are
-the design; doc comments are abbreviated. `M` is the same property-meta parameter the eager
-types carry, defaulting to `NoMeta`, and lives on the handle: `concrete` grows `BinStream`,
-`BinOverrideStream` and `BinFileStream` aliases that pin it at the `mount` call, after which
-it disappears from every downstream signature (ADR-0010).
+All types live in `ltk_meta::stream` and are re-exported in full from the crate root, which is
+where a consumer names them. Signatures are the design; doc comments are abbreviated. `M` is the
+same property-meta parameter the eager types carry, defaulting to `NoMeta`, and lives on the handle
+(ADR-0010) - the only placement a `concrete` alias can reach. The alias is what removes the
+annotation, because `mount` is itself expression position and Rust applies no default there:
+`concrete::BinStream::mount(file)` pins `M`, which then disappears from every downstream signature.
+So `concrete` carries the expression-position names of the shipped surface - `BinStream`,
+`LruObjectCache` and its `NoCache` sibling - while every other type is named in type position,
+where the default applies. The `PTCH` handles of [section 5](#s5) want the same alias when they
+land.
 
 ```rust
 /// A mounted `PROP` stream: the header is parsed, the object table is read on demand.
@@ -873,7 +878,7 @@ rules append.
 | S9 | `Bin::from_reader` is `mount` plus `into_bin`. | Keeping the eager reader as its own parser. | Makes the stream the crate's only parser, so a fix to one is a fix to both. | [section 9](#s9); ADR-0008 |
 | S10 | The layout module is crate-internal; only `Numbering` is re-exported. | Publishing the cursor. | Nothing outside the crate uses it, and publishing a thirty-method cursor pins it under semver for nobody's benefit. | [section 9](#s9) |
 | S11 | Counts drive the parse, declared sizes drive the skips, and a size the walk disagrees with is `Error::InvalidSize`. | A tolerant discrepancy log, as the client is tolerant. | Continuing past the mismatch means handing out TOC rows and byte ranges built from sizes the parse just disproved. | [section 7](#s7); ADR-0009 |
-| S12 | `M` lives on the handle, pinned once through a `concrete` alias. | `M` on the value-producing methods. | Rust never applies a type parameter's default in expression position, so a method-level `M` needs a turbofish at every call site and `concrete` cannot reach it. | [section 4](#s4); ADR-0010 |
+| S12 | `M` lives on the handle, and a `concrete` alias pins it at the `mount` call. | `M` on the value-producing methods. | Handle placement is the only one an alias can reach, and the alias is what a consumer depends on, because `mount` is itself expression position. | [section 4](#s4); ADR-0010 |
 | S13 | The public error enums are `#[non_exhaustive]`, taken in the 0.8.0 breaking window. | Adding variants as breaking changes later. | The streaming work grows variants for years; the free breaking moment was the one to spend. | `ptch-property-patches.md` [section 6](ptch-property-patches.md#s6) |
 | S14 | Caching is an opt-in provider on the handle, `NoCache` by default, returning `Arc<BinObject<M>>`. Only `cached_object()` consults it. | An `Option<Cache>` returning a borrow, or a policy enum and a third type parameter. | Eviction must never invalidate a value a caller holds, and a sweep must not evict what a consumer is holding hot. | [section 4.4](#s4.4); ADR-0011 |
 | S15 | The latch re-reads the current object under legacy numbering, then latches for the handle's life; `into_bin` restarts from the top. | Re-reading the whole file, as the eager reader does, on every discovery. | With buffered objects the retry is a re-walk of bytes already in memory. Restarting `into_bin` is what keeps the eager path's behaviour identical. | [section 8](#s8) |
@@ -905,3 +910,50 @@ same objects the per-hash lookups do.
 The last row is the interesting one: nothing in a shipped install is written in the legacy
 numbering, which is what [section 8](#s8) expects. The latch is a guard, not a path - it exists for
 files older than anything Riot currently ships, and it is untested against real data by definition.
+
+## <a id="appendix-b"></a>Appendix B. Cache measurements, 2026-09-01
+
+What [section 4.4](#s4.4) is worth, measured rather than assumed. Run against a live install
+(40 of its 392 archives, 2,740 `PROP` chunks), with the sampled chunks written to disk and
+mounted as files, so a miss pays the seek and the read a real consumer pays. Best of five runs.
+
+**What a hit saves.** The 150 heaviest link sequences, 41.7 MB:
+
+| | per object |
+| --- | --- |
+| miss - seek, read, parse | 30,010 ns |
+| hit - an `Arc` clone | 105 ns |
+| saved per hit | 29,905 ns (286x) |
+
+**Pattern 1, harvested: an editor chasing `ObjectLink`s.** Every in-file link target in
+traversal order, which is the only cache-relevant access pattern a shipped file can attest to:
+
+| measurement | result |
+| --- | --- |
+| files carrying in-file links | 1,833 of 2,740 |
+| link references followed | 20,412 |
+| distinct targets | 17,321 |
+| ceiling hit rate, unbounded cache | 15.1% |
+| files where any target is referenced twice | 385 (21%) |
+| most references to one target | 499 |
+| `NoCache` to `LruObjectCache(32)` | 1.14x |
+| `NoCache` to `LruObjectCache(128)` | 1.20x |
+
+**Pattern 2, modelled: a working set re-requested.** The manager's "same objects across
+requests" has no signature in a file, so it is modelled rather than harvested - 16 objects per
+file, requested 8 times each. Labelled as a model on purpose:
+
+| policy | vs `NoCache` |
+| --- | --- |
+| `LruObjectCache(16)` | 8.29x |
+
+**What ties them.** From the two costs above, speedup is approximately `1 / (1 - hit_rate)`.
+That predicts 1.18x at pattern 1's 15.1% and 7.81x at pattern 2's 87.5%, against 1.14x-1.20x
+and 8.29x measured - so a consumer can predict its own payoff from its own hit rate without
+re-running any of this.
+
+Two things the numbers do not say. The miss cost is warm: the file is in the page cache by the
+second run, so 286x is a floor rather than a ceiling. And pattern 1 is the weak one - the
+corpus attests 1.2x, not 8x. The case for the cache is that it costs a consumer who does not
+want it nothing, because `NoCache` is the default and only `cached_object` consults it
+([section 4.4](#s4.4), rule S14), while paying 8x for the interactive consumers ADR-0011 names.

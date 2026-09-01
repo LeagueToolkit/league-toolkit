@@ -23,14 +23,35 @@
 //! # assert_eq!(bin.objects.len(), 1);
 //! ```
 //!
+//! The streaming surface splits along the same line. Its views and cursors are only ever named
+//! in type position, where the default already applies, so they come from the crate root. What
+//! needs an alias is what a caller writes in *expression* position: [`BinStream::mount`] and
+//! [`LruObjectCache::new`]. [`NoCache`] is not generic and so pins nothing; it is re-exported
+//! rather than aliased, because an associated function like `new` resolves through a type alias
+//! but a unit struct's value constructor does not - so that a cache policy and its LRU sibling
+//! are still named from one import.
+//!
+//! ```no_run
+//! use std::{fs::File, num::NonZeroUsize};
+//! use ltk_meta::concrete::{BinStream, LruObjectCache};
+//!
+//! let mut stream = BinStream::mount(File::open("data.bin")?)?;
+//! stream.set_cache(Box::new(LruObjectCache::new(NonZeroUsize::try_from(64)?)));
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
 //! Code that carries metadata (such as `ltk_ritobin`, which threads source spans)
 //! keeps using the generic types directly.
 //!
 //! [`NoMeta`]: crate::property::NoMeta
+//! [`BinStream::mount`]: crate::stream::BinStream::mount
+//! [`LruObjectCache::new`]: crate::stream::LruObjectCache::new
 
 pub type Bin = crate::Bin;
 pub type BinObject = crate::BinObject;
 pub type BinStream<R> = crate::stream::BinStream<R>;
+pub type LruObjectCache = crate::stream::LruObjectCache;
+pub use crate::stream::NoCache;
 pub type BinFile = crate::BinFile;
 pub type BinOverride = crate::BinOverride;
 pub type PropertyPatch = crate::PropertyPatch;

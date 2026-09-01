@@ -68,7 +68,13 @@ pub enum Error {
 
 Unblocked: #208 and #209 shipped the views and the layout core this runs on.
 
-Deliberately unscheduled. [section 11](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/bin-streaming.md#s11) defers this until a consumer exists — it is thin enough that building it early risks fitting it to a guess. The named consumer in #192 is the bin grepping API; the bin editor's link-chasing is a second. Pick it up when one of those lands, or when a third asks.
+Still unscheduled, and now against a consumer rather than by default. [section 11](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/bin-streaming.md#s11) defers this until a consumer exists, and the one it was expected to serve was checked against its own code:
+
+- **It already reaches its target in O(1).** The downstream repair path keys objects by path hash and skips every object it holds no finding for, so it never scans for the object. The walk `resolve` would do inside the object it has reached is the work itself, not work saved.
+- **It persists no paths.** Its mismatch record is `{ expected, found }`, so there is no stored path grammar a streaming walk would have to stay compatible with, and nothing gets cheaper by front-loading one.
+- **The saving needs a caller that does not want the whole tree** — which is the read half of the delta flow, so this couples to #211, parked for reasons of its own.
+
+So it stays a follow-on: open, unscheduled, and thin enough that building it early would fit it to a guess. #192 names the bin grepping API, and the bin editor's link-chasing is a second candidate. Pick it up when one of them walks a path into an object it does not otherwise want, which is what turns the skipped siblings into a saving.
 
 - [ ] `ObjectView::resolve` and `StructView::resolve` walk only the properties on the path; siblings are skipped, nothing is materialized (attested by counting decoded leaves)
 - [ ] Differential test: for a sampled set of paths per corpus object, streaming resolve and `BinObject::resolve` agree on the value, and on `ResolveError`'s segment and kind when they fail
