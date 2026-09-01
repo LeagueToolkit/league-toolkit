@@ -13,12 +13,12 @@ Two kinds of file share the `.bin` extension and this crate reads both:
 | --- | --- |
 | `Bin`, `BinObject` | The object tree: read (`from_reader`), build (`builder()`), edit, write (`to_writer`) |
 | `BinStream`, `BinToc`, `ObjectEntry`, `BatchObjects` | Streaming access: mount a file, sweep object descriptors, random access by path hash, and whole batches of them at once - without parsing values |
-| `stream::ObjectView`, `PropertyView`, `ValueView` | Zero-copy views over one buffered object: iterate, look up and descend to any depth without materializing anything |
-| `stream::ObjectCache`, `NoCache`, `LruObjectCache` | The opt-in lookup cache `BinStream::cached_object` resolves through |
-| `stream::Numbering` | Which property-kind numbering a file is being read under, and whether the legacy latch has flipped |
+| `ObjectView`, `PropertyView`, `ValueView` | Zero-copy views over one buffered object: iterate, look up and descend to any depth without materializing anything |
+| `ObjectCache`, `NoCache`, `LruObjectCache` | The opt-in lookup cache `BinStream::cached_object` resolves through |
+| `Numbering` | Which property-kind numbering a file is being read under, and whether the legacy latch has flipped |
 | `property::values`, `PropertyValueEnum`, `PropertyKind` | One typed value struct per wire kind (`I32`, `String`, `Vector3`, `Container`, `Map`, `Struct`, `Embedded`, `Optional`, …) and the enum over them |
 | `ValueSlot` | A mutable handle on one value, carrying the kind its holder pins it to - what `resolve_mut` hands back |
-| `concrete` | The same types with the metadata parameter pinned, so nothing generic needs spelling - start here |
+| `concrete` | The value model with the metadata parameter pinned - start here - plus the three streaming names Rust cannot infer without it: `BinStream`, `LruObjectCache`, `NoCache` |
 | `path::PropertyPath` | Property addressing (`Position.Anchors.Anchor`, `Elements[3]`, `Lookup{"weapon"}`), with `Bin::resolve`, `resolve_mut` and `Bin::patch` |
 | `path::ValueShape` | What a value is - kind, item kind, map key kind, embed class - as the resolver's type rule and the streaming header peek both speak it |
 | `BinOverride`, `ApplyReport` | PTCH files: read, build, `check` against / `apply` onto a base `Bin` |
@@ -83,7 +83,7 @@ Descending buffers the object's declared byte range once and views it in place. 
 
 ```rust
 use std::fs::File;
-use ltk_meta::{concrete::BinStream, stream::ValueView};
+use ltk_meta::{concrete::BinStream, ValueView};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut stream = BinStream::mount(File::open("data.bin")?)?;
@@ -152,7 +152,7 @@ Bins written before `WadChunkLink` existed number the complex kinds one lower. A
 
 ```rust
 use std::fs::File;
-use ltk_meta::{concrete::BinStream, stream::Numbering};
+use ltk_meta::{concrete::BinStream, Numbering};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut stream = BinStream::mount(File::open("data.bin")?)?;

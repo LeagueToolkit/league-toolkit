@@ -76,7 +76,7 @@ iteration and descent to any depth cost no I/O and materialize nothing:
 
 ```no_run
 use std::fs::File;
-use ltk_meta::{concrete::BinStream, stream::ValueView};
+use ltk_meta::{concrete::BinStream, ValueView};
 
 let mut stream = BinStream::mount(File::open("data.bin")?)?;
 let mut objects = stream.objects();
@@ -225,8 +225,9 @@ pub use file::{BinFile, BinKind};
 
 pub mod stream;
 pub use stream::{
-    BatchObjects, BinStream, BinToc, Entries, Numbering, ObjectEntry, ObjectStream, ObjectView,
-    Objects, PropertyView, ValueView,
+    BatchObjects, BinStream, BinToc, ContainerItems, ContainerView, Entries, LruObjectCache,
+    MapEntries, MapView, NoCache, Numbering, ObjectCache, ObjectEntry, ObjectStream, ObjectView,
+    Objects, OptionalView, Properties, PropertyView, StructView, ValueView,
 };
 
 mod error;
