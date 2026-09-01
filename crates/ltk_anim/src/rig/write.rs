@@ -2,6 +2,7 @@ use super::RigResource;
 use byteorder::{WriteBytesExt, LE};
 use ltk_hash::elf;
 use ltk_io_ext::WriterExt;
+use std::cmp::Reverse;
 use std::io;
 use std::io::{Seek, SeekFrom, Write};
 
@@ -68,7 +69,7 @@ impl RigResource {
             .iter()
             .map(|j| (j.id(), elf::elf(j.name())))
             .collect::<Vec<_>>();
-        hash_ids.sort_by(|a, b| b.1.cmp(&a.1));
+        hash_ids.sort_by_key(|(_, hash)| Reverse(*hash));
 
         for (id, hash) in hash_ids {
             writer.write_i16::<LE>(id)?;
