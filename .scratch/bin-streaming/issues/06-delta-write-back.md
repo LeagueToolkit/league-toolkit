@@ -4,7 +4,7 @@ title: "Bin streaming: delta write-back (the editor's save path)"
 labels: crate:ltk_meta, enhancement, format:bin, area:writing
 ---
 
-Part of #192 (design: `docs/design/bin-streaming.md` section 15). Saving an edit as a rewritten `.bin`. PTCH authoring is explicitly out of scope — a delta is upstream of either output form, and nothing here forecloses rendering one as patch records later.
+Part of #192 (design: `docs/design/bin-streaming.md` [section 10](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/bin-streaming.md#s10)). Saving an edit as a rewritten `.bin`. PTCH authoring is explicitly out of scope — a delta is upstream of either output form, and nothing here forecloses rendering one as patch records later.
 
 ## Proposed surface
 

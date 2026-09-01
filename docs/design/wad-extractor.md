@@ -6,26 +6,26 @@ the measurements behind the naming rules.
 Status: implemented, 2026-08-26. Absorbs the path-clash design record of 2026-08-25, which
 superseded the write-time-only resolution that shipped in `ltk_wad` 0.4.0.
 
-## 1. What it is
+## <a id="s1"></a>1. What it is
 
 A WAD is a flat map from a path hash to bytes. A file system is a tree, in which every name is a
 file **exclusive-or** a directory. The extractor projects the one onto the other, and everything
 interesting about it comes from the ways that projection is imperfect:
 
 - The archive stores hashes, not paths, so a **resolver** has to supply the names, and a chunk
-  nothing names needs a fallback (section 3).
+  nothing names needs a fallback ([section 3](#s3)).
 - The projection is not injective: a WAD can hold `x` and `x/y` at the same time, and no file
-  system holds both, so one of the pair has to **move** (section 6).
+  system holds both, so one of the pair has to **move** ([section 6](#s6)).
 - The resolver's paths are **untrusted**, so some of them must never reach the file system
-  (section 8).
+  ([section 8](#s8)).
 - Extraction is I/O- and decompression-bound, so the work is **parallel**, and none of the above
-  may depend on which worker gets where first (section 5).
+  may depend on which worker gets where first ([section 5](#s5)).
 
 The guarantee that ties these together: **one archive and one hash table give one output tree, on
 every run and on every host.** Every naming decision is either made before the first write or
-shown to be order-independent; the exceptions are named in section 6.
+shown to be order-independent; the exceptions are named in [section 6](#s6).
 
-## 2. Public surface: `WadExtractor`
+## <a id="s2"></a>2. Public surface: `WadExtractor`
 
 `WadExtractor` is configuration plus execution. Build one with `new(&resolver)`, configure it with
 `with_*` methods, run it with `extract_all` or `extract_chunks`. One extractor runs any number of
@@ -41,7 +41,7 @@ extractions.
 | `with_existing_file_policy` | `ExistingFilePolicy::Overwrite` or `::Skip`                  | `Overwrite`                          |
 | `with_cancel_flag(&flag)`   | Stop early once the `AtomicBool` reads true                  | run to the end                       |
 | `with_workers(n)`           | Threads that decompress and write                            | available parallelism, capped at 8   |
-| `with_name_recovery()`      | Read the archive's own bins for names first (section 4)      | off                                  |
+| `with_name_recovery()`      | Read the archive's own bins for names first ([section 4](#s4))       | off                                  |
 
 The two entry points:
 
@@ -53,7 +53,7 @@ The two entry points:
 Both return `Result<ExtractReport, WadError>`. Both fail on the first chunk the extractor cannot
 read, decompress or write, with a `WadError::Chunk` that names it; chunks written before the
 failure stay on disk. A pair of the extraction's own clashing paths is **not** a failure: the
-extraction moves one of them and finishes (section 6).
+extraction moves one of them and finishes ([section 6](#s6)).
 
 The filters differ in when they can run, and it shows. The path filter runs in the up-front pass,
 so a path it drops is never written and makes no directory. The type filter cannot run until a
@@ -61,7 +61,7 @@ chunk's bytes are decompressed, so a chunk it drops still counts as a directory 
 names, and a path that only that chunk clashed with still takes its `.ltk` suffix. The move is
 reported, and the combination is vanishingly rare.
 
-## 3. Naming chunks: `PathResolver`
+## <a id="s3"></a>3. Naming chunks: `PathResolver`
 
 A WAD stores the hash of each chunk's path and not the path, so an extraction needs something to
 supply the names:
@@ -81,9 +81,9 @@ named and unnamed files; `ExtractProgress::is_named` is the exact answer during 
 real name can also be sixteen hex digits.
 
 The resolver is asked about each chunk exactly once per extraction, in the up-front pass
-(section 5), and runs on the calling thread, so it does not need to be `Sync`.
+([section 5](#s5)), and runs on the calling thread, so it does not need to be `Sync`.
 
-## 4. Name recovery
+## <a id="s4"></a>4. Name recovery
 
 A chunk no external table names can still get its name from the archive itself: the `.bin` files
 of a WAD carry path strings. `NameRecovery` scans them without a full parse, telling a bin from
@@ -99,37 +99,37 @@ length-prefixed string runs and keeping the ones that hash to a chunk the archiv
 
 Recovered names are resolver paths like any other: untrusted, and checked the same way.
 
-## 5. The pipeline
+## <a id="s5"></a>5. The pipeline
 
 An extraction is three stages. The first is a pass over metadata; the other two run concurrently.
 
 1. **Resolve (calling thread, before any write).** Every chunk is named through the resolver, here
-   and nowhere else. In the same pass, each path is checked against `is_evil` (section 8) and the
-   path filter, so what the extraction will refuse and what it will skip is settled first. From
+   and nowhere else. In the same pass, each path is checked against `is_evil` ([section 8](#s8)) and
+   the path filter, so what the extraction will refuse and what it will skip is settled first. From
    the surviving paths, `DirectoryPaths` collects every prefix of every path, excluding the paths
-   themselves: the set of names the extraction's own output needs as directories. Each name is
-   read once and carried from here to the worker that writes the chunk; a worker needs an owned
-   path either way, because the job crosses a thread boundary, so nothing is allocated twice.
+   themselves: the set of names the extraction's own output needs as directories. Each name is read
+   once and carried from here to the worker that writes the chunk; a worker needs an owned path
+   either way, because the job crosses a thread boundary, so nothing is allocated twice.
 2. **Read (calling thread).** The reader walks the archive in order and hands each chunk's raw
    bytes to a worker over a channel bounded by the worker count, so memory holds a few chunks
    whatever the archive holds. The cancel flag is checked before each read. The resolver, the
    path filter and the progress callback all stay on this thread, which is what keeps all three
    free of any `Sync` bound; the progress callback hears of each chunk once it is done.
 3. **Write (workers).** Each worker decompresses its chunk, applies the type filter, settles the
-   final name (section 6), and writes. The workers share a `ChunkWriter`: the directory set from
-   stage 1, and a mutex-guarded claim set of names given out so far, which is how a second chunk
-   resolving to an already-written path is caught and skipped rather than silently overwriting
-   the first. After a failure the workers drain and drop their queues rather than write, so a
-   reader blocked on a full channel sees the failure too.
+   final name ([section 6](#s6)), and writes. The workers share a `ChunkWriter`: the directory set
+   from stage 1, and a mutex-guarded claim set of names given out so far, which is how a second
+   chunk resolving to an already-written path is caught and skipped rather than silently overwriting
+   the first. After a failure the workers drain and drop their queues rather than write, so a reader
+   blocked on a full channel sees the failure too.
 
 `ExistingFilePolicy::Skip` opens with `create_new`, which makes the existence check and the create
 one operation, so two workers can never both write one path and a file that appears between two
 chunks is left alone too.
 
-## 6. How a chunk is named on disk
+## <a id="s6"></a>6. How a chunk is named on disk
 
 - A path the resolver knows stays as it is.
-- A nameless chunk lands under its hash as sixteen hex digits (section 3).
+- A nameless chunk lands under its hash as sixteen hex digits ([section 3](#s3)).
 - A name that another path of the same extraction needs as a directory takes a `.ltk` suffix:
   `foo.bin` becomes `foo.bin.ltk`. Which of the pair moves is settled against the stage-1
   directory set, before anything is written. It is always the file, never the directory: renaming
@@ -146,7 +146,7 @@ chunks is left alone too.
   invalid name, the Windows long-path limit) becomes `<hash>.<ext>` in the output directory
   itself, losing the directories the path named. This is the one naming decision that only the
   write can make, and it is order-independent: whatever stood in the way was there before the
-  extraction started. `is_path_conflict` (section 9) tells a refused name from a failure a
+  extraction started. `is_path_conflict` ([section 9](#s9)) tells a refused name from a failure a
   different name would not mend; the latter ends the run.
 - Under `ExtractLayout::Flat` every chunk lands in the output directory by file name alone, and a
   second chunk of one name takes its hash before the extension, as `name.<hash>.ext`. A flat tree
@@ -158,7 +158,7 @@ Nothing else moves a chunk off the name its path gave it. The suffix is added an
 substituted, so stripping a trailing `.ltk` gives the original name back exactly, hex name as much
 as path, which is what a caller hashing an extracted file's path back to its chunk needs.
 
-## 7. What comes back
+## <a id="s7"></a>7. What comes back
 
 `ExtractProgress` reports one chunk as it finishes: `done`/`total`/`fraction`, `path_hash`,
 `path`, `is_named`, `bytes`, an `ExtractResult` saying what became of the chunk (`Extracted`, or
@@ -172,18 +172,18 @@ wrote reads the former.
 at the path its resolver gave is a `DisplacedChunk` under `displaced`, with a `PathIssue` saying
 why:
 
-- **`Rejected`**: the path was one the extraction refuses to write (section 8). Nothing was
+- **`Rejected`**: the path was one the extraction refuses to write ([section 8](#s8)). Nothing was
   written.
 - **`Duplicate`**: another chunk claimed the path first. Nothing was written; the first file
   stays. Two hashes resolving to one path means the resolver is wrong about one of them, and an
   extraction that overwrote in silence would lose the difference.
-- **`Renamed(path)`**: the chunk was written, at the carried path instead (section 6).
+- **`Renamed(path)`**: the chunk was written, at the carried path instead ([section 6](#s6)).
 
 The counts are computed from the list rather than kept alongside it: `report.rejected()`,
 `report.duplicates()`, `report.renamed()`. `Display` for the report renders the whole run as one
 line.
 
-## 8. Paths the extraction will not write
+## <a id="s8"></a>8. Paths the extraction will not write
 
 A resolver's paths are untrusted: a hash table is a third-party download, and name recovery reads
 paths out of the archive itself. A path is refused, before anything is written, when joining it
@@ -212,12 +212,12 @@ A refused path, like one the path filter drops, is never written and makes no di
 cannot force a rename on anything. A caller's filter is applied after the refusal check, so a
 selection cannot mask the fact that its resolver handed out a hostile path.
 
-## 9. The path-clash record
+## <a id="s9"></a>9. The path-clash record
 
-The rename rule in section 6 was re-argued several times from first principles, and the answer
-turns on numbers that are expensive to re-derive. This section records them.
+The rename rule in [section 6](#s6) was re-argued several times from first principles, and the
+answer turns on numbers that are expensive to re-derive. This section records them.
 
-### 9.1 The phenomenon is real, new, and small
+### <a id="s9.1"></a>9.1 The phenomenon is real, new, and small
 
 Measured against real CDTB hash tables:
 
@@ -244,7 +244,7 @@ One thing is inferred rather than measured: whether both halves of a clashing pa
 *same* WAD. The only local archives are 8.18-era, which predate these paths, and all scanned
 clean. A modern `Global` or UI WAD would settle it.
 
-### 9.2 The options
+### <a id="s9.2"></a>9.2 The options
 
 | #   | Policy                          | Deterministic | Exact     | Cost                                                      |
 | --- | ------------------------------- | ------------- | --------- | --------------------------------------------------------- |
@@ -270,7 +270,7 @@ So the same archive and the same table could produce either a tree that keeps bo
 tree that threw one away, depending on chunk order and worker scheduling. Making the choice up
 front picks the good branch every time.
 
-### 9.3 The marker is appended, never substituted
+### <a id="s9.3"></a>9.3 The marker is appended, never substituted
 
 `foo.bin` becomes `foo.bin.ltk`, not `foo.ltk.bin` and not `foo.ltk`. Stripping a trailing `.ltk`
 gives the original name back exactly, which is what a caller hashing an extracted file's path
@@ -295,7 +295,7 @@ with no extension, so a renamed file has no extension to lose. The trade would b
 and would give up an exact inverse. If a clash between paths that carry extensions ever shows up
 in a real table, this is the decision to revisit.
 
-### 9.4 The suffix goes on the path string, not through `set_file_name`
+### <a id="s9.4"></a>9.4 The suffix goes on the path string, not through `set_file_name`
 
 `set_file_name` re-joins the path with the host separator, which would report `assets\thing.ltk`
 on Windows where every un-renamed chunk reports `assets/thing`. Stripping the suffix off that
@@ -303,7 +303,7 @@ gives a path the archive was never built from, so the round trip above would fai
 files it exists for. Appending to the whole path is the same operation, because a path's file
 name is its tail.
 
-### 9.5 What the pass costs
+### <a id="s9.5"></a>9.5 What the pass costs
 
 Directories dedupe hard, so the pass is cheap. Measured on 8.18 archives against the 1.1M-entry
 March 2024 table:
@@ -316,7 +316,7 @@ March 2024 table:
 That is 0.13% of the extraction it makes deterministic. Both archives displaced nothing, which is
 the expected result for 8.18 content: these paths postdate it.
 
-## 10. Filesystem behaviour this relies on
+## <a id="s10"></a>10. Filesystem behaviour this relies on
 
 Probed with real binaries on Windows and Unix, and worth not re-deriving:
 
@@ -328,7 +328,7 @@ Probed with real binaries on Windows and Unix, and worth not re-deriving:
 `PermissionDenied` is ambiguous on Windows (a genuinely unopenable file reports it too), so
 `is_path_conflict` breaks the tie with `path.is_dir()`.
 
-Three more findings, two of them feeding the refusal rules in section 8:
+Three more findings, two of them feeding the refusal rules in [section 8](#s8):
 
 - `notes.txt.` and `notes.txt` are the **same file** on Windows, which strips the trailing dot
   before it looks the name up. A path ending in a dot or a space is refused, because it would
@@ -339,9 +339,9 @@ Three more findings, two of them feeding the refusal rules in section 8:
 - `sub/../../x.txt` does silently escape the output directory, so `..` is refused. `...` and
   `.. ` are *not* traversals and fail with `NotFound`.
 
-## 11. What this does not cover
+## <a id="s11"></a>11. What this does not cover
 
-Containment is lexical. Section 8 says the joined path cannot name a file outside the output
+Containment is lexical. [Section 8](#s8) says the joined path cannot name a file outside the output
 directory; it says nothing about a symlink an output tree already holds. If an extraction is ever
 run into a directory an attacker can pre-seed, `cap-std` and OS-enforced containment through
 `openat` is the real answer. That is separate, larger work.

@@ -21,7 +21,7 @@ It maps losslessly to an [`ltk_meta::Bin`], which in turn maps losslessly to the
 ## Pipeline
 
 ```
-.bin bytes  <──►  ltk_meta::Bin  <──►  Cst  <──►  ritobin text
+.bin bytes  <-->  ltk_meta::Bin  <-->  Cst  <-->  ritobin text
                     (semantic)       (syntactic)
 ```
 

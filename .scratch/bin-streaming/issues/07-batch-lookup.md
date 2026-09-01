@@ -4,7 +4,7 @@ title: "Bin streaming: batch object lookup"
 labels: crate:ltk_meta, enhancement, format:bin, area:reading, blocked
 ---
 
-Part of #192 (design: `docs/design/bin-streaming.md` section 4.5). `object(hash)` answers one question per seek; a consumer that wants fifty objects out of one bin pays fifty seeks in whatever order it asked. `objects_batch` takes the whole request up front so the handle can schedule the I/O.
+Part of #192 (design: `docs/design/bin-streaming.md` [section 4.5](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/bin-streaming.md#s4.5)). `object(hash)` answers one question per seek; a consumer that wants fifty objects out of one bin pays fifty seeks in whatever order it asked. `objects_batch` takes the whole request up front so the handle can schedule the I/O.
 
 ## Proposed surface
 

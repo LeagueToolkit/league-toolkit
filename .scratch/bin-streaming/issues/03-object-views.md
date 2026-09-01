@@ -4,7 +4,7 @@ title: "Bin streaming: zero-copy object views"
 labels: crate:ltk_meta, enhancement, format:bin, area:reading, blocked
 ---
 
-Part of #192 (design: `docs/design/bin-streaming.md` sections 4.2-4.3, section 8, section 14). Descending into an object buffers its declared byte range once (one read, handle-owned reused buffer) and everything inside — iteration, random access, descent — happens in memory, zero-copy. Nothing decodes until touched, nothing allocates until an owned value is asked for.
+Part of #192 (design: `docs/design/bin-streaming.md` [section 4.2](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/bin-streaming.md#s4.2)-[section 4.3](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/bin-streaming.md#s4.3) and [section 8](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/bin-streaming.md#s8); rationale in `docs/adr/0007-object-bytes-are-buffered-and-viewed.md`). Descending into an object buffers its declared byte range once (one read, handle-owned reused buffer) and everything inside — iteration, random access, descent — happens in memory, zero-copy. Nothing decodes until touched, nothing allocates until an owned value is asked for.
 
 ## Proposed surface
 
@@ -116,11 +116,11 @@ impl<'a, M> StructView<'a, M> {
 // store one; every view is `Copy` whatever `M` is, because `M` is a phantom here.
 ```
 
-Because `ValueView` descends to any depth, `Elements[3].Position` is a `ContainerView::get` and two `StructView::property` calls, none of which materialize a sibling. (The rationale for views over forward-only cursors: `PropertyValueEnum` is 96 bytes per node, align 16 — a wire `f32` costs 96 bytes materialized. Buffering one KB-scale object dissolves the cursor restrictions while the file-level sweep keeps the constant-memory guarantee. section 14.)
+Because `ValueView` descends to any depth, `Elements[3].Position` is a `ContainerView::get` and two `StructView::property` calls, none of which materialize a sibling. (The rationale for views over forward-only cursors: `PropertyValueEnum` is 96 bytes per node, align 16 — a wire `f32` costs 96 bytes materialized. Buffering one KB-scale object dissolves the cursor restrictions while the file-level sweep keeps the constant-memory guarantee. ADR-0007.)
 
 ## The numbering latch
 
-Lands at this layer (section 8): a kind byte that fails to decode re-walks the already-buffered object under the legacy numbering (no I/O), latches the handle for the rest of its life, and reports via `numbering()`. A view captures the numbering at creation, so one handed out before the flip keeps what it was built under.
+Lands at this layer ([section 8](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/bin-streaming.md#s8)): a kind byte that fails to decode re-walks the already-buffered object under the legacy numbering (no I/O), latches the handle for the rest of its life, and reports via `numbering()`. A view captures the numbering at creation, so one handed out before the flip keeps what it was built under.
 
 The numbering is cursor state rather than a flag threaded through every call: `stream::layout::Cursor` carries the `Numbering` its bytes were written under, and `Kind::unpack` is fed from that. A slice and its numbering travel together and cannot be paired up wrongly.
 

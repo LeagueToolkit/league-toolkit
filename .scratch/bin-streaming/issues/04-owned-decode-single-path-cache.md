@@ -4,7 +4,7 @@ title: "Bin streaming: owned decode, the single decode path, and the lookup cach
 labels: crate:ltk_meta, enhancement, format:bin, area:reading, blocked
 ---
 
-Part of #192 (design: `docs/design/bin-streaming.md` section 4.2, section 4.4, section 9). The owned escape hatches, the parser unification, and the opt-in lookup cache.
+Part of #192 (design: `docs/design/bin-streaming.md` [section 4.2](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/bin-streaming.md#s4.2), [section 4.4](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/bin-streaming.md#s4.4), [section 9](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/bin-streaming.md#s9)). The owned escape hatches, the parser unification, and the opt-in lookup cache.
 
 ## Proposed surface
 

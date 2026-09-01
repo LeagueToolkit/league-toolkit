@@ -4,7 +4,7 @@ title: "Bin streaming: resolve a PropertyPath over the views"
 labels: crate:ltk_meta, enhancement, format:bin, area:reading
 ---
 
-Part of #192 (design: `docs/design/bin-streaming.md` section 10, section 12). The one piece section 10 names as a follow-on and never ticketed: walking a `PropertyPath` over the borrowed views, so a consumer that knows where it is going descends only the properties on the path and materializes nothing beside them. The resolver's traversal rules already exist and are corpus-tested (#187); this is those rules run against `ValueView` instead of `PropertyValueEnum`.
+Part of #192 (design: `docs/design/bin-streaming.md` [section 11](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/bin-streaming.md#s11)). The one piece [section 11](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/bin-streaming.md#s11) names as a follow-on and never ticketed: walking a `PropertyPath` over the borrowed views, so a consumer that knows where it is going descends only the properties on the path and materializes nothing beside them. The resolver's traversal rules already exist and are corpus-tested (PRD-001); this is those rules run against `ValueView` instead of `PropertyValueEnum`.
 
 ## Proposed surface
 
@@ -68,7 +68,7 @@ pub enum Error {
 
 Unblocked: #208 and #209 shipped the views and the layout core this runs on.
 
-Deliberately unscheduled. Section 10 defers this until a consumer exists — it is thin enough that building it early risks fitting it to a guess. The named consumer in #192 is the bin grepping API; the bin editor's link-chasing is a second. Pick it up when one of those lands, or when a third asks.
+Deliberately unscheduled. [section 11](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/bin-streaming.md#s11) defers this until a consumer exists — it is thin enough that building it early risks fitting it to a guess. The named consumer in #192 is the bin grepping API; the bin editor's link-chasing is a second. Pick it up when one of those lands, or when a third asks.
 
 - [ ] `ObjectView::resolve` and `StructView::resolve` walk only the properties on the path; siblings are skipped, nothing is materialized (attested by counting decoded leaves)
 - [ ] Differential test: for a sampled set of paths per corpus object, streaming resolve and `BinObject::resolve` agree on the value, and on `ResolveError`'s segment and kind when they fail

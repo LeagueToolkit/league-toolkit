@@ -4,7 +4,7 @@ title: "Bin streaming foundation: mount, TOC, harvest, and the wire core"
 labels: crate:ltk_meta, enhancement, format:bin, area:reading, blocked
 ---
 
-First slice of #192 (design: `docs/design/bin-streaming.md` section 4, sections 6-7, section 9). A consumer can mount a real `.bin` and read everything that costs no value parsing. Everything lives in `ltk_meta::stream`, re-exported from the crate root; `M` sits on the handle and `concrete` grows stream aliases that pin it at the mount call.
+First slice of #192 (design: `docs/design/bin-streaming.md` [section 4](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/bin-streaming.md#s4), [section 6](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/bin-streaming.md#s6)-[section 7](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/bin-streaming.md#s7), [section 9](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/bin-streaming.md#s9)). A consumer can mount a real `.bin` and read everything that costs no value parsing. Everything lives in `ltk_meta::stream`, re-exported from the crate root; `M` sits on the handle and `concrete` grows stream aliases that pin it at the mount call.
 
 ## Proposed surface
 
@@ -23,13 +23,13 @@ impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
     /// [`Error::UnexpectedBinKind`] for a `PTCH` stream.
     pub fn mount(source: R) -> Result<Self, Error>;
 
-    // ── header facts, free after mount ──────────────────────────────────────
+    // -- header facts, free after mount --------------------------------------
     pub fn version(&self) -> u32;
     pub fn dependencies(&self) -> &[String];
     /// Class hash of every object, in file order. `class_hashes().len()` is the object count.
     pub fn class_hashes(&self) -> &[BinHash];
 
-    // ── sweeping ────────────────────────────────────────────────────────────
+    // -- sweeping ------------------------------------------------------------
     /// A cursor over the object table. Every call starts a fresh sweep from the top;
     /// objects not descended into are skipped by their size field.
     pub fn objects(&mut self) -> Objects<'_, R, M>;
@@ -37,7 +37,7 @@ impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
     /// A `std` iterator of plain descriptors, for harvesting and filtering.
     pub fn entries(&mut self) -> Entries<'_, R, M>;
 
-    // ── random access ───────────────────────────────────────────────────────
+    // -- random access -------------------------------------------------------
     /// The table of contents: every object's `(path_hash, class_hash, offset, size)`.
     /// Built by one harvest sweep on first use, then cached. Sweeps also populate it
     /// as a side effect, so a fully-swept handle pays nothing.
@@ -100,7 +100,7 @@ impl<R: io::Read + io::Seek, M: Default> Iterator for Entries<'_, R, M> {
 
 ## Beneath it: the wire core
 
-One byte-level module owns the wire (expand phase — existing readers untouched): value shapes (`ValueShape` from the wire header), skip distances for every kind, leaf codecs over `&[u8]`, and legacy numbering threading via `Kind::unpack`. Skip semantics mirror `MetaValue_skipByType`: primitives by fixed width, strings by length prefix, complex values by their stored byte size. The parse path is driven by counts; a declared size that disagrees with what the counts consumed is `Error::InvalidSize`, the same error the eager readers raise for it (section 7).
+One byte-level module owns the wire (expand phase — existing readers untouched): value shapes (`ValueShape` from the wire header), skip distances for every kind, leaf codecs over `&[u8]`, and legacy numbering threading via `Kind::unpack`. Skip semantics mirror `MetaValue_skipByType`: primitives by fixed width, strings by length prefix, complex values by their stored byte size. The parse path is driven by counts; a declared size that disagrees with what the counts consumed is `Error::InvalidSize`, the same error the eager readers raise for it ([section 7](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/bin-streaming.md#s7)).
 
 Demoable: a corpus test harvests `(path_hash, class_hash)` for every PROP chunk in an install and matches the eager parse — the grep-index workload end to end.
 

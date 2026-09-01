@@ -194,46 +194,53 @@ cargo test
 cargo doc --open
 ```
 
-### AI-Assisted Development with Speckit
+### AI-Assisted Development
 
-This repository uses the **Speckit** workflow for developing new features and fixing bugs with AI agents (e.g., Claude Code). Speckit enforces a structured specification-plan-task pipeline so that all AI-generated work is auditable and reviewable before it lands in a PR.
+AI agents can produce large, hard-to-review changesets. This repository answers that with a
+**document trail** rather than a tool pipeline: work is specified, decided and sliced in the repo
+before it is written, and each artifact is reviewable on its own.
 
-**Why?** AI agents can produce large, hard-to-review changesets. Speckit breaks work into discrete, reviewable artifacts — a spec, a design plan, and an ordered task list — so maintainers can catch issues early and PRs stay focused.
+| Document | Holds | Where |
+| --- | --- | --- |
+| **PRD** | Why a feature exists, who asks for it, numbered requirements (`FR-N`) | `docs/prd/NNN-slug.md` |
+| **ADR** | One architectural decision: what forced it, the options it beat, what it costs | `docs/adr/NNNN-slug.md` |
+| **Design doc** | The API surface and the wire format | `docs/design/<feature>.md` |
+| **Ticket** | One slice of implementable work, rendered to a GitHub issue | `.scratch/<project>/issues/*.md` |
 
-**The workflow:**
+The rule that keeps them readable: each cites the others rather than restating them. A design doc
+cites requirements as `FR-N` and decisions as `ADR-NNNN`; two copies of one argument drift.
 
-1. **`/speckit.specify`** — Create or update a feature specification from a natural language description
-2. **`/speckit.clarify`** — Identify underspecified areas and resolve ambiguities
-3. **`/speckit.plan`** — Generate a design plan with architectural decisions
-4. **`/speckit.tasks`** — Produce a dependency-ordered task list
-5. **`/speckit.analyze`** — Cross-check consistency across spec, plan, and tasks
-6. **`/speckit.implement`** — Execute the task list
-7. **`/speckit.taskstoissues`** — Convert tasks into GitHub issues for tracking
+GitHub issues are **rendered** from the ticket files — the repo is the source of truth, and an
+issue that disagrees with its ticket is fixed by re-rendering, not by editing it on GitHub.
 
-All artifacts live in a `.specify/` directory scoped to the feature. The project's design principles are codified in [`.specify/memory/constitution.md`](.specify/memory/constitution.md).
+Claude Code users get four skills in `.claude/skills/` that write and maintain all of this:
+`write-prd`, `write-adr`, `write-ticket` and `sync-issues`. Worked example: PRD-001 with
+ADR-0001 to ADR-0006 and `docs/design/ptch-property-patches.md`.
 
-**Contributors using AI agents SHOULD follow this workflow** to ensure that proposed changes are well-specified and easy to review. PRs generated without a spec/plan trail may require additional review cycles.
+**Contributors using AI agents SHOULD follow this workflow.** A PR that arrives with no written
+reasoning behind it may need extra review cycles. Day-to-day rules for agents live in
+[`CLAUDE.md`](CLAUDE.md).
 
 ### Project Structure
 
 ```
 league-toolkit/
-├── crates/
-│   ├── league-toolkit/    # Umbrella crate
-│   ├── ltk_wad/           # WAD archives
-│   ├── ltk_texture/       # Textures
-│   ├── ltk_mesh/          # Meshes
-│   ├── ltk_anim/          # Animation
-│   ├── ltk_meta/          # Property bins
-│   ├── ltk_ritobin/       # Ritobin text format
-│   ├── ltk_mapgeo/        # Map geometry
-│   ├── ltk_file/          # File detection
-│   ├── ltk_hash/          # Hashing
-│   ├── ltk_shader/        # Shader utilities
-│   ├── ltk_primitives/    # Primitives
-│   └── ltk_io_ext/        # I/O extensions
-└── docs/
-    └── LTK_GUIDE.md       # Usage guide
+|-- crates/
+|   |-- league-toolkit/    # Umbrella crate
+|   |-- ltk_wad/           # WAD archives
+|   |-- ltk_texture/       # Textures
+|   |-- ltk_mesh/          # Meshes
+|   |-- ltk_anim/          # Animation
+|   |-- ltk_meta/          # Property bins
+|   |-- ltk_ritobin/       # Ritobin text format
+|   |-- ltk_mapgeo/        # Map geometry
+|   |-- ltk_file/          # File detection
+|   |-- ltk_hash/          # Hashing
+|   |-- ltk_shader/        # Shader utilities
+|   |-- ltk_primitives/    # Primitives
+|   |-- ltk_io_ext/        # I/O extensions
+|-- docs/
+    |-- LTK_GUIDE.md       # Usage guide
 ```
 
 ---

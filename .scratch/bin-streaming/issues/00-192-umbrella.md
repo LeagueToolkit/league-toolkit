@@ -12,9 +12,20 @@ Implement an API for reading .bin files lazily from a reader.
 
 The lazy resolution API is crucial for consumers that don't need to parse the whole file to achieve their goal. It's a key blocker for implementing an optimized bin grepping API. Being able to read the object paths and classes without parsing the whole file makes it possible to index efficiently.
 
-## Design
+## Documents
 
-`docs/design/bin-streaming.md`, with the tickets below rendering its API-surface sections.
+| What | Where |
+| --- | --- |
+| Why this exists, who asks for it, requirements, failure modes | `docs/prd/002-streaming-bin-reading.md` |
+| API surface, wire format, layout core, testing | `docs/design/bin-streaming.md` |
+| Object bytes are buffered and viewed, not streamed through cursors | `docs/adr/0007-object-bytes-are-buffered-and-viewed.md` |
+| One layout core under two renderers | `docs/adr/0008-one-layout-core-under-two-renderers.md` |
+| A size the counts disagree with is an error | `docs/adr/0009-a-size-the-counts-disagree-with-is-an-error.md` |
+| The metadata parameter lives on the handle | `docs/adr/0010-the-metadata-parameter-lives-on-the-handle.md` |
+| The object cache is a provider handing out `Arc` | `docs/adr/0011-the-object-cache-is-a-provider-handing-out-arc.md` |
+
+The tickets below render the spec's API-surface sections. Every rule the spec settles is an `Sn`
+row in its [section 13](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/bin-streaming.md#s13), each naming the ADR that argues it where one does.
 
 ## Children
 
@@ -25,6 +36,6 @@ The lazy resolution API is crucial for consumers that don't need to parse the wh
 - [x] #214 — Bin streaming: batch object lookup
 - [ ] #210 — Bin streaming: PTCH stream
 - [ ] #211 — Bin streaming: delta write-back (the editor's save path)
-- [ ] #217 — Bin streaming: resolve a PropertyPath over the views (deliberately unscheduled until a consumer asks — section 10)
+- [ ] #217 — Bin streaming: resolve a PropertyPath over the views (deliberately unscheduled until a consumer asks — [section 11](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/bin-streaming.md#s11))
 
-`PROP` reading is complete: mount, header, TOC harvest, per-object seek, zero-copy views, one owned decode path shared with `Bin::from_reader`, the opt-in object cache, and batch lookup. What remains is `PTCH` (#210) and the write side (#211); #217 is the named follow-on section 10 defers.
+`PROP` reading is complete: mount, header, TOC harvest, per-object seek, zero-copy views, one owned decode path shared with `Bin::from_reader`, the opt-in object cache, and batch lookup. What remains is `PTCH` (#210) and the write side (#211); #217 is the named follow-on [section 11](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/bin-streaming.md#s11) defers.
