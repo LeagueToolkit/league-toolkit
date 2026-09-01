@@ -77,6 +77,8 @@ impl<R: io::Read + io::Seek, M: Default> BinFileStream<R, M> {
 
 `PatchStream::path()` returns `&PropertyPath`, not `&str` — `PropertyPatch::path` is already a `PropertyPath`, so anything less would force callers to re-parse. `BinOverride::from_reader` joins the single decode path (mount + `into_bin_override`).
 
+Parked: no consumer, and no gap behind it. The eager `BinOverride` — with the `data_override/{read,write}.rs` split under it — already closed the real downstream need, which was an unimplemented override *write* path; nothing downstream wants a patch bin read lazily. The design stands as written, so this stays open rather than closed: pick it up when a consumer wants a PTCH file's records without its tree, which is the want that drove #192 for PROP. Until then `BinOverrideStream` and `BinFileStream` do not exist, and the `concrete` aliases [section 4](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/bin-streaming.md#s4) says they want are part of this ticket rather than of the shipped surface.
+
 Demoable: every shipped PTCH file in an install streams — headers, objects, all records — and drains to an eager value equal to the direct eager parse.
 
 - [ ] All shipped PTCH chunks in an install (238 at last count) mount, stream every record, and `into_bin_override()` equals the eager parse

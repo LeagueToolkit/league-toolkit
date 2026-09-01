@@ -119,11 +119,16 @@ Every term this document uses in a specific sense.
 
 ## <a id="s4"></a>4. API surface - `PROP`
 
-All types live in `ltk_meta::stream` and are re-exported from the crate root. Signatures are
-the design; doc comments are abbreviated. `M` is the same property-meta parameter the eager
-types carry, defaulting to `NoMeta`, and lives on the handle: `concrete` grows `BinStream`,
-`BinOverrideStream` and `BinFileStream` aliases that pin it at the `mount` call, after which
-it disappears from every downstream signature (ADR-0010).
+All types live in `ltk_meta::stream` and are re-exported in full from the crate root, which is
+where a consumer names them. Signatures are the design; doc comments are abbreviated. `M` is the
+same property-meta parameter the eager types carry, defaulting to `NoMeta`, and lives on the handle
+(ADR-0010) - the only placement a `concrete` alias can reach. The alias is what removes the
+annotation, because `mount` is itself expression position and Rust applies no default there:
+`concrete::BinStream::mount(file)` pins `M`, which then disappears from every downstream signature.
+So `concrete` carries the expression-position names of the shipped surface - `BinStream`,
+`LruObjectCache` and its `NoCache` sibling - while every other type is named in type position,
+where the default applies. The `PTCH` handles of [section 5](#s5) want the same alias when they
+land.
 
 ```rust
 /// A mounted `PROP` stream: the header is parsed, the object table is read on demand.
@@ -873,7 +878,7 @@ rules append.
 | S9 | `Bin::from_reader` is `mount` plus `into_bin`. | Keeping the eager reader as its own parser. | Makes the stream the crate's only parser, so a fix to one is a fix to both. | [section 9](#s9); ADR-0008 |
 | S10 | The layout module is crate-internal; only `Numbering` is re-exported. | Publishing the cursor. | Nothing outside the crate uses it, and publishing a thirty-method cursor pins it under semver for nobody's benefit. | [section 9](#s9) |
 | S11 | Counts drive the parse, declared sizes drive the skips, and a size the walk disagrees with is `Error::InvalidSize`. | A tolerant discrepancy log, as the client is tolerant. | Continuing past the mismatch means handing out TOC rows and byte ranges built from sizes the parse just disproved. | [section 7](#s7); ADR-0009 |
-| S12 | `M` lives on the handle, pinned once through a `concrete` alias. | `M` on the value-producing methods. | Rust never applies a type parameter's default in expression position, so a method-level `M` needs a turbofish at every call site and `concrete` cannot reach it. | [section 4](#s4); ADR-0010 |
+| S12 | `M` lives on the handle, and a `concrete` alias pins it at the `mount` call. | `M` on the value-producing methods. | Handle placement is the only one an alias can reach, and the alias is what a consumer depends on, because `mount` is itself expression position. | [section 4](#s4); ADR-0010 |
 | S13 | The public error enums are `#[non_exhaustive]`, taken in the 0.8.0 breaking window. | Adding variants as breaking changes later. | The streaming work grows variants for years; the free breaking moment was the one to spend. | `ptch-property-patches.md` [section 6](ptch-property-patches.md#s6) |
 | S14 | Caching is an opt-in provider on the handle, `NoCache` by default, returning `Arc<BinObject<M>>`. Only `cached_object()` consults it. | An `Option<Cache>` returning a borrow, or a policy enum and a third type parameter. | Eviction must never invalidate a value a caller holds, and a sweep must not evict what a consumer is holding hot. | [section 4.4](#s4.4); ADR-0011 |
 | S15 | The latch re-reads the current object under legacy numbering, then latches for the handle's life; `into_bin` restarts from the top. | Re-reading the whole file, as the eager reader does, on every discovery. | With buffered objects the retry is a re-walk of bytes already in memory. Restarting `into_bin` is what keeps the eager path's behaviour identical. | [section 8](#s8) |

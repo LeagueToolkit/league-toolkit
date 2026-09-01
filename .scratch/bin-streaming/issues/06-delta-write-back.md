@@ -44,6 +44,14 @@ impl<R: io::Read + io::Seek, M: Default + Clone> BinStream<R, M> {
 
 This completes the bin editor's loop end to end: mount → TOC rows → `view()` to browse → `read()` on first edit → mutate through the value-slot surface → `write_patched` to a temp file → rename → remount. (The editing path takes `read()`, never `cached_object()` — the cache hands out shared `Arc`s, and an edit wants exclusive ownership; `Arc::make_mut` is the escape hatch when both are wanted.)
 
+Parked, on three arguments rather than on time:
+
+- **There is no fidelity to recover.** The downstream consumer's own accepted decision record has a bin repair re-encode the whole file, and states that the bytes it did not address come back the same. Byte-exact copy-through of untouched objects buys a guarantee that consumer already holds.
+- **This design already treats a uniform re-encode as correct output.** The legacy refusal above names a full `into_bin()` + `to_writer` transcode as the fallback for a latched base ([section 8](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/bin-streaming.md#s8)) — a whole-file re-encode is a supported way to save, not a lossy last resort.
+- **A delta write *introduces* a refusal case a re-encode does not have.** That refusal exists only because raw-copied and re-encoded objects can disagree about kind numbering. A consumer that always re-encodes never meets a mixed-numbering file, and carries no fallback path for one.
+
+What is left is a CPU saving, and it is unmeasured. So this comes back with a number attached: `into_bin()` + `to_writer` measured as a share of a repair's wall-clock, once the streaming reads are adopted downstream. If the transcode is a visible share of that time, the delta writer earns its refusal case; if it is noise, it does not.
+
 - [ ] An empty delta reproduces the input byte-for-byte, for every PROP chunk in an install (corpus test)
 - [ ] A one-property edit re-reads equal to the same edit applied to the eager tree, and every other object's bytes are unchanged
 - [ ] A version-1/2 base saves with its header version intact; editing an object re-encodes that object without upgrading the header
