@@ -80,7 +80,7 @@ pub struct Trail<'a, M = NoMeta> { /* Vec<TrailStep<'a, M>> */ }
 /// One step of a [`Trail`]. The borrowing form of [`Step`].
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TrailStep<'a, M = NoMeta> {
-    Field { class: BinHash, field: BinHash },
+    Field(BinHash),
     Index(usize),
     Key(&'a PropertyValueEnum<M>),
 }
@@ -89,7 +89,11 @@ impl<'a, M> Trail<'a, M> {
     pub fn steps(&self) -> &[TrailStep<'a, M>];
     pub fn len(&self) -> usize;
     pub fn is_empty(&self) -> bool;
-    /// The owned address: every step copied, keys with their metadata dropped.
+    /// The class of the node each field step was read on, one per `Field` step, in order.
+    /// Never 0: the walk always knows.
+    pub fn classes(&self) -> &[BinHash];
+    /// The owned address: every step copied, keys with their metadata dropped, the class
+    /// context carried over.
     pub fn to_value_path(&self) -> ValuePath where M: Clone;
 }
 
@@ -144,6 +148,8 @@ depend on it and can land first behind those three methods.
       an optional, or as a map value
 - [ ] A visitor that declines one property sees no node beneath it and every node elsewhere;
       `leaves` is called exactly once per `enters` that returned `true`, in reverse nesting order
+- [ ] `Trail::classes()` has one entry per field step at every node, equal to the class of the
+      node that field was read on, and `to_value_path().fields()` yields the same pairs
 - [ ] `Trail::to_string()` equals `to_value_path().to_string()` at every node, and a walk over a
       map of 10,000 hash-keyed entries grows the trail's capacity by at most one step
 - [ ] `BinOverride::walk` visits the fixture patch's embedded objects and never a record's value

@@ -23,19 +23,22 @@ In `ltk_meta::path`, beside `PropertyPath`:
 /// whose plaintext is unknown - and never written to a file. The object it is inside is
 /// carried beside it, never in it.
 ///
-/// `PartialEq` and not `Eq` or `Hash`, because a map key may be an `f32`. The form to key on
-/// is the hash form, `to_string()`.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct ValuePath(Vec<Step>);
+/// Beside the steps it keeps the **class context**: for each `Field` step, the class hash of
+/// the node the field was read on, which is what a name table is asked with (ADR-0012). A
+/// class of 0 means unknown. The context is not part of the address: two paths with the same
+/// steps are equal whatever their classes, and the hash form does not print them.
+///
+/// `PartialEq` is written by hand over the steps alone (W16), and there is no `Eq` or `Hash`,
+/// because a map key may be an `f32`. The form to key on is the hash form, `to_string()`.
+#[derive(Clone, Debug, Default)]
+pub struct ValuePath { /* steps: Vec<Step>, classes: Vec<BinHash>, one per Field step */ }
+impl PartialEq for ValuePath { /* steps only */ }
 
 /// One step from a node toward a position inside it.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Step {
-    /// A property of a node: the class hash the node carries, and the field's name hash.
-    ///
-    /// The class rides on every field step because naming a field takes the class it is on
-    /// (ADR-0012). It is context for a name table, not part of the rendered address.
-    Field { class: BinHash, field: BinHash },
+    /// A property of a node, by the field's name hash.
+    Field(BinHash),
     /// A container element by position, or the value of a present optional, which is always 0.
     Index(usize),
     /// A map entry, by its key. Metadata is dropped; the key is otherwise the one the map holds.
@@ -47,8 +50,19 @@ impl ValuePath {
     pub fn steps(&self) -> &[Step];
     pub fn len(&self) -> usize;
     pub fn is_empty(&self) -> bool;
+
+    /// Appends a field step, recording `class` - the class hash of the node `field` is on -
+    /// in the class context. Pass 0 when it is not known.
+    pub fn push_field(&mut self, field: BinHash, class: BinHash);
+    pub fn push_index(&mut self, index: usize);
+    pub fn push_key(&mut self, key: PropertyValueEnum);
+    /// Appends `step` with no class: a `Field` records 0.
     pub fn push(&mut self, step: Step);
+    /// Removes the last step, and its class if it was a field.
     pub fn pop(&mut self) -> Option<Step>;
+
+    /// Every field step with its class, in order; `None` where the class is unknown.
+    pub fn fields(&self) -> Fields<'_>;
 
     /// The client path naming the same position, if every field has a name and every key a
     /// literal.
@@ -64,8 +78,13 @@ impl ValuePath {
 }
 
 impl fmt::Display for ValuePath { /* the hash form */ }
+/// Steps only; every field's class is unknown.
 impl FromIterator<Step> for ValuePath {}
 impl Extend<Step> for ValuePath {}
+/// The iterator behind [`ValuePath::fields`]: `(field, class)` pairs.
+#[derive(Clone, Debug)]
+pub struct Fields<'a> { /* ... */ }
+impl Iterator for Fields<'_> { type Item = (BinHash, Option<BinHash>); }
 impl<'a> IntoIterator for &'a ValuePath { type Item = &'a Step; /* ... */ }
 impl IntoIterator for ValuePath { type Item = Step; /* ... */ }
 
@@ -100,19 +119,20 @@ pub struct Unnameable {
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum UnnameableKind {
-    /// `names` has no plaintext for `field` on `class`.
-    Field { class: BinHash, field: BinHash },
+    /// `names` has no plaintext for `field`; `class` is the context it was asked with.
+    Field { field: BinHash, class: Option<BinHash> },
     /// A map key of a kind the path grammar has no literal for.
     Key(Kind),
 }
 
 /// Plaintext for the hashes a `ValuePath` carries.
 pub trait FieldNames {
-    /// The plaintext of `field` on `class`, if known.
+    /// The plaintext of `field`, if known, given the class of the node it was read on.
     ///
     /// A table keyed by field alone ignores `class`; a table keyed by class - a meta class
-    /// dump - needs it. Either way the name must hash back to `field` under `BinHash::hash_str`.
-    fn field(&self, class: BinHash, field: BinHash) -> Option<Cow<'_, str>>;
+    /// dump - needs it and answers nothing for `None`. Either way the name must hash back to
+    /// `field` under `BinHash::hash_str`.
+    fn field(&self, field: BinHash, class: Option<BinHash>) -> Option<Cow<'_, str>>;
 
     /// The plaintext behind a `Hash`-kind map key, if known. Named form only.
     fn hash(&self, hash: BinHash) -> Option<Cow<'_, str>> { None }
@@ -135,11 +155,12 @@ breaks `PropertyPath::new` and produces text the client misreads. What earns the
 **totality**: every position in a value tree has a `ValuePath`, including the ones a report most
 needs to name and a `PropertyPath` cannot - a container element, a map entry.
 
-**W4 (ADR-0012): the class rides on the field step.** The tables a consumer holds are keyed by
-class (`lol-meta-classes`, the manager's migration tables), so naming a field takes the class it
-was read on, and by the time a report is rendered the tree that would say is gone. The class is
-context for the name table and is not printed: the hash form of a path is the same whatever
-class it went through.
+**W4 (ADR-0012): the class context rides beside the steps.** The tables a consumer holds are
+keyed by class (`lol-meta-classes`, the manager's migration tables), so naming a field takes the
+class it was read on, and by the time a report is rendered the tree that would say is gone. The
+class is context for the name table and not part of the address: `Step::Field` carries the field
+alone, two paths with the same steps are equal whatever their classes (W16), the hash form does
+not print them, and a path built from steps alone has none (W15).
 
 **W5: `PartialEq` only.** `Kind::is_valid_map_key` admits `F32` and the vector kinds, so a `Key`
 step can hold a float. The hash form is the total, stable, `Eq` key; a consumer that keys a map on
@@ -158,5 +179,7 @@ coerces a number either way.
       whose kind has no literal is reported as `UnnameableKind::Key`, not silently rendered
 - [ ] `to_named` spells every hash `names` knows and leaves the rest as hex; `named` plus `unnamed`
       equals the count of field steps plus hash-kind keys
+- [ ] `push_field`, `pop`, `push` and `FromIterator` keep one class per field step; `fields()`
+      yields `None` for a class of 0; two paths with equal steps and different classes are equal
 - [ ] `FieldNames` is implemented for `()`, the two `HashMap` shapes, `&T`, and
       `ltk_ritobin::hashes::HashMapProvider`

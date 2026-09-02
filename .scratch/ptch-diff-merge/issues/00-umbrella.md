@@ -15,7 +15,7 @@ Layering one bin over another, and saying the difference between two bins as a `
 | Merge and diff are separate operations | `docs/adr/0004-merge-and-diff-are-separate-operations.md` |
 | `ValuePath` and the walk that produces one | `docs/design/value-walk.md` |
 | `ValuePath` addresses by hash | `docs/adr/0005-value-path-addresses-by-hash.md` |
-| Field step class | `docs/adr/0012-field-step-class.md` |
+| Path class context | `docs/adr/0012-path-class-context.md` |
 | Single-visitor walk | `docs/adr/0013-single-visitor-walk.md` |
 | No schema in `ltk_meta` | `docs/adr/0006-no-schema-in-ltk-meta.md` |
 
@@ -42,7 +42,7 @@ here: `ApplyReport::outcomes` (#221's ready half) and `join` (#223).
 
 ## Children
 
-- [ ] #219 — `ValuePath`: addressing a position in a bin by hash (goes first; #220 and #225 rest on it; its `Field` step carries the class, ADR-0012)
+- [ ] #219 — `ValuePath`: addressing a position in a bin by hash (goes first; #220 and #225 rest on it; it carries a class context beside its steps, ADR-0012)
 - [ ] #220 — `Bin::merge`: layer one bin over another (what the overlay build needs; the only one
       of these with a consumer waiting)
 - [ ] #221 — the per-record report and filter (`RecordOutcome`, `ApplyReport::outcomes`,

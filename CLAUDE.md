@@ -140,8 +140,8 @@ Bad   docs(ltk_meta): specify the value walk and align ValuePath with the manage
 Good  docs(ltk_meta): specify value walk
 ```
 
-The same shape holds for an **ADR title**: a noun phrase naming the decision (`Field step
-class`, `Single-visitor walk`), never a sentence stating it. Only a **test name** stays
+The same shape holds for an **ADR title**: a noun phrase naming the decision (`Path class
+context`, `Single-visitor walk`), never a sentence stating it. Only a **test name** stays
 narrative, because it is read one at a time and is the only sentence saying what the case is.
 
 ## Additional Context

@@ -65,6 +65,8 @@ Every term this document uses in a specific sense.
 **Addresses**
 
 - **step** - one move from a node toward a position inside it: a field, an index or a map key.
+  A step carries no class; the class of each node a path passes through is the path's **class
+  context**, kept beside the steps (ADR-0012).
 - **trail** - the walk's own record of the steps from the root object to its current position.
   It borrows the tree, allocates nothing per step, and is what a visitor renders an address from.
 - **`ValuePath`** - the owned address: the trail's steps, with map keys copied out. Addresses a
@@ -120,19 +122,23 @@ a patch record carries and the client resolves; `ValuePath` is the reporting lan
 /// whose plaintext is unknown - and never written to a file. The object it is inside is
 /// carried beside it, never in it.
 ///
-/// `PartialEq` and not `Eq` or `Hash`, because a map key may be an `f32`. The form to key on
-/// is the hash form, `to_string()`.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct ValuePath(Vec<Step>);
+/// Beside the steps it keeps the **class context**: for each `Field` step, the class hash of
+/// the node the field was read on, which is what a name table is asked with (ADR-0012). A
+/// class of 0 means unknown - no node carries the null class (W2), so the value is free. The
+/// context is not part of the address: two paths with the same steps are equal whatever
+/// their classes, and the hash form does not print them.
+///
+/// `PartialEq` is written by hand over the steps alone (W16), and there is no `Eq` or `Hash`,
+/// because a map key may be an `f32`. The form to key on is the hash form, `to_string()`.
+#[derive(Clone, Debug, Default)]
+pub struct ValuePath { /* steps: Vec<Step>, classes: Vec<BinHash>, one per Field step */ }
+impl PartialEq for ValuePath { /* steps only */ }
 
 /// One step from a node toward a position inside it.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Step {
-    /// A property of a node: the class hash the node carries, and the field's name hash.
-    ///
-    /// The class rides on every field step because naming a field takes the class it is on
-    /// (ADR-0012). It is context for a name table, not part of the rendered address.
-    Field { class: BinHash, field: BinHash },
+    /// A property of a node, by the field's name hash.
+    Field(BinHash),
     /// A container element by position, or the value of a present optional, which is always 0.
     Index(usize),
     /// A map entry, by its key. Metadata is dropped; the key is otherwise the one the map holds.
@@ -144,8 +150,19 @@ impl ValuePath {
     pub fn steps(&self) -> &[Step];
     pub fn len(&self) -> usize;
     pub fn is_empty(&self) -> bool;
+
+    /// Appends a field step, recording `class` - the class hash of the node `field` is on -
+    /// in the class context. Pass 0 when it is not known.
+    pub fn push_field(&mut self, field: BinHash, class: BinHash);
+    pub fn push_index(&mut self, index: usize);
+    pub fn push_key(&mut self, key: PropertyValueEnum);
+    /// Appends `step` with no class: a `Field` records 0.
     pub fn push(&mut self, step: Step);
+    /// Removes the last step, and its class if it was a field.
     pub fn pop(&mut self) -> Option<Step>;
+
+    /// Every field step with its class, in order; `None` where the class is unknown.
+    pub fn fields(&self) -> Fields<'_>;
 
     /// The client path naming the same position, if every field has a name and every key a
     /// literal.
@@ -161,8 +178,13 @@ impl ValuePath {
 }
 
 impl fmt::Display for ValuePath { /* the hash form, section 4.2 */ }
+/// Steps only; every field's class is unknown.
 impl FromIterator<Step> for ValuePath {}
 impl Extend<Step> for ValuePath {}
+/// The iterator behind [`ValuePath::fields`]: `(field, class)` pairs.
+#[derive(Clone, Debug)]
+pub struct Fields<'a> { /* ... */ }
+impl Iterator for Fields<'_> { type Item = (BinHash, Option<BinHash>); }
 impl<'a> IntoIterator for &'a ValuePath { type Item = &'a Step; /* ... */ }
 impl IntoIterator for ValuePath { type Item = Step; /* ... */ }
 
@@ -198,8 +220,8 @@ pub struct Unnameable {
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum UnnameableKind {
-    /// `names` has no plaintext for `field` on `class`.
-    Field { class: BinHash, field: BinHash },
+    /// `names` has no plaintext for `field`; `class` is the context it was asked with.
+    Field { field: BinHash, class: Option<BinHash> },
     /// A map key of a kind the path grammar has no literal for.
     Key(Kind),
 }
@@ -249,12 +271,13 @@ attested, and the literal the client coerces is a number either way
 /// `ltk_ritobin::hashes::HashMapProvider` implements this; it is the smaller trait `ltk_meta`
 /// can own without depending on it.
 pub trait FieldNames {
-    /// The plaintext of `field` on `class`, if known.
+    /// The plaintext of `field`, if known, given the class of the node it was read on.
     ///
     /// A table keyed by field alone ignores `class`; a table keyed by class - a meta class
-    /// dump - needs it. Either way the name must hash back to `field` under `BinHash::hash_str`,
-    /// which is what makes `to_property_path` resolve where the walk was.
-    fn field(&self, class: BinHash, field: BinHash) -> Option<Cow<'_, str>>;
+    /// dump - needs it and answers nothing for `None`. Either way the name must hash back to
+    /// `field` under `BinHash::hash_str`, which is what makes `to_property_path` resolve where
+    /// the walk was.
+    fn field(&self, field: BinHash, class: Option<BinHash>) -> Option<Cow<'_, str>>;
 
     /// The plaintext behind a `Hash`-kind map key, if known. Named form only.
     fn hash(&self, hash: BinHash) -> Option<Cow<'_, str>> { None }
@@ -272,7 +295,8 @@ impl<T: FieldNames + ?Sized> FieldNames for &T {}
 The `class` parameter exists because the tables a consumer holds are keyed by class:
 `lol-meta-classes` dumps one meta class at a time, and `ltk-manager`'s migration tables name a
 field by the class it is on. A name is looked up with the class the walk saw the field on, which
-is exactly what `Step::Field` carries (ADR-0012).
+is what the path's class context holds (ADR-0012). A path built without a tree - from steps
+alone - asks with `None`, and a field-keyed table still answers.
 
 ## <a id="s5"></a>5. The walk
 
@@ -331,7 +355,7 @@ pub struct Trail<'a, M = NoMeta> { /* Vec<TrailStep<'a, M>> */ }
 /// One step of a [`Trail`]. The borrowing form of [`Step`].
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TrailStep<'a, M = NoMeta> {
-    Field { class: BinHash, field: BinHash },
+    Field(BinHash),
     Index(usize),
     Key(&'a PropertyValueEnum<M>),
 }
@@ -340,7 +364,11 @@ impl<'a, M> Trail<'a, M> {
     pub fn steps(&self) -> &[TrailStep<'a, M>];
     pub fn len(&self) -> usize;
     pub fn is_empty(&self) -> bool;
-    /// The owned address: every step copied, keys with their metadata dropped.
+    /// The class of the node each field step was read on, one per `Field` step, in order.
+    /// Never 0: the walk always knows.
+    pub fn classes(&self) -> &[BinHash];
+    /// The owned address: every step copied, keys with their metadata dropped, the class
+    /// context carried over.
     pub fn to_value_path(&self) -> ValuePath where M: Clone;
 }
 
@@ -379,8 +407,8 @@ For one object:
 2. For each property `(field, value)` of a node, in property order, the walk asks
    `enters(field, value, trail)`. If the answer is `false`, the value is skipped whole and
    nothing beneath it is visited.
-3. Otherwise `Field { class, field }` is pushed, with `class` the node's class hash, and the
-   walk descends `value`:
+3. Otherwise `Field(field)` is pushed, with the node's class hash recorded in the class
+   context, and the walk descends `value`:
    - `Struct` or `Embedded` with class hash not 0: a node. `visit`, then rule 2 recurses.
    - `Struct` or `Embedded` with class hash 0: a null pointer. Nothing.
    - `Container` or `UnorderedContainer`: for each item, `Index(i)` is pushed, the item is
@@ -407,9 +435,10 @@ The trail holds hashes, indices and borrowed keys, never text. A step costs a pu
 a `Trail` writes the hash form straight from the borrows, and `to_value_path` copies the steps
 out; either is what a visitor does for a node it reports on, and neither happens otherwise.
 
-The class on every `Field` step is the class of the node the field was read on: the object's
-class hash at the root, the `Struct` or `Embedded` class hash below it. It is what a name table
-is asked with ([section 4.3](#s4.3)).
+Beside the steps the trail keeps the class context: for each `Field` step, the class hash of
+the node the field was read on - the object's class hash at the root, the `Struct` or
+`Embedded` class hash below it. It is what a name table is asked with ([section 4.3](#s4.3)),
+and `to_value_path` carries it over.
 
 ## <a id="s6"></a>6. Where else the trail is used
 
@@ -476,14 +505,16 @@ rules append.
 | W1 | The walk's prune is `holds_node`, built on `Kind::is_node` (`Struct`, `Embedded`). `Kind::is_primitive` plays no part. | Entering everything `is_primitive` does not cover. | `ObjectLink` and `BitBool` are neither primitive nor a node, so the complement of `is_primitive` enters containers that hold nothing; and a consumer should not have to know which set `is_primitive` is. | [section 3](#s3) |
 | W2 | A `Struct` or `Embedded` with class 0 is not a node and is not entered. | Visiting it as a node with class 0. | It is the client's null pointer, has no properties, and the resolver already treats it as one (`NullPointer`). A visitor keyed on class would otherwise see a class no meta class dump has. | [section 5.1](#s5.1) |
 | W3 | `ltk_meta` owns one single-visitor walk with a trail; scheduling several visitors over one walk, and what each does with a node, is the consumer's. | A multi-visitor walk with per-visitor pruning in the crate; or only a predicate and a step enum. | The single-visitor descent is identical for every consumer and is what merge and diff need; the active-set policy is one consumer's and would pin its shape under semver. | [section 5](#s5); ADR-0013 |
-| W4 | `Step::Field` carries the class hash of the node the field is on. | `Field(BinHash)`, the field alone. | Naming a field takes the class it is on: every table a consumer holds is keyed by class. | [section 4.1](#s4.1); ADR-0012 |
+| W4 | A `ValuePath` keeps a class context beside its steps - the class of the node each field was read on - and `Step::Field` carries the field hash alone. | `Field { class, field }`, or no class anywhere. | Naming a field takes the class it is on, and every table a consumer holds is keyed by class; keeping it beside the steps leaves `Step` the address and the context free to grow. | [section 4.1](#s4.1); ADR-0012 |
 | W5 | `ValuePath` is `PartialEq` and not `Eq` or `Hash`; the hash form is the key. | Deriving `Eq` and `Hash`, or a key type that excludes floats. | `Kind::is_valid_map_key` admits `F32`, `Vector2` and the rest, so a key can be a float. The hash form is total, stable and `Eq`. | [section 4.1](#s4.1) |
 | W6 | The walk is infallible and has no early exit. | `visit` returning `ControlFlow`, or a `Result`. | It walks a tree the caller already holds. A visitor that wants to stop declines every further `enters`; a search that wants the first hit is a follow-on with a consumer. | [section 5](#s5) |
 | W7 | A visitor is asked `enters` at properties only; the items of a container, optional or map it entered are all descended. | Asking per item. | An item has no field hash to prune on, and pruning per item would make a container of ten thousand structs ten thousand calls for a decision already taken. | [section 5.1](#s5.1) |
 | W8 | `leaves` is paired with every `enters` that returned `true`. | `enters` alone. | A consumer running several visitors over one walk carries an active set down the recursion and needs the point to pop it; without the pair it would reconstruct depth from the trail. | [section 5](#s5) |
-| W9 | The trail borrows map keys; `ValuePath` owns them with metadata dropped. Two step types, `TrailStep<'a, M>` and `Step`. | One owned step type in both places. | Owning a key per push allocates for every string-keyed entry descended; borrowing costs nothing and the copy happens only for a reported node. | [section 5.2](#s5.2) |
+| W9 | The trail borrows map keys; `ValuePath` owns them with metadata dropped. Two step types, `TrailStep<'a, M>` and `Step`, each beside a class context. | One owned step type in both places. | Owning a key per push allocates for every string-keyed entry descended; borrowing costs nothing and the copy happens only for a reported node. | [section 5.2](#s5.2) |
 | W10 | `Index` is `usize`. | `u32`, the width of the wire count. | It indexes a `Vec` and is compared with `len()`; the wire width is the writer's concern. | [section 4.1](#s4.1) |
 | W11 | `to_property_path` writes a `Hash` key as its raw decimal value; `to_named` writes the name where one is known. | Writing the name in both. | The value is what is attested; the client coerces a number and a string alike, and a number cannot be mis-hashed. | [section 4.2](#s4.2) |
 | W12 | `BinOverride::walk` walks embedded objects only. | Walking record values too, at their record's path. | A record's value is a fragment with no node to stand on until applied; a consumer that wants applied content applies first. | [section 5](#s5) |
 | W13 | `FieldNames::field` returns `Cow<'_, str>`. | `&str`, or `String`. | Matches `ltk_ritobin::HashProvider`, so its provider implements this trait without copying, and a computed name is possible. | [section 4.3](#s4.3) |
 | W14 | `ValuePath` and `FieldNames` live in `ltk_meta::path` beside `PropertyPath`; the walk in `ltk_meta::walk`. | Everything under `walk`. | Both paths are addresses and are converted between; the walk is one producer of them. | [section 4](#s4), [section 5](#s5) |
+| W15 | A class of 0 in the context means unknown; `Trail` never records one, `FromIterator<Step>` and `push(Step)` always do. | `Vec<Option<BinHash>>`. | No node carries the null class (W2), so 0 is free, and the public reading is `Option` through `fields()` either way. | [section 4.1](#s4.1) |
+| W16 | Two paths with the same steps are equal whatever their class context. | Comparing the context too. | The context is what a name table is asked with, not where the position is; a report keyed on an address must match the same position however it was reached. | [section 4.1](#s4.1) |
