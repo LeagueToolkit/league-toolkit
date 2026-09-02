@@ -209,6 +209,42 @@ macro_rules! create_enum {
 
 variants!(create_enum);
 
+impl<M> PropertyValueEnum<M> {
+    /// Whether entering this value can reach a node.
+    ///
+    /// True for a `Struct` or `Embedded` whose class hash is not 0, and for a container,
+    /// optional or map whose item kind [`Kind::is_node`]. An empty optional or container of a
+    /// node kind answers true: it *can* hold one. A `Struct` or `Embedded` with class 0 is the
+    /// client's null pointer and holds nothing.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ltk_meta::{property::values, PropertyKind, PropertyValueEnum};
+    ///
+    /// let leaf: PropertyValueEnum = values::I32::new(1).into();
+    /// let null: PropertyValueEnum = values::Struct::default().into();
+    /// let empty: PropertyValueEnum = values::Optional::empty(PropertyKind::Embedded)?.into();
+    ///
+    /// assert!(!leaf.holds_node());
+    /// assert!(!null.holds_node());
+    /// assert!(empty.holds_node());
+    /// # Ok::<(), ltk_meta::Error>(())
+    /// ```
+    #[must_use]
+    pub fn holds_node(&self) -> bool {
+        match self {
+            Self::Struct(s) => *s.class_hash != 0,
+            Self::Embedded(e) => *e.0.class_hash != 0,
+            Self::Container(c) => c.item_kind().is_node(),
+            Self::UnorderedContainer(c) => c.0.item_kind().is_node(),
+            Self::Optional(o) => o.item_kind().is_node(),
+            Self::Map(m) => m.value_kind().is_node(),
+            _ => false,
+        }
+    }
+}
+
 /// A value type that can be borrowed out of a [`PropertyValueEnum`].
 ///
 /// Implemented for every type in [`values`]. It exists so [`PropertyValueEnum::get`] and
