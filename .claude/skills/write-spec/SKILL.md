@@ -38,7 +38,7 @@ that owns the subject, in the present tense, and the rung goes away.
 | Document | Answers | Tense | Lifecycle |
 | --- | --- | --- | --- |
 | **Spec** `docs/design/` | What is true | Present | Edited in place, forever |
-| **ADR** `docs/adr/` | Why this and not that | Past | Immutable; superseded, never edited |
+| **ADR** `docs/adr/` | Why this and not that | Present | Immutable; superseded, never edited |
 | **PRD** `docs/prd/` | Why at all, for whom | Present | Requirements appended, never renumbered |
 | **Ticket** `.scratch/*/issues/` | What to build next | Imperative | Closed when done |
 
@@ -103,5 +103,7 @@ taken against. That appendix is the only place in a spec where a date belongs.
 ## Finishing
 
 - Cite requirements as `FR-N` and decisions as `ADR-NNNN`; do not restate either.
-- ASCII only, never the section sign, and a section reference is a linked "section N" - see the Documentation section of CLAUDE.md.
+- ASCII only, never the section sign, and a section reference is a linked "section N".
+- Prose is declarative, and free of time and cause: no temporal anchor, no causal
+  connective, no narrative. Both rules are in the Documentation section of CLAUDE.md.
 - If a ticket renders from a section that moved or changed, run the `sync-issues` skill.

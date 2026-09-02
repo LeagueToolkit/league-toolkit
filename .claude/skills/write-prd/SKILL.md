@@ -69,6 +69,8 @@ is an ADR or a spec row.
 2. Point the spec's header at the PRD, so the citation runs both ways.
 3. Status moves Draft -> In review -> Approved -> Implemented. An approved PRD gains requirements
    by appending; it does not get quietly rewritten.
-4. ASCII only, never the section sign, and a section reference is a linked "section N" - see the Documentation section of CLAUDE.md.
-5. If any ticket under `.scratch/*/issues/` renders from what changed, run the `sync-issues` skill
+4. ASCII only, never the section sign, and a section reference is a linked "section N".
+5. Prose is declarative, and free of time and cause: no temporal anchor, no causal
+   connective, no narrative. Both rules are in the Documentation section of CLAUDE.md.
+6. If any ticket under `.scratch/*/issues/` renders from what changed, run the `sync-issues` skill
    before finishing.

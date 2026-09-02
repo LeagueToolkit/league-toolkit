@@ -69,8 +69,9 @@ ADR-0011 predate this rule and keep their sentence titles.
 - **Considered options** lists what was genuinely on the table, at least two. An option nobody
   could have picked is padding and makes the real choice look unexamined. If a rejected option was
   tempting, say why it was tempting - that is what stops it being re-proposed next quarter.
-- **Decision** names the option taken, in bold, in the past tense, and **points at the spec section
-  that states the rule**. One or two sentences on what it means concretely - the error it produces,
+- **Decision** names the option taken, in bold, as the rule the code obeys, and **points at the
+  spec section that states the rule**. The header date is the only moment in the record; the
+  body is untensed and free of narrative. One or two sentences on what it means concretely - the error it produces,
   the invariant it holds - and no more. If the section is growing into a specification, that
   content belongs in the spec.
 - **Consequences** must carry a **Negative** that is a genuine cost; "none" means the analysis is
@@ -98,5 +99,7 @@ An accepted ADR is a record of a moment. It is not a wiki page.
    section that specifies the rule.
 2. Wire the citation back: the spec's rules table names `ADR-NNNN` in its Spec column, and the
    ticket implementing it cites the ADR instead of carrying the argument.
-3. ASCII only, never the section sign, and a section reference is a linked "section N" - see the Documentation section of CLAUDE.md.
-4. If a ticket renders from a document that changed, run the `sync-issues` skill.
+3. ASCII only, never the section sign, and a section reference is a linked "section N".
+4. Prose is declarative, and free of time and cause: no temporal anchor, no causal
+   connective, no narrative. Both rules are in the Documentation section of CLAUDE.md.
+5. If a ticket renders from a document that changed, run the `sync-issues` skill.

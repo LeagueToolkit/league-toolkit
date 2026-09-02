@@ -68,7 +68,10 @@ rationale, `Blocked by`, checklist last. What matters most here:
 
 ## Finishing
 
-1. ASCII only, never the section sign, and a section reference is a linked "section N" - see the Documentation section of CLAUDE.md.
-2. Everything published to GitHub is in the maintainer's voice. No AI attribution of any kind.
-3. Run the `sync-issues` skill: it creates the issue for a ticket with no number, writes the
+1. ASCII only, never the section sign, and a section reference is a linked "section N".
+
+2. Prose is declarative, and free of time and cause: no temporal anchor, no causal
+    connective, no narrative. Both rules are in the Documentation section of CLAUDE.md.
+3. Everything published to GitHub is in the maintainer's voice. No AI attribution of any kind.
+4. Run the `sync-issues` skill: it creates the issue for a ticket with no number, writes the
    number back into the frontmatter, and pushes bodies and labels for the rest.

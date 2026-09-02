@@ -10,7 +10,7 @@ Four kinds of document, one job each. What separates them is not only subject bu
 | ---------- | ------------------------------------------------------------ | ---------- | ------------------------------------------- | -------------------------------- |
 | **PRD**    | Why at all, for whom, what it must do (`FR-N`)               | Present    | Requirements append; numbers never shift    | `docs/prd/NNN-slug.md`           |
 | **Spec**   | What is true: surface, wire format, traversal, errors, tests | Present    | **Edited in place, forever**                | `docs/design/<feature>.md`       |
-| **ADR**    | Why this option and not that one                             | Past       | **Immutable** — superseded, never rewritten | `docs/adr/NNNN-slug.md`          |
+| **ADR**    | Why this option and not that one                             | Present    | **Immutable** — superseded, never rewritten | `docs/adr/NNNN-slug.md`          |
 | **Ticket** | What to build next                                           | Imperative | Closed when done                            | `.scratch/<project>/issues/*.md` |
 
 - **Every rule has exactly one home, and it is the spec.** An ADR records that a choice was made and what it beat; it is never where a reader looks to learn how the code behaves today. A rule stated in two places has one stale copy and no way to tell which.
@@ -18,6 +18,45 @@ Four kinds of document, one job each. What separates them is not only subject bu
 - **A spec is edited in place, never appended to.** When the code departs from it, the section that stated the old thing is rewritten to state the new one. No phase sections, no "implementation notes", no correction notes appended below. Measurements are the one exception: they are facts about a specific build and live in a dated appendix.
 - A spec **cites**: requirements as `FR-N`, decisions as `ADR-NNNN`. It does not restate them. Two copies of one argument drift.
 - **A section reference is a linked "section N".** Every numbered heading in a PRD or a spec carries a stable anchor — `## <a id="s4.3"></a>4.3. Views` — and every citation is a link whose text says what it points at: `[section 4.3](#s4.3)`, parenthesised where it is an aside, and spelled out in full on both halves of a pair or a range — `[section 4.2](#s4.2) and [section 4.3](#s4.3)`, `[section 4](#s4) to [section 9](#s9)` — so no link ever renders as a bare number with nothing to say what it is. Appendices are `[appendix B](#appendix-b)`. A cross-document reference names the file first — `` `ptch-property-patches.md` [section 6](ptch-property-patches.md#s6) `` — and a ticket uses the absolute `https://github.com/LeagueToolkit/league-toolkit/blob/main/<path>#sN` form, because a bare fragment in an issue body resolves against the issue page instead. Inside a code block a reference stays plain prose: a link cannot render there, and doc comments get copied into source. The anchor is the point — a heading can be reworded freely and no citation breaks.
+- **Prose is declarative, and free of time and cause.** This holds for every document above and
+  for every doc comment in the code. A sentence states one fact that is true of the subject as it
+  is. It does not say when the fact became true, what it replaced, or what it follows from.
+  - **No temporal anchor.** No `now`, `currently`, `today`, `previously`, `used to`, `no longer`,
+    `still`, `will`, `once X lands`, `after the refactor`, `as of`, `for now`, `going forward`.
+    The lifecycle markers a document type owns are the one exception: an ADR's status line, a
+    PRD's status, the date on a withdrawn `FR-N`, the build named on a measurement.
+  - **No causal connective between facts.** No `because`, `since`, `so`, `so that`, `therefore`,
+    `hence`, `thus`, `as a result`, `which means`, `in order to`, `this is why`. Each fact is its
+    own sentence and the reader derives the consequence. A why is written as the fact that grounds
+    the rule, next to the rule, not as a chain joining the two.
+  - **No narrative.** A document does not tell what was done, decided, tried, or changed. It states
+    what is. `git log` and the ADR carry the history.
+
+  ```
+  Bad   A record that does not fit is now skipped, because the client skips it and we changed
+        apply to match.
+  Good  The client skips a record it cannot resolve. Apply skips a record that does not fit.
+
+  Bad   Names are hashed with FNV-1a so that they match the client's lookup.
+  Good  The client looks up a property by the FNV-1a hash of its name. A property name is hashed
+        with FNV-1a.
+  ```
+
+  A `Why` column, an ADR's context, and a PRD's problem statement are still declarative: they
+  hold the facts a decision rests on, each as its own statement. An ADR is a record of one
+  moment and its header date carries that moment; the body is untensed. The Decision states the
+  option taken as the rule the code obeys.
+
+  Doc comments carry the most volume and lean on `so that`. A purpose clause is a second
+  sentence stating the invariant:
+
+  ```
+  Bad   /// Sorts the entries by hash so that lookup can binary search.
+  Good  /// Sorts the entries by hash. Lookup binary searches the sorted entries.
+
+  Bad   /// Returns `None` once the walk has left the object, since a path cannot re-enter it.
+  Good  /// Returns `None` outside the object. A path never re-enters an object.
+  ```
 - Write an ADR before adding a crate, changing the shape of a public API, or diverging from what the game client does. Name at least two viable alternatives with concrete trade-offs.
 - Templates: `docs/prd/template.md`, `docs/adr/template.md`. Worked example: PRD-001, ADR-0001 to ADR-0006 and `docs/design/ptch-property-patches.md`.
 - Skills: `write-prd`, `write-spec`, `write-adr` and `write-ticket` produce these files, `sync-issues` renders tickets to GitHub. Each carries the rule for its own document (when it is worth writing, how it is numbered, what it must not absorb).
