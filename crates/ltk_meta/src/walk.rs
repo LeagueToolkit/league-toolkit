@@ -63,7 +63,7 @@ mod view;
 mod tests;
 
 pub use owned::{OwnedChildren, OwnedNode, OwnedProperties};
-pub use tree::{Child, Leaf, TreeNode, TreeValue};
+pub use tree::{Child, Leaf, TreeKind, TreeNode, TreeValue};
 pub use view::{ViewChildren, ViewProperties};
 
 use std::{

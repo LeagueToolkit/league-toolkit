@@ -12,10 +12,42 @@ pub(crate) mod sealed {
     pub trait Sealed {}
 }
 
+/// Whether a [`Kind`] is a node kind.
+///
+/// Sealed: implemented for [`Kind`] and by nothing else. A node kind is `Struct` or
+/// `Embedded`. The walk asks nothing else of a kind.
+///
+/// # Examples
+///
+/// ```
+/// use ltk_meta::{walk::TreeKind, PropertyKind};
+///
+/// assert!(PropertyKind::Struct.is_node());
+/// assert!(PropertyKind::Embedded.is_node());
+/// assert!(!PropertyKind::ObjectLink.is_node());
+/// assert!(!PropertyKind::Container.is_node());
+/// ```
+pub trait TreeKind: Copy + sealed::Sealed {
+    /// Whether a value of this kind is a node: `Struct` or `Embedded`.
+    ///
+    /// [`Kind::is_primitive`] answers a different question, which kinds a value model treats
+    /// as leaves. The two are not complements: `ObjectLink` and `BitBool` are neither
+    /// primitive nor a node.
+    fn is_node(self) -> bool;
+}
+
+impl sealed::Sealed for Kind {}
+impl TreeKind for Kind {
+    #[inline]
+    fn is_node(self) -> bool {
+        matches!(self, Kind::Struct | Kind::Embedded)
+    }
+}
+
 /// A value the walk can cross.
 ///
 /// Sealed: implemented for `&'a PropertyValueEnum<M>` and for [`ValueView<'a, M>`], and by
-/// nothing else. A visitor is written against this trait and runs over either tree.
+/// nothing else. A visitor written against this trait runs over either tree.
 ///
 /// [`ValueView<'a, M>`]: crate::stream::ValueView
 pub trait TreeValue<'a>: Copy + sealed::Sealed {
@@ -30,8 +62,8 @@ pub trait TreeValue<'a>: Copy + sealed::Sealed {
     /// Whether entering this value can reach a node.
     ///
     /// True for a `Struct` or `Embedded` whose class hash is not 0, and for a container,
-    /// optional or map whose item kind [`Kind::is_node`]. An empty optional or container of a
-    /// node kind answers true: it *can* hold one, and entering it costs nothing.
+    /// optional or map whose item kind [`TreeKind::is_node`]. An empty optional or container
+    /// of a node kind answers true. Entering it costs nothing.
     ///
     /// # Errors
     ///
@@ -46,7 +78,7 @@ pub trait TreeValue<'a>: Copy + sealed::Sealed {
     fn as_node(&self) -> Result<Option<Self::Node>, Error>;
 
     /// The values inside this one, with the step reaching each. Empty for a leaf and for a
-    /// node: a node's contents are its properties.
+    /// node. A node's contents are its properties.
     ///
     /// # Errors
     ///
@@ -60,8 +92,8 @@ pub trait TreeValue<'a>: Copy + sealed::Sealed {
     /// Over a view, a leaf that does not decode. The owned tree never fails.
     fn leaf(&self) -> Result<Option<Leaf<'a>>, Error>;
 
-    /// The whole value, owned. Allocates; a visitor reaches for it when it needs a subtree
-    /// rather than a leaf.
+    /// The whole value, owned. Allocates. A visitor reaches for it for a subtree, not for a
+    /// leaf.
     ///
     /// # Errors
     ///
@@ -73,7 +105,7 @@ pub trait TreeValue<'a>: Copy + sealed::Sealed {
 /// A node the walk can visit: a class and properties.
 ///
 /// Sealed: implemented for the owned tree's node, [`OwnedNode`](super::OwnedNode), and for
-/// [`StructView<'a, M>`], which an object's root also views as.
+/// [`StructView<'a, M>`]. An object's root is a `StructView` over the same bytes.
 ///
 /// [`StructView<'a, M>`]: crate::stream::StructView
 pub trait TreeNode<'a>: Copy + sealed::Sealed {
@@ -89,8 +121,8 @@ pub trait TreeNode<'a>: Copy + sealed::Sealed {
     /// The properties, in file order.
     fn properties(&self) -> Self::Properties;
 
-    /// One property by field hash: the owned tree's keyed lookup, or the view's in-place
-    /// scan.
+    /// One property by field hash. The owned tree looks it up by key; the view scans in
+    /// place.
     ///
     /// # Errors
     ///
@@ -98,8 +130,9 @@ pub trait TreeNode<'a>: Copy + sealed::Sealed {
     /// owned tree never fails.
     fn property(&self, field: BinHash) -> Result<Option<Self::Value>, Error>;
 
-    /// The whole node, owned, as a `Struct` carrying this class and every property. Allocates.
-    /// For a root, the object's path hash is [`Node::object_hash`](super::Node::object_hash).
+    /// The whole node, owned, as a `Struct` carrying this class and every property.
+    /// Allocates. The object's path hash is not part of a `Struct`; a root's is
+    /// [`Node::object_hash`](super::Node::object_hash).
     ///
     /// # Errors
     ///
@@ -111,7 +144,7 @@ pub trait TreeNode<'a>: Copy + sealed::Sealed {
 /// The step from a container, optional or map to one value inside it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Child<V> {
-    /// A container element, or the value of a present optional (always 0).
+    /// A container element by position, or the value of a present optional, which is 0.
     Index(usize),
     /// A map entry, by its key value.
     Key(V),
@@ -122,8 +155,8 @@ pub enum Child<V> {
 /// The client's names for the tags, not the wire enum's: `File` is [`Kind::WadChunkLink`],
 /// `Link` is [`Kind::ObjectLink`], `Flag` is [`Kind::BitBool`].
 ///
-/// Non-exhaustive: the set of leaf kinds is the game's, and the game has added one before. A
-/// match outside this crate carries a wildcard arm.
+/// Non-exhaustive: the set of leaf kinds is the game's. A match outside this crate carries a
+/// wildcard arm.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[non_exhaustive]
 pub enum Leaf<'a> {
@@ -242,8 +275,8 @@ fn write_tuple<T: fmt::Display>(f: &mut fmt::Formatter<'_>, items: &[T]) -> fmt:
     f.write_str(")")
 }
 
-/// A JSON string literal, escaped as `serde_json` writes one: `"`, `\` and the control
-/// characters.
+/// A JSON string literal. `"`, `\` and the control characters are escaped, as `serde_json`
+/// writes them.
 fn write_json_string(f: &mut fmt::Formatter<'_>, s: &str) -> fmt::Result {
     f.write_str("\"")?;
     for c in s.chars() {

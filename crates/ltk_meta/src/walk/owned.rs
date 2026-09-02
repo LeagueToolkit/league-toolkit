@@ -6,7 +6,7 @@ use indexmap::IndexMap;
 use ltk_hash::BinHash;
 
 use super::{
-    tree::{sealed::Sealed, Child, Leaf, TreeNode, TreeValue},
+    tree::{sealed::Sealed, Child, Leaf, TreeKind as _, TreeNode, TreeValue},
     Error,
 };
 use crate::{
@@ -169,7 +169,15 @@ impl<'a, M> TreeValue<'a> for &'a PropertyValueEnum<M> {
     }
 
     fn holds_node(&self) -> Result<bool, Error> {
-        Ok(PropertyValueEnum::holds_node(self))
+        Ok(match self {
+            PropertyValueEnum::Struct(s) => *s.class_hash != 0,
+            PropertyValueEnum::Embedded(e) => *e.0.class_hash != 0,
+            PropertyValueEnum::Container(c) => c.item_kind().is_node(),
+            PropertyValueEnum::UnorderedContainer(c) => c.0.item_kind().is_node(),
+            PropertyValueEnum::Optional(o) => o.item_kind().is_node(),
+            PropertyValueEnum::Map(m) => m.value_kind().is_node(),
+            _ => false,
+        })
     }
 
     fn as_node(&self) -> Result<Option<Self::Node>, Error> {

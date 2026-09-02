@@ -148,28 +148,6 @@ impl Kind {
         )
     }
 
-    /// Whether a value of this kind is a node: [`Kind::Struct`] or [`Kind::Embedded`].
-    ///
-    /// The other question - which kinds a value model treats as leaves - is
-    /// [`Kind::is_primitive`], and the two are not complements: [`Kind::ObjectLink`] and
-    /// [`Kind::BitBool`] are neither primitive nor a node.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use ltk_meta::PropertyKind;
-    ///
-    /// assert!(PropertyKind::Struct.is_node());
-    /// assert!(PropertyKind::Embedded.is_node());
-    /// assert!(!PropertyKind::ObjectLink.is_node());
-    /// assert!(!PropertyKind::Container.is_node());
-    /// ```
-    #[inline(always)]
-    #[must_use]
-    pub fn is_node(self) -> bool {
-        matches!(self, Kind::Struct | Kind::Embedded)
-    }
-
     /// Whether this property kind is a container type (container, unordered container, optional, map).
     #[inline(always)]
     #[must_use]
