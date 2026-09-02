@@ -409,6 +409,73 @@ if report.is_clean() {
 `crates/ltk_meta/tests/corpus.rs` runs all of this over an installed client; it is `#[ignore]`d
 unless `LTK_LOL_GAME_DIR` is set.
 
+**Walking a bin**: `ltk_meta::walk` is one read-only traversal over every node of an object,
+driven by a `Visitor` that is generic over the tree. The walk visits every node of an object once, in pre-order and file order, and asks the visitor before entering each property. The visitor is generic over the tree: the same `Census` runs over an owned `Bin` and over a `BinStream`, where nothing is materialised. The design is
+`docs/design/value-walk.md`.
+
+```rust
+use ltk_hash::BinHash;
+use ltk_meta::{
+    walk::{Node, TreeValue, Visit, Visitor},
+    Error,
+};
+
+/// Counts nodes and records the address of every `Struct` of one class.
+#[derive(Default)]
+struct Census {
+    nodes: usize,
+    hits: Vec<(BinHash, String)>,
+}
+
+impl<'a, V: TreeValue<'a>> Visitor<'a, V> for Census {
+    type Error = Error;
+
+    fn enter_node(&mut self, node: &Node<'_, 'a, V>) -> Result<Visit, Error> {
+        self.nodes += 1;
+        if *node.class_hash() == 0x1e6b_a0c4 {
+            self.hits.push((node.object_hash(), node.trail().to_string()));
+        }
+        Ok(Visit::Continue)
+    }
+}
+
+let mut census = Census::default();
+bin.walk(&mut census)?;
+```
+
+**In parallel.** The walk over one object is sequential by contract: one visitor, pre-order, `Stop` and `Skip` as ordered decisions. Objects are independent of one another, and every view, node and trail type is `Send`. A sweep parallelises across objects with one visitor instance per worker and a reduce at the end. Nothing in the crate schedules this; the split is the caller's.
+
+```rust
+let objects: Vec<_> = bin.objects.values().collect();
+let workers = std::thread::available_parallelism().map_or(1, |n| n.get());
+let per_worker = objects.len().div_ceil(workers).max(1);
+
+let counted = std::thread::scope(|scope| {
+    let workers: Vec<_> = objects
+        .chunks(per_worker)
+        .map(|chunk| {
+            scope.spawn(move || {
+                let mut census = Census::default();
+                for object in chunk {
+                    object.walk(&mut census)?;
+                }
+                Ok::<_, Error>(census)
+            })
+        })
+        .collect();
+
+    let mut all = Census::default();
+    for worker in workers {
+        let census = worker.join().expect("a worker panicked")?;
+        all.nodes += census.nodes;
+        all.hits.extend(census.hits);
+    }
+    Ok::<_, Error>(all)
+})?;
+```
+
+Across many files the same shape applies one level up: one task per file, each mounting its own `BinStream` and walking it sequentially. The per-object walk is microseconds; decompression and I/O are where a sweep spends its time.
+
 **Path/Name Hashing**: Object paths and property names are stored as FNV-1a hashes. Use community hash databases or `ltk_hash::fnv1a::hash_lower()` to compute hashes.
 
 ---
