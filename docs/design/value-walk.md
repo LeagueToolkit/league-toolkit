@@ -95,21 +95,23 @@ Every term this document uses in a specific sense.
 
 ## <a id="s3"></a>3. The tree the walk sees
 
+The walk is written once, against two sealed traits, and the owned tree and the view each
+implement them. A visitor is generic over the value type and never names either. A third
+sealed trait carries the one question the walk asks of a `Kind`. All three live in
+`ltk_meta::walk`; `Kind` and `PropertyValueEnum` carry no walk vocabulary of their own (W1).
+
 ```rust
-impl Kind {
+/// The one question the walk asks of a `Kind`. Sealed: implemented for `Kind` only.
+pub trait TreeKind: Copy + sealed::Sealed {
     /// Whether a value of this kind is a node: `Struct` or `Embedded`.
     ///
     /// The other question - which kinds a value model treats as leaves - is
-    /// [`Kind::is_primitive`], and the two are not complements: `ObjectLink` and `BitBool`
+    /// `Kind::is_primitive`, and the two are not complements: `ObjectLink` and `BitBool`
     /// are neither primitive nor a node.
-    pub fn is_node(self) -> bool;
+    fn is_node(self) -> bool;
 }
-```
+impl TreeKind for Kind {}
 
-The walk is written once, against two sealed traits, and the owned tree and the view each
-implement them. A visitor is generic over the value type and never names either.
-
-```rust
 /// A value the walk can cross. Sealed: implemented for `&'a PropertyValueEnum<M>` and for
 /// `ValueView<'a, M>`, and by nothing else.
 pub trait TreeValue<'a>: Copy + sealed::Sealed {
@@ -123,8 +125,8 @@ pub trait TreeValue<'a>: Copy + sealed::Sealed {
     /// Whether entering this value can reach a node.
     ///
     /// True for a `Struct` or `Embedded` whose class hash is not 0, and for a container,
-    /// optional or map whose item kind [`Kind::is_node`]. An empty optional or container of a
-    /// node kind answers true: it *can* hold one, and entering it costs nothing.
+    /// optional or map whose item kind [`TreeKind::is_node`]. An empty optional or container
+    /// of a node kind answers true: it *can* hold one, and entering it costs nothing.
     ///
     /// # Errors
     ///
@@ -249,8 +251,7 @@ pub struct ViewChildren<'a, M = NoMeta> { /* ... */ }
 owned tree every metadata slot is reset, over a view there was none. A null pointer stays a
 `Struct` with class 0 under either.
 
-`PropertyValueEnum::holds_node` is also exposed directly, infallible, and `Kind::is_primitive`
-plays no part in any of this (W1). `Leaf` is the one place the crate names the tags as the
+`Kind::is_primitive` plays no part in any of this (W1). `Leaf` is the one place the crate names the tags as the
 client does (W19): a visitor reads a texture path as `Leaf::File`, whatever `Kind` calls it.
 
 ## <a id="s4"></a>4. `ValuePath`
@@ -832,7 +833,7 @@ rules append.
 
 | ID | Rule | Instead of | Why | Spec |
 | -- | ---- | ---------- | --- | ---- |
-| W1 | The walk's prune is `holds_node`, built on `Kind::is_node` (`Struct`, `Embedded`), asked of the tree before the visitor. `Kind::is_primitive` plays no part. | Entering everything `is_primitive` does not cover. | `ObjectLink` and `BitBool` are neither primitive nor a node, so the complement of `is_primitive` enters containers that hold nothing; and a consumer should not have to know which set `is_primitive` is. | [section 3](#s3), [section 5.1](#s5.1) |
+| W1 | The walk's prune is `TreeValue::holds_node`, built on `TreeKind::is_node` (`Struct`, `Embedded`), asked of the tree before the visitor. Both are traits in `walk`; `Kind` and `PropertyValueEnum` carry no inherent walk predicate. `Kind::is_primitive` plays no part. | Inherent `Kind::is_node` and `PropertyValueEnum::holds_node`; or entering everything `is_primitive` does not cover. | "Node" is the walk's vocabulary, defined in this document, and a method on `Kind` shows the word to every reader of the crate with nothing beside it to say what it means. `ObjectLink` and `BitBool` are neither primitive nor a node, so the complement of `is_primitive` enters containers that hold nothing. | [section 3](#s3), [section 5.1](#s5.1) |
 | W2 | A `Struct` or `Embedded` with class 0 is not a node and is not entered. | Visiting it as a node with class 0. | It is the client's null pointer, has no properties, and the resolver already treats it as one (`NullPointer`). A visitor keyed on class would otherwise see a class no meta class dump has. | [section 5.1](#s5.1) |
 | W3 | `ltk_meta` owns one single-visitor walk with a trail; scheduling several visitors over one walk, and what each does with a node, is the consumer's. | A multi-visitor walk with per-visitor pruning in the crate; or only a predicate and a step enum. | The single-visitor descent is identical for every consumer and is what merge and diff need; the active-set policy is one consumer's and would pin its shape under semver. | [section 5](#s5); ADR-0013 |
 | W4 | A `ValuePath` keeps a class context beside its steps - the class of the node each field was read on - and `Step::Field` carries the field hash alone. | `Field { class, field }`, or no class anywhere. | Naming a field takes the class it is on, and every table a consumer holds is keyed by class; keeping it beside the steps leaves `Step` the address and the context free to grow. | [section 4.1](#s4.1); ADR-0012 |
