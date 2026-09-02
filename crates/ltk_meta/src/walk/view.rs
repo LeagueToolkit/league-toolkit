@@ -5,7 +5,7 @@ use std::fmt;
 use ltk_hash::BinHash;
 
 use super::{
-    tree::{sealed::Sealed, Child, Leaf, TreeNode, TreeValue},
+    tree::{sealed::Sealed, Child, Leaf, TreeKind as _, TreeNode, TreeValue},
     Error,
 };
 use crate::{

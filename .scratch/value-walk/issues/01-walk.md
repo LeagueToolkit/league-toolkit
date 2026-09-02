@@ -19,16 +19,16 @@ visitors over `BinStream::walk`, and the same visitor verifies a repair over `Bi
 
 ## Proposed surface
 
-```rust
-impl Kind {
-    /// Whether a value of this kind is a node: `Struct` or `Embedded`.
-    pub fn is_node(self) -> bool;
-}
-```
-
 In `ltk_meta::walk`:
 
 ```rust
+/// The one question the walk asks of a `Kind`. Sealed: implemented for `Kind` only.
+pub trait TreeKind: Copy + sealed::Sealed {
+    /// Whether a value of this kind is a node: `Struct` or `Embedded`.
+    fn is_node(self) -> bool;
+}
+impl TreeKind for Kind {}
+
 /// A value the walk can cross. Sealed: implemented for `&'a PropertyValueEnum<M>` and for
 /// `ValueView<'a, M>`, and by nothing else.
 pub trait TreeValue<'a>: Copy + sealed::Sealed {
@@ -37,7 +37,7 @@ pub trait TreeValue<'a>: Copy + sealed::Sealed {
 
     fn kind(&self) -> Kind;
     /// Whether entering this value can reach a node: a `Struct` or `Embedded` whose class hash
-    /// is not 0, or a container, optional or map whose item kind [`Kind::is_node`].
+    /// is not 0, or a container, optional or map whose item kind [`TreeKind::is_node`].
     fn holds_node(&self) -> Result<bool, Error>;
     /// This value as a node, if it is a `Struct` or `Embedded` with a class hash that is not 0.
     fn as_node(&self) -> Result<Option<Self::Node>, Error>;
@@ -253,7 +253,7 @@ to decode and a visitor reading a leaf can too; the tree's errors convert throug
 `Stop` is an outcome, not an error.
 
 Blocked by #219: `Node::value_path`, `Trail::to_value_path` and `MapKey` are its types.
-`Kind::is_node`, the traits, `Leaf`, `Visitor`, `Node`, `Trail` and every entry point do not
+`TreeKind`, the tree traits, `Leaf`, `Visitor`, `Node`, `Trail` and every entry point do not
 depend on it and can land first behind those methods.
 
 - [ ] The fixture tree of `value-walk.md` [section 7](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/value-walk.md#s7) is walked twice, owned and as an `ObjectView` of its bytes, through one generic visitor, and a
