@@ -191,6 +191,84 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+## Walking a bin
+
+`ltk_meta::walk` is one traversal for both trees. A `Visitor` is called once per node, in pre-order and file order, and answers a `Visit` that continues, prunes a property, stops or aborts. The walk visits every node of an object once, in pre-order and file order, and asks the visitor before entering each property. The visitor is generic over the tree: the same `Census` runs over an owned `Bin` and over a `BinStream`, where nothing is materialised.
+
+```rust
+use ltk_hash::BinHash;
+use ltk_meta::{
+    walk::{Node, TreeValue, Visit, Visitor},
+    Error,
+};
+
+/// Counts nodes and records the address of every `Struct` of one class.
+#[derive(Default)]
+struct Census {
+    nodes: usize,
+    hits: Vec<(BinHash, String)>,
+}
+
+impl<'a, V: TreeValue<'a>> Visitor<'a, V> for Census {
+    type Error = Error;
+
+    fn enter_node(&mut self, node: &Node<'_, 'a, V>) -> Result<Visit, Error> {
+        self.nodes += 1;
+        if *node.class_hash() == 0x1e6b_a0c4 {
+            self.hits.push((node.object_hash(), node.trail().to_string()));
+        }
+        Ok(Visit::Continue)
+    }
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let bin = ltk_meta::Bin::from_reader(&mut std::fs::File::open("data.bin")?)?;
+    let mut census = Census::default();
+    bin.walk(&mut census)?;
+    println!("{} nodes, {} hits", census.nodes, census.hits.len());
+
+    let mut stream = ltk_meta::concrete::BinStream::mount(std::fs::File::open("data.bin")?)?;
+    let mut census = Census::default();
+    stream.walk(&mut census)?;
+    Ok(())
+}
+```
+
+**In parallel.** The walk over one object is sequential by contract: one visitor, pre-order, `Stop` and `Skip` as ordered decisions. Objects are independent of one another, and every view, node and trail type is `Send`. A sweep parallelises across objects with one visitor instance per worker and a reduce at the end. Nothing in the crate schedules this; the split is the caller's.
+
+```rust
+let objects: Vec<_> = bin.objects.values().collect();
+let workers = std::thread::available_parallelism().map_or(1, |n| n.get());
+let per_worker = objects.len().div_ceil(workers).max(1);
+
+let counted = std::thread::scope(|scope| {
+    let workers: Vec<_> = objects
+        .chunks(per_worker)
+        .map(|chunk| {
+            scope.spawn(move || {
+                let mut census = Census::default();
+                for object in chunk {
+                    object.walk(&mut census)?;
+                }
+                Ok::<_, Error>(census)
+            })
+        })
+        .collect();
+
+    let mut all = Census::default();
+    for worker in workers {
+        let census = worker.join().expect("a worker panicked")?;
+        all.nodes += census.nodes;
+        all.hits.extend(census.hits);
+    }
+    Ok::<_, Error>(all)
+})?;
+
+println!("{} nodes, {} hits", counted.nodes, counted.hits.len());
+```
+
+Across many files the same shape applies one level up: one task per file, each mounting its own `BinStream` and walking it sequentially. The per-object walk is microseconds; decompression and I/O are where a sweep spends its time.
+
 ## Creating one programmatically
 
 The `concrete` module pins the metadata parameter, which is what you want unless you are attaching per-node metadata of your own:

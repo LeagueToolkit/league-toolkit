@@ -19,16 +19,16 @@ visitors over `BinStream::walk`, and the same visitor verifies a repair over `Bi
 
 ## Proposed surface
 
-```rust
-impl Kind {
-    /// Whether a value of this kind is a node: `Struct` or `Embedded`.
-    pub fn is_node(self) -> bool;
-}
-```
-
 In `ltk_meta::walk`:
 
 ```rust
+/// The one question the walk asks of a `Kind`. Sealed: implemented for `Kind` only.
+pub trait TreeKind: Copy + sealed::Sealed {
+    /// Whether a value of this kind is a node: `Struct` or `Embedded`.
+    fn is_node(self) -> bool;
+}
+impl TreeKind for Kind {}
+
 /// A value the walk can cross. Sealed: implemented for `&'a PropertyValueEnum<M>` and for
 /// `ValueView<'a, M>`, and by nothing else.
 pub trait TreeValue<'a>: Copy + sealed::Sealed {
@@ -37,7 +37,7 @@ pub trait TreeValue<'a>: Copy + sealed::Sealed {
 
     fn kind(&self) -> Kind;
     /// Whether entering this value can reach a node: a `Struct` or `Embedded` whose class hash
-    /// is not 0, or a container, optional or map whose item kind [`Kind::is_node`].
+    /// is not 0, or a container, optional or map whose item kind [`TreeKind::is_node`].
     fn holds_node(&self) -> Result<bool, Error>;
     /// This value as a node, if it is a `Struct` or `Embedded` with a class hash that is not 0.
     fn as_node(&self) -> Result<Option<Self::Node>, Error>;
@@ -52,7 +52,8 @@ pub trait TreeValue<'a>: Copy + sealed::Sealed {
 }
 
 /// A node the walk can visit: a class and properties. Sealed: implemented for the owned
-/// tree's node, for `StructView<'a, M>`, and for `ObjectView<'a, M>` as a root.
+/// tree's node and for `StructView<'a, M>`. An object's root is walked as a `StructView`
+/// over the same bytes.
 pub trait TreeNode<'a>: Copy + sealed::Sealed {
     type Value: TreeValue<'a, Node = Self>;
     type Properties: Iterator<Item = Result<(BinHash, Self::Value), Error>>;
@@ -97,7 +98,6 @@ impl<'a, M> TreeValue<'a> for &'a PropertyValueEnum<M> { type Node = OwnedNode<'
 impl<'a, M: Default> TreeValue<'a> for ValueView<'a, M> { type Node = StructView<'a, M>; /* ... */ }
 impl<'a, M> TreeNode<'a> for OwnedNode<'a, M> { type Value = &'a PropertyValueEnum<M>; /* ... */ }
 impl<'a, M: Default> TreeNode<'a> for StructView<'a, M> { type Value = ValueView<'a, M>; /* ... */ }
-impl<'a, M: Default> TreeNode<'a> for ObjectView<'a, M> { type Value = ValueView<'a, M>; /* ... */ }
 
 /// What a callback answers. `ltk_ritobin::cst::visitor::Visit`'s shape (W21).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -132,7 +132,8 @@ pub trait Visitor<'a, V: TreeValue<'a>> {
     /// descended on `Continue`.
     fn enter_property(&mut self, field: BinHash, value: V, node: &Node<'_, 'a, V>)
         -> Result<Visit, Self::Error> { Ok(Visit::Continue) }
-    /// Once per property descended. Not called for a leaf. Never after an `Abort`.
+    /// Once per property that holds a node and was entered. Not called for a leaf. Never
+    /// after an `Abort`.
     fn exit_property(&mut self, field: BinHash, value: V, node: &Node<'_, 'a, V>)
         -> Result<Visit, Self::Error> { Ok(Visit::Continue) }
 }
@@ -208,14 +209,14 @@ impl<'a, M: Default> ObjectView<'a, M> {
 }
 impl<R: io::Read + io::Seek, M: Default> ObjectStream<'_, R, M> {
     /// `view()?` then `walk`.
-    pub fn walk<W>(&mut self, visitor: &mut W) -> Result<WalkOutcome, W::Error>
-    where W: for<'a> Visitor<'a, ValueView<'a, M>>;
+    pub fn walk<E, W>(&mut self, visitor: &mut W) -> Result<WalkOutcome, E>
+    where E: From<Error>, W: for<'a> Visitor<'a, ValueView<'a, M>, Error = E>;
 }
 impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
     /// Walks every object in file order, one buffered object at a time. Holds one object's
     /// bytes at any moment and nothing of the tree.
-    pub fn walk<W>(&mut self, visitor: &mut W) -> Result<WalkOutcome, W::Error>
-    where W: for<'a> Visitor<'a, ValueView<'a, M>>;
+    pub fn walk<E, W>(&mut self, visitor: &mut W) -> Result<WalkOutcome, E>
+    where E: From<Error>, W: for<'a> Visitor<'a, ValueView<'a, M>, Error = E>;
 }
 ```
 
@@ -252,7 +253,7 @@ to decode and a visitor reading a leaf can too; the tree's errors convert throug
 `Stop` is an outcome, not an error.
 
 Blocked by #219: `Node::value_path`, `Trail::to_value_path` and `MapKey` are its types.
-`Kind::is_node`, the traits, `Leaf`, `Visitor`, `Node`, `Trail` and every entry point do not
+`TreeKind`, the tree traits, `Leaf`, `Visitor`, `Node`, `Trail` and every entry point do not
 depend on it and can land first behind those methods.
 
 - [ ] The fixture tree of `value-walk.md` [section 7](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/value-walk.md#s7) is walked twice, owned and as an `ObjectView` of its bytes, through one generic visitor, and a

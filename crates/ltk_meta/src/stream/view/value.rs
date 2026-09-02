@@ -616,6 +616,17 @@ impl<'a, M> StructView<'a, M> {
         })
     }
 
+    /// A view over `count` properties at `properties`, carrying `class_hash`. An object's
+    /// root as a struct.
+    pub(crate) fn from_parts(class_hash: BinHash, count: u16, properties: Cursor<'a>) -> Self {
+        Self {
+            class_hash,
+            property_count: count,
+            properties,
+            meta: PhantomData,
+        }
+    }
+
     /// The class this is an instance of, or `0` for a null pointer.
     #[must_use]
     pub fn class_hash(&self) -> BinHash {
