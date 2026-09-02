@@ -184,7 +184,9 @@ pub enum Child<V> {
 
 /// A leaf, decoded and borrowed. The client's names for the tags, not the wire enum's:
 /// `File` is `Kind::WadChunkLink`, `Link` is `Kind::ObjectLink`, `Flag` is `Kind::BitBool`.
+/// Non-exhaustive: the set of leaf kinds is the game's (W22).
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
 pub enum Leaf<'a> {
     None,
     Bool(bool),
@@ -851,3 +853,4 @@ rules append.
 | W19 | `Leaf` and `MapKey` name the tags as the client does: `File`, `Link`, `Flag`. `Kind` keeps `WadChunkLink`, `ObjectLink`, `BitBool`. | Reusing `Kind`'s names in the new types. | The new surface is what a consumer writes against and should carry the vocabulary the reversing notes and the meta class dumps use; renaming `Kind` is a break for every existing caller and is its own decision. | [section 3](#s3) |
 | W20 | The walk runs over two sealed traits, `TreeNode` and `TreeValue`, implemented by the owned tree and by the views; a visitor is generic over the value type. | A walk over `PropertyValueEnum` only, with `read()` per streamed object; or a walk over the views only. | One traversal, one visitor, both sources; the stream pass materialises nothing and the repair's in-memory check uses the same rule. Sealed, because a third tree would have to be this crate's. | [section 3](#s3), [section 5](#s5); ADR-0014 |
 | W21 | The visitor has `ltk_ritobin`'s CST visitor shape: symmetric enter and exit, a `Visit` answer of `Abort`, `Stop`, `Skip` or `Continue`, a `WalkOutcome`. `Skip` from `enter_property` prunes that value, where the CST's token `Skip` prunes the rest of the node. | A `bool` prune and no early exit. | One visitor idiom across the workspace; and a property, unlike a token, has a subtree of its own to prune. | [section 5](#s5) |
+| W22 | `Leaf` is `#[non_exhaustive]`; `Visit`, `WalkOutcome`, `Child`, `TrailStep` and `Step` are exhaustive. | Marking every new public enum, or none. | The leaf kinds are the game's to extend, and `WadChunkLink` was added once; a consumer's wildcard arm is the price of a minor release carrying the next one. The other enums are this crate's own, and a consumer matching a new `Visit` answer or step kind is told by the compiler. | [section 3](#s3) |
