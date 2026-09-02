@@ -263,6 +263,13 @@ attested, and the literal the client coerces is a number either way
 (`ptch-property-patches.md` D10). The path it produces resolves, by
 `Bin::resolve`, to the position the walk was at; that is the round trip [section 7](#s7) tests.
 
+What that round trip attests is this crate's resolver, not the client's. The `{key}` literal is
+JSON by D10, inferred from `PropertyPath.hpp`; the reversing notes' worked example writes the
+bare text `PerAttachmentMaterial{weapon}`, no shipped record uses a `{key}` at all, and the two
+readings have not been settled in game. A path with a `Key` step is therefore **unattested** as
+a client path, and a tool that exports one should say so until D10 is tested (W18). Field-only
+paths and `[i]` subscripts are the forms every shipped record uses and carry no such caveat.
+
 ### <a id="s4.3"></a>4.3 `FieldNames`
 
 ```rust
@@ -297,6 +304,18 @@ The `class` parameter exists because the tables a consumer holds are keyed by cl
 field by the class it is on. A name is looked up with the class the walk saw the field on, which
 is what the path's class context holds (ADR-0012). A path built without a tree - from steps
 alone - asks with `None`, and a field-keyed table still answers.
+
+The class in the context is the **concrete** class, as the file states it: the object's class
+hash, or the class hash a `Struct` or `Embedded` carries. For a pointer that is the class the
+client constructs, which may be a descendant of the class the property declares
+(`BinPropertyTypes_TypeRule.md` section 9.5). Two things follow for a class-keyed table:
+
+- A field may be declared on a base class rather than on the concrete one. The client resolves a
+  field by walking the base chain from the concrete class (`MetaPath_resolve`, `cls+56`), and a
+  table keyed by class has to do the same; `field(field, Some(class))` is asked with the concrete
+  class only, and walking the chain is the table's job (W17).
+- The concrete class is what a meta class dump names a field under, which is why it is the
+  right one to carry. The declared class of the property is not recorded anywhere on the path.
 
 ## <a id="s5"></a>5. The walk
 
@@ -389,9 +408,10 @@ impl<M> Bin<M> {
 }
 
 impl<M> BinOverride<M> {
-    /// Walks every embedded object, in file order. Patch records are not walked: a record's
-    /// value has no node of its own to stand on, and the objects are content the game loads
-    /// whether or not the records apply.
+    /// Walks every embedded object, in file order, as the file holds them: a record that
+    /// targets one of them (the client merges a patch's objects into the base table before
+    /// applying records, so it may) has not been applied. Patch records are not walked: a
+    /// record's value has no node of its own to stand on.
     pub fn walk<V: Visitor<M>>(&self, visitor: &mut V);
 }
 ```
@@ -518,3 +538,5 @@ rules append.
 | W14 | `ValuePath` and `FieldNames` live in `ltk_meta::path` beside `PropertyPath`; the walk in `ltk_meta::walk`. | Everything under `walk`. | Both paths are addresses and are converted between; the walk is one producer of them. | [section 4](#s4), [section 5](#s5) |
 | W15 | A class of 0 in the context means unknown; `Trail` never records one, `FromIterator<Step>` and `push(Step)` always do. | `Vec<Option<BinHash>>`. | No node carries the null class (W2), so 0 is free, and the public reading is `Option` through `fields()` either way. | [section 4.1](#s4.1) |
 | W16 | Two paths with the same steps are equal whatever their class context. | Comparing the context too. | The context is what a name table is asked with, not where the position is; a report keyed on an address must match the same position however it was reached. | [section 4.1](#s4.1) |
+| W17 | The class context holds the concrete class the file states; a class-keyed `FieldNames` walks the base chain itself. | Recording the declaring class, or walking the chain in `to_named`. | The crate holds no schema (ADR-0006), so it cannot know where a field is declared; the client resolves from the concrete class up, and a dump names fields under the class that declares them. | [section 4.3](#s4.3) |
+| W18 | A `PropertyPath` produced from a `Key` step is unattested as a client path until D10 is tested in game. | Refusing to produce one. | The resolver's own reading is consistent and round-trips here; what is unknown is whether the client reads the literal as JSON or as bare text, and no shipped record decides it. | [section 4.2](#s4.2) |

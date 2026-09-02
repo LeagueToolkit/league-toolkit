@@ -162,6 +162,15 @@ class is context for the name table and not part of the address: `Step::Field` c
 alone, two paths with the same steps are equal whatever their classes (W16), the hash form does
 not print them, and a path built from steps alone has none (W15).
 
+**W17: the context is the concrete class.** The object's class hash, or the class a `Struct` or
+`Embedded` carries - for a pointer, the class the client constructs, which may be a descendant of
+the declared one. A field may be declared on a base class, and a class-keyed table walks the base
+chain itself, as the client does from `cls+56`.
+
+**W18: a `Key` step's client path is unattested.** The `{key}` literal is JSON by D10; the
+reversing notes' worked example writes bare text, and no shipped record uses one. The round trip
+attests this crate's resolver, not the client's.
+
 **W5: `PartialEq` only.** `Kind::is_valid_map_key` admits `F32` and the vector kinds, so a `Key`
 step can hold a float. The hash form is the total, stable, `Eq` key; a consumer that keys a map on
 an address uses `to_string()`.

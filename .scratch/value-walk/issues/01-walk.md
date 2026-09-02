@@ -114,7 +114,8 @@ impl<M> Bin<M> {
 }
 
 impl<M> BinOverride<M> {
-    /// Walks every embedded object, in file order. Patch records are not walked.
+    /// Walks every embedded object, in file order, as the file holds them: a record that
+    /// targets one of them has not been applied. Patch records are not walked.
     pub fn walk<V: Visitor<M>>(&self, visitor: &mut V);
 }
 ```
