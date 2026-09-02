@@ -28,22 +28,54 @@ In `ltk_meta::path`, beside `PropertyPath`:
 /// class of 0 means unknown. The context is not part of the address: two paths with the same
 /// steps are equal whatever their classes, and the hash form does not print them.
 ///
-/// `PartialEq` is written by hand over the steps alone (W16), and there is no `Eq` or `Hash`,
-/// because a map key may be an `f32`. The form to key on is the hash form, `to_string()`.
+/// `PartialEq`, `Eq` and `Hash` are written by hand over the steps alone (W16).
 #[derive(Clone, Debug, Default)]
 pub struct ValuePath { /* steps: Vec<Step>, classes: Vec<BinHash>, one per Field step */ }
 impl PartialEq for ValuePath { /* steps only */ }
+impl Eq for ValuePath {}
+impl Hash for ValuePath { /* steps only */ }
 
 /// One step from a node toward a position inside it.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Step {
     /// A property of a node, by the field's name hash.
     Field(BinHash),
     /// A container element by position, or the value of a present optional, which is always 0.
     Index(usize),
-    /// A map entry, by its key. Metadata is dropped; the key is otherwise the one the map holds.
-    Key(PropertyValueEnum),
+    /// A map entry, by its key.
+    Key(MapKey),
 }
+
+/// A map key, owned and metadata-free: every kind `Kind::is_valid_map_key` admits.
+///
+/// Floats are held as their bit patterns so the key is `Eq` and `Hash`: two keys are equal
+/// when the file would write the same bytes for them. The client's names for the tags (W19).
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum MapKey {
+    None,
+    Bool(bool),
+    I8(i8), U8(u8), I16(i16), U16(u16), I32(i32), U32(u32), I64(i64), U64(u64),
+    F32(FloatBits),
+    Vector2([FloatBits; 2]), Vector3([FloatBits; 3]), Vector4([FloatBits; 4]),
+    Matrix44([FloatBits; 16]),
+    Color(Color),
+    String(String),
+    Hash(BinHash),
+    File(WadHash),
+}
+
+/// An `f32` by its bits: `Eq` and `Hash`, and equal exactly when the wire bytes are.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct FloatBits(u32);
+impl FloatBits { pub fn new(value: f32) -> Self; pub fn get(self) -> f32; }
+
+impl MapKey {
+    pub fn kind(&self) -> Kind;
+    /// A leaf as a key, or `None` for `Link` and `Flag`, which no map is keyed by.
+    pub fn from_leaf(leaf: Leaf<'_>) -> Option<Self>;
+    pub fn to_value(&self) -> PropertyValueEnum;
+}
+impl<M> TryFrom<&PropertyValueEnum<M>> for MapKey { type Error = Error; /* InvalidKeyType */ }
 
 impl ValuePath {
     pub fn new() -> Self;
@@ -55,7 +87,7 @@ impl ValuePath {
     /// in the class context. Pass 0 when it is not known.
     pub fn push_field(&mut self, field: BinHash, class: BinHash);
     pub fn push_index(&mut self, index: usize);
-    pub fn push_key(&mut self, key: PropertyValueEnum);
+    pub fn push_key(&mut self, key: MapKey);
     /// Appends `step` with no class: a `Field` records 0.
     pub fn push(&mut self, step: Step);
     /// Removes the last step, and its class if it was a field.
@@ -171,17 +203,20 @@ chain itself, as the client does from `cls+56`.
 reversing notes' worked example writes bare text, and no shipped record uses one. The round trip
 attests this crate's resolver, not the client's.
 
-**W5: `PartialEq` only.** `Kind::is_valid_map_key` admits `F32` and the vector kinds, so a `Key`
-step can hold a float. The hash form is the total, stable, `Eq` key; a consumer that keys a map on
-an address uses `to_string()`.
+**W5: `MapKey`, not the value model.** The address type names no `PropertyValueEnum`; a key is
+an owned, metadata-free `MapKey` with floats as bits, so `ValuePath` is `Eq` and `Hash` and a
+repair can key its findings on it directly.
 
 **Rendering** is the `PropertyPath` grammar with hex where a name is unknown, one table for all
 three forms in `value-walk.md` [section 4.2](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/value-walk.md#s4.2). `to_property_path` writes a `Hash` key as its raw
 decimal value even when a name is known (W11): the value is what is attested and the client
 coerces a number either way.
 
-- [ ] `ValuePath`, `Step`, `NamedPath`, `Unnameable` and `UnnameableKind` derive the traits above,
-      and `Display` on `ValuePath` writes the hash form of every row of the rendering table
+- [ ] `ValuePath`, `Step`, `MapKey`, `NamedPath`, `Unnameable` and `UnnameableKind` carry the
+      traits above; two `F32` keys with the same bits are equal and hash the same; `Display` on
+      `ValuePath` writes the hash form of every row of the rendering table
+- [ ] `MapKey::try_from` accepts every kind `Kind::is_valid_map_key` admits and rejects the rest
+      with `InvalidKeyType`; `to_value` round-trips
 - [ ] `to_property_path` produces a path that `Bin::resolve` lands on the same value with, for
       every position in a fixture tree with a complete name table (AC-7)
 - [ ] `to_property_path` reports the first unnameable step rather than the last, and a `Key` step

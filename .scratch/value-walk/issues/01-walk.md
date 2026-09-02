@@ -7,12 +7,15 @@ labels: crate:ltk_meta, enhancement, format:bin, area:api, blocked
 Design: `docs/design/value-walk.md` [section 3](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/value-walk.md#s3) and [section 5](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/value-walk.md#s5); requirements PRD-001 FR-12 and FR-13.
 A `Visitor` called once per node of an object, in pre-order and file order, with a prune per
 property and a borrowing `Trail` that renders to a `ValuePath` (#219) only for a node a visitor
-reports on.
+reports on. The walk is written against two sealed tree traits that the owned tree and the
+streaming views both implement, so one visitor runs over a `BinObject` and over a `BinStream`
+sweep alike, and the sweep materialises nothing.
 
 The consumer is `ltk-manager`'s problems pass, which reads every bin once and runs every
 health-check rule over that one read. It has two hand-written walkers today, each matching the
 six recursive `PropertyValueEnum` variants by hand, and a third on the way; with this they are
-visitors. `Bin::merge` (#220) and `Bin::diff` build their addresses from the same `Trail`.
+visitors over `BinStream::walk`, and the same visitor verifies a repair over `BinObject::walk`.
+`Bin::merge` (#220) and `Bin::diff` build their addresses from the same `Trail`.
 
 ## Proposed surface
 
@@ -21,140 +24,220 @@ impl Kind {
     /// Whether a value of this kind is a node: `Struct` or `Embedded`.
     pub fn is_node(self) -> bool;
 }
-
-impl<M> PropertyValueEnum<M> {
-    /// Whether entering this value can reach a node.
-    ///
-    /// True for a `Struct` or `Embedded` whose class hash is not 0, and for a container,
-    /// optional or map whose item kind [`Kind::is_node`].
-    pub fn holds_node(&self) -> bool;
-}
 ```
 
 In `ltk_meta::walk`:
 
 ```rust
-/// What a walk calls. One `visit` per node, one `enters` per property, one `leaves` per
-/// property entered.
-pub trait Visitor<M = NoMeta> {
-    /// Called at every node the walk reaches, before any of the node's properties is entered.
-    fn visit(&mut self, node: &Node<'_, M>);
+/// A value the walk can cross. Sealed: implemented for `&'a PropertyValueEnum<M>` and for
+/// `ValueView<'a, M>`, and by nothing else.
+pub trait TreeValue<'a>: Copy + sealed::Sealed {
+    type Node: TreeNode<'a, Value = Self>;
+    type Children: Iterator<Item = Result<(Child<Self>, Self), Error>>;
 
-    /// Whether the walk descends `value`, the property `field` of the node at `at`.
-    ///
-    /// The prune. Default: [`PropertyValueEnum::holds_node`]. A visitor that answers `false`
-    /// is not shown anything beneath the value.
-    fn enters(&mut self, field: BinHash, value: &PropertyValueEnum<M>, at: &Trail<'_, M>) -> bool {
-        value.holds_node()
-    }
-
-    /// Called once every node beneath a property `enters` accepted has been visited.
-    fn leaves(&mut self, field: BinHash, value: &PropertyValueEnum<M>, at: &Trail<'_, M>) {}
+    fn kind(&self) -> Kind;
+    /// Whether entering this value can reach a node: a `Struct` or `Embedded` whose class hash
+    /// is not 0, or a container, optional or map whose item kind [`Kind::is_node`].
+    fn holds_node(&self) -> Result<bool, Error>;
+    /// This value as a node, if it is a `Struct` or `Embedded` with a class hash that is not 0.
+    fn as_node(&self) -> Result<Option<Self::Node>, Error>;
+    /// The values inside this one, with the step reaching each. Empty for a leaf and a node.
+    fn children(&self) -> Result<Self::Children, Error>;
+    /// This value decoded, if it is a leaf kind.
+    fn leaf(&self) -> Result<Option<Leaf<'a>>, Error>;
+    /// This value as a map key; `InvalidKeyType` for a kind no map can be keyed by.
+    fn map_key(&self) -> Result<MapKey, Error>;
+    /// The whole value, owned. Allocates.
+    fn to_value(&self) -> Result<PropertyValueEnum, Error>;
 }
 
-impl<M, V: Visitor<M> + ?Sized> Visitor<M> for &mut V {}
+/// A node the walk can visit: a class and properties. Sealed: implemented for the owned
+/// tree's node, for `StructView<'a, M>`, and for `ObjectView<'a, M>` as a root.
+pub trait TreeNode<'a>: Copy + sealed::Sealed {
+    type Value: TreeValue<'a, Node = Self>;
+    type Properties: Iterator<Item = Result<(BinHash, Self::Value), Error>>;
+
+    fn class_hash(&self) -> BinHash;
+    fn properties(&self) -> Self::Properties;
+    fn property(&self, field: BinHash) -> Result<Option<Self::Value>, Error>;
+}
+
+/// The step from a container, optional or map to one value inside it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Child<V> {
+    Index(usize),
+    Key(V),
+}
+
+/// A leaf, decoded and borrowed. The client's names for the tags: `File` is
+/// `Kind::WadChunkLink`, `Link` is `Kind::ObjectLink`, `Flag` is `Kind::BitBool`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Leaf<'a> {
+    None,
+    Bool(bool),
+    I8(i8), U8(u8), I16(i16), U16(u16), I32(i32), U32(u32), I64(i64), U64(u64),
+    F32(f32),
+    Vector2(Vec2), Vector3(Vec3), Vector4(Vec4), Matrix44(Mat4),
+    Color(Color),
+    String(&'a str),
+    Hash(BinHash),
+    File(WadHash),
+    Link(BinHash),
+    Flag(bool),
+}
+
+/// The owned tree's node: a class hash and a borrowed property map. `BinObject` and
+/// `values::Struct` both view as one.
+#[derive(Clone, Copy, Debug)]
+pub struct OwnedNode<'a, M = NoMeta> { /* ... */ }
+
+impl<'a, M> TreeValue<'a> for &'a PropertyValueEnum<M> { type Node = OwnedNode<'a, M>; /* ... */ }
+impl<'a, M: Default> TreeValue<'a> for ValueView<'a, M> { type Node = StructView<'a, M>; /* ... */ }
+impl<'a, M> TreeNode<'a> for OwnedNode<'a, M> { type Value = &'a PropertyValueEnum<M>; /* ... */ }
+impl<'a, M: Default> TreeNode<'a> for StructView<'a, M> { type Value = ValueView<'a, M>; /* ... */ }
+impl<'a, M: Default> TreeNode<'a> for ObjectView<'a, M> { type Value = ValueView<'a, M>; /* ... */ }
+
+/// What a walk calls. One `visit` per node, one `enters` per property that can hold a node,
+/// one `leaves` per property entered. Generic over the tree's value type.
+pub trait Visitor<'a, V: TreeValue<'a>> {
+    /// Called at every node the walk reaches, before any of the node's properties is entered.
+    fn visit(&mut self, node: &Node<'_, 'a, V>) -> Result<(), Error>;
+    /// The prune. Asked only for a value that `holds_node`. Default: `true`.
+    fn enters(&mut self, field: BinHash, value: V, at: &Trail<V>) -> bool { true }
+    /// Called once every node beneath a property `enters` accepted has been visited.
+    fn leaves(&mut self, field: BinHash, value: V, at: &Trail<V>) {}
+}
+
+impl<'a, V: TreeValue<'a>, W: Visitor<'a, V> + ?Sized> Visitor<'a, V> for &mut W {}
 
 /// One node, as the walk hands it to a visitor.
 #[derive(Clone, Copy, Debug)]
-pub struct Node<'a, M = NoMeta> { /* object hash, class, &'a properties, &'a Trail */ }
+pub struct Node<'t, 'a, V: TreeValue<'a>> { /* object hash, V::Node, &'t Trail<V> */ }
 
-impl<'a, M> Node<'a, M> {
+impl<'t, 'a, V: TreeValue<'a>> Node<'t, 'a, V> {
     /// The path hash of the object this node is in, or is.
     pub fn object_hash(&self) -> BinHash;
     /// The class hash this node carries. Never 0.
     pub fn class_hash(&self) -> BinHash;
-    /// The node's properties, in file order.
-    pub fn properties(&self) -> &'a IndexMap<BinHash, PropertyValueEnum<M>>;
+    /// The node itself: its properties, in file order, and lookup by field.
+    pub fn inner(&self) -> V::Node;
     /// Where the node is: empty at the root.
-    pub fn trail(&self) -> &Trail<'a, M>;
+    pub fn trail(&self) -> &'t Trail<V>;
     pub fn is_root(&self) -> bool;
     /// The node's address, copied out of the trail. Allocates.
-    pub fn value_path(&self) -> ValuePath where M: Clone;
+    pub fn value_path(&self) -> Result<ValuePath, Error>;
 }
 
-/// The steps from an object's root to the walk's position. Borrows the tree; a map key is a
-/// reference, never a copy.
+/// The steps from an object's root to the walk's position. A map key is the tree's own
+/// value, never a copy.
 #[derive(Debug)]
-pub struct Trail<'a, M = NoMeta> { /* Vec<TrailStep<'a, M>> */ }
+pub struct Trail<V> { /* Vec<TrailStep<V>>, Vec<BinHash> */ }
 
 /// One step of a [`Trail`]. The borrowing form of [`Step`].
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum TrailStep<'a, M = NoMeta> {
+pub enum TrailStep<V> {
     Field(BinHash),
     Index(usize),
-    Key(&'a PropertyValueEnum<M>),
+    Key(V),
 }
 
-impl<'a, M> Trail<'a, M> {
-    pub fn steps(&self) -> &[TrailStep<'a, M>];
+impl<'a, V: TreeValue<'a>> Trail<V> {
+    pub fn steps(&self) -> &[TrailStep<V>];
     pub fn len(&self) -> usize;
     pub fn is_empty(&self) -> bool;
-    /// The class of the node each field step was read on, one per `Field` step, in order.
-    /// Never 0: the walk always knows.
+    /// The class of the node each field step was read on, one per `Field` step. Never 0.
     pub fn classes(&self) -> &[BinHash];
-    /// The owned address: every step copied, keys with their metadata dropped, the class
+    /// The owned address: every step copied, every key decoded to a `MapKey`, the class
     /// context carried over.
-    pub fn to_value_path(&self) -> ValuePath where M: Clone;
+    pub fn to_value_path(&self) -> Result<ValuePath, Error>;
 }
 
-impl<M> fmt::Display for Trail<'_, M> { /* the hash form, without building a ValuePath */ }
-
-impl<'a, M: Clone> TrailStep<'a, M> {
-    pub fn to_step(&self) -> Step;
-}
+/// The hash form, without building a `ValuePath`. A key that does not decode renders `{?}`.
+impl<'a, V: TreeValue<'a>> fmt::Display for Trail<V> {}
 
 impl<M> BinObject<M> {
-    /// Walks this object: the root, then every node beneath every property `visitor` enters.
-    pub fn walk<V: Visitor<M>>(&self, visitor: &mut V);
+    pub fn walk<'a, W>(&'a self, visitor: &mut W) -> Result<(), Error>
+    where W: Visitor<'a, &'a PropertyValueEnum<M>>;
 }
-
 impl<M> Bin<M> {
     /// Walks every object, in file order.
-    pub fn walk<V: Visitor<M>>(&self, visitor: &mut V);
+    pub fn walk<'a, W>(&'a self, visitor: &mut W) -> Result<(), Error>
+    where W: Visitor<'a, &'a PropertyValueEnum<M>>;
 }
-
 impl<M> BinOverride<M> {
     /// Walks every embedded object, in file order, as the file holds them: a record that
     /// targets one of them has not been applied. Patch records are not walked.
-    pub fn walk<V: Visitor<M>>(&self, visitor: &mut V);
+    pub fn walk<'a, W>(&'a self, visitor: &mut W) -> Result<(), Error>
+    where W: Visitor<'a, &'a PropertyValueEnum<M>>;
+}
+
+impl<'a, M: Default> ObjectView<'a, M> {
+    /// Walks this object over its buffered bytes: nothing is materialised, a header is
+    /// decoded where the walk descends, and a leaf is decoded only when the visitor asks.
+    pub fn walk<W>(&self, visitor: &mut W) -> Result<(), Error>
+    where W: Visitor<'a, ValueView<'a, M>>;
+}
+impl<R: io::Read + io::Seek, M: Default> ObjectStream<'_, R, M> {
+    /// `view()?` then `walk`.
+    pub fn walk<W>(&mut self, visitor: &mut W) -> Result<(), Error>
+    where W: for<'a> Visitor<'a, ValueView<'a, M>>;
+}
+impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
+    /// Walks every object in file order, one buffered object at a time. Holds one object's
+    /// bytes at any moment and nothing of the tree.
+    pub fn walk<W>(&mut self, visitor: &mut W) -> Result<(), Error>
+    where W: for<'a> Visitor<'a, ValueView<'a, M>>;
 }
 ```
 
 ## Rationale
+
+**W20 (ADR-0014): two sealed traits, both trees.** The views exist so a consumer pays for what
+it reads; a pass that decoded every object to visit it would pay for everything. One visitor,
+generic over the value type, runs over `BinStream::walk` in the pass and over `BinObject::walk`
+when a repair verifies its own edit in memory. `Leaf` and `MapKey` carry the client's tag names
+(W19) and the visitor never names `PropertyValueEnum`, `M` or `ValueView`.
 
 **W3 (ADR-0013): one visitor, the fan-out stays with the consumer.** The descent with a trail is
 the same for every consumer and is what merge and diff need; which visitors are active beneath a
 value is one consumer's policy. `leaves` is on the trait so that fan-out can be one `Visitor`
 that pushes its active set on `enters` and pops it on `leaves` (W8).
 
-**Traversal** is `value-walk.md` [section 5.1](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/value-walk.md#s5.1): pre-order, file order, each node once. A `Struct` or
-`Embedded` with class 0 is the client's null pointer and is not a node (W2). A visitor is asked
-`enters` at properties only; the items of a container, optional or map it entered are all
-descended (W7). An optional's value is `Index(0)`, as the path grammar addresses it (D9).
+**Traversal** is `value-walk.md` [section 5.1](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/value-walk.md#s5.1): pre-order, file order, each node once. The tree is
+asked `holds_node` before the visitor is asked `enters`, so a visitor is never asked about a
+leaf or a container of leaves (W7); over a view those are skipped by declared size with nothing
+decoded. A `Struct` or `Embedded` with class 0 is the client's null pointer and is not a node
+(W2). An optional's value is `Index(0)`, as the path grammar addresses it (D9).
 
-**The trail allocates nothing per step.** Keys are borrowed; text and owned steps are made only
-by `Display`, `to_value_path` or `Node::value_path`, which a visitor calls for a node it reports
-on (W9).
+**The trail allocates nothing per step.** Keys are the tree's own values; text and owned steps
+are made only by `Display`, `to_value_path` or `Node::value_path`, which a visitor calls for a
+node it reports on (W9).
 
-**`is_primitive` is not load-bearing.** The prune is `holds_node` over `Kind::is_node`; the set
-`Kind::is_primitive` covers is a value-model question the walk does not ask (W1).
+**The walk is fallible over both trees (W6).** A view's header can fail to decode and a visitor
+reading a leaf can too; the owned tree never fails on its own.
 
-Blocked by #219: `Node::value_path`, `Trail::to_value_path` and `TrailStep::to_step` produce its
-types. `Kind::is_node`, `holds_node`, the trait, `Node`, `Trail` and the entry points do not
-depend on it and can land first behind those three methods.
+Blocked by #219: `Node::value_path`, `Trail::to_value_path` and `MapKey` are its types.
+`Kind::is_node`, the traits, `Leaf`, `Visitor`, `Node`, `Trail` and every entry point do not
+depend on it and can land first behind those methods.
 
-- [ ] A visitor recording `(object_hash, class_hash, hash form)` per node over the fixture tree of
-      `value-walk.md` [section 7](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/value-walk.md#s7) matches a hand-written pre-order list, each node once
+- [ ] The fixture tree of `value-walk.md` [section 7](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/value-walk.md#s7) is walked twice, owned and as an `ObjectView` of its bytes, through one generic visitor, and a
+      visitor recording `(object_hash, class_hash, hash form)` per node produces the same
+      hand-written pre-order list from both, each node once
 - [ ] A `Struct` or `Embedded` with class 0 is never visited, at a property, in a container, in
       an optional, or as a map value
 - [ ] A visitor that declines one property sees no node beneath it and every node elsewhere;
-      `leaves` is called exactly once per `enters` that returned `true`, in reverse nesting order
+      `leaves` is called exactly once per `enters` that returned `true`, in reverse nesting
+      order; `enters` is never asked about a value whose `holds_node` is false
+- [ ] `leaf()` and `map_key()` agree between the two trees for every leaf kind and every key
+      kind `Kind::is_valid_map_key` admits
 - [ ] `Trail::classes()` has one entry per field step at every node, equal to the class of the
-      node that field was read on, and `to_value_path().fields()` yields the same pairs
-- [ ] `Trail::to_string()` equals `to_value_path().to_string()` at every node, and a walk over a
-      map of 10,000 hash-keyed entries grows the trail's capacity by at most one step
+      node that field was read on, and `to_value_path()?.fields()` yields the same pairs
+- [ ] `Trail::to_string()` equals `to_value_path()?.to_string()` at every node; a walk over a
+      map of 10,000 hash-keyed entries grows the trail's capacity by at most one step, and over
+      a view allocates nothing else
 - [ ] `BinOverride::walk` visits the fixture patch's embedded objects and never a record's value
-- [ ] `Bin::walk` over `lolminimap_uibase.bin` visits 66 root nodes in file order
-- [ ] Corpus, `#[ignore]` under `LTK_LOL_GAME_DIR`: every object in the install walks, and the
-      node count equals an independent count of objects plus `Struct` and `Embedded` values with a
-      non-zero class (AC-7)
+- [ ] `Bin::walk` over `lolminimap_uibase.bin` visits 66 root nodes in file order, and
+      `BinStream::walk` over the same bytes visits the same
+- [ ] Corpus, `#[ignore]` under `LTK_LOL_GAME_DIR`: every chunk walks through `BinStream::walk`
+      and `Bin::walk` with identical visit sequences, and the node count equals an independent
+      count of objects plus `Struct` and `Embedded` values with a non-zero class (AC-7)

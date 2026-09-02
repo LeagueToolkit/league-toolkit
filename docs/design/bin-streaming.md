@@ -405,7 +405,9 @@ pub fn property(&self, name_hash: impl Into<BinHash>)
 ```
 
 Because `ValueView` descends to any depth, `Elements[3].Position` is a `ContainerView::get` and two
-`StructView::property` calls, none of which materialize a sibling. The streaming
+`StructView::property` calls, none of which materialize a sibling. The views are one of the two
+trees the visitor walk runs over: `ObjectView::walk`, `ObjectStream::walk` and `BinStream::walk`
+are specified in `value-walk.md` [section 5](value-walk.md#s5) (S25). The streaming
 `resolve(&PropertyPath)` follow-on ([section 11](#s11)) is a thin loop over this surface.
 
 Two shapes the whole view family shares. **The iterators are named types** - `Properties`,
@@ -904,6 +906,7 @@ rules append.
 | S22 | A save is a delta rewrite of the whole `.bin`: untouched objects copied through byte-exactly, edited ones re-encoded. PTCH authoring is out of scope. | Patching bytes in place, or emitting a `PTCH` as the save format. | A delta is upstream of either output form, and nothing here forecloses rendering one as patch records later. | [section 10](#s10) |
 | S23 | `BinToc::largest` answers the largest declared object size before any body is decoded. | Leaving the consumer to fold over `entries()`. | It is the number a consumer bounds a streamed read by, and naming it says that the TOC is where it comes from. | [section 4](#s4) |
 | S24 | A `PTCH` stream's object cursors yield embedded objects only; `patches()` alone reads records. | One cursor interleaving objects and records. | The two are different content: objects are what the game loads, records are edits to a base it does not hold. A consumer walking content wants the first and never the second. | [section 5](#s5) |
+| S25 | `ObjectView`, `StructView` and `ValueView` implement the walk's `TreeNode` and `TreeValue`; `BinStream::walk` sweeps a file through a visitor with nothing materialised. | A walk over the owned tree with `read()` per object. | The views exist so a consumer pays for what it reads; a pass that decoded every object to visit it would pay for everything. | `value-walk.md` [section 3](value-walk.md#s3), [section 5](value-walk.md#s5); ADR-0014 |
 
 ## <a id="appendix-a"></a>Appendix A. Corpus measurements
 

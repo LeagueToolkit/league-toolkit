@@ -9,7 +9,7 @@
   `.scratch/ptch-diff-merge/issues/`
 - **Spec:** `docs/design/ptch-property-patches.md`; `docs/design/value-walk.md` for the walk
   and `ValuePath`
-- **Decisions:** ADR-0001 to ADR-0006, ADR-0012, ADR-0013
+- **Decisions:** ADR-0001 to ADR-0006, ADR-0012 to ADR-0014
 
 ## <a id="s1"></a>1. Problem
 
@@ -90,7 +90,9 @@ A consumer here is a crate, a tool, or a person building one.
 - **FR-11:** The crate SHALL offer one entry point that reads whichever kind of bin a file holds.
 - **FR-12:** The crate SHALL walk every node of an object - the object and every nested struct
   and embed - in a fixed order, calling a visitor once per node, and SHALL let the visitor decline
-  to enter any property so that nothing beneath it is visited.
+  to enter any property so that nothing beneath it is visited. The same visitor SHALL run over an
+  owned object and over a streamed object's buffered bytes, materialising nothing in the second
+  case.
 - **FR-13:** The crate SHALL address any position inside an object by hash and by position,
   carrying the class each field was read on, and SHALL render an address in a form that is stable
   across machines and name tables and in a best-effort readable form that says how much of it a

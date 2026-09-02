@@ -17,6 +17,7 @@ Layering one bin over another, and saying the difference between two bins as a `
 | `ValuePath` addresses by hash | `docs/adr/0005-value-path-addresses-by-hash.md` |
 | Path class context | `docs/adr/0012-path-class-context.md` |
 | Single-visitor walk | `docs/adr/0013-single-visitor-walk.md` |
+| Tree traits under the walk | `docs/adr/0014-tree-traits-under-the-walk.md` |
 | No schema in `ltk_meta` | `docs/adr/0006-no-schema-in-ltk-meta.md` |
 
 The tickets below render the spec's API-surface sections. Every rule the spec settles is a `Dn` row

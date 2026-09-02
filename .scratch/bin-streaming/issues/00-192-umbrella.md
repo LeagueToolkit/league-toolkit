@@ -23,6 +23,7 @@ The lazy resolution API is crucial for consumers that don't need to parse the wh
 | A size the counts disagree with is an error | `docs/adr/0009-a-size-the-counts-disagree-with-is-an-error.md` |
 | The metadata parameter lives on the handle | `docs/adr/0010-the-metadata-parameter-lives-on-the-handle.md` |
 | The object cache is a provider handing out `Arc` | `docs/adr/0011-the-object-cache-is-a-provider-handing-out-arc.md` |
+| Tree traits under the walk (the views implement them; #225) | `docs/adr/0014-tree-traits-under-the-walk.md` |
 
 The tickets below render the spec's API-surface sections. Every rule the spec settles is an `Sn`
 row in its [section 13](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/bin-streaming.md#s13), each naming the ADR that argues it where one does.

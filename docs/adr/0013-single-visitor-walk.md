@@ -65,8 +65,10 @@ there was more than one.
   way for the same position.
 - **Negative:** two traversals in the crate - the byte skipper in `stream::layout` and this walk
   over decoded values - at different layers, with ADR-0008's "one layout core" applying to the
-  first and not the second. And a call per entered property for `leaves` that most visitors
-  ignore. The walk also has no early exit; a search that wants to stop at the first hit declines
+  first and not the second. (Corrected 2026-09-02: the walk runs over the views as well as the
+  owned tree, ADR-0014, so over a stream it is a traversal of the same buffered bytes the
+  skipper crosses, not a second decode.) And a call per entered property for `leaves` that most
+  visitors ignore. The walk also has no early exit; a search that wants to stop at the first hit declines
   every further `enters` instead, which is a cost only if such a search appears.
 - **Revisit when:** a second consumer wants the same fan-out the manager built. Then the
   active-set adapter is generic and belongs beside the walk.
