@@ -121,7 +121,11 @@ pub enum Child<V> {
 ///
 /// The client's names for the tags, not the wire enum's: `File` is [`Kind::WadChunkLink`],
 /// `Link` is [`Kind::ObjectLink`], `Flag` is [`Kind::BitBool`].
+///
+/// Non-exhaustive: the set of leaf kinds is the game's, and the game has added one before. A
+/// match outside this crate carries a wildcard arm.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
 pub enum Leaf<'a> {
     /// [`Kind::None`].
     None,
