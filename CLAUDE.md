@@ -117,6 +117,33 @@ Shared dependency versions are declared in the root `Cargo.toml` under `[workspa
 - **Hash algorithms are fixed by the game.** WAD paths are XXHash64 of the lowercased path; bin names are FNV-1a 32-bit. Changing either needs format evidence, not a preference.
 - **Work lands through PRs** on feature branches, with conventional commit subjects (`feat(ltk_wad):`, `fix(ltk_meta):`). A branch is rebased onto `main` and force-pushed — never have `main` merged into it.
 
+## Commits and PRs
+
+One conventional-commit subject line. No body, no trailers, no `Co-Authored-By`, no session
+links. A PR is that same subject as its title and an empty body. Never commit or push unasked.
+
+The scope is the crate (`ltk_meta`, `ltk_wad`) or, for work outside one, the area (`docs`, `ci`,
+`workspace`).
+
+**A subject names the change, it does not describe it.** A plain verb and a domain noun phrase,
+roughly three to six words, in the codebase's own vocabulary. No contrastive clause, no mechanism,
+no narrative verb, and drop articles that carry nothing.
+
+```
+Bad   fix(ltk_meta): raise InvalidSize when a declared size disagrees with the count-driven walk
+Good  fix(ltk_meta): error on size the counts disagree with
+
+Bad   feat(ltk_wad): mount an archive by reading the header and TOC without touching chunk bodies
+Good  feat(ltk_wad): mount archive header only
+
+Bad   docs(ltk_meta): specify the value walk and align ValuePath with the manager's trail
+Good  docs(ltk_meta): specify value walk
+```
+
+Two things keep their own shape. An **ADR title** is a declarative sentence, because the title is
+the decision. A **test name** stays narrative, because it is read one at a time and is the only
+sentence saying what the case is.
+
 ## Additional Context
 
 The `docs/LTK_GUIDE.md` file contains detailed crate-by-crate API documentation with usage examples, file format references, and hash algorithm details. Consult it for format-specific questions.

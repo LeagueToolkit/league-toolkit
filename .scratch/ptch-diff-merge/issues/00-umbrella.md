@@ -13,7 +13,10 @@ Layering one bin over another, and saying the difference between two bins as a `
 | Why this exists, who asks for it, requirements, delivery routes, failure modes | `docs/prd/001-ptch-property-patches.md` |
 | API surface, wire format, merge walk, testing | `docs/design/ptch-property-patches.md` [section 10](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/ptch-property-patches.md#s10) to [section 14](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/ptch-property-patches.md#s14) |
 | Merge and diff are separate operations | `docs/adr/0004-merge-and-diff-are-separate-operations.md` |
+| `ValuePath` and the walk that produces one | `docs/design/value-walk.md` |
 | `ValuePath` addresses by hash | `docs/adr/0005-value-path-addresses-by-hash.md` |
+| A field step names the class it is on | `docs/adr/0012-a-field-step-names-the-class-it-is-on.md` |
+| `ltk_meta` owns the single-visitor walk | `docs/adr/0013-ltk-meta-owns-the-single-visitor-walk.md` |
 | No schema in `ltk_meta` | `docs/adr/0006-no-schema-in-ltk-meta.md` |
 
 The tickets below render the spec's API-surface sections. Every rule the spec settles is a `Dn` row
@@ -39,7 +42,7 @@ here: `ApplyReport::outcomes` (#221's ready half) and `join` (#223).
 
 ## Children
 
-- [ ] #219 — `ValuePath`: addressing a position in a bin by hash (goes first; #220 rests on it)
+- [ ] #219 — `ValuePath`: addressing a position in a bin by hash (goes first; #220 and #225 rest on it; its `Field` step carries the class, ADR-0012)
 - [ ] #220 — `Bin::merge`: layer one bin over another (what the overlay build needs; the only one
       of these with a consumer waiting)
 - [ ] #221 — the per-record report and filter (`RecordOutcome`, `ApplyReport::outcomes`,

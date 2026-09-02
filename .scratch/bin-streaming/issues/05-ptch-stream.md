@@ -75,14 +75,17 @@ impl<R: io::Read + io::Seek, M: Default> BinFileStream<R, M> {
 }
 ```
 
+`objects()`, `entries()`, `toc()` and `object()` cover the embedded objects only and never touch a record (S24): the object table precedes the record list, so a consumer sweeping a patch bin for the content the game loads - `ltk-manager`'s problems pass walks every object of every bin, `PTCH` included, and never looks at a record - reads its objects and nothing of its records. `patches()` is the only cursor over the record list. `BinToc::largest()` answers the largest embedded object's size before any is decoded, exactly as for a `PROP` (S23).
+
 `PatchStream::path()` returns `&PropertyPath`, not `&str` — `PropertyPatch::path` is already a `PropertyPath`, so anything less would force callers to re-parse. `BinOverride::from_reader` joins the single decode path (mount + `into_bin_override`).
 
-Parked: no consumer, and no gap behind it. The eager `BinOverride` — with the `data_override/{read,write}.rs` split under it — already closed the real downstream need, which was an unimplemented override *write* path; nothing downstream wants a patch bin read lazily. The design stands as written, so this stays open rather than closed: pick it up when a consumer wants a PTCH file's records without its tree, which is the want that drove #192 for PROP. Until then `BinOverrideStream` and `BinFileStream` do not exist, and the `concrete` aliases [section 4](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/bin-streaming.md#s4) says they want are part of this ticket rather than of the shipped surface.
+Parked until a consumer asks, and one is now in sight: `ltk-manager`'s problems pass streams every `PROP` through `BinStream` and falls back to the eager `BinOverride` for a `PTCH`, because `BinStream::mount` refuses one. This ticket removes that fallback. The eager `BinOverride` - with the `data_override/{read,write}.rs` split under it - closed the earlier downstream need, an unimplemented override *write* path, so nothing is blocked on this; it is the one place the manager's streaming path still pays a whole-file parse. Until it lands `BinOverrideStream` and `BinFileStream` do not exist, and the `concrete` aliases [section 4](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/bin-streaming.md#s4) says they want are part of this ticket rather than of the shipped surface.
 
 Demoable: every shipped PTCH file in an install streams — headers, objects, all records — and drains to an eager value equal to the direct eager parse.
 
 - [ ] All shipped PTCH chunks in an install (238 at last count) mount, stream every record, and `into_bin_override()` equals the eager parse
 - [ ] A record's object hash, kind and path are readable with the value left untouched; skipping advances by payload size
 - [ ] The delete list round-trips (corpus already attests byte-exact outer headers)
+- [ ] For every PTCH chunk in an install, `objects()` yields the same objects the eager `BinOverride::objects` holds and reads no byte of the record list (AC-8)
 - [ ] `BinFileStream::mount` returns the right variant for PROP, PTCH, and errors on neither
 - [ ] Existing PTCH snapshot/round-trip tests pass with `from_reader` on the stream

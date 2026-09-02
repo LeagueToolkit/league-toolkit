@@ -218,6 +218,13 @@ pub struct BinToc { /* Vec<ObjectEntry> + HashMap<BinHash, usize> */ }
 impl BinToc {
     pub fn entries(&self) -> &[ObjectEntry];
     pub fn entry(&self, path_hash: impl Into<BinHash>) -> Option<&ObjectEntry>;
+    /// The entry with the largest declared size, or `None` for an empty file.
+    ///
+    /// Known before any object body is decoded: `toc()` is one seek-hop per object and reads
+    /// nothing past the 8-byte header. It bounds what a sweep that reads one object at a time
+    /// can cost - the bytes of the file plus this object's expansion - which is the number a
+    /// consumer budgeting a streamed read wants (S23).
+    pub fn largest(&self) -> Option<&ObjectEntry>;
 }
 ```
 
@@ -574,6 +581,12 @@ impl<'a, R: io::Read + io::Seek, M: Default> PatchStream<'a, R, M> {
 }
 ```
 
+`objects()`, `entries()`, `toc()` and `object()` cover the embedded objects only and never
+touch a record: the object table precedes the record list in the file, and a consumer that reads
+a patch bin for the content the game loads - the walk of `value-walk.md`
+[section 6](value-walk.md#s6) is one - sees its objects and nothing of its records. `patches()`
+is the only cursor over the record list (S24).
+
 For a `.bin` of unknown kind, `BinFileStream` mirrors the eager `BinFile`:
 
 ```rust
@@ -889,6 +902,8 @@ rules append.
 | S20 | Every view is `Copy` for every `M`, with the impls written by hand. | Deriving `Clone`, `Copy` and `Debug`. | `M` is a phantom, so a derive would demand `M: Copy` for a field that holds nothing. | [section 4.3](#s4.3) |
 | S21 | Scope is `PROP` and `PTCH`, reading only, with `into_bin()` as the upgrade. | Including the write path in the same stage. | The delta pipeline is a later stage this design must not preclude, and [section 10](#s10) is what keeps that promise checkable. | [section 10](#s10), [section 11](#s11) |
 | S22 | A save is a delta rewrite of the whole `.bin`: untouched objects copied through byte-exactly, edited ones re-encoded. PTCH authoring is out of scope. | Patching bytes in place, or emitting a `PTCH` as the save format. | A delta is upstream of either output form, and nothing here forecloses rendering one as patch records later. | [section 10](#s10) |
+| S23 | `BinToc::largest` answers the largest declared object size before any body is decoded. | Leaving the consumer to fold over `entries()`. | It is the number a consumer bounds a streamed read by, and naming it says that the TOC is where it comes from. | [section 4](#s4) |
+| S24 | A `PTCH` stream's object cursors yield embedded objects only; `patches()` alone reads records. | One cursor interleaving objects and records. | The two are different content: objects are what the game loads, records are edits to a base it does not hold. A consumer walking content wants the first and never the second. | [section 5](#s5) |
 
 ## <a id="appendix-a"></a>Appendix A. Corpus measurements
 

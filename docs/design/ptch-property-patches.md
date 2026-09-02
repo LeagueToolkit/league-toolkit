@@ -14,7 +14,8 @@ is the bug and gets edited. Two things it does not hold:
 Implemented today: [section 4](#s4) to [section 9](#s9) - reading, writing, the path language,
 resolution and apply. Designed and not yet built: [section 10](#s10) to [section 14](#s14) (merge,
 `ValuePath`, diff, join, the per-record surface), tracked as #219 to #223, and [section 15](#s15)
-(ritobin text).
+(ritobin text). `ValuePath` itself, and the walk that produces one, are specified in
+`value-walk.md`.
 
 ## <a id="s1"></a>1. Summary
 
@@ -90,7 +91,8 @@ holds the argument; the definition lives here.
   client resolves ([section 8](#s8)).
 - **`ValuePath`** - this crate's address for a position in a value tree, by hash and by position.
   Total, where a `PropertyPath` is not: container elements and map entries have no name. Never
-  written to a file ([section 11](#s11), ADR-0005).
+  written to a file. Specified in `value-walk.md` [section 4](value-walk.md#s4); how merge and
+  diff use it is [section 11](#s11) (ADR-0005).
 
 ## <a id="s3"></a>3. Evidence
 
@@ -865,59 +867,15 @@ carries. What that leaves for this document is which part of the report answers 
 
 ## <a id="s11"></a>11. `ValuePath`: where the walk is, without needing a name
 
-A `PropertyPath` is text, and `Segment::name_hash` is FNV-1a of that text ([section 8](#s8)), so
-writing one needs the property's plaintext name. A bin stores name hashes only. A walk over two bins
-therefore cannot always spell where it is: an unknown hash has no path.
+The address a merge or a diff reports positions with is `ValuePath`, specified in
+`value-walk.md` [section 4](value-walk.md#s4): total, by hash and by position, never written to a
+file, and converted to a `PropertyPath` only when every field on it has a name (ADR-0005). The
+trail `merge` and `diff` keep as they walk, and build a `ValuePath` from at each position they
+report, is `value-walk.md` [section 6](value-walk.md#s6).
 
-Rather than grow a hash escape into the client's grammar - `0x1234abcd` and `#1234abcd` are both
-legal `PropertyPath` names today and would hash as their own text, so any escape both breaks
-`PropertyPath::new` and produces text the client misreads - the walk gets its own address type
-that never claims to be a client path:
-
-```rust
-/// Where a merge or diff touched, addressed by hash. Total: every position in a value tree has
-/// one. Not a client path - it may name a field whose plaintext is unknown, and it is never
-/// written to a file.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct ValuePath(Vec<Step>);
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Step {
-    /// A property or field, by name hash.
-    Field(BinHash),
-    /// A container element, or the value inside an Option.
-    Index(u32),
-    /// A map entry, by its key value.
-    Key(PropertyValueEnum),
-}
-
-impl ValuePath {
-    /// The client path naming the same position, if every field hash has a known name.
-    ///
-    /// # Errors
-    ///
-    /// [`Unnameable`] naming the first field hash `names` could not spell, or the first `Key`
-    /// step whose key kind has no `{...}` literal.
-    pub fn to_property_path(&self, names: &dyn FieldNames) -> Result<PropertyPath, Unnameable>;
-}
-
-/// Plaintext for bin field hashes. `ltk_ritobin::hashes` already has an implementation of this
-/// shape; this is the smaller trait `ltk_meta` can own without depending on it.
-pub trait FieldNames {
-    fn field(&self, hash: BinHash) -> Option<&str>;
-}
-```
-
-The argument for the type is **totality**, not the avoidance of a name table. Every position in a
-value tree has a `ValuePath`, including positions that have no name and never will: an element of a
-container, an entry of a map. A report addressed in `PropertyPath` would have to give up on exactly
-the positions a user most needs told about. `PropertyPath` is the export language; `ValuePath` is
-the reporting language.
-
-An earlier draft of this section justified it as sparing the overlay build a hashtable. That was
-wrong twice over: `lol-meta-classes` resolves field names, and `ltk-manager` ADR-0009 already gates
-its check, sweep and repair on `ModLibrary::hashtables_ready()`, so a hashtable is present wherever
-this code runs.
+What this document adds is where the two operations put one: `Replaced::at`
+([section 10.1](#s10.1)) and `Lift::at` ([section 12](#s12)) are `ValuePath`s inside the object
+the surrounding report names, so an address here never carries the object hash (D13).
 
 ## <a id="s12"></a>12. The diff
 
@@ -1170,8 +1128,7 @@ Both come from `UI.wad.client` of client 16.16.804.9184.
 - **The ADR's specimen.** The 847-object mod bin over the 1,473-object game bin: merged, all 1,151
   dropped `ResourceResolver` keys are present, all 4,788 of the mod's own bindings survive, and the
   84 it adds are there. That fixture is the manager's; `ltk_meta` gets the reduced case.
-- **`ValuePath` round trip.** `to_property_path` then `resolve` lands on the value the walk was at,
-  for every position in a fixture tree with a complete name table.
+- **`ValuePath` round trip** is `value-walk.md` [section 7](value-walk.md#s7).
 
 ## <a id="s17"></a>17. Rules
 
@@ -1199,7 +1156,7 @@ rules append.
 | D13 | A `PropertyPath` addresses a property inside one object; the object hash is a separate argument (`Bin::resolve(object_hash, path)`). | One string addressing a whole file. | Whole-file addressing can extend the grammar later without touching the object-level API. | [section 5.3](#s5.3), [section 9.1](#s9.1) |
 | D9 | `Option[0]` resolves; no other index on an Option does. | Rejecting subscripts on Option outright. | The 16.14 decompile of `MetaPath_resolve`. Untested in game. | [section 8.1](#s8.1) |
 | D10 | `{key}` text is parsed as JSON and coerced to the map's key type, per `PropertyPath.hpp`. An enum-typed key is not supported. | Taking the brace text as a literal string, which the other client source implies. | The two sources disagree and no shipped record uses `{key}`, so data cannot settle it. Enum keys need a schema. | [section 8.1](#s8.1) |
-| D19 | `ValuePath` is a separate type from `PropertyPath`, addressing by hash and by position. | A hash escape in the path grammar. | `ValuePath` is total - container elements and map entries have no name - and `PropertyPath` keeps its promise that every one of them is client-resolvable. | [section 11](#s11); ADR-0005 |
+| D19 | `ValuePath` is a separate type from `PropertyPath`, addressing by hash and by position. | A hash escape in the path grammar. | `ValuePath` is total - container elements and map entries have no name - and `PropertyPath` keeps its promise that every one of them is client-resolvable. | `value-walk.md` [section 4](value-walk.md#s4), [section 11](#s11); ADR-0005 |
 | D8 | A missing intermediate segment is a skip (`MissingProperty`). A missing leaf whose parent exists is created. | Default-constructing the absent intermediate from its class. | The client has no counterpart to either half: it patches an object whose every declared property already exists, so the skip does strictly less than the game. A schema hook can arrive later as `apply_with(&self, base, &ApplyOptions)` without a break. | [section 9.2](#s9.2), [section 9.3](#s9.3); ADR-0006 |
 | D11 | The type rule compares `ValueShape`: kind, item and key kinds, Embed class exact, Pointer class ignored. | Comparing a Pointer's class. | The client runs an is-a test up the base chain, which needs a hierarchy only the game has; omitting the class accepts strictly more than the client rather than guessing. | [section 9.3](#s9.3); ADR-0003 |
 | D7 | A patch object whose hash is already in the base replaces it, reported in `ApplyReport::replaced`. | Keeping both, as the client does. | The client's merged table would hold both with unspecified lookup order. Unattested in shipped data. | [section 9.5](#s9.5) |
