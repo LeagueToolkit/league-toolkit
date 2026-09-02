@@ -62,7 +62,7 @@ over both trees.
   which is more to write than a concrete trait, and a `for<'a>` bound on the stream entry
   points that a consumer has to understand once. Two implementations of each trait to keep in
   step, which the parity test in [section 7](../design/value-walk.md#s7) is for. And the walk
-  is fallible over the owned tree too, where it never fails.
+  is fallible over the owned tree too, where the tree itself never fails.
 - **Revisit when:** the value model is reworked without `M`. Then the owned tree and the view
   may collapse toward one representation and the traits toward it.
 

@@ -53,9 +53,9 @@ trail, and the multi-visitor active set stays with the consumer.** The traversal
 [section 5.2](../design/value-walk.md#s5.2); what merge and diff share with it is
 [section 6](../design/value-walk.md#s6).
 
-`leaves` is part of the trait precisely so that a consumer's fan-out can be one `Visitor`: it
-pushes its active set on `enters` and pops it on `leaves`, and the crate never learns that
-there was more than one.
+The exit callbacks are part of the trait precisely so that a consumer's fan-out can be one
+`Visitor`: it pushes its active set on `enter_property` and pops it on `exit_property`, and the
+crate never learns that there was more than one.
 
 ## Consequences
 
@@ -68,8 +68,8 @@ there was more than one.
   first and not the second. (Corrected 2026-09-02: the walk runs over the views as well as the
   owned tree, ADR-0014, so over a stream it is a traversal of the same buffered bytes the
   skipper crosses, not a second decode.) And a call per entered property for `leaves` that most
-  visitors ignore. The walk also has no early exit; a search that wants to stop at the first hit declines
-  every further `enters` instead, which is a cost only if such a search appears.
+  visitors ignore. (Corrected 2026-09-02: the visitor took `ltk_ritobin`'s shape, W21 - `Visit::Stop`
+  and `Visit::Abort` are the early exits, and the paired exit callbacks stand.)
 - **Revisit when:** a second consumer wants the same fan-out the manager built. Then the
   active-set adapter is generic and belongs beside the walk.
 

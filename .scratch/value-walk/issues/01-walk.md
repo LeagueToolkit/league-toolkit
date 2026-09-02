@@ -60,6 +60,8 @@ pub trait TreeNode<'a>: Copy + sealed::Sealed {
     fn class_hash(&self) -> BinHash;
     fn properties(&self) -> Self::Properties;
     fn property(&self, field: BinHash) -> Result<Option<Self::Value>, Error>;
+    /// The whole node, owned, as a `Struct`. Allocates.
+    fn to_struct(&self) -> Result<values::Struct, Error>;
 }
 
 /// The step from a container, optional or map to one value inside it.
@@ -97,15 +99,42 @@ impl<'a, M> TreeNode<'a> for OwnedNode<'a, M> { type Value = &'a PropertyValueEn
 impl<'a, M: Default> TreeNode<'a> for StructView<'a, M> { type Value = ValueView<'a, M>; /* ... */ }
 impl<'a, M: Default> TreeNode<'a> for ObjectView<'a, M> { type Value = ValueView<'a, M>; /* ... */ }
 
-/// What a walk calls. One `visit` per node, one `enters` per property that can hold a node,
-/// one `leaves` per property entered. Generic over the tree's value type.
+/// What a callback answers. `ltk_ritobin::cst::visitor::Visit`'s shape (W21).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Visit {
+    /// Ends the walk immediately. No exit callback runs for anything still open.
+    Abort,
+    /// Ends the walk after unwinding: every open property and node still gets its exit.
+    Stop,
+    /// Skips ahead, locally: from `enter_node`, the node's properties; from `enter_property`,
+    /// the value (the prune); from `exit_property`, the node's remaining properties; from
+    /// `exit_node`, the parent property's remaining items.
+    Skip,
+    Continue,
+}
+
+/// How a walk ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WalkOutcome { Completed, Stopped, Aborted }
+
+/// What a walk calls. Generic over the tree's value type. Every callback defaults to
+/// `Continue`.
 pub trait Visitor<'a, V: TreeValue<'a>> {
-    /// Called at every node the walk reaches, before any of the node's properties is entered.
-    fn visit(&mut self, node: &Node<'_, 'a, V>) -> Result<(), Error>;
-    /// The prune. Asked only for a value that `holds_node`. Default: `true`.
-    fn enters(&mut self, field: BinHash, value: V, at: &Trail<V>) -> bool { true }
-    /// Called once every node beneath a property `enters` accepted has been visited.
-    fn leaves(&mut self, field: BinHash, value: V, at: &Trail<V>) {}
+    /// The visitor's own error; the tree's errors convert into it.
+    type Error: From<Error>;
+
+    /// Before any of the node's properties.
+    fn enter_node(&mut self, node: &Node<'_, 'a, V>) -> Result<Visit, Self::Error> { Ok(Visit::Continue) }
+    /// Once per node entered - after its properties, after a `Skip`, while unwinding for a
+    /// `Stop`. Never after an `Abort`.
+    fn exit_node(&mut self, node: &Node<'_, 'a, V>) -> Result<Visit, Self::Error> { Ok(Visit::Continue) }
+    /// For every property, in file order, leaves included. Only a value that `holds_node` is
+    /// descended on `Continue`.
+    fn enter_property(&mut self, field: BinHash, value: V, node: &Node<'_, 'a, V>)
+        -> Result<Visit, Self::Error> { Ok(Visit::Continue) }
+    /// Once per property descended. Not called for a leaf. Never after an `Abort`.
+    fn exit_property(&mut self, field: BinHash, value: V, node: &Node<'_, 'a, V>)
+        -> Result<Visit, Self::Error> { Ok(Visit::Continue) }
 }
 
 impl<'a, V: TreeValue<'a>, W: Visitor<'a, V> + ?Sized> Visitor<'a, V> for &mut W {}
@@ -119,7 +148,7 @@ impl<'t, 'a, V: TreeValue<'a>> Node<'t, 'a, V> {
     pub fn object_hash(&self) -> BinHash;
     /// The class hash this node carries. Never 0.
     pub fn class_hash(&self) -> BinHash;
-    /// The node itself: its properties, in file order, and lookup by field.
+    /// The node itself: its properties, in file order, lookup by field, and `to_struct`.
     pub fn inner(&self) -> V::Node;
     /// Where the node is: empty at the root.
     pub fn trail(&self) -> &'t Trail<V>;
@@ -156,36 +185,36 @@ impl<'a, V: TreeValue<'a>> Trail<V> {
 impl<'a, V: TreeValue<'a>> fmt::Display for Trail<V> {}
 
 impl<M> BinObject<M> {
-    pub fn walk<'a, W>(&'a self, visitor: &mut W) -> Result<(), Error>
+    pub fn walk<'a, W>(&'a self, visitor: &mut W) -> Result<WalkOutcome, W::Error>
     where W: Visitor<'a, &'a PropertyValueEnum<M>>;
 }
 impl<M> Bin<M> {
     /// Walks every object, in file order.
-    pub fn walk<'a, W>(&'a self, visitor: &mut W) -> Result<(), Error>
+    pub fn walk<'a, W>(&'a self, visitor: &mut W) -> Result<WalkOutcome, W::Error>
     where W: Visitor<'a, &'a PropertyValueEnum<M>>;
 }
 impl<M> BinOverride<M> {
     /// Walks every embedded object, in file order, as the file holds them: a record that
     /// targets one of them has not been applied. Patch records are not walked.
-    pub fn walk<'a, W>(&'a self, visitor: &mut W) -> Result<(), Error>
+    pub fn walk<'a, W>(&'a self, visitor: &mut W) -> Result<WalkOutcome, W::Error>
     where W: Visitor<'a, &'a PropertyValueEnum<M>>;
 }
 
 impl<'a, M: Default> ObjectView<'a, M> {
     /// Walks this object over its buffered bytes: nothing is materialised, a header is
     /// decoded where the walk descends, and a leaf is decoded only when the visitor asks.
-    pub fn walk<W>(&self, visitor: &mut W) -> Result<(), Error>
+    pub fn walk<W>(&self, visitor: &mut W) -> Result<WalkOutcome, W::Error>
     where W: Visitor<'a, ValueView<'a, M>>;
 }
 impl<R: io::Read + io::Seek, M: Default> ObjectStream<'_, R, M> {
     /// `view()?` then `walk`.
-    pub fn walk<W>(&mut self, visitor: &mut W) -> Result<(), Error>
+    pub fn walk<W>(&mut self, visitor: &mut W) -> Result<WalkOutcome, W::Error>
     where W: for<'a> Visitor<'a, ValueView<'a, M>>;
 }
 impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
     /// Walks every object in file order, one buffered object at a time. Holds one object's
     /// bytes at any moment and nothing of the tree.
-    pub fn walk<W>(&mut self, visitor: &mut W) -> Result<(), Error>
+    pub fn walk<W>(&mut self, visitor: &mut W) -> Result<WalkOutcome, W::Error>
     where W: for<'a> Visitor<'a, ValueView<'a, M>>;
 }
 ```
@@ -198,23 +227,29 @@ generic over the value type, runs over `BinStream::walk` in the pass and over `B
 when a repair verifies its own edit in memory. `Leaf` and `MapKey` carry the client's tag names
 (W19) and the visitor never names `PropertyValueEnum`, `M` or `ValueView`.
 
+**W21: the visitor is `ltk_ritobin`'s CST visitor shape.** Symmetric enter and exit callbacks,
+a `Visit` answer, a `WalkOutcome`; two nested pairs here because a property, unlike a token, has
+a subtree to prune. Collapsing a subtree eagerly is `value.to_value()?` or
+`node.inner().to_struct()?` in the enter callback followed by `Visit::Skip`.
+
 **W3 (ADR-0013): one visitor, the fan-out stays with the consumer.** The descent with a trail is
 the same for every consumer and is what merge and diff need; which visitors are active beneath a
-value is one consumer's policy. `leaves` is on the trait so that fan-out can be one `Visitor`
-that pushes its active set on `enters` and pops it on `leaves` (W8).
+value is one consumer's policy. The exit callbacks are on the trait so that fan-out can be one
+`Visitor` that pushes its active set on `enter_property` and pops it on `exit_property` (W8).
 
 **Traversal** is `value-walk.md` [section 5.1](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/value-walk.md#s5.1): pre-order, file order, each node once. The tree is
-asked `holds_node` before the visitor is asked `enters`, so a visitor is never asked about a
-leaf or a container of leaves (W7); over a view those are skipped by declared size with nothing
-decoded. A `Struct` or `Embedded` with class 0 is the client's null pointer and is not a node
+shown every property through `enter_property`, leaves included, and descends only a value
+that `holds_node` (W7); over a view a leaf or a container of leaves is skipped by declared size
+with nothing decoded. A `Struct` or `Embedded` with class 0 is the client's null pointer and is not a node
 (W2). An optional's value is `Index(0)`, as the path grammar addresses it (D9).
 
 **The trail allocates nothing per step.** Keys are the tree's own values; text and owned steps
 are made only by `Display`, `to_value_path` or `Node::value_path`, which a visitor calls for a
 node it reports on (W9).
 
-**The walk is fallible over both trees (W6).** A view's header can fail to decode and a visitor
-reading a leaf can too; the owned tree never fails on its own.
+**The walk is fallible over both trees, in the visitor's error (W6).** A view's header can fail
+to decode and a visitor reading a leaf can too; the tree's errors convert through `From`, and a
+`Stop` is an outcome, not an error.
 
 Blocked by #219: `Node::value_path`, `Trail::to_value_path` and `MapKey` are its types.
 `Kind::is_node`, the traits, `Leaf`, `Visitor`, `Node`, `Trail` and every entry point do not
@@ -225,9 +260,14 @@ depend on it and can land first behind those methods.
       hand-written pre-order list from both, each node once
 - [ ] A `Struct` or `Embedded` with class 0 is never visited, at a property, in a container, in
       an optional, or as a map value
-- [ ] A visitor that declines one property sees no node beneath it and every node elsewhere;
-      `leaves` is called exactly once per `enters` that returned `true`, in reverse nesting
-      order; `enters` is never asked about a value whose `holds_node` is false
+- [ ] A visitor answering `Skip` at one property sees no node beneath it and every node
+      elsewhere; `exit_property` runs exactly once per property descended and never for a leaf,
+      `exit_node` once per node entered, in reverse nesting order
+- [ ] `Skip` from each of the four callbacks prunes what the spec's section 5.1 says; `Stop`
+      unwinds every open exit and returns `Stopped`; `Abort` runs no further callback and returns
+      `Aborted`; a visitor error ends the walk like an `Abort` and is returned
+- [ ] `to_struct` on a root and on a nested node equals the eager parse of the same bytes, over
+      both trees
 - [ ] `leaf()` and `map_key()` agree between the two trees for every leaf kind and every key
       kind `Kind::is_valid_map_key` admits
 - [ ] `Trail::classes()` has one entry per field step at every node, equal to the class of the
