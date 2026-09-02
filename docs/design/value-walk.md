@@ -12,7 +12,8 @@ is the bug and gets edited. Two things it does not hold:
 - **Why an option was chosen over the alternatives it beat** - ADR-0005, ADR-0012, ADR-0013 and
   ADR-0014, cited from the rules in [section 8](#s8).
 
-Designed and not yet built, tracked as #219 (`ValuePath`) and #225 (the walk).
+`ValuePath`, `MapKey`, `FieldNames` and the three methods that produce them -
+`TreeValue::map_key`, `Trail::to_value_path`, `Node::value_path` - are #219.
 
 ## <a id="s1"></a>1. Summary
 
@@ -56,8 +57,8 @@ Every term this document uses in a specific sense.
   `File`, `Link`, `Flag`, and a container, optional or map whose item kind is not a node kind. A
   `Kind` is a **node kind** when it is `Struct` or `Embedded`. A leaf's decoded value is a
   `Leaf`.
-- **tree** - either source of nodes and values: the **owned tree**, `PropertyValueEnum<M>`
-  under a `BinObject`; or the **view**, `ValueView<'a, M>` under an `ObjectView` over an object's
+- **tree** - either source of nodes and values: the **owned tree**, `PropertyValueEnum`
+  under a `BinObject`; or the **view**, `ValueView<'a>` under an `ObjectView` over an object's
   buffered bytes (`bin-streaming.md` [section 4.3](bin-streaming.md#s4.3)). `TreeNode` and
   `TreeValue` are what the walk sees of either.
 
@@ -109,8 +110,8 @@ The walk is written once, against two sealed traits, and the owned tree and the 
 implement them. A visitor is generic over the value type and never names either.
 
 ```rust
-/// A value the walk can cross. Sealed: implemented for `&'a PropertyValueEnum<M>` and for
-/// `ValueView<'a, M>`, and by nothing else.
+/// A value the walk can cross. Sealed: implemented for `&'a PropertyValueEnum` and for
+/// `ValueView<'a>`, and by nothing else.
 pub trait TreeValue<'a>: Copy + sealed::Sealed {
     /// The node type this tree's `Struct` and `Embedded` values are.
     type Node: TreeNode<'a, Value = Self>;
@@ -153,11 +154,13 @@ pub trait TreeValue<'a>: Copy + sealed::Sealed {
 }
 
 /// A node the walk can visit: a class and properties. Sealed: implemented for the owned
-/// tree's node, for `StructView<'a, M>`, and for `ObjectView<'a, M>` as a root.
+/// tree's node and for `StructView<'a>`. An object's root is walked as a `StructView`
+/// over the same bytes; `ObjectView` implements nothing, its `Value` would have to name it
+/// as `Node` and `ValueView::Node` is `StructView`.
 pub trait TreeNode<'a>: Copy + sealed::Sealed {
     type Value: TreeValue<'a, Node = Self>;
-    /// The properties in file order. Items are `Result` because a view's kind byte can fail to
-    /// decode; the owned tree never fails.
+    /// The properties in file order. A view's kind byte can fail to decode. Items are
+    /// `Result`; the owned tree never fails.
     type Properties: Iterator<Item = Result<(BinHash, Self::Value), Error>>;
 
     fn class_hash(&self) -> BinHash;
@@ -196,17 +199,52 @@ pub enum Leaf<'a> {
     Flag(bool),
 }
 
-impl<'a, M> TreeValue<'a> for &'a PropertyValueEnum<M> { type Node = OwnedNode<'a, M>; /* ... */ }
-impl<'a, M: Default> TreeValue<'a> for ValueView<'a, M> { type Node = StructView<'a, M>; /* ... */ }
+impl Leaf<'_> {
+    pub fn kind(&self) -> Kind;
+}
+
+impl<'a> TreeValue<'a> for &'a PropertyValueEnum {
+    type Node = OwnedNode<'a>;
+    type Children = OwnedChildren<'a>;
+    /* ... */
+}
+impl<'a> TreeValue<'a> for ValueView<'a> {
+    type Node = StructView<'a>;
+    type Children = ViewChildren<'a>;
+    /* ... */
+}
 
 /// The owned tree's node: a class hash and a borrowed property map. `BinObject` and
-/// `values::Struct` both view as one.
+/// `values::Struct` both view as one, through `From`.
 #[derive(Clone, Copy, Debug)]
-pub struct OwnedNode<'a, M = NoMeta> { /* class_hash, &'a IndexMap<BinHash, PropertyValueEnum<M>> */ }
-impl<'a, M> TreeNode<'a> for OwnedNode<'a, M> { type Value = &'a PropertyValueEnum<M>; /* ... */ }
-impl<'a, M: Default> TreeNode<'a> for StructView<'a, M> { type Value = ValueView<'a, M>; /* ... */ }
-impl<'a, M: Default> TreeNode<'a> for ObjectView<'a, M> { type Value = ValueView<'a, M>; /* ... */ }
+pub struct OwnedNode<'a> { /* class_hash, &'a IndexMap<BinHash, PropertyValueEnum> */ }
+impl<'a> OwnedNode<'a> {
+    pub fn new(class_hash: BinHash, properties: &'a IndexMap<BinHash, PropertyValueEnum>) -> Self;
+}
+impl<'a> From<&'a BinObject> for OwnedNode<'a> {}
+impl<'a> From<&'a values::Struct> for OwnedNode<'a> {}
+
+impl<'a> TreeNode<'a> for OwnedNode<'a> {
+    type Value = &'a PropertyValueEnum;
+    type Properties = OwnedProperties<'a>;
+    /* ... */
+}
+impl<'a> TreeNode<'a> for StructView<'a> {
+    type Value = ValueView<'a>;
+    type Properties = ViewProperties<'a>;
+    /* ... */
+}
+
+/// The iterators behind the associated types. Each is `FusedIterator`; the owned pair is
+/// `ExactSizeIterator` too.
+pub struct OwnedProperties<'a> { /* ... */ }
+pub struct OwnedChildren<'a> { /* ... */ }
+pub struct ViewProperties<'a> { /* ... */ }
+pub struct ViewChildren<'a> { /* ... */ }
 ```
+
+`to_value` and `to_struct` return an owned tree. A null pointer stays a `Struct` with class 0
+under either.
 
 `PropertyValueEnum::holds_node` is also exposed directly, infallible, and `Kind::is_primitive`
 plays no part in any of this (W1). `Leaf` is the one place the crate names the tags as the
@@ -284,7 +322,7 @@ impl MapKey {
     pub fn from_leaf(leaf: Leaf<'_>) -> Option<Self>;
     pub fn to_value(&self) -> PropertyValueEnum;
 }
-impl<M> TryFrom<&PropertyValueEnum<M>> for MapKey { type Error = Error; /* InvalidKeyType */ }
+impl TryFrom<&PropertyValueEnum> for MapKey { type Error = Error; /* InvalidKeyType */ }
 
 impl ValuePath {
     pub fn new() -> Self;
@@ -396,7 +434,8 @@ field step nowhere in the text. A `ValuePath` with no steps renders as the empty
 Hex is lowercase, zero-padded to the hash's width: eight digits for a `BinHash`, sixteen for a
 `WadHash`. A string key is written as a JSON string, escaped as `serde_json` would write it. An
 `F32` key is written in Rust's shortest round-trip form. A vector or colour key is its components
-in parentheses, comma separated; it is text for a human and nothing parses it.
+in parentheses, comma separated, and a matrix key is its sixteen components row by row, as the
+wire holds them; it is text for a human and nothing parses it.
 
 `to_property_path` writes a `Hash` key as its raw value in decimal rather than as a name, even
 when the table has one: a plaintext hashes back to the same value, but it is the value that is
@@ -498,7 +537,7 @@ pub enum WalkOutcome {
 }
 
 /// What a walk calls. Generic over the tree's value type, so one visitor runs over the owned
-/// tree (`V = &PropertyValueEnum<M>`) and over the view (`V = ValueView<'a, M>`) alike.
+/// tree (`V = &PropertyValueEnum`) and over the view (`V = ValueView<'a>`) alike.
 ///
 /// Every callback has a default that continues, so a visitor implements only what it reads.
 pub trait Visitor<'a, V: TreeValue<'a>> {
@@ -522,8 +561,9 @@ pub trait Visitor<'a, V: TreeValue<'a>> {
         -> Result<Visit, Self::Error> {
         Ok(Visit::Continue)
     }
-    /// Called once for every property that was descended - after its nodes, after a `Skip`,
-    /// and while unwinding for a `Stop`. Not called for a leaf. Never after an `Abort`.
+    /// Called once for every property that holds a node and was entered - after its nodes,
+    /// after a `Skip`, and while unwinding for a `Stop`. Not called for a leaf. Never after
+    /// an `Abort`.
     fn exit_property(&mut self, field: BinHash, value: V, node: &Node<'_, 'a, V>)
         -> Result<Visit, Self::Error> {
         Ok(Visit::Continue)
@@ -590,28 +630,28 @@ impl<'a, V: TreeValue<'a>> Trail<V> {
 impl<'a, V: TreeValue<'a>> fmt::Display for Trail<V> {}
 
 /// The owned tree. Never fails unless the visitor does.
-impl<M> BinObject<M> {
+impl BinObject {
     /// Walks this object: the root, then every node beneath every property `visitor` enters.
     pub fn walk<'a, W>(&'a self, visitor: &mut W) -> Result<WalkOutcome, W::Error>
-    where W: Visitor<'a, &'a PropertyValueEnum<M>>;
+    where W: Visitor<'a, &'a PropertyValueEnum>;
 }
-impl<M> Bin<M> {
+impl Bin {
     /// Walks every object, in file order. A `Stop` or `Abort` ends the whole walk, not the
     /// current object.
     pub fn walk<'a, W>(&'a self, visitor: &mut W) -> Result<WalkOutcome, W::Error>
-    where W: Visitor<'a, &'a PropertyValueEnum<M>>;
+    where W: Visitor<'a, &'a PropertyValueEnum>;
 }
-impl<M> BinOverride<M> {
+impl BinOverride {
     /// Walks every embedded object, in file order, as the file holds them: a record that
     /// targets one of them (the client merges a patch's objects into the base table before
     /// applying records, so it may) has not been applied. Patch records are not walked: a
     /// record's value has no node of its own to stand on.
     pub fn walk<'a, W>(&'a self, visitor: &mut W) -> Result<WalkOutcome, W::Error>
-    where W: Visitor<'a, &'a PropertyValueEnum<M>>;
+    where W: Visitor<'a, &'a PropertyValueEnum>;
 }
 
 /// The view.
-impl<'a, M: Default> ObjectView<'a, M> {
+impl<'a> ObjectView<'a> {
     /// Walks this object over its buffered bytes: nothing is materialised, a header is
     /// decoded where the walk descends, and a leaf is decoded only when the visitor asks.
     ///
@@ -620,20 +660,24 @@ impl<'a, M: Default> ObjectView<'a, M> {
     /// A kind byte or header that does not decode, converted into the visitor's error, or
     /// whatever the visitor raises.
     pub fn walk<W>(&self, visitor: &mut W) -> Result<WalkOutcome, W::Error>
-    where W: Visitor<'a, ValueView<'a, M>>;
+    where W: Visitor<'a, ValueView<'a>>;
 }
-impl<R: io::Read + io::Seek, M: Default> ObjectStream<'_, R, M> {
+impl<R: io::Read + io::Seek> ObjectStream<'_, R> {
     /// `view()?` then `walk`.
-    pub fn walk<W>(&mut self, visitor: &mut W) -> Result<WalkOutcome, W::Error>
-    where W: for<'a> Visitor<'a, ValueView<'a, M>>;
+    pub fn walk<E, W>(&mut self, visitor: &mut W) -> Result<WalkOutcome, E>
+    where E: From<Error>, W: for<'a> Visitor<'a, ValueView<'a>, Error = E>;
 }
-impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
+impl<R: io::Read + io::Seek> BinStream<R> {
     /// Walks every object in file order, one buffered object at a time: `objects()` and
     /// `walk` on each. Holds one object's bytes at any moment and nothing of the tree.
-    pub fn walk<W>(&mut self, visitor: &mut W) -> Result<WalkOutcome, W::Error>
-    where W: for<'a> Visitor<'a, ValueView<'a, M>>;
+    pub fn walk<E, W>(&mut self, visitor: &mut W) -> Result<WalkOutcome, E>
+    where E: From<Error>, W: for<'a> Visitor<'a, ValueView<'a>, Error = E>;
 }
 ```
+
+The stream entry points name the visitor's error as their own type parameter `E`. A bound
+quantified over every `'a` has no single `W::Error` to project; `Error = E` pins it, and a
+caller never spells it.
 
 A visitor written against `TreeValue` and `TreeNode` runs over either tree unchanged. The
 manager's rules are written once and run over `BinStream::walk` in the pass and over
@@ -694,7 +738,8 @@ For one object:
 `Visit::Skip` from `enter_node` runs rule 5 without rule 2; from `exit_property` it runs rule 5
 without the node's remaining properties; from `exit_node` it ends the enclosing property's
 remaining items and runs rule 4. `Stop` runs every pending rule 4 and rule 5 innermost first,
-then returns `Stopped`; `Abort` returns `Aborted` at once.
+then returns `Stopped`; a `Stop` from `enter_property` on a value that holds a node counts that
+property as pending, and a `Stop` on a leaf does not. `Abort` returns `Aborted` at once.
 
 So a visitor sees nodes in pre-order, in file order, each exactly once, and every push is popped
 before the walk returns. With every callback at its default the walk visits every node in the
