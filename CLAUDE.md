@@ -69,6 +69,11 @@ GitHub issues are rendered from the ticket files in `.scratch/*/issues/` (frontm
 
 League Toolkit is a Rust workspace for parsing, editing, and writing League of Legends file formats. It consists of 13 individual `ltk_*` crates plus one umbrella `league-toolkit` crate that re-exports them via feature flags.
 
+**Consumers.** [LTK Manager](https://github.com/LeagueToolkit/ltk-manager) is the desktop app
+where end users interact with this code, and the main consumer of these crates, alongside
+[league-mod](https://github.com/LeagueToolkit/league-mod). An API question the manager raises is
+settled in this repo's spec, and the manager cites it.
+
 ## Build Commands
 
 ```bash
