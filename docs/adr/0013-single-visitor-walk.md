@@ -1,4 +1,4 @@
-# ADR-0013: `ltk_meta` owns a single-visitor walk with a trail; scheduling visitors is the consumer's
+# ADR-0013: Single-visitor walk
 
 - **Status:** Accepted
 - **Date:** 2026-09-02

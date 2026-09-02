@@ -140,9 +140,9 @@ Bad   docs(ltk_meta): specify the value walk and align ValuePath with the manage
 Good  docs(ltk_meta): specify value walk
 ```
 
-Two things keep their own shape. An **ADR title** is a declarative sentence, because the title is
-the decision. A **test name** stays narrative, because it is read one at a time and is the only
-sentence saying what the case is.
+The same shape holds for an **ADR title**: a noun phrase naming the decision (`Field step
+class`, `Single-visitor walk`), never a sentence stating it. Only a **test name** stays
+narrative, because it is read one at a time and is the only sentence saying what the case is.
 
 ## Additional Context
 

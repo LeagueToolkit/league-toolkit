@@ -1,4 +1,4 @@
-# ADR-0012: A field step names the class it is on
+# ADR-0012: Field step class
 
 - **Status:** Accepted
 - **Date:** 2026-09-02

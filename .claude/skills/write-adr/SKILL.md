@@ -54,9 +54,12 @@ accident.
 `docs/adr/NNNN-slug.md` - four digits, next free number, never reused, never renumbered. Numbers
 are global to the repo, not per feature. Start from `docs/adr/template.md`.
 
-**The title states the decision as a claim, not a topic.**
-`0004-merge-and-diff-are-separate-operations`, not `0004-merge-and-diff`. A reader scanning the
-directory should learn what was decided without opening anything.
+**The title is a terse noun phrase naming the decision, not a sentence arguing it.** Two to
+five words in the codebase's own vocabulary, the same shape as a commit subject: `Field step
+class`, `Single-visitor walk`, `Object cache provider`. Not `A field step names the class it is
+on` - the claim and its reasoning belong in the Decision section, where they can be read in
+full. The slug is the title, lowercased and hyphenated: `0012-field-step-class`. ADR-0001 to
+ADR-0011 predate this rule and keep their sentence titles.
 
 ## Writing it
 

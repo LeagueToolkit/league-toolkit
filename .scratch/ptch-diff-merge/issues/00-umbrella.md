@@ -15,8 +15,8 @@ Layering one bin over another, and saying the difference between two bins as a `
 | Merge and diff are separate operations | `docs/adr/0004-merge-and-diff-are-separate-operations.md` |
 | `ValuePath` and the walk that produces one | `docs/design/value-walk.md` |
 | `ValuePath` addresses by hash | `docs/adr/0005-value-path-addresses-by-hash.md` |
-| A field step names the class it is on | `docs/adr/0012-a-field-step-names-the-class-it-is-on.md` |
-| `ltk_meta` owns the single-visitor walk | `docs/adr/0013-ltk-meta-owns-the-single-visitor-walk.md` |
+| Field step class | `docs/adr/0012-field-step-class.md` |
+| Single-visitor walk | `docs/adr/0013-single-visitor-walk.md` |
 | No schema in `ltk_meta` | `docs/adr/0006-no-schema-in-ltk-meta.md` |
 
 The tickets below render the spec's API-surface sections. Every rule the spec settles is a `Dn` row
