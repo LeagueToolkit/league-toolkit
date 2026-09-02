@@ -27,7 +27,8 @@ use ltk_meta::{
     concrete::BinStream,
     path::{PatchError, ResolveErrorKind, ValueShape},
     traits::PropertyExt as _,
-    Bin, BinKind, BinObject, BinOverride,
+    walk::{Node, TreeValue, Visit, Visitor},
+    Bin, BinKind, BinObject, BinOverride, Error, PropertyValueEnum,
 };
 use ltk_wad::Wad;
 
@@ -517,6 +518,128 @@ fn every_shipped_prop_streams_the_same_object_set() {
                 continue;
             }
             check_stream_parity(wad_path, &data, &mut counts);
+        }
+    }
+
+    println!("{counts}");
+    assert!(counts.prop_chunks > 0, "no PROP chunks in {game_dir}");
+}
+
+/// `(object, class, trail)` per node, in visit order.
+#[derive(Default)]
+struct Visits(Vec<(u32, u32, String)>);
+
+impl<'a, V: TreeValue<'a>> Visitor<'a, V> for Visits {
+    type Error = Error;
+
+    fn enter_node(&mut self, node: &Node<'_, 'a, V>) -> Result<Visit, Error> {
+        self.0.push((
+            *node.object_hash(),
+            *node.class_hash(),
+            node.trail().to_string(),
+        ));
+        Ok(Visit::Continue)
+    }
+}
+
+/// The nodes under `value`, by a recursion independent of the walk: every `Struct` and
+/// `Embedded` with a non-zero class, wherever it sits.
+fn count_nodes(value: &PropertyValueEnum) -> usize {
+    use PropertyValueEnum as P;
+    let count_struct = |s: &ltk_meta::property::values::Struct| {
+        if *s.class_hash == 0 {
+            0
+        } else {
+            1 + s.properties.values().map(count_nodes).sum::<usize>()
+        }
+    };
+    match value {
+        P::Struct(s) => count_struct(s),
+        P::Embedded(e) => count_struct(&e.0),
+        P::Container(c) => c.items().iter().map(count_nodes).sum(),
+        P::UnorderedContainer(c) => c.0.items().iter().map(count_nodes).sum(),
+        P::Optional(o) => o.value().map_or(0, count_nodes),
+        P::Map(m) => m.entries().iter().map(|(_, v)| count_nodes(v)).sum(),
+        _ => 0,
+    }
+}
+
+#[derive(Default)]
+struct WalkCounts {
+    wads: usize,
+    prop_chunks: usize,
+    objects: usize,
+    nodes: usize,
+}
+
+impl fmt::Display for WalkCounts {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "{} wad archives", self.wads)?;
+        writeln!(f, "{} PROP chunks walked twice", self.prop_chunks)?;
+        writeln!(f, "{} objects, {} nodes", self.objects, self.nodes)
+    }
+}
+
+/// The streaming walk against the owned walk and an independent count, for one `PROP` chunk.
+fn check_walk_parity(wad_path: &Path, data: &[u8], counts: &mut WalkCounts) {
+    let context = || format!("{}", wad_path.display());
+
+    let eager = Bin::from_reader(&mut Cursor::new(data))
+        .unwrap_or_else(|e| panic!("{}: the eager parse failed: {e}", context()));
+    let mut owned = Visits::default();
+    eager
+        .walk(&mut owned)
+        .unwrap_or_else(|e| panic!("{}: the owned walk failed: {e}", context()));
+
+    let mut stream = BinStream::mount(Cursor::new(data))
+        .unwrap_or_else(|e| panic!("{}: the stream did not mount: {e}", context()));
+    let mut streamed = Visits::default();
+    stream
+        .walk(&mut streamed)
+        .unwrap_or_else(|e: Error| panic!("{}: the streaming walk failed: {e}", context()));
+
+    assert_eq!(owned.0, streamed.0, "{}", context());
+
+    let expected: usize = eager
+        .objects
+        .values()
+        .map(|object| 1 + object.properties.values().map(count_nodes).sum::<usize>())
+        .sum();
+    assert_eq!(owned.0.len(), expected, "{}", context());
+
+    counts.prop_chunks += 1;
+    counts.objects += eager.objects.len();
+    counts.nodes += expected;
+}
+
+#[test]
+#[ignore = "needs an installed client; set LTK_LOL_GAME_DIR"]
+fn every_shipped_prop_walks_the_same_over_both_trees() {
+    let Ok(game_dir) = std::env::var(GAME_DIR) else {
+        panic!("set {GAME_DIR} to the client's Game directory");
+    };
+
+    let mut wad_files = Vec::new();
+    wad_paths(Path::new(&game_dir), &mut wad_files);
+    wad_files.sort();
+    assert!(!wad_files.is_empty(), "no .wad.client under {game_dir}");
+
+    let mut counts = WalkCounts::default();
+    for wad_path in &wad_files {
+        counts.wads += 1;
+
+        let source = File::open(wad_path).expect("the wad opens");
+        let mut wad = Wad::mount(source).expect("the wad mounts");
+        let chunks: Vec<_> = wad.chunks().as_slice().to_vec();
+
+        for chunk in &chunks {
+            let Ok(data) = wad.load_chunk_decompressed(chunk) else {
+                continue;
+            };
+            if BinKind::identify_from_bytes(&data) != Some(BinKind::Prop) {
+                continue;
+            }
+            check_walk_parity(wad_path, &data, &mut counts);
         }
     }
 

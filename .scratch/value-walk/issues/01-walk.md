@@ -52,7 +52,8 @@ pub trait TreeValue<'a>: Copy + sealed::Sealed {
 }
 
 /// A node the walk can visit: a class and properties. Sealed: implemented for the owned
-/// tree's node, for `StructView<'a, M>`, and for `ObjectView<'a, M>` as a root.
+/// tree's node and for `StructView<'a, M>`. An object's root is walked as a `StructView`
+/// over the same bytes.
 pub trait TreeNode<'a>: Copy + sealed::Sealed {
     type Value: TreeValue<'a, Node = Self>;
     type Properties: Iterator<Item = Result<(BinHash, Self::Value), Error>>;
@@ -97,7 +98,6 @@ impl<'a, M> TreeValue<'a> for &'a PropertyValueEnum<M> { type Node = OwnedNode<'
 impl<'a, M: Default> TreeValue<'a> for ValueView<'a, M> { type Node = StructView<'a, M>; /* ... */ }
 impl<'a, M> TreeNode<'a> for OwnedNode<'a, M> { type Value = &'a PropertyValueEnum<M>; /* ... */ }
 impl<'a, M: Default> TreeNode<'a> for StructView<'a, M> { type Value = ValueView<'a, M>; /* ... */ }
-impl<'a, M: Default> TreeNode<'a> for ObjectView<'a, M> { type Value = ValueView<'a, M>; /* ... */ }
 
 /// What a callback answers. `ltk_ritobin::cst::visitor::Visit`'s shape (W21).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -132,7 +132,8 @@ pub trait Visitor<'a, V: TreeValue<'a>> {
     /// descended on `Continue`.
     fn enter_property(&mut self, field: BinHash, value: V, node: &Node<'_, 'a, V>)
         -> Result<Visit, Self::Error> { Ok(Visit::Continue) }
-    /// Once per property descended. Not called for a leaf. Never after an `Abort`.
+    /// Once per property that holds a node and was entered. Not called for a leaf. Never
+    /// after an `Abort`.
     fn exit_property(&mut self, field: BinHash, value: V, node: &Node<'_, 'a, V>)
         -> Result<Visit, Self::Error> { Ok(Visit::Continue) }
 }
@@ -208,14 +209,14 @@ impl<'a, M: Default> ObjectView<'a, M> {
 }
 impl<R: io::Read + io::Seek, M: Default> ObjectStream<'_, R, M> {
     /// `view()?` then `walk`.
-    pub fn walk<W>(&mut self, visitor: &mut W) -> Result<WalkOutcome, W::Error>
-    where W: for<'a> Visitor<'a, ValueView<'a, M>>;
+    pub fn walk<E, W>(&mut self, visitor: &mut W) -> Result<WalkOutcome, E>
+    where E: From<Error>, W: for<'a> Visitor<'a, ValueView<'a, M>, Error = E>;
 }
 impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
     /// Walks every object in file order, one buffered object at a time. Holds one object's
     /// bytes at any moment and nothing of the tree.
-    pub fn walk<W>(&mut self, visitor: &mut W) -> Result<WalkOutcome, W::Error>
-    where W: for<'a> Visitor<'a, ValueView<'a, M>>;
+    pub fn walk<E, W>(&mut self, visitor: &mut W) -> Result<WalkOutcome, E>
+    where E: From<Error>, W: for<'a> Visitor<'a, ValueView<'a, M>, Error = E>;
 }
 ```
 
