@@ -7,8 +7,9 @@
   [#173](https://github.com/LeagueToolkit/league-toolkit/issues/173),
   [#218](https://github.com/LeagueToolkit/league-toolkit/issues/218); tickets in
   `.scratch/ptch-diff-merge/issues/`
-- **Spec:** `docs/design/ptch-property-patches.md`
-- **Decisions:** ADR-0001 to ADR-0006
+- **Spec:** `docs/design/ptch-property-patches.md`; `docs/design/value-walk.md` for the walk
+  and `ValuePath`
+- **Decisions:** ADR-0001 to ADR-0006, ADR-0012, ADR-0013
 
 ## <a id="s1"></a>1. Problem
 
@@ -54,6 +55,10 @@ A consumer here is a crate, a tool, or a person building one.
    patch is editable by hand and diffable in review.
 6. As **a scanning tool**, I want one entry point that reads whichever kind of bin a file is, so
    that I do not sniff magics myself.
+7. As **`ltk-manager`'s problems pass**, I want one read-only traversal over every node of a bin,
+   with an address for any node I report on, so that each health-check rule is a visitor rather
+   than its own walker - the manager has two hand-written walkers today and is about to need a
+   third that runs several rules over one pass.
 
 ## <a id="s4"></a>4. Requirements
 
@@ -83,6 +88,13 @@ A consumer here is a crate, a tool, or a person building one.
 - **FR-10:** The crate SHALL be able to express the difference between two bins as a patch, and
   SHALL report every difference the record language cannot carry. *(Parked - ADR-0004.)*
 - **FR-11:** The crate SHALL offer one entry point that reads whichever kind of bin a file holds.
+- **FR-12:** The crate SHALL walk every node of an object - the object and every nested struct
+  and embed - in a fixed order, calling a visitor once per node, and SHALL let the visitor decline
+  to enter any property so that nothing beneath it is visited.
+- **FR-13:** The crate SHALL address any position inside an object by hash and by position,
+  carrying the class each field was read on, and SHALL render an address in a form that is stable
+  across machines and name tables and in a best-effort readable form that says how much of it a
+  name table could spell.
 
 ### Non-functional
 
@@ -187,3 +199,7 @@ So the guarantee a mod carries, stated as a user should hear it:
       two surfaces cannot drift (FR-8).
 - [ ] **AC-6:** Joining two patches that write the same position reports it, and applying the
       joined patch equals applying each in order (FR-9).
+- [ ] **AC-7:** A walk over every object in an install visits each struct and embed with a
+      non-zero class exactly once, in file order, and for every position in a fixture tree with a
+      complete name table the address renders to a path that resolves back to the same value
+      (FR-12, FR-13).

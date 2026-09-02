@@ -47,6 +47,10 @@ object; reaching one object costs that object; and a consumer that wants everyth
   materializing its siblings, so that reading `Elements[3].Position` costs three lookups.
 - As **any caller of `Bin::from_reader`**, I want the eager path to be the streaming path drained,
   so that a fix to one is a fix to both.
+- As **`ltk-manager`'s problems pass**, I want to sweep a bin one materialised object at a time,
+  and to know the largest object's size before decoding any, so that a streamed bin's memory
+  budget is its bytes plus one object's expansion rather than the whole file's - and I want a
+  `PTCH` swept the same way for the objects it carries, without reading its records.
 
 ## <a id="s4"></a>4. Requirements
 
@@ -77,6 +81,11 @@ object; reaching one object costs that object; and a consumer that wants everyth
   which numbering a handle settled on.
 - **FR-12:** A saved edit SHALL be a rewritten `.bin` in which untouched objects are copied through
   byte-exactly and only edited objects are re-encoded.
+- **FR-13:** The table of contents SHALL answer the largest declared object size in a file before
+  any object body is decoded.
+- **FR-14:** A `PTCH` stream SHALL yield its embedded objects through the same cursors as a `PROP`
+  stream, without reading its patch records; the records SHALL be reachable only through a cursor
+  of their own.
 
 ### Non-functional
 
@@ -148,3 +157,5 @@ Facts the format imposes, read off the client's loader
 - [ ] **AC-5:** `Bin::from_reader` is mount plus drain, with no second parse path in the crate.
 - [ ] **AC-6:** A batch request visits the file in offset order and reports its misses.
 - [ ] **AC-7:** A file in legacy numbering reads identically through the stream and the eager path.
+- [ ] **AC-8:** For every `PTCH` chunk in an install, the object cursors yield the same objects
+      the eager `BinOverride::objects` holds and read no byte of the record list (FR-14).
