@@ -14,10 +14,8 @@ mod tests;
 use std::{convert::Infallible, fmt, str::FromStr};
 
 pub use crate::Spanned;
-use indexmap::IndexMap;
 use ltk_meta::PropertyKind;
 pub use node::{Object, Property, RootEntry, Value};
-use smallvec::SmallVec;
 pub use to_bin::PartialBin;
 
 use crate::{

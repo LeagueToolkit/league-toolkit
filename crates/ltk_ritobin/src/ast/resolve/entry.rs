@@ -103,23 +103,6 @@ impl<'a> Builder<'a> {
         let value_node = children
             .find_tree(self.cst, Kind::EntryValue)
             .ok_or(MissingTree(Kind::EntryValue))?;
-        let value_span = value_node.span;
-
-        // if let Some(parent) = parent_value_kind.as_ref() {
-        //     if let Some((kind, kind_span)) = kind.as_ref().zip(kind_span) {
-        //         if !parent.can_coerce(*kind) {
-        //             self.push(
-        //                 TypeMismatch {
-        //                     span: kind_span,
-        //                     expected: *parent,
-        //                     expected_span: parent_type_span,
-        //                     got: (*kind).into(),
-        //                 }
-        //                 .unwrap(),
-        //             );
-        //         }
-        //     }
-        // }
 
         let desired_kind = type_expr.or(parent_value_kind.map(|k| k.into()));
         let type_span = type_expr_span.or(parent_type_span);
