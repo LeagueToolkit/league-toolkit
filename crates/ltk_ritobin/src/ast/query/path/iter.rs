@@ -8,7 +8,6 @@ use crate::ast::{
 /// Use [`Ast::coarse_path_to`] to construct this iterator.
 #[derive(Clone)]
 pub struct AstPathIter<'a> {
-    ast: &'a Ast,
     next: Option<NodeRef<'a>>,
     offset: u32,
 }
@@ -16,7 +15,6 @@ pub struct AstPathIter<'a> {
 impl<'a> AstPathIter<'a> {
     pub(crate) fn from_ast(ast: &'a Ast, offset: u32) -> Self {
         Self {
-            ast,
             next: ast
                 .root_entries()
                 .find(|o| o.span().contains_inclusive(offset))
@@ -24,9 +22,8 @@ impl<'a> AstPathIter<'a> {
             offset,
         }
     }
-    pub(crate) fn from_node(node: NodeRef<'a>, ast: &'a Ast, offset: u32) -> Self {
+    pub(crate) fn from_node(node: NodeRef<'a>, offset: u32) -> Self {
         Self {
-            ast,
             next: node.span().contains_inclusive(offset).then_some(node),
             offset,
         }
@@ -39,7 +36,7 @@ impl<'a> Iterator for AstPathIter<'a> {
     fn next(&mut self) -> Option<NodeRef<'a>> {
         let current = self.next.take()?;
         self.next = current
-            .children(self.ast)
+            .children()
             .find(|c| c.span().contains_inclusive(self.offset));
         Some(current)
     }
@@ -50,22 +47,17 @@ impl<'a> Iterator for AstPathIter<'a> {
 /// Use [`Ast::fine_path_to`] to construct this iterator.
 #[derive(Clone)]
 pub struct AstFinePathIter<'a> {
-    ast: &'a Ast,
     next: Option<SubNodeRef<'a>>,
     offset: u32,
 }
 impl<'a> AstFinePathIter<'a> {
     pub(crate) fn from_ast(ast: &'a Ast, offset: u32) -> Self {
         Self {
-            ast,
             next: ast
                 .roots
                 .iter()
-                .enumerate()
-                .find(|(_, r)| r.resolve_span(&ast.roots).contains_inclusive(offset))
-                .map(|(i, _)| {
-                    SubNodeRef::Root(&ast.roots, i, crate::ast::query::AstRootDetail::Node)
-                }),
+                .find(|r| r.span().contains_inclusive(offset))
+                .map(|r| SubNodeRef::Root(r, crate::ast::query::AstRootDetail::Node)),
             offset,
         }
     }
@@ -86,8 +78,8 @@ impl<'a> Iterator for AstFinePathIter<'a> {
         // only recurse on nodes with detail = Node, since that means we have more resolution
         if current.detail().is_node() {
             self.next = match current {
-                SubNodeRef::Root(roots, idx, _) => roots.all[idx]
-                    .detailed_children(roots)
+                SubNodeRef::Root(v, _) => v
+                    .detailed_children()
                     .find(|c| c.span().contains_inclusive(self.offset)),
                 SubNodeRef::RootEntry(v, _) => v
                     .detailed_children()

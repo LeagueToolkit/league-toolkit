@@ -66,27 +66,8 @@ impl Root {
         self.name.span.cover(
             self.value
                 .as_ref()
-                .and_then(|v| v.as_value())
-                .map(|v| v.span())
+                .map(RootValue::span)
                 .unwrap_or(self.type_expr.span),
-        )
-    }
-
-    pub fn resolve_span(&self, roots: &Roots) -> Span {
-        self.name.span.cover(
-            match self.value.as_ref() {
-                Some(RootValue::Value(value)) => Some(value.span()),
-                Some(RootValue::Taken) => match *self.name {
-                    RootKind::Entries => roots
-                        .entries
-                        .as_ref()
-                        .and_then(|e| e.value.first())
-                        .map(|v| v.span()),
-                    _ => None,
-                },
-                None => todo!(),
-            }
-            .unwrap_or(self.type_expr.span),
         )
     }
 }
@@ -94,8 +75,8 @@ impl Root {
 #[derive(Debug, Clone)]
 pub enum RootValue {
     Value(Value),
-    /// Value was taken to resolve a known root.
-    Taken,
+    /// The resolved entries of the `entries` root. Stores extra span to preserve the original `Value::Map` span
+    Entries(Spanned<Vec<RootEntry>>),
 }
 
 impl RootValue {
@@ -103,6 +84,13 @@ impl RootValue {
         match self {
             RootValue::Value(v) => Some(v),
             _ => None,
+        }
+    }
+
+    pub fn span(&self) -> Span {
+        match self {
+            RootValue::Value(v) => v.span(),
+            RootValue::Entries(e) => e.span,
         }
     }
 }

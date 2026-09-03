@@ -1,25 +1,36 @@
 use crate::ast::{
-    node::root::{FileKind, KnownRoot, Root, RootKind},
+    node::root::{FileKind, KnownRoot, Root, RootKind, RootValue},
     RootEntry,
 };
 
 pub type VersionRoot = KnownRoot<u32>;
 pub type FileTypeRoot = KnownRoot<FileKind>;
 pub type LinkedRoot = KnownRoot<Vec<String>>;
-pub type EntriesRoot = KnownRoot<Vec<RootEntry>>;
 
 #[derive(Debug, Clone, Default)]
 pub struct Roots {
-    pub file_type: Option<FileTypeRoot>,
-    pub version: Option<VersionRoot>,
-    pub linked: Option<LinkedRoot>,
-    pub entries: Option<EntriesRoot>,
+    pub(crate) file_type: Option<FileTypeRoot>,
+    pub(crate) version: Option<VersionRoot>,
+    pub(crate) linked: Option<LinkedRoot>,
+    pub(crate) entries: Option<usize>,
 
     /// Ordered list of all top level roots
     pub all: Vec<Root>,
 }
 
 impl Roots {
+    pub fn file_type(&self) -> Option<KnownRoot<FileKind>> {
+        self.file_type
+    }
+
+    pub fn version(&self) -> Option<KnownRoot<u32>> {
+        self.version
+    }
+
+    pub fn linked(&self) -> Option<&KnownRoot<Vec<String>>> {
+        self.linked.as_ref()
+    }
+
     pub fn new(roots: impl IntoIterator<Item = Root>) -> Self {
         Self {
             all: roots.into_iter().collect(),
@@ -32,6 +43,14 @@ impl Roots {
     }
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Root> {
         self.all.iter_mut()
+    }
+
+    /// The resolved entries of the `entries` root, if present and well-formed.
+    pub fn entries(&self) -> Option<&[RootEntry]> {
+        match &self.all[self.entries?].value {
+            Some(RootValue::Entries(e)) => Some(e.as_slice()),
+            _ => None,
+        }
     }
 
     pub fn contains(&self, kind: RootKind) -> bool {

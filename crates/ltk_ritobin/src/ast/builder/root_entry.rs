@@ -170,33 +170,32 @@ impl<'a> Builder<'a> {
                         }
                     }
                 }
-                RootKind::Entries => match root.value.replace(RootValue::Taken) {
-                    Some(RootValue::Value(Value::Map { entries: map, .. })) => {
-                        if let Some(existing) = entries.replace(KnownRoot {
-                            idx,
-                            value: map
-                                .into_iter()
-                                .filter_map(|(k, v)| match (k, v) {
-                                    (Value::Hash(path_hash), Some(Value::Embedded(object))) => {
-                                        Some(RootEntry { path_hash, object })
-                                    }
-                                    _ => None,
-                                })
-                                .collect(),
-                        }) {
+                RootKind::Entries => match root.value.take() {
+                    Some(RootValue::Value(Value::Map {
+                        entries: map, span, ..
+                    })) => {
+                        let items = map
+                            .into_iter()
+                            .filter_map(|(k, v)| match (k, v) {
+                                (Value::Hash(path_hash), Some(Value::Embedded(object))) => {
+                                    Some(RootEntry { path_hash, object })
+                                }
+                                _ => None,
+                            })
+                            .collect();
+                        root.value = Some(RootValue::Entries(Spanned::new(span, items)));
+                        if let Some(shadowee) = entries.replace(idx) {
                             self.push(
                                 D::ShadowedRoot {
                                     shadower: idx,
-                                    shadowee: existing.idx,
+                                    shadowee,
                                 }
                                 .default_span(Span::empty(0)),
                             );
                         }
                     }
-                    Some(v) => {
-                        root.value.replace(v);
-                    }
-                    None => {}
+                    // not a well-formed map: leave the raw value in place to navigate/diagnose
+                    other => root.value = other,
                 },
             }
         }

@@ -33,7 +33,7 @@ pub struct Ast {
 
 impl Ast {
     pub fn root_entries(&self) -> impl Iterator<Item = &RootEntry> {
-        self.roots.entries.iter().flat_map(|e| e.value.iter())
+        self.roots.entries().unwrap_or_default().iter()
     }
 }
 

@@ -2,19 +2,18 @@ use std::iter::{empty, once};
 
 use crate::ast::{
     node::{
-        root::{Root, RootKind, RootValue},
-        roots::Roots,
+        root::{Root, RootValue},
         NodeRef, SubNodeRef,
     },
-    Ast, Object, Property, RootEntry, Value,
+    Object, Property, RootEntry, Value,
 };
 
 use super::*;
 
 impl<'a> NodeRef<'a> {
-    pub fn children(&self, ast: &'a Ast) -> Box<dyn Iterator<Item = NodeRef<'a>> + 'a> {
+    pub fn children(&self) -> Box<dyn Iterator<Item = NodeRef<'a>> + 'a> {
         match self {
-            NodeRef::Root(r, idx) => r.all[*idx].children(&ast.roots),
+            NodeRef::Root(r) => r.children(),
             NodeRef::RootEntry(o) => Box::new(std::iter::once(NodeRef::Object(&o.object))),
             NodeRef::Object(s) => Box::new(s.properties.iter().map(NodeRef::Property)),
             NodeRef::Property(p) => Box::new(p.value.as_ref().map(NodeRef::Value).into_iter()),
@@ -24,34 +23,22 @@ impl<'a> NodeRef<'a> {
 }
 
 impl Root {
-    pub fn children<'a>(&'a self, roots: &'a Roots) -> Box<dyn Iterator<Item = NodeRef<'a>> + 'a> {
-        match self.value.as_ref() {
+    pub fn children<'a>(&'a self) -> Box<dyn Iterator<Item = NodeRef<'a>> + 'a> {
+        match &self.value {
+            Some(RootValue::Entries(e)) => Box::new(e.iter().map(NodeRef::RootEntry)),
             Some(RootValue::Value(value)) => Box::new(once(NodeRef::Value(value))),
-            Some(RootValue::Taken) if matches!(self.name.value, RootKind::Entries) => Box::new(
-                roots
-                    .entries
-                    .iter()
-                    .flat_map(|e| e.value.iter().map(NodeRef::RootEntry)),
-            ),
-            // roots w/ simple values are not worth having a dedicated node for at this resolution
-            _ => Box::new(empty()),
+            // roots w/ simple values aren't worth a dedicated node at this resolution
+            None => Box::new(empty()),
         }
     }
-    pub fn detailed_children<'a>(
-        &'a self,
-        roots: &'a Roots,
-    ) -> impl Iterator<Item = SubNodeRef<'a>> {
+    pub fn detailed_children<'a>(&'a self) -> impl Iterator<Item = SubNodeRef<'a>> {
         [
-            SubNodeRef::Root(roots, self.idx, AstRootDetail::Name),
-            SubNodeRef::Root(roots, self.idx, AstRootDetail::TypeExpr),
+            SubNodeRef::Root(self, AstRootDetail::Name),
+            SubNodeRef::Root(self, AstRootDetail::TypeExpr),
         ]
         .into_iter()
-        .chain(self.children(roots).map(|r| r.into()))
-        .chain(once(SubNodeRef::Root(
-            roots,
-            self.idx,
-            AstRootDetail::Trivia,
-        )))
+        .chain(self.children().map(SubNodeRef::from))
+        .chain(once(SubNodeRef::Root(self, AstRootDetail::Trivia)))
     }
 }
 
