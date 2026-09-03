@@ -2,7 +2,7 @@ use crate::{
     ast::{
         diagnostics::Diagnostic as D,
         node::{
-            root::{KnownRoot, Root, RootKind},
+            root::{KnownRoot, Root, RootKind, RootValue},
             roots::Roots,
             TypeExpr,
         },
@@ -33,9 +33,12 @@ impl<'a> Builder<'a> {
         let mut linked = None;
         let mut entries = None;
 
+        let mut idx = 0;
         let mut roots = Roots::new(root_node.children.get(self.cst).iter().filter_map(|child| {
             let node = child.tree(self.cst)?;
-            self.resolve_root(node)
+            let root = self.resolve_root(node, idx)?;
+            idx += 1;
+            Some(root)
         }));
 
         // we don't need to coerce here since we collected these roots via Self::resolve_entry, who
@@ -68,7 +71,7 @@ impl<'a> Builder<'a> {
                     }
                 }
 
-                if let Some(value) = root.value.as_ref() {
+                if let Some(RootValue::Value(value)) = root.value.as_ref() {
                     if let Some(got) = value.rito_type() {
                         if got != expected_type {
                             self.push(
@@ -99,7 +102,7 @@ impl<'a> Builder<'a> {
                     );
                 }
                 RootKind::Version => {
-                    if let Some(Value::U32(v)) = &root.value {
+                    if let Some(RootValue::Value(Value::U32(v))) = &root.value {
                         if let Some(existing) = version.replace(KnownRoot {
                             idx,
                             value: v.value,
@@ -115,7 +118,12 @@ impl<'a> Builder<'a> {
                     }
                 }
                 RootKind::Type => {
-                    if let Some(v) = root.value.as_ref().and_then(|v| v.as_string()) {
+                    if let Some(v) = root
+                        .value
+                        .as_ref()
+                        .and_then(|v| v.as_value())
+                        .and_then(|v| v.as_string())
+                    {
                         if let Some(existing) = file_type.replace(KnownRoot {
                             idx,
                             value: v.parse().unwrap(),
@@ -135,7 +143,7 @@ impl<'a> Builder<'a> {
                         continue;
                     };
                     match value {
-                        Value::Container { items, .. } => {
+                        RootValue::Value(Value::Container { items, .. }) => {
                             if let Some(existing) = linked.replace(KnownRoot {
                                 idx,
                                 value: items
@@ -162,8 +170,8 @@ impl<'a> Builder<'a> {
                         }
                     }
                 }
-                RootKind::Entries => match root.value.take() {
-                    Some(Value::Map { entries: map, .. }) => {
+                RootKind::Entries => match root.value.replace(RootValue::Taken) {
+                    Some(RootValue::Value(Value::Map { entries: map, .. })) => {
                         if let Some(existing) = entries.replace(KnownRoot {
                             idx,
                             value: map
@@ -208,7 +216,7 @@ impl<'a> Builder<'a> {
         }
     }
 
-    fn resolve_root(&mut self, node: &Node) -> Option<Root> {
+    fn resolve_root(&mut self, node: &Node, idx: usize) -> Option<Root> {
         match node.kind {
             Kind::Comment | Kind::ErrorTree => return None,
             Kind::Entry => match self.resolve_entry(node, None, None) {
@@ -216,9 +224,10 @@ impl<'a> Builder<'a> {
                     let kind = RootKind::from_value(&entry.key);
 
                     return Some(Root {
+                        idx,
                         name: kind.with_span(entry.key.span()),
                         type_expr: entry.type_expr,
-                        value: entry.value,
+                        value: entry.value.map(RootValue::Value),
                     });
                 }
                 Err(e) => {

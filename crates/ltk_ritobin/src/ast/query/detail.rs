@@ -1,4 +1,17 @@
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub enum AstRootDetail {
+    Node,
+    Name,
+    TypeExpr,
+    Trivia,
+}
+impl AstRootDetail {
+    pub fn is_node(&self) -> bool {
+        matches!(self, Self::Node)
+    }
+}
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum AstRootEntryDetail {
     Node,
     PathHash,
@@ -37,6 +50,7 @@ impl AstPropertyDetail {
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum NodeDetail {
+    Root(AstRootDetail),
     Object(AstRootEntryDetail),
     Struct(AstObjectDetail),
     Property(AstPropertyDetail),
@@ -45,6 +59,7 @@ pub enum NodeDetail {
 impl NodeDetail {
     pub fn is_node(&self) -> bool {
         match self {
+            NodeDetail::Root(d) => d.is_node(),
             NodeDetail::Object(d) => d.is_node(),
             NodeDetail::Struct(d) => d.is_node(),
             NodeDetail::Property(d) => d.is_node(),
@@ -53,6 +68,11 @@ impl NodeDetail {
     }
 }
 
+impl From<AstRootDetail> for NodeDetail {
+    fn from(value: AstRootDetail) -> Self {
+        Self::Root(value)
+    }
+}
 impl From<AstRootEntryDetail> for NodeDetail {
     fn from(value: AstRootEntryDetail) -> Self {
         Self::Object(value)

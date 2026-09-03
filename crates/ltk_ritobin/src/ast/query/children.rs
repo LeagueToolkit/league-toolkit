@@ -1,20 +1,57 @@
-use std::iter::once;
+use std::iter::{empty, once};
 
 use crate::ast::{
-    node::{NodeRef, SubNodeRef},
-    Object, Property, RootEntry, Value,
+    node::{
+        root::{Root, RootKind, RootValue},
+        roots::Roots,
+        NodeRef, SubNodeRef,
+    },
+    Ast, Object, Property, RootEntry, Value,
 };
 
 use super::*;
 
 impl<'a> NodeRef<'a> {
-    pub fn children(&self) -> Box<dyn Iterator<Item = NodeRef<'a>> + 'a> {
+    pub fn children(&self, ast: &'a Ast) -> Box<dyn Iterator<Item = NodeRef<'a>> + 'a> {
         match self {
+            NodeRef::Root(r, idx) => r.all[*idx].children(&ast.roots),
             NodeRef::RootEntry(o) => Box::new(std::iter::once(NodeRef::Object(&o.object))),
             NodeRef::Object(s) => Box::new(s.properties.iter().map(NodeRef::Property)),
             NodeRef::Property(p) => Box::new(p.value.as_ref().map(NodeRef::Value).into_iter()),
             NodeRef::Value(v) => v.children(),
         }
+    }
+}
+
+impl Root {
+    pub fn children<'a>(&'a self, roots: &'a Roots) -> Box<dyn Iterator<Item = NodeRef<'a>> + 'a> {
+        match self.value.as_ref() {
+            Some(RootValue::Value(value)) => Box::new(once(NodeRef::Value(value))),
+            Some(RootValue::Taken) if matches!(self.name.value, RootKind::Entries) => Box::new(
+                roots
+                    .entries
+                    .iter()
+                    .flat_map(|e| e.value.iter().map(NodeRef::RootEntry)),
+            ),
+            // roots w/ simple values are not worth having a dedicated node for at this resolution
+            _ => Box::new(empty()),
+        }
+    }
+    pub fn detailed_children<'a>(
+        &'a self,
+        roots: &'a Roots,
+    ) -> impl Iterator<Item = SubNodeRef<'a>> {
+        [
+            SubNodeRef::Root(roots, self.idx, AstRootDetail::Name),
+            SubNodeRef::Root(roots, self.idx, AstRootDetail::TypeExpr),
+        ]
+        .into_iter()
+        .chain(self.children(roots).map(|r| r.into()))
+        .chain(once(SubNodeRef::Root(
+            roots,
+            self.idx,
+            AstRootDetail::Trivia,
+        )))
     }
 }
 

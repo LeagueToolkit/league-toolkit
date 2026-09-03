@@ -5,6 +5,7 @@ use crate::{
         node::{roots::Roots, TypeExpr},
         RootEntry, Value,
     },
+    parse::Span,
     Spanned,
 };
 
@@ -51,34 +52,56 @@ impl<V> KnownRoot<V> {
 /// A root is a special-cased property (`key: type = value`), that exists at the top level of a
 /// ritobin file.
 pub struct Root {
+    pub idx: usize,
     pub name: Spanned<RootKind>,
     pub type_expr: Spanned<Option<TypeExpr>>,
-    pub value: Option<Value>,
+    pub value: Option<RootValue>,
+}
+
+impl Root {
+    /// Get the span of the whole root property
+    #[inline(always)]
+    #[must_use]
+    pub fn span(&self) -> Span {
+        self.name.span.cover(
+            self.value
+                .as_ref()
+                .and_then(|v| v.as_value())
+                .map(|v| v.span())
+                .unwrap_or(self.type_expr.span),
+        )
+    }
+
+    pub fn resolve_span(&self, roots: &Roots) -> Span {
+        self.name.span.cover(
+            match self.value.as_ref() {
+                Some(RootValue::Value(value)) => Some(value.span()),
+                Some(RootValue::Taken) => match *self.name {
+                    RootKind::Entries => roots
+                        .entries
+                        .as_ref()
+                        .and_then(|e| e.value.first())
+                        .map(|v| v.span()),
+                    _ => None,
+                },
+                None => todo!(),
+            }
+            .unwrap_or(self.type_expr.span),
+        )
+    }
 }
 
 #[derive(Debug, Clone)]
 pub enum RootValue {
     Value(Value),
-    Dependencies(Spanned<Vec<Value>>),
-    Entries(Spanned<Vec<RootEntry>>),
+    /// Value was taken to resolve a known root.
+    Taken,
 }
 
 impl RootValue {
     pub fn as_value(&self) -> Option<&Value> {
         match self {
             RootValue::Value(v) => Some(v),
-            _ => None,
-        }
-    }
-    pub fn as_entries(&self) -> Option<&Vec<RootEntry>> {
-        match self {
-            RootValue::Entries(v) => Some(v),
-            _ => None,
-        }
-    }
-    pub fn as_dependencies(&self) -> Option<&Vec<Value>> {
-        match self {
-            RootValue::Dependencies(v) => Some(v),
             _ => None,
         }
     }

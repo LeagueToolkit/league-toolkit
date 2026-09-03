@@ -23,9 +23,9 @@ impl Ast {
     }
 }
 
-impl<'a> NodeRef<'a> {
-    /// The chain of nodes on the way to `offset`, including this node.
-    pub fn path_to(&self, offset: u32) -> AstPathIter<'a> {
-        AstPathIter::from_node(*self, offset)
-    }
-}
+// impl<'a> NodeRef<'a> {
+//     /// The chain of nodes on the way to `offset`, including this node.
+//     pub fn path_to(&self, offset: u32) -> AstPathIter<'a> {
+//         AstPathIter::from_node(*self, offset)
+//     }
+// }

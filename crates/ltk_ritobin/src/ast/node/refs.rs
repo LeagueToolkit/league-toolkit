@@ -3,8 +3,10 @@ use ltk_hash::BinHash;
 use crate::{
     ast::{
         hash::HashedLiteral,
-        node::{NodeExt, NodeKind},
-        query::{AstObjectDetail, AstPropertyDetail, AstRootEntryDetail, NodeDetail},
+        node::{root::Root, roots::Roots, NodeExt, NodeKind},
+        query::{
+            AstObjectDetail, AstPropertyDetail, AstRootDetail, AstRootEntryDetail, NodeDetail,
+        },
         Object, Property, RootEntry, Value,
     },
     parse::Span,
@@ -13,6 +15,7 @@ use crate::{
 /// A reference to a node in an [`Ast`].
 #[derive(Debug, Clone, Copy)]
 pub enum NodeRef<'a> {
+    Root(&'a Roots, usize),
     RootEntry(&'a RootEntry),
     Object(&'a Object),
     Property(&'a Property),
@@ -22,6 +25,7 @@ pub enum NodeRef<'a> {
 /// A detailed reference to a node in an [`Ast`], down to the field level.
 #[derive(Debug, Clone, Copy)]
 pub enum SubNodeRef<'a> {
+    Root(&'a Roots, usize, AstRootDetail),
     RootEntry(&'a RootEntry, AstRootEntryDetail),
     Object(&'a Object, AstObjectDetail),
     Property(&'a Property, AstPropertyDetail),
@@ -31,11 +35,8 @@ pub enum SubNodeRef<'a> {
 impl<'a> NodeRef<'a> {
     pub fn span(&self) -> Span {
         match self {
-            // TODO: don't do this
-            NodeRef::RootEntry(o) => Span::new(
-                o.path_hash.span().start.min(o.object.span.start),
-                o.object.span.end.max(o.path_hash.span().end),
-            ),
+            NodeRef::Root(roots, idx) => roots.all[*idx].span(),
+            NodeRef::RootEntry(o) => o.span(),
             NodeRef::Object(s) => s.span,
             NodeRef::Property(p) => p.span(),
             NodeRef::Value(v) => v.span(),
@@ -47,6 +48,7 @@ impl<'a> SubNodeRef<'a> {
     #[must_use]
     pub fn detail(&self) -> NodeDetail {
         match self {
+            SubNodeRef::Root(_, _, d) => (*d).into(),
             SubNodeRef::RootEntry(_, d) => (*d).into(),
             SubNodeRef::Object(_, d) => (*d).into(),
             SubNodeRef::Property(_, d) => (*d).into(),
@@ -58,6 +60,7 @@ impl<'a> SubNodeRef<'a> {
     #[must_use]
     pub fn trivia_from(node: &NodeRef<'a>) -> Self {
         match node {
+            NodeRef::Root(roots, idx) => Self::Root(roots, *idx, AstRootDetail::Trivia),
             NodeRef::RootEntry(v) => Self::RootEntry(v, AstRootEntryDetail::Trivia),
             NodeRef::Object(v) => Self::Object(v, AstObjectDetail::Trivia),
             NodeRef::Property(v) => Self::Property(v, AstPropertyDetail::Trivia),
@@ -69,6 +72,14 @@ impl<'a> SubNodeRef<'a> {
     #[must_use]
     pub fn span(&self) -> Span {
         match self {
+            SubNodeRef::Root(roots, idx, f) => {
+                let v = &roots.all[*idx];
+                match f {
+                    AstRootDetail::Node | AstRootDetail::Trivia => v.span(),
+                    AstRootDetail::Name => v.name.span,
+                    AstRootDetail::TypeExpr => v.type_expr.span,
+                }
+            }
             SubNodeRef::RootEntry(v, f) => match f {
                 AstRootEntryDetail::Node | AstRootEntryDetail::Trivia => v.span(),
                 AstRootEntryDetail::PathHash => v.path_hash.span(),
@@ -90,6 +101,7 @@ impl<'a> SubNodeRef<'a> {
 impl NodeExt for NodeRef<'_> {
     fn kind(&self) -> NodeKind {
         match self {
+            NodeRef::Root(..) => NodeKind::Root,
             NodeRef::RootEntry(_) => NodeKind::RootEntry,
             NodeRef::Object(_) => NodeKind::Object,
             NodeRef::Property(_) => NodeKind::Property,
@@ -101,7 +113,7 @@ impl NodeExt for NodeRef<'_> {
         match self {
             NodeRef::RootEntry(o) => Some(o.object.class_hash),
             NodeRef::Object(s) => Some(s.class_hash),
-            NodeRef::Property(_) | NodeRef::Value(_) => None,
+            NodeRef::Property(_) | NodeRef::Value(_) | NodeRef::Root(..) => None,
         }
     }
 }
@@ -110,6 +122,7 @@ impl NodeExt for SubNodeRef<'_> {
     #[inline(always)]
     fn kind(&self) -> NodeKind {
         match self {
+            SubNodeRef::Root(..) => NodeKind::Root,
             SubNodeRef::RootEntry(_, _) => NodeKind::RootEntry,
             SubNodeRef::Object(_, _) => NodeKind::Object,
             SubNodeRef::Property(_, _) => NodeKind::Property,
@@ -122,7 +135,7 @@ impl NodeExt for SubNodeRef<'_> {
         match self {
             Self::RootEntry(o, _) => Some(o.object.class_hash),
             Self::Object(s, _) => Some(s.class_hash),
-            Self::Property(_, _) | Self::Value(_) => None,
+            Self::Property(_, _) | Self::Value(_) | Self::Root(..) => None,
         }
     }
 }
@@ -171,6 +184,7 @@ impl<'a> From<&'a Value> for SubNodeRef<'a> {
 impl<'a> From<NodeRef<'a>> for SubNodeRef<'a> {
     fn from(value: NodeRef<'a>) -> Self {
         match value {
+            NodeRef::Root(roots, idx) => Self::Root(roots, idx, AstRootDetail::Node),
             NodeRef::RootEntry(v) => v.into(),
             NodeRef::Object(v) => v.into(),
             NodeRef::Property(v) => v.into(),
