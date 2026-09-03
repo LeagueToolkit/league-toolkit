@@ -27,10 +27,9 @@ impl PartialBin {
 }
 
 impl Ast {
-    pub fn to_bin(&self, text: &str) -> Bin {
+    pub fn to_bin(&self, _text: &str) -> Bin {
         let objects = self
-            .objects
-            .iter()
+            .root_entries()
             .map(|RootEntry { path_hash, object }| {
                 let struct_val = object.to_bin_value().no_meta();
                 BinObject {
@@ -42,10 +41,11 @@ impl Ast {
             .collect::<Vec<_>>();
 
         let dependencies: Vec<String> = self
-            .dependencies
-            .iter()
-            .map(|span| text[Span::new(span.start + 1, span.end - 1)].to_owned())
-            .collect();
+            .roots
+            .linked
+            .clone()
+            .map(|linked| linked.into_inner())
+            .unwrap_or_default();
 
         Bin::new(objects, dependencies)
     }

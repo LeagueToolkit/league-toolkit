@@ -1,14 +1,14 @@
 use ltk_hash::BinHash;
 
 use crate::{
-    ast::{hash::HashedLiteral, node::Object, Ptr},
+    ast::{hash::HashedLiteral, node::Object},
     parse::Span,
 };
 
 #[derive(Debug, Clone)]
 pub struct RootEntry {
     pub path_hash: HashedLiteral<BinHash>,
-    pub object: Ptr<Object>,
+    pub object: Object,
 }
 
 impl RootEntry {

@@ -16,8 +16,7 @@ impl<'a> AstPathIter<'a> {
     pub(crate) fn from_ast(ast: &'a Ast, offset: u32) -> Self {
         Self {
             next: ast
-                .objects
-                .iter()
+                .root_entries()
                 .find(|o| o.span().contains_inclusive(offset))
                 .map(NodeRef::RootEntry),
             offset,
@@ -55,8 +54,7 @@ impl<'a> AstFinePathIter<'a> {
     pub(crate) fn from_ast(ast: &'a Ast, offset: u32) -> Self {
         Self {
             next: ast
-                .objects
-                .iter()
+                .root_entries()
                 .find(|o| o.span().contains_inclusive(offset))
                 .map(SubNodeRef::from),
             offset,

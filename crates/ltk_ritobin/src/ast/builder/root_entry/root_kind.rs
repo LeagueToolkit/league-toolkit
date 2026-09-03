@@ -6,6 +6,7 @@ use crate::ast::Value;
 
 /// One of the four entries every ritobin file has at its root.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[deprecated]
 pub enum RootKind {
     Type,
     Version,
@@ -46,6 +47,7 @@ impl FromStr for RootKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[deprecated]
 pub enum RootKindOrUnknown<'a> {
     Known(RootKind),
     Unknown(Cow<'a, str>),

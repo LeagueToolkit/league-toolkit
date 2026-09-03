@@ -81,6 +81,13 @@ impl Value {
                 | Value::Optional { .. }
         )
     }
+
+    pub fn as_string(&self) -> Option<&String> {
+        match self {
+            Self::String(s) => Some(s),
+            _ => None,
+        }
+    }
 }
 
 impl Display for Value {

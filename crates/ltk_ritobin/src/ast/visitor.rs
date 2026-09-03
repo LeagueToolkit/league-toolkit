@@ -210,6 +210,6 @@ fn walk_value<V: Visitor>(visitor: &mut V, value: &Value) -> ExitFlow {
 impl Ast {
     /// Walk a [`Visitor`] over every object in this tree.
     pub fn walk<V: Visitor>(&self, visitor: &mut V) {
-        let _ = walk_all(visitor, &self.objects, walk_root_object);
+        let _ = walk_all(visitor, self.root_entries(), walk_root_object);
     }
 }

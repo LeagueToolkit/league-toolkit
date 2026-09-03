@@ -1,8 +1,11 @@
 use crate::{
-    ast::{diagnostics::Diagnostic as D, node::TypeExpr, Ptr, RootEntry, Value},
+    ast::{
+        diagnostics::Diagnostic as D, node::TypeExpr, Ptr, Root, RootEntry, RootEntryKind,
+        RootValue, Roots, Value,
+    },
     cst::Kind,
     parse::Span,
-    RitoType, Spanned,
+    Node, RitoType, Spanned, SpannedExt,
 };
 
 use super::*;
@@ -18,47 +21,231 @@ pub struct RawRootEntry {
     type_expr: Spanned<Option<TypeExpr>>,
     value: Option<Value>,
 }
+#[derive(Debug, Clone)]
+pub struct RawRootProperty {
+    pub key: Spanned<RootEntryKind>,
+    pub type_expr: Spanned<Option<TypeExpr>>,
+    pub value: Option<Value>,
+}
 
 impl<'a> Builder<'a> {
     pub(crate) fn build_root(&mut self) -> Ast {
         let root_node = self.cst.root();
-        let mut roots: IndexMap<RootKindOrUnknown, RawRootEntry> = IndexMap::new();
 
-        for child in root_node.children.get(self.cst).iter() {
-            let Some(node) = child.tree(self.cst) else {
-                continue;
-            };
-            match node.kind {
-                Kind::Comment | Kind::ErrorTree => continue,
-                Kind::Entry => match self.resolve_entry(node, None, None) {
-                    Ok(entry) => {
-                        let key_span = entry.key.span();
-                        let kind = RootKindOrUnknown::from_value(self.text, &entry.key);
-                        if let Some(existing) = roots.insert(
-                            kind,
-                            RawRootEntry {
-                                key: entry.key,
-                                type_expr: entry.type_expr,
-                                value: entry.value,
-                            },
-                        ) {
-                            self.push(
-                                D::ShadowedEntry {
-                                    shadowee: existing.key.span(),
-                                    shadower: key_span,
-                                }
-                                .unwrap(),
-                            );
+        let mut roots = Roots::new(root_node.children.get(self.cst).iter().filter_map(|child| {
+            let node = child.tree(self.cst)?;
+            self.resolve_root(node)
+        }));
+
+        for root in &roots {
+            match *root.name {
+                RootEntryKind::Unknown => {
+                    self.push(
+                        D::MissingEntryValue {
+                            key_span: root.name.span,
+                            expected: root
+                                .name
+                                .expected_type()
+                                .map(|t| t.with_span(root.type_expr.span)),
                         }
-                    }
-                    Err(e) => self.push(e.fallback(node.span)),
-                },
-                _ => self.push(D::RootNonEntry.default_span(node.span)),
+                        .unwrap(),
+                    );
+                }
+                RootEntryKind::Version => {
+                    let Some(value) = &root.value else {
+                        continue;
+                    };
+                }
+                RootEntryKind::Type => todo!(),
+                RootEntryKind::Linked => todo!(),
+                RootEntryKind::Entries => todo!(),
             }
         }
 
-        self.collect_root(roots)
+        todo!()
     }
+
+    fn resolve_root(&mut self, node: &Node) -> Option<Root> {
+        match node.kind {
+            Kind::Comment | Kind::ErrorTree => return None,
+            Kind::Entry => match self.resolve_entry(node, None, None) {
+                Ok(entry) => {
+                    let kind = RootEntryKind::from_value(&entry.key);
+
+                    return Some(Root {
+                        name: kind.with_span(entry.key.span()),
+                        type_expr: entry.type_expr,
+                        value: entry.value,
+                    });
+                }
+                Err(e) => {
+                    self.push(e.fallback(node.span));
+                }
+            },
+            _ => {
+                self.push(D::RootNonEntry.default_span(node.span));
+            }
+        }
+        None
+    }
+
+    // fn resolve_raw_root_property(&mut self, prop: RawRootProperty) -> Option<Root> {
+    // let Some(value) = prop.value else {
+    //     self.push(
+    //         D::MissingEntryValue {
+    //             key_span: prop.key.span,
+    //             expected: prop
+    //                 .key
+    //                 .expected_type()
+    //                 .map(|t| t.with_span(prop.type_expr.span)),
+    //         }
+    //         .unwrap(),
+    //     );
+    //     return None;
+    // };
+    // let Some(desired) = prop.key.expected_type() else {
+    //     self.push(
+    //         D::UnknownRoot {
+    //             span: prop.key.span,
+    //         }
+    //         .unwrap(),
+    //     );
+    //     return None;
+    // };
+    //
+    // Some(match *prop.key {
+    //     // unknown has no expected type, so this arm is unreachable via the above UnknownRoot
+    //     // return
+    //     RootEntryKind::Unknown => unreachable!(),
+    //     RootEntryKind::Version | RootEntryKind::Type => Root {
+    //         key: prop.key,
+    //         type_expr: prop.type_expr,
+    //         value: Some(RootValue::Value(match value.coerce_to(desired.base) {
+    //             Ok(v) => v,
+    //             Err(v) => {
+    //                 self.push(
+    //                     D::TypeMismatch {
+    //                         span: prop.key.span,
+    //                         expected: desired.into(),
+    //                         expected_span: Some(prop.type_expr.span),
+    //                         got: v.rito_type().into(),
+    //                     }
+    //                     .unwrap(),
+    //                 );
+    //                 v
+    //             }
+    //         })),
+    //     },
+    //     RootEntryKind::Linked => Root {
+    //         key: prop.key,
+    //         type_expr: prop.type_expr,
+    //         value: Some(match value {
+    //             Value::Container {
+    //                 item_kind,
+    //                 items,
+    //                 span,
+    //             } if Some(item_kind) == desired.value_subtype() => {
+    //                 RootValue::Dependencies(items.with_span(span))
+    //             }
+    //             value => {
+    //                 self.push(
+    //                     D::TypeMismatch {
+    //                         span: prop.key.span,
+    //                         expected: desired.into(),
+    //                         expected_span: Some(prop.type_expr.span),
+    //                         got: value.rito_type().into(),
+    //                     }
+    //                     .unwrap(),
+    //                 );
+    //                 RootValue::Value(value)
+    //             }
+    //         }),
+    //     },
+    //     RootEntryKind::Entries => Root {
+    //         key: prop.key,
+    //         type_expr: prop.type_expr,
+    //         value: Some(match value {
+    //             Value::Map {
+    //                 key_kind,
+    //                 value_kind,
+    //                 entries,
+    //                 span,
+    //             } if key_kind == desired.subtype(0) && value_kind == desired.subtype(1) => {
+    //                 RootValue::Entries(
+    //                     entries
+    //                         .into_iter()
+    //                         .filter_map(|(k, v)| {
+    //                             Some(RootEntry {
+    //                                 object: match v {
+    //                                     Some(v) => match v.coerce_to(value_kind) {
+    //                                         Ok(Value::Embedded(object)) => object,
+    //                                         Ok(v) | Err(v) => {
+    //                                             self.push(
+    //                                                 D::TypeMismatch {
+    //                                                     span: prop.key.span,
+    //                                                     expected: RitoType::simple(value_kind)
+    //                                                         .into(),
+    //                                                     expected_span: Some(
+    //                                                         prop.type_expr.span,
+    //                                                     ),
+    //                                                     got: v.rito_type().into(),
+    //                                                 }
+    //                                                 .unwrap(),
+    //                                             );
+    //                                             return None;
+    //                                         }
+    //                                     },
+    //                                     None => {
+    //                                         self.push(
+    //                                             D::MissingEntryValue {
+    //                                                 key_span: k.span(),
+    //                                                 expected: Some(
+    //                                                     RitoType::simple(value_kind)
+    //                                                         .with_span(prop.type_expr.span),
+    //                                                 ),
+    //                                             }
+    //                                             .unwrap(),
+    //                                         );
+    //                                         return None;
+    //                                     }
+    //                                 },
+    //                                 path_hash: match k.coerce_to(key_kind) {
+    //                                     Ok(Value::Hash(hash)) => hash,
+    //                                     Ok(k) | Err(k) => {
+    //                                         self.push(
+    //                                             D::TypeMismatch {
+    //                                                 span: prop.key.span,
+    //                                                 expected: RitoType::simple(key_kind).into(),
+    //                                                 expected_span: Some(prop.type_expr.span),
+    //                                                 got: k.rito_type().into(),
+    //                                             }
+    //                                             .unwrap(),
+    //                                         );
+    //                                         return None;
+    //                                     }
+    //                                 },
+    //                             })
+    //                         })
+    //                         .collect::<Vec<_>>()
+    //                         .with_span(span),
+    //                 )
+    //             }
+    //             value => {
+    //                 self.push(
+    //                     D::TypeMismatch {
+    //                         span: prop.key.span,
+    //                         expected: desired.into(),
+    //                         expected_span: Some(prop.type_expr.span),
+    //                         got: value.rito_type().into(),
+    //                     }
+    //                     .unwrap(),
+    //                 );
+    //                 RootValue::Value(value)
+    //             }
+    //         }),
+    //     },
+    // })
+    // }
 
     fn take_root_value(
         &mut self,
@@ -154,7 +341,7 @@ impl<'a> Builder<'a> {
                         match value {
                             Some(Value::Embedded(s)) => Some(RootEntry {
                                 path_hash,
-                                object: Ptr::new(s),
+                                object: s,
                             }),
                             _ => None,
                         }
@@ -225,12 +412,13 @@ impl<'a> Builder<'a> {
             );
         }
 
-        Ast {
-            bin_type,
-            version,
-            dependencies,
-            objects,
-            diagnostics: std::mem::take(&mut self.diagnostics),
-        }
+        todo!()
+        // Ast {
+        //     bin_type,
+        //     version,
+        //     dependencies,
+        //     objects,
+        //     diagnostics: std::mem::take(&mut self.diagnostics),
+        // }
     }
 }
