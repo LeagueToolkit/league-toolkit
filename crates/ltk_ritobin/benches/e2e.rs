@@ -33,9 +33,9 @@ fn criterion_benchmark(c: &mut Criterion) {
 
 fn e2e(txt: &str) -> Cst {
     let cst = Cst::parse(txt);
-    let (bin, _errs) = cst.build_bin(txt);
+    let partial = cst.build_bin(txt);
     let mut str = String::new();
-    bin.print_to_writer(&mut str).unwrap();
+    partial.bin.print_to_writer(&mut str).unwrap();
     cst
 }
 

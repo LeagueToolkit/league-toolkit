@@ -21,11 +21,11 @@
 //! let cst = Cst::parse(text);
 //! assert!(cst.errors.is_empty());
 //!
-//! let (bin, bin_errors) = cst.build_bin(text);
-//! assert!(bin_errors.is_empty());
+//! let partial = cst.build_bin(text);
+//! assert!(partial.diagnostics.is_empty());
 //!
 //! // Write back to text
-//! let output = bin.print().unwrap();
+//! let output = partial.bin.print().unwrap();
 //!
 //! assert_eq!(text, output);
 //! ```
@@ -73,19 +73,23 @@
 //! assert_eq!(cst.errors.len(), 1); // the unexpected "!!" in the value
 //! ```
 //!
-//! `Cst::build_bin` follows the same philosophy: it returns `(Bin, Vec<DiagnosticWithSpan>)`
-//! so type errors don't prevent you from getting a best-effort `Bin` back. This matters for
-//! editor use cases: between keystrokes a buffer is almost always temporarily invalid, and
-//! tooling still needs to render it, navigate it, and report problems with precise spans.
+//! `Cst::build_bin` follows the same philosophy: it returns a [`ast::PartialBin`], pairing a
+//! best-effort `Bin` with any diagnostics, so type errors don't prevent you from getting a
+//! `Bin` back. This matters for editor use cases: between keystrokes a buffer is almost always
+//! temporarily invalid, and tooling still needs to render it, navigate it, and report problems
+//! with precise spans. Use [`ast::PartialBin::finish`] where you instead want a `Result` that
+//! only succeeds on a clean build.
+
+use std::ops::{Deref, DerefMut};
 
 #[allow(unused, reason = "for module level doc link")]
 use ltk_meta::Bin;
 
+pub mod ast;
 pub mod cst;
 pub mod hashes;
 pub mod parse;
 pub mod print;
-pub mod typecheck;
 pub mod types;
 
 pub use hashes::*;
@@ -94,3 +98,60 @@ pub use types::*;
 pub use cst::Cst;
 pub use cst::Node;
 pub use print::Print;
+
+use crate::parse::Span;
+
+pub trait SpannedExt {
+    fn with_span(self, span: Span) -> Spanned<Self>
+    where
+        Self: Sized;
+}
+
+impl<T> SpannedExt for T {
+    fn with_span(self, span: Span) -> Spanned<Self> {
+        Spanned::new(span, self)
+    }
+}
+
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Spanned<T> {
+    pub span: Span,
+    pub value: T,
+}
+
+impl<T> Spanned<T> {
+    pub fn new(span: Span, value: T) -> Self {
+        Self { span, value }
+    }
+}
+
+impl<T> DerefMut for Spanned<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
+    }
+}
+
+impl<T> Deref for Spanned<T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl<T> AsMut<T> for Spanned<T> {
+    fn as_mut(&mut self) -> &mut T {
+        &mut self.value
+    }
+}
+
+impl<T> AsRef<T> for Spanned<T> {
+    fn as_ref(&self) -> &T {
+        &self.value
+    }
+}
+
+impl AsRef<str> for Spanned<String> {
+    fn as_ref(&self) -> &str {
+        &self.value
+    }
+}

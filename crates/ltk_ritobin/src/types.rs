@@ -92,6 +92,7 @@ pub struct RitoType {
 impl Display for RitoType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let base = self.base.to_rito_name();
+
         match self.subtypes {
             [None, None] => f.write_str(base),
             [Some(a), None] => write!(f, "{base}[{}]", a.to_rito_name()),
@@ -103,11 +104,133 @@ impl Display for RitoType {
     }
 }
 
+#[macro_export]
+macro_rules! rito {
+    ($kind:ident) => {
+        const {
+            match RitoType::try_new(ltk_meta::PropertyKind::$kind, [None, None]) {
+                Ok(t) => t,
+                Err(_) => panic!("invalid simple rito type"),
+            }
+        }
+    };
+    ($kind:ident [ $sub:ident ]) => {
+        const {
+            match RitoType::try_new(
+                ltk_meta::PropertyKind::$kind,
+                [Some(ltk_meta::PropertyKind::$sub), None],
+            ) {
+                Ok(t) => t,
+                Err(_) => panic!("invalid rito type"),
+            }
+        }
+    };
+    ($kind:ident [ $a:ident, $b:ident ]) => {
+        const {
+            match RitoType::try_new(
+                ltk_meta::PropertyKind::$kind,
+                [
+                    Some(ltk_meta::PropertyKind::$a),
+                    Some(ltk_meta::PropertyKind::$b),
+                ],
+            ) {
+                Ok(t) => t,
+                Err(_) => panic!("invalid rito type"),
+            }
+        }
+    };
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum ConstructError {
+    #[error("Got {got} subtypes, expected {expected}")]
+    BadSubtypeCount { got: u8, expected: u8 },
+    #[error("{got:?} is not primitive - containers can only hold primitive types")]
+    NonPrimitiveContainer { got: PropertyKind },
+    #[error("{got:?} is not a valid map key")]
+    BadMapKey { got: PropertyKind },
+    #[error("{got:?} is not a valid map value")]
+    BadMapValue { got: PropertyKind },
+}
+
 impl RitoType {
-    pub fn simple(kind: PropertyKind) -> Self {
+    pub const fn simple(kind: PropertyKind) -> Self {
         Self {
             base: kind,
             subtypes: [None, None],
+        }
+    }
+
+    pub const fn single(base: PropertyKind, sub: PropertyKind) -> Option<Self> {
+        if base.subtype_count() != 1 {
+            return None;
+        }
+        Some(Self {
+            base,
+            subtypes: [Some(sub), None],
+        })
+    }
+    pub const fn new(base: PropertyKind, subtypes: [Option<PropertyKind>; 2]) -> Self {
+        Self { base, subtypes }
+    }
+
+    pub const fn try_new(
+        base: PropertyKind,
+        subtypes: [Option<PropertyKind>; 2],
+    ) -> Result<Self, ConstructError> {
+        use ConstructError::*;
+
+        match base.subtype_count() {
+            0 => match subtypes {
+                [None, None] => Ok(Self::simple(base)),
+                [Some(_), None] | [None, Some(_)] => Err(BadSubtypeCount {
+                    got: 1,
+                    expected: 0,
+                }),
+                [Some(_), Some(_)] => Err(BadSubtypeCount {
+                    got: 2,
+                    expected: 0,
+                }),
+            },
+            1 => match subtypes {
+                [Some(sub), None] | [None, Some(sub)] => {
+                    if !sub.is_primitive() {
+                        return Err(NonPrimitiveContainer { got: sub });
+                    }
+                    Ok(RitoType {
+                        base,
+                        subtypes: [Some(sub), None],
+                    })
+                }
+                [None, None] => Err(BadSubtypeCount {
+                    got: 0,
+                    expected: 1,
+                }),
+                [Some(_), Some(_)] => Err(BadSubtypeCount {
+                    got: 2,
+                    expected: 1,
+                }),
+            },
+            2 => match subtypes {
+                [None, None] => Err(BadSubtypeCount {
+                    got: 0,
+                    expected: 2,
+                }),
+                [Some(_), None] | [None, Some(_)] => Err(BadSubtypeCount {
+                    got: 1,
+                    expected: 2,
+                }),
+                [Some(a), Some(b)] => {
+                    if !a.is_valid_map_key() {
+                        return Err(BadMapKey { got: a });
+                    }
+                    if b.is_container() {
+                        return Err(BadMapValue { got: b });
+                    }
+                    Ok(RitoType { base, subtypes })
+                }
+            },
+            _ => unreachable!(),
         }
     }
 

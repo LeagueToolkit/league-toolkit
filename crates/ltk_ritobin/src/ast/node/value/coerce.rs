@@ -1,0 +1,109 @@
+use ltk_hash::{BinHash, Hash as _, WadHash};
+use ltk_meta::PropertyKind;
+
+use crate::{
+    ast::{node::Value, Ptr},
+    RitoType,
+};
+
+use crate::ast::hash::{HashedLiteral, Originally};
+
+pub trait CanCoerce {
+    fn can_coerce(self, from: Self) -> bool;
+}
+
+impl CanCoerce for PropertyKind {
+    fn can_coerce(self, from: Self) -> bool {
+        let to = self;
+        if to == from {
+            return true;
+        }
+        use PropertyKind as K;
+        match (to, from) {
+            (K::Optional, from) if !from.is_container() => true,
+            (K::Hash, K::String)
+            | (K::WadChunkLink | K::ObjectLink, K::Hash | K::String)
+            | (K::BitBool | K::Bool, K::Bool | K::BitBool) => true,
+            _ => false,
+        }
+    }
+}
+impl CanCoerce for RitoType {
+    fn can_coerce(self, from: Self) -> bool {
+        if !self.base.can_coerce(from.base) {
+            return false;
+        }
+        for i in 0..1 {
+            if (self.subtypes[i].zip(from.subtypes[i]))
+                .is_some_and(|(to, from)| !to.can_coerce(from))
+            {
+                return false;
+            }
+        }
+        true
+    }
+}
+
+impl Value {
+    pub fn coerce_to(self, to: PropertyKind) -> Self {
+        match self.try_coerce_to(to) {
+            Ok(v) => v,
+            Err(v) => v,
+        }
+    }
+
+    pub fn try_coerce_to(self, to: PropertyKind) -> Result<Self, Self> {
+        Ok(match to {
+            to if self.kind().is_some_and(|k| k == to) => self,
+            // Unknown values can be coerced into any value (as an unresolved variant)
+            to if self.kind().is_none() => Self::Unresolved {
+                span: self.span(),
+                kind: to,
+            },
+
+            PropertyKind::Optional => Self::Optional {
+                item_kind: self.kind(),
+                span: self.span(),
+                value: Some(Ptr::new(self)),
+            },
+
+            PropertyKind::Hash => match self {
+                Self::String(str) => Self::Hash(HashedLiteral::new(
+                    str.span,
+                    Originally::String,
+                    BinHash::hash_str(&str),
+                )),
+                _ => return Err(self),
+            },
+            PropertyKind::ObjectLink => match self {
+                Self::Hash(hash) => Self::ObjectLink(hash),
+                Self::String(str) => Self::ObjectLink(HashedLiteral::new(
+                    str.span,
+                    Originally::String,
+                    BinHash::hash_str(&str),
+                )),
+                _ => return Err(self),
+            },
+            PropertyKind::WadChunkLink => match self {
+                Self::Hash(hash) => {
+                    Self::WadChunkLink(hash.with_value(WadHash((*hash.value).into())))
+                }
+                Self::String(str) => Self::WadChunkLink(HashedLiteral::new(
+                    str.span,
+                    Originally::String,
+                    WadHash::hash_str(str.as_str()),
+                )),
+                _ => return Err(self),
+            },
+            PropertyKind::BitBool => match self {
+                Self::Bool(bool) => Self::BitBool(bool),
+                _ => return Err(self),
+            },
+            PropertyKind::Bool => match self {
+                Self::BitBool(bool) => Self::Bool(bool),
+                _ => return Err(self),
+            },
+            _ => return Err(self),
+        })
+    }
+}

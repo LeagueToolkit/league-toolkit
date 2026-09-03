@@ -3,40 +3,15 @@ use std::{fmt::Display, num::IntErrorKind};
 use ltk_meta::PropertyKind;
 
 use crate::{
+    ast::node::root::RootKind,
     cst,
     parse::{Span, TokenKind},
-    ItemShape, RitoType,
+    ItemShape, RitoType, Spanned,
 };
-
-/// One of the four entries every ritobin file has at its root.
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub enum RootKind {
-    Type,
-    Version,
-    Linked,
-    Entries,
-}
-
-impl RootKind {
-    /// The name this root entry is written with in a ritobin file.
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            RootKind::Type => "type",
-            RootKind::Version => "version",
-            RootKind::Linked => "linked",
-            RootKind::Entries => "entries",
-        }
-    }
-}
-
-impl Display for RootKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
 
 #[derive(Debug, Clone, Copy)]
 pub enum RitoTypeOrVirtual {
+    Unknown,
     RitoType(RitoType),
     Numeric,
     StructOrEmbedded,
@@ -50,6 +25,15 @@ impl RitoTypeOrVirtual {
     }
 }
 
+impl From<Option<RitoType>> for RitoTypeOrVirtual {
+    fn from(value: Option<RitoType>) -> Self {
+        match value {
+            Some(value) => value.into(),
+            None => Self::Unknown,
+        }
+    }
+}
+
 impl From<RitoType> for RitoTypeOrVirtual {
     fn from(value: RitoType) -> Self {
         RitoTypeOrVirtual::RitoType(value)
@@ -59,6 +43,7 @@ impl From<RitoType> for RitoTypeOrVirtual {
 impl Display for RitoTypeOrVirtual {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Unknown => f.write_str("unknown type"),
             Self::RitoType(rito_type) => Display::fmt(rito_type, f),
             Self::Numeric => f.write_str("numeric type"),
             Self::StructOrEmbedded => f.write_str("struct/embedded"),
@@ -134,21 +119,9 @@ pub enum Diagnostic {
     UnknownType(Span),
     MissingType(Span),
 
-    MissingRootEntry {
-        root_kind: RootKind,
-    },
-
-    InvalidRootEntryType {
-        root_kind: RootKind,
-        key_span: Span,
-        type_span: Span,
-        got: RitoType,
-        expected: RitoType,
-    },
-
     TypeMismatch {
         span: Span,
-        expected: RitoType,
+        expected: RitoTypeOrVirtual,
         expected_span: Option<Span>,
         got: RitoTypeOrVirtual,
     },
@@ -217,9 +190,34 @@ pub enum Diagnostic {
         /// span of the unrecognised entry's name
         span: Span,
     },
+    MissingRootEntry {
+        root_kind: RootKind,
+    },
+    /// An entry is missing its value
+    MissingEntryValue {
+        key_span: Span,
+        expected: Option<Spanned<RitoType>>,
+    },
+    MissingEntryType {
+        key_span: Span,
+    },
+
+    InvalidRootEntryType {
+        root_kind: RootKind,
+        key_span: Span,
+        type_span: Span,
+        got: RitoTypeOrVirtual,
+        expected: RitoType,
+    },
+
     ShadowedEntry {
         shadowee: Span,
         shadower: Span,
+    },
+    /// [`Self::ShadowedEntry`], but for a pair of root indices
+    ShadowedRoot {
+        shadowee: usize,
+        shadower: usize,
     },
 
     InvalidHash(Span),
@@ -233,6 +231,22 @@ pub enum Diagnostic {
     UnexpectedSubtypes {
         span: Span,
         base_type: Span,
+    },
+
+    /// A container/map/optional's declared item type is itself container-shaped
+    /// (list/list2/map/option)
+    InvalidNesting {
+        /// span of the offending subtype token
+        span: Span,
+        /// the container-shaped type that cannot be nested
+        kind: RitoType,
+    },
+    /// A map's declared key type cannot key a map, such as `map[link,u32]`
+    InvalidMapKey {
+        /// span of the offending key subtype token
+        span: Span,
+        /// the type that cannot key a map
+        kind: RitoType,
     },
 }
 
@@ -260,14 +274,6 @@ impl Display for Diagnostic {
             MissingType(_) => {
                 f.write_str("Missing type - entries are written 'name: type = value'")
             }
-
-            MissingRootEntry { root_kind } => write!(f, "Missing root entry '{root_kind}'"),
-            InvalidRootEntryType {
-                root_kind,
-                got,
-                expected,
-                ..
-            } => write!(f, "Root entry '{root_kind}' must be {expected}, got {got}"),
 
             TypeMismatch { expected, got, .. } => {
                 write!(f, "Type mismatch - expected {expected}, got {got}")
@@ -327,7 +333,27 @@ impl Display for Diagnostic {
 
             RootNonEntry => f.write_str("Top-level bin entries are written 'name: type = value'"),
             UnknownRoot { .. } => f.write_str("Unknown root entry"),
-            ShadowedEntry { .. } => f.write_str("Entry shadows a previous entry with the same key"),
+            MissingRootEntry { root_kind } => write!(f, "Missing root entry '{root_kind}'"),
+            InvalidRootEntryType {
+                root_kind,
+                got,
+                expected,
+                ..
+            } => write!(f, "Root entry '{root_kind}' must be {expected}, got {got}"),
+            MissingEntryValue {
+                key_span: _,
+                expected,
+            } => {
+                f.write_str("Entry is missing value")?;
+                if let Some(expected) = expected {
+                    write!(f, " (expected {})", expected.value)?;
+                }
+                Ok(())
+            }
+            MissingEntryType { key_span: _ } => f.write_str("Entry is missing type expression"),
+            ShadowedEntry { .. } | ShadowedRoot { .. } => {
+                f.write_str("Entry shadows a previous entry with the same key")
+            }
 
             InvalidHash(_) => f.write_str("Invalid hash"),
 
@@ -335,6 +361,13 @@ impl Display for Diagnostic {
                 write!(f, "Expected {expected} type parameters, got {got}")
             }
             UnexpectedSubtypes { .. } => f.write_str("This type does not accept type parameters"),
+
+            InvalidNesting { kind, .. } => {
+                write!(f, "{kind} cannot be nested inside a container")
+            }
+            InvalidMapKey { kind, .. } => {
+                write!(f, "{kind} is not a valid map key type")
+            }
         }
     }
 }
@@ -347,6 +380,7 @@ impl Diagnostic {
             | EmptyTree(_)
             | MissingToken(_)
             | RootNonEntry
+            | ShadowedRoot { .. }
             | ResolveLiteral
             | MissingRootEntry { .. } => None,
             UnknownType(span)
@@ -361,12 +395,16 @@ impl Diagnostic {
             | QuotedPropertyName { span, .. }
             | MissingType(span)
             | TypeMismatch { span, .. }
+            | MissingEntryType { key_span: span, .. }
+            | MissingEntryValue { key_span: span, .. }
             | ShadowedEntry { shadower: span, .. }
             | InvalidHash(span)
             | AmbiguousNumeric(span)
             | ParseNumericError { span, .. }
             | NotEnoughItems { span, .. }
             | TooManyItems { span, .. }
+            | InvalidNesting { span, .. }
+            | InvalidMapKey { span, .. }
             | InvalidRootEntryType { key_span: span, .. } => Some(span),
         }
     }

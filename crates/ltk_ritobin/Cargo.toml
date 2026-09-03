@@ -21,6 +21,10 @@ harness = false
 name = "e2e"
 harness = false
 
+[[bench]]
+name = "ast"
+harness = false
+
 [lints]
 workspace = true
 
@@ -28,6 +32,7 @@ workspace = true
 default = []
 debug = []
 serde = ["dep:serde", "ltk_meta/serde"]
+salsa = ["dep:salsa"]
 
 [dependencies]
 nom = "7.1"
@@ -46,11 +51,12 @@ ltk_hash = { version = "0.4.0", path = "../ltk_hash" }
 ltk_primitives = { version = "0.3.5", path = "../ltk_primitives" }
 
 serde = { workspace = true, optional = true }
-salsa = "0.22.0"
+salsa = { version = "0.22.0", optional = true }
 
 [dev-dependencies]
 insta.workspace = true
 pretty_assertions.workspace = true
+proptest.workspace = true
 serde.workspace = true
 criterion.workspace = true
 ltk_ritobin = { path = ".", features = ["serde"] }
