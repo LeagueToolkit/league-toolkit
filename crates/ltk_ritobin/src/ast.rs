@@ -11,7 +11,7 @@ mod to_bin;
 #[cfg(test)]
 mod tests;
 
-use std::{fmt, str::FromStr};
+use std::{convert::Infallible, fmt, str::FromStr};
 
 pub use crate::Spanned;
 use indexmap::IndexMap;
@@ -46,6 +46,19 @@ impl Ast {
 pub enum FileKind {
     Prop,
     Patch,
+    Unknown,
+}
+
+impl FromStr for FileKind {
+    type Err = Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "PROP" => Self::Prop,
+            "PTCH" => Self::Patch,
+            _ => Self::Unknown,
+        })
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -94,6 +107,34 @@ impl Roots {
             all: roots.into_iter().collect(),
             ..Default::default()
         }
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &Root> {
+        self.all.iter()
+    }
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Root> {
+        self.all.iter_mut()
+    }
+
+    pub fn contains(&self, kind: RootEntryKind) -> bool {
+        match kind {
+            RootEntryKind::Unknown => false,
+            RootEntryKind::Version => self.version.is_some(),
+            RootEntryKind::Type => self.file_type.is_some(),
+            RootEntryKind::Linked => self.linked.is_some(),
+            RootEntryKind::Entries => self.entries.is_some(),
+        }
+    }
+
+    pub fn missing(&self) -> impl Iterator<Item = RootEntryKind> + use<'_> {
+        [
+            RootEntryKind::Version,
+            RootEntryKind::Type,
+            RootEntryKind::Linked,
+            RootEntryKind::Entries,
+        ]
+        .into_iter()
+        .filter(|k| !self.contains(*k))
     }
 }
 

@@ -3,7 +3,7 @@ use std::{fmt::Display, num::IntErrorKind};
 use ltk_meta::PropertyKind;
 
 use crate::{
-    ast::builder::RootKind,
+    ast::{builder::RootKind, Ast, RootEntryKind},
     cst,
     parse::{Span, TokenKind},
     ItemShape, RitoType, Spanned,
@@ -191,7 +191,7 @@ pub enum Diagnostic {
         span: Span,
     },
     MissingRootEntry {
-        root_kind: RootKind,
+        root_kind: RootEntryKind,
     },
     /// An entry is missing its value
     MissingEntryValue {
@@ -203,7 +203,7 @@ pub enum Diagnostic {
     },
 
     InvalidRootEntryType {
-        root_kind: RootKind,
+        root_kind: RootEntryKind,
         key_span: Span,
         type_span: Span,
         got: RitoTypeOrVirtual,
@@ -213,6 +213,11 @@ pub enum Diagnostic {
     ShadowedEntry {
         shadowee: Span,
         shadower: Span,
+    },
+    /// [`Self::ShadowedEntry`], but for a pair of root indices
+    ShadowedRoot {
+        shadowee: usize,
+        shadower: usize,
     },
 
     InvalidHash(Span),
@@ -346,7 +351,9 @@ impl Display for Diagnostic {
                 Ok(())
             }
             MissingEntryType { key_span: _ } => f.write_str("Entry is missing type expression"),
-            ShadowedEntry { .. } => f.write_str("Entry shadows a previous entry with the same key"),
+            ShadowedEntry { .. } | ShadowedRoot { .. } => {
+                f.write_str("Entry shadows a previous entry with the same key")
+            }
 
             InvalidHash(_) => f.write_str("Invalid hash"),
 
@@ -373,6 +380,7 @@ impl Diagnostic {
             | EmptyTree(_)
             | MissingToken(_)
             | RootNonEntry
+            | ShadowedRoot { .. }
             | ResolveLiteral
             | MissingRootEntry { .. } => None,
             UnknownType(span)

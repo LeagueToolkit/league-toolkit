@@ -8,12 +8,12 @@ pub use root_entry::*;
 
 impl Ast {
     pub fn from_cst(cst: &Cst, text: &str) -> Self {
-        let mut ctx = Builder {
+        let ctx = Builder {
             cst,
             text,
             diagnostics: Vec::new(),
         };
-        ctx.build_root()
+        ctx.build()
     }
 }
 
