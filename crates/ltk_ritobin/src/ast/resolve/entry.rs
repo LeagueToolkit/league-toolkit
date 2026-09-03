@@ -141,7 +141,7 @@ impl<'a> Builder<'a> {
         };
 
         let value = value.map(|value| match desired_kind {
-            Some(TypeExpr::Resolved(kind)) => match value.coerce_to(kind.base) {
+            Some(TypeExpr::Resolved(kind)) => match value.try_coerce_to(kind.base) {
                 Ok(value) => value,
                 Err(value) => value,
             },

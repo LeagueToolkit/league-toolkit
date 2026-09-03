@@ -55,6 +55,7 @@ impl<'a> Builder<'a> {
                     let Some(value) = &root.value else {
                         continue;
                     };
+                    match value.try_coerce_to(PropertyKind::U32) {}
                 }
                 RootEntryKind::Type => todo!(),
                 RootEntryKind::Linked => todo!(),
