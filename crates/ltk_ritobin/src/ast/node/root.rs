@@ -51,7 +51,7 @@ impl<V> KnownRoot<V> {
 /// A root is a special-cased property (`key: type = value`), that exists at the top level of a
 /// ritobin file.
 pub struct Root {
-    pub name: Spanned<RootEntryKind>,
+    pub name: Spanned<RootKind>,
     pub type_expr: Spanned<Option<TypeExpr>>,
     pub value: Option<Value>,
 }

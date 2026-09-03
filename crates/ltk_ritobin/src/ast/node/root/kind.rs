@@ -4,7 +4,7 @@ use crate::{ast::Value, rito, RitoType};
 
 /// One of the four entries every ritobin file has at its root, or [`Self::Unknown`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum RootEntryKind {
+pub enum RootKind {
     #[default]
     Unknown,
     Version,
@@ -13,7 +13,7 @@ pub enum RootEntryKind {
     Entries,
 }
 
-impl RootEntryKind {
+impl RootKind {
     /// The key this root entry uses in a ritobin file.
     /// [`Self::Unknown`] is not an actual root entry,
     /// but is written as `"unknown"` in this method.
@@ -30,11 +30,11 @@ impl RootEntryKind {
     /// What type this kind of root expects
     pub fn expected_type(&self) -> Option<RitoType> {
         Some(match self {
-            RootEntryKind::Unknown => return None,
-            RootEntryKind::Version => rito!(U32),
-            RootEntryKind::Type => rito!(String),
-            RootEntryKind::Linked => rito!(Container[String]),
-            RootEntryKind::Entries => rito!(Map[Hash, Embedded]),
+            RootKind::Unknown => return None,
+            RootKind::Version => rito!(U32),
+            RootKind::Type => rito!(String),
+            RootKind::Linked => rito!(Container[String]),
+            RootKind::Entries => rito!(Map[Hash, Embedded]),
         })
     }
 
@@ -48,13 +48,13 @@ impl RootEntryKind {
     }
 }
 
-impl fmt::Display for RootEntryKind {
+impl fmt::Display for RootKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.as_str())
     }
 }
 
-impl FromStr for RootEntryKind {
+impl FromStr for RootKind {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, ()> {

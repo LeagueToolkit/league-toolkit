@@ -2,7 +2,7 @@ use crate::{
     ast::{
         diagnostics::Diagnostic as D,
         node::{
-            root::{KnownRoot, Root, RootEntryKind},
+            root::{KnownRoot, Root, RootKind},
             roots::Roots,
             TypeExpr,
         },
@@ -15,13 +15,11 @@ use crate::{
 
 use super::*;
 
-mod root_kind;
 use ltk_meta::PropertyKind::{self};
-pub use root_kind::*;
 
 #[derive(Debug, Clone)]
 pub struct RawRootProperty {
-    pub key: Spanned<RootEntryKind>,
+    pub key: Spanned<RootKind>,
     pub type_expr: Spanned<Option<TypeExpr>>,
     pub value: Option<Value>,
 }
@@ -88,7 +86,7 @@ impl<'a> Builder<'a> {
                 }
             }
             match *root.name {
-                RootEntryKind::Unknown => {
+                RootKind::Unknown => {
                     self.push(
                         D::MissingEntryValue {
                             key_span: root.name.span,
@@ -100,7 +98,7 @@ impl<'a> Builder<'a> {
                         .unwrap(),
                     );
                 }
-                RootEntryKind::Version => {
+                RootKind::Version => {
                     if let Some(Value::U32(v)) = &root.value {
                         if let Some(existing) = version.replace(KnownRoot {
                             idx,
@@ -116,7 +114,7 @@ impl<'a> Builder<'a> {
                         }
                     }
                 }
-                RootEntryKind::Type => {
+                RootKind::Type => {
                     if let Some(v) = root.value.as_ref().and_then(|v| v.as_string()) {
                         if let Some(existing) = file_type.replace(KnownRoot {
                             idx,
@@ -132,7 +130,7 @@ impl<'a> Builder<'a> {
                         }
                     }
                 }
-                RootEntryKind::Linked => {
+                RootKind::Linked => {
                     let Some(value) = &root.value else {
                         continue;
                     };
@@ -164,7 +162,7 @@ impl<'a> Builder<'a> {
                         }
                     }
                 }
-                RootEntryKind::Entries => match root.value.take() {
+                RootKind::Entries => match root.value.take() {
                     Some(Value::Map { entries: map, .. }) => {
                         if let Some(existing) = entries.replace(KnownRoot {
                             idx,
@@ -215,7 +213,7 @@ impl<'a> Builder<'a> {
             Kind::Comment | Kind::ErrorTree => return None,
             Kind::Entry => match self.resolve_entry(node, None, None) {
                 Ok(entry) => {
-                    let kind = RootEntryKind::from_value(&entry.key);
+                    let kind = RootKind::from_value(&entry.key);
 
                     return Some(Root {
                         name: kind.with_span(entry.key.span()),

@@ -37,13 +37,6 @@ impl Ast {
     }
 }
 
-#[derive(Debug, Clone)]
-/// Something that was resolved from a value, and the value that something came from.
-pub struct FromValue<T> {
-    pub value: Value,
-    pub resolved: T,
-}
-
 impl Cst {
     pub fn build_ast(&self, text: &str) -> crate::ast::Ast {
         crate::ast::Ast::from_cst(self, text)

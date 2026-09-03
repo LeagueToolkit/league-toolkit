@@ -3,7 +3,7 @@ use std::{fmt::Display, num::IntErrorKind};
 use ltk_meta::PropertyKind;
 
 use crate::{
-    ast::node::root::RootEntryKind,
+    ast::node::root::RootKind,
     cst,
     parse::{Span, TokenKind},
     ItemShape, RitoType, Spanned,
@@ -191,7 +191,7 @@ pub enum Diagnostic {
         span: Span,
     },
     MissingRootEntry {
-        root_kind: RootEntryKind,
+        root_kind: RootKind,
     },
     /// An entry is missing its value
     MissingEntryValue {
@@ -203,7 +203,7 @@ pub enum Diagnostic {
     },
 
     InvalidRootEntryType {
-        root_kind: RootEntryKind,
+        root_kind: RootKind,
         key_span: Span,
         type_span: Span,
         got: RitoTypeOrVirtual,

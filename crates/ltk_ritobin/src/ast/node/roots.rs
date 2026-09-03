@@ -1,5 +1,5 @@
 use crate::ast::{
-    node::root::{FileKind, KnownRoot, Root, RootEntryKind},
+    node::root::{FileKind, KnownRoot, Root, RootKind},
     RootEntry,
 };
 
@@ -34,22 +34,22 @@ impl Roots {
         self.all.iter_mut()
     }
 
-    pub fn contains(&self, kind: RootEntryKind) -> bool {
+    pub fn contains(&self, kind: RootKind) -> bool {
         match kind {
-            RootEntryKind::Unknown => false,
-            RootEntryKind::Version => self.version.is_some(),
-            RootEntryKind::Type => self.file_type.is_some(),
-            RootEntryKind::Linked => self.linked.is_some(),
-            RootEntryKind::Entries => self.entries.is_some(),
+            RootKind::Unknown => false,
+            RootKind::Version => self.version.is_some(),
+            RootKind::Type => self.file_type.is_some(),
+            RootKind::Linked => self.linked.is_some(),
+            RootKind::Entries => self.entries.is_some(),
         }
     }
 
-    pub fn missing(&self) -> impl Iterator<Item = RootEntryKind> + use<'_> {
+    pub fn missing(&self) -> impl Iterator<Item = RootKind> + use<'_> {
         [
-            RootEntryKind::Version,
-            RootEntryKind::Type,
-            RootEntryKind::Linked,
-            RootEntryKind::Entries,
+            RootKind::Version,
+            RootKind::Type,
+            RootKind::Linked,
+            RootKind::Entries,
         ]
         .into_iter()
         .filter(|k| !self.contains(*k))

@@ -8,7 +8,7 @@ use ltk_meta::{
 use crate::{
     ast::{
         diagnostics::{Diagnostic, DiagnosticWithSpan, RitoTypeOrVirtual},
-        node::root::RootEntryKind,
+        node::root::RootKind,
     },
     Cst, ItemShape, RitoType,
 };
@@ -226,7 +226,7 @@ entries: map[hash,embed] = {}
         errs.iter().any(|e| matches!(
             e.diagnostic,
             Diagnostic::MissingRootEntry {
-                root_kind: RootEntryKind::Linked
+                root_kind: RootKind::Linked
             }
         )),
         "{errs:#?}"
@@ -246,7 +246,7 @@ linked: list[string] = {}
         errs.iter().any(|e| matches!(
             e.diagnostic,
             Diagnostic::MissingRootEntry {
-                root_kind: RootEntryKind::Entries
+                root_kind: RootKind::Entries
             }
         )),
         "{errs:#?}"
@@ -266,7 +266,7 @@ entries: map[hash,embed] = {}
         errs.iter().any(|e| matches!(
             e.diagnostic,
             Diagnostic::MissingRootEntry {
-                root_kind: RootEntryKind::Type
+                root_kind: RootKind::Type
             }
         )),
         "{errs:#?}"
@@ -287,7 +287,7 @@ entries: map[hash,embed] = {}
         errs.iter().any(|e| matches!(
             e.diagnostic,
             Diagnostic::InvalidRootEntryType {
-                root_kind: RootEntryKind::Type,
+                root_kind: RootKind::Type,
                 ..
             }
         )),
