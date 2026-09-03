@@ -8,7 +8,7 @@ use ltk_meta::{
 use crate::{
     ast::{
         diagnostics::{Diagnostic, DiagnosticWithSpan, RitoTypeOrVirtual},
-        RootEntryKind,
+        node::root::RootEntryKind,
     },
     Cst, ItemShape, RitoType,
 };

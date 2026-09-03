@@ -1,7 +1,12 @@
 use crate::{
     ast::{
-        diagnostics::Diagnostic as D, node::TypeExpr, KnownRoot, Root, RootEntry, RootEntryKind,
-        Roots, Value,
+        diagnostics::Diagnostic as D,
+        node::{
+            root::{KnownRoot, Root, RootEntryKind},
+            roots::Roots,
+            TypeExpr,
+        },
+        RootEntry, Value,
     },
     cst::Kind,
     parse::Span,

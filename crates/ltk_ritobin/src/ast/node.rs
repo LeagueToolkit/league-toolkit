@@ -4,6 +4,8 @@ mod property;
 mod refs;
 mod root_object;
 
+pub mod root;
+pub mod roots;
 pub mod value;
 
 pub use kind::*;

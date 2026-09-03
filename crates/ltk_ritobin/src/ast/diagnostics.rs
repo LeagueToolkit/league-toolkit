@@ -3,7 +3,7 @@ use std::{fmt::Display, num::IntErrorKind};
 use ltk_meta::PropertyKind;
 
 use crate::{
-    ast::RootEntryKind,
+    ast::node::root::RootEntryKind,
     cst,
     parse::{Span, TokenKind},
     ItemShape, RitoType, Spanned,
