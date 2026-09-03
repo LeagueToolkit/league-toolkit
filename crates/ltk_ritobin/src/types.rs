@@ -108,7 +108,7 @@ impl Display for RitoType {
 macro_rules! rito {
     ($kind:ident) => {
         const {
-            match RitoType::try_new(PropertyKind::$kind, [None, None]) {
+            match RitoType::try_new(ltk_meta::PropertyKind::$kind, [None, None]) {
                 Ok(t) => t,
                 Err(_) => panic!("invalid simple rito type"),
             }
@@ -116,7 +116,10 @@ macro_rules! rito {
     };
     ($kind:ident [ $sub:ident ]) => {
         const {
-            match RitoType::try_new(PropertyKind::$kind, [Some(PropertyKind::$sub), None]) {
+            match RitoType::try_new(
+                ltk_meta::PropertyKind::$kind,
+                [Some(ltk_meta::PropertyKind::$sub), None],
+            ) {
                 Ok(t) => t,
                 Err(_) => panic!("invalid rito type"),
             }
@@ -125,8 +128,11 @@ macro_rules! rito {
     ($kind:ident [ $a:ident, $b:ident ]) => {
         const {
             match RitoType::try_new(
-                PropertyKind::$kind,
-                [Some(PropertyKind::$a), Some(PropertyKind::$b)],
+                ltk_meta::PropertyKind::$kind,
+                [
+                    Some(ltk_meta::PropertyKind::$a),
+                    Some(ltk_meta::PropertyKind::$b),
+                ],
             ) {
                 Ok(t) => t,
                 Err(_) => panic!("invalid rito type"),
