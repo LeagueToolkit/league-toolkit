@@ -88,6 +88,12 @@ impl Value {
             _ => None,
         }
     }
+    pub fn into_string(self) -> Option<String> {
+        match self {
+            Self::String(s) => Some(s.value),
+            _ => None,
+        }
+    }
 }
 
 impl Display for Value {
