@@ -74,6 +74,13 @@ mod test {
     }
 
     #[test]
+    fn eof() {
+        assert_fail("0:[?");
+        assert_fail("a = ?");
+        assert_fail("a:");
+    }
+
+    #[test]
     fn error_spans_stay_within_the_source() {
         // all of these error at the end of input, where the "point just past
         // the token" error span used to run past the source

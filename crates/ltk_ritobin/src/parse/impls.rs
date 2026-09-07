@@ -175,7 +175,7 @@ pub fn type_expr(p: &mut Parser) {
                     }
                 }
             });
-            while !p.at(TokenKind::RBrack) {
+            while !p.at(TokenKind::RBrack) && !p.eof() {
                 p.advance();
             }
             p.expect(TokenKind::RBrack);
