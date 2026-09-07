@@ -1,8 +1,7 @@
 use std::fmt::{self, Display};
 
-use ltk_meta::Bin;
-
 use crate::{
+    ast::PartialBin,
     cst::{
         visitor::{Visit, VisitCtx},
         ChildRange, ErrorRange, NodeId, TokenId, Visitor,
@@ -12,7 +11,6 @@ use crate::{
         tokenizer::{self, Token},
         Error, ErrorPropagation, Parser, Span, TokenKind,
     },
-    typecheck::diagnostics::DiagnosticWithSpan,
 };
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -143,6 +141,51 @@ impl Node {
             .filter(|t| t.kind == TokenKind::LCurly)
             .map_or(self.span, |t| t.span)
     }
+
+    pub fn trimmed_span(&self, cst: &Cst) -> Span {
+        let children = self.children.get(cst);
+        match self.kind {
+            Kind::Entry => {
+                let key = children.find_tree(cst, Kind::EntryKey);
+                let value = children.find_tree(cst, Kind::EntryValue);
+                match (key, value) {
+                    (Some(key), Some(value)) => Span::new(key.span.start, value.span.end),
+                    _ => self.span,
+                }
+            }
+            Kind::ListItem => children
+                .iter()
+                .find_map(|c| c.tree(cst))
+                .map(|t| t.span)
+                .unwrap_or(self.span),
+            _ => self.span,
+        }
+    }
+}
+
+pub trait ChildrenExt {
+    fn find_tree<'c>(&'c self, cst: &'c Cst, kind: Kind) -> Option<&'c Node>;
+    fn find_token<'c>(&'c self, cst: &'c Cst, kind: TokenKind) -> Option<&'c Token>;
+}
+
+impl ChildrenExt for [Child] {
+    fn find_tree<'c>(&'c self, cst: &'c Cst, kind: Kind) -> Option<&'c Node> {
+        self.iter()
+            .find_map(|c| c.tree(cst).filter(|t| t.kind == kind))
+    }
+    fn find_token<'c>(&'c self, cst: &'c Cst, kind: TokenKind) -> Option<&'c Token> {
+        self.iter()
+            .find_map(|c| c.token(cst).filter(|t| t.kind == kind))
+    }
+}
+
+impl ChildrenExt for ChildRange {
+    fn find_tree<'c>(&'c self, cst: &'c Cst, kind: Kind) -> Option<&'c Node> {
+        self.get(cst).find_tree(cst, kind)
+    }
+    fn find_token<'c>(&'c self, cst: &'c Cst, kind: TokenKind) -> Option<&'c Token> {
+        self.get(cst).find_token(cst, kind)
+    }
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -210,12 +253,11 @@ impl Cst {
         p.build_tree(error_propagation)
     }
 
-    /// Construct a best-effort [`Bin`] from this tree, returning any errors. If there are any
-    /// errors returned, the [`Bin`] may only be partially constructed.
-    pub fn build_bin(&self, text: &str) -> (Bin, Vec<DiagnosticWithSpan>) {
-        let mut checker = crate::typecheck::TypeChecker::new(text);
-        self.walk(&mut checker);
-        checker.collect_to_bin()
+    /// Construct a best-effort [`Bin`] from this tree, along with any diagnostics. If there
+    /// are any diagnostics, the [`Bin`] may only be partially/best-effort constructed - use
+    /// [`PartialBin::finish`] to get a quick Result type.
+    pub fn build_bin(&self, text: &str) -> PartialBin {
+        self.build_ast(text).into_partial_bin(text)
     }
 
     /// Print this tree to a string for debugging purposes. This does **NOT** output ritobin, see [`crate::Print`] for

@@ -85,7 +85,7 @@ impl Kind {
     /// Whether this property kind is a primitive type. (i8, u8, .. u32, u64, f32, Vector2, Vector3, Vector4, Matrix44, Color, String, Hash, WadChunkLink),
     #[inline(always)]
     #[must_use]
-    pub fn is_primitive(&self) -> bool {
+    pub const fn is_primitive(&self) -> bool {
         use Kind::*;
         matches!(
             self,
@@ -123,7 +123,7 @@ impl Kind {
     /// shipped bin in the client keys a map on any of them.
     #[inline(always)]
     #[must_use]
-    pub fn is_valid_map_key(&self) -> bool {
+    pub const fn is_valid_map_key(&self) -> bool {
         use Kind::*;
         matches!(
             self,
@@ -151,7 +151,7 @@ impl Kind {
     /// Whether this property kind is a container type (container, unordered container, optional, map).
     #[inline(always)]
     #[must_use]
-    pub fn is_container(&self) -> bool {
+    pub const fn is_container(&self) -> bool {
         self.subtype_count() > 0
     }
 
@@ -194,7 +194,7 @@ impl Kind {
 
     #[inline(always)]
     #[must_use]
-    pub fn subtype_count(&self) -> u8 {
+    pub const fn subtype_count(&self) -> u8 {
         use Kind::*;
         match self {
             Container | UnorderedContainer | Optional => 1,

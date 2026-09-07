@@ -1,3 +1,4 @@
 {
-    "rust-analyzer.cargo.allTargets": true
+    "rust-analyzer.cargo.allTargets": true,
+    "nixEnvSelector.suggestion": false
 }

@@ -20,7 +20,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         for sample in &samples {
             let size = sample.len();
             let cst = Cst::parse(sample);
-            let (bin, _errs) = cst.build_bin(sample);
+            let bin = cst.build_bin(sample).bin;
 
             group.throughput(Throughput::Bytes(size.try_into().unwrap()));
             group.bench_with_input(BenchmarkId::from_parameter(size), &bin, |b, bin| {
