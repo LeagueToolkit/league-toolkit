@@ -38,6 +38,11 @@ installers - these crates read and write what the game ships. Building mods on t
 `ltk_wad`, `ltk_meta`, `ltk_texture` and `ltk_ritobin` carry their own READMEs, which are the
 reference for those surfaces. The rest document themselves on [docs.rs](https://docs.rs).
 
+The ritobin language itself is specified in
+[ritobin-lang](https://github.com/LeagueToolkit/ritobin-lang), the home for its syntax and the
+standards the ecosystem around it follows. `ltk_ritobin` is an implementation of that
+specification.
+
 ## Installation
 
 The umbrella crate, with the subsystems you want:
@@ -261,6 +266,8 @@ version bumps and changelogs, and merging it publishes the affected crates to cr
 - [league-mod](https://github.com/LeagueToolkit/league-mod) - the `.modpkg` mod format, project
   packing, and the WAD overlay builder, all built on these crates
 - [ltk-manager](https://github.com/LeagueToolkit/ltk-manager) - the desktop mod manager
+- [ritobin-lang](https://github.com/LeagueToolkit/ritobin-lang) - the ritobin language
+  specification, and the standards for the ecosystem around it
 - [wadtools](https://github.com/LeagueToolkit/wadtools) - CLI for extracting, listing and
   comparing `.wad` archives
 - [Mimir](https://github.com/LeagueToolkit/Mimir) - hash-to-path tables as compact memory-mapped
