@@ -3,7 +3,7 @@
 [![CI](https://github.com/LeagueToolkit/league-toolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/LeagueToolkit/league-toolkit/actions/workflows/ci.yml)
 [![Crates.io](https://img.shields.io/crates/v/league-toolkit.svg)](https://crates.io/crates/league-toolkit)
 [![Docs](https://img.shields.io/docsrs/league-toolkit)](https://docs.rs/league-toolkit)
-[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](#license)
 
 Rust libraries for reading, editing and writing League of Legends file formats - WAD archives,
 property bins, textures, meshes, animations, map geometry and string tables.
@@ -279,16 +279,11 @@ version bumps and changelogs, and merging it publishes the affected crates to cr
 
 ## License
 
-Licensed under either of:
-
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or
-  <http://www.apache.org/licenses/LICENSE-2.0>)
-- MIT license ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
-
-at your option.
+Licensed under the Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or
+<http://www.apache.org/licenses/LICENSE-2.0>).
 
 ### Contribution
 
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in
-the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without
-any additional terms or conditions.
+the work by you, as defined in the Apache-2.0 license, shall be licensed as above, without any
+additional terms or conditions.

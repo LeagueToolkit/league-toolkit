@@ -3,7 +3,7 @@ name = "ltk_ritobin"
 version = "0.8.0"
 edition = "2021"
 description = "Ritobin text format parser and writer for League Toolkit"
-license = "MIT OR Apache-2.0"
+license = "Apache-2.0"
 readme = "../../README.md"
 
 [lib]
