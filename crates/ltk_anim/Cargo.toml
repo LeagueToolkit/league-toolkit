@@ -3,7 +3,7 @@ name = "ltk_anim"
 version = "0.3.6"
 edition = "2021"
 description = "Animation formats support for League Toolkit"
-license = "MIT OR Apache-2.0"
+license = "Apache-2.0"
 readme = "../../README.md"
 
 [lints]

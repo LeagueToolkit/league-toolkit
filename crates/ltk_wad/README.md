@@ -232,4 +232,4 @@ Three ways to decode:
 
 ## License
 
-MIT OR Apache-2.0, at your option.
+Apache-2.0.

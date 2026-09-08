@@ -3,7 +3,7 @@ name = "ltk_io_ext"
 version = "0.4.4"
 edition = "2021"
 description = "I/O extensions used by League Toolkit"
-license = "MIT OR Apache-2.0"
+license = "Apache-2.0"
 readme = "../../README.md"
 
 [lints]
