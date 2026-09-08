@@ -94,6 +94,97 @@ while let Some(mut object) = objects.next()? {
 [`Bin::from_reader`] is itself `BinStream::mount` plus [`BinStream::into_bin`], so the eager
 tree and the streaming surface are one parser and cannot drift.
 
+### Walking a bin
+
+[`walk`] is one traversal for both trees. A [`Visitor`](walk::Visitor) is called once per
+node, in pre-order and file order, and answers a [`Visit`](walk::Visit) that continues, prunes
+a property, stops or aborts. The same visitor runs over an owned [`Bin`] and over a
+[`BinStream`], where nothing is materialised.
+
+```
+use ltk_hash::BinHash;
+use ltk_meta::{
+    walk::{Node, TreeValue, Visit, Visitor},
+    Error,
+};
+
+/// Counts nodes and records the address of every `Struct` of one class.
+#[derive(Default)]
+struct Census {
+    nodes: usize,
+    hits: Vec<(BinHash, String)>,
+}
+
+impl<'a, V: TreeValue<'a>> Visitor<'a, V> for Census {
+    type Error = Error;
+
+    fn enter_node(&mut self, node: &Node<'_, 'a, V>) -> Result<Visit, Error> {
+        self.nodes += 1;
+        if *node.class_hash() == 0x1e6b_a0c4 {
+            self.hits.push((node.object_hash(), node.trail().to_string()));
+        }
+        Ok(Visit::Continue)
+    }
+}
+
+# let bin = ltk_meta::concrete::Bin::builder().build();
+let mut census = Census::default();
+bin.walk(&mut census)?;
+# Ok::<(), Error>(())
+```
+
+The walk over one object is sequential by contract. Objects are independent, and every view,
+node and trail type is `Send`. A sweep parallelises across objects: one visitor instance per
+worker, reduced at the end. The split is the caller's; the crate schedules nothing.
+
+```
+# use ltk_hash::BinHash;
+# use ltk_meta::{walk::{Node, TreeValue, Visit, Visitor}, Error};
+# #[derive(Default)]
+# struct Census { nodes: usize, hits: Vec<(BinHash, String)> }
+# impl<'a, V: TreeValue<'a>> Visitor<'a, V> for Census {
+#     type Error = Error;
+#     fn enter_node(&mut self, node: &Node<'_, 'a, V>) -> Result<Visit, Error> {
+#         self.nodes += 1;
+#         Ok(Visit::Continue)
+#     }
+# }
+# let bin = ltk_meta::concrete::Bin::builder().build();
+let objects: Vec<_> = bin.objects.values().collect();
+let workers = std::thread::available_parallelism().map_or(1, |n| n.get());
+let per_worker = objects.len().div_ceil(workers).max(1);
+
+let counted = std::thread::scope(|scope| {
+    let workers: Vec<_> = objects
+        .chunks(per_worker)
+        .map(|chunk| {
+            scope.spawn(move || {
+                let mut census = Census::default();
+                for object in chunk {
+                    object.walk(&mut census)?;
+                }
+                Ok::<_, Error>(census)
+            })
+        })
+        .collect();
+
+    let mut all = Census::default();
+    for worker in workers {
+        let census = worker.join().expect("a worker panicked")?;
+        all.nodes += census.nodes;
+        all.hits.extend(census.hits);
+    }
+    Ok::<_, Error>(all)
+})?;
+
+println!("{} nodes, {} hits", counted.nodes, counted.hits.len());
+# Ok::<(), Error>(())
+```
+
+Across many files the same shape applies one level up: one task per file, each mounting its
+own [`BinStream`] and walking it sequentially. The per-object walk is microseconds;
+decompression and I/O are where a sweep spends its time.
+
 ### Modifying a bin file
 
 ```no_run
@@ -234,3 +325,5 @@ mod error;
 pub use error::*;
 
 pub mod traits;
+
+pub mod walk;
