@@ -1,19 +1,21 @@
 # Walking a bin's value tree in `ltk_meta`
 
-The API spec for `ltk_meta::walk` and `ltk_meta::path::ValuePath`: one read-only traversal over
-every node of an object, driven by a visitor with a prune, running over the owned tree or the
-streaming view alike, and the address type a position in that tree is reported with.
+The API spec for `ltk_meta::walk` and `ltk_meta::path::ValuePath`: one traversal over every node
+of an object, driven by a visitor with a prune, read-only over the owned tree or the streaming view
+alike and mutable over the owned tree, and the address type a position in that tree is reported
+with.
 
 **This document states what is true now.** Where the code and a section here disagree, the section
 is the bug and gets edited. Two things it does not hold:
 
 - **Why this exists, who asks for it, and what it must do** -
-  `docs/prd/001-ptch-property-patches.md` (FR-7, FR-8, FR-12, FR-13), cited here as FR-N.
-- **Why an option was chosen over the alternatives it beat** - ADR-0005, ADR-0012, ADR-0013 and
-  ADR-0014, cited from the rules in [section 8](#s8).
+  `docs/prd/001-ptch-property-patches.md` (FR-7, FR-8, FR-12, FR-13, FR-15), cited here as FR-N.
+- **Why an option was chosen over the alternatives it beat** - ADR-0005, ADR-0012, ADR-0013,
+  ADR-0014 and ADR-0015, cited from the rules in [section 8](#s8).
 
 `ValuePath`, `MapKey`, `FieldNames` and the three methods that produce them -
 `TreeValue::map_key`, `Trail::to_value_path`, `Node::value_path` - are #219.
+The mutable walk of [section 5.3](#s5.3) is #237.
 
 ## <a id="s1"></a>1. Summary
 
@@ -36,6 +38,9 @@ The module holds:
   `Bin`, `BinOverride` and `BinStream`, which call a `Visitor` once per node in a fixed order,
   ask it before entering each property, and carry a `Trail` that renders to a `ValuePath` only
   when asked ([section 5](#s5)).
+- **The mutable walk**: `BinObject::walk_mut` and the file-level entry points over `Bin` and
+  `BinOverride`, which run the same traversal over the owned tree through a `VisitorMut` that edits
+  nodes and property values in place, under the same `Trail` ([section 5.3](#s5.3)).
 
 Over a stream nothing is materialised: the walk crosses an object's buffered bytes, decodes a
 header where it has to descend, and hands the visitor leaves it can read without allocating
@@ -75,6 +80,11 @@ Every term this document uses in a specific sense.
   is not shown anything beneath it.
 - **descend** - the walk crossing a container, optional or map to reach the nodes inside it.
   Descent is never asked about: once a property is entered, every node inside it is visited.
+- **mutable walk** - the walk over an owned object through `&mut`: the same traversal, with a
+  node's property map and a property's value editable from the callbacks. A visitor of the
+  mutable walk is a `VisitorMut`; a visitor of the read-only walk is a `Visitor`.
+- **kind pin** - the kind a container, optional or map declares for every item it holds. A
+  property of a node carries no pin.
 
 **Addresses**
 
@@ -768,6 +778,132 @@ the node the field was read on - the object's class hash at the root, the `Struc
 `Embedded` class hash below it. It is what a name table is asked with ([section 4.3](#s4.3)),
 and `to_value_path` carries it over.
 
+### <a id="s5.3"></a>5.3 The mutable walk
+
+The mutable walk runs [section 5.1](#s5.1) over an owned object through `&mut`. It shares
+`Visit`, `WalkOutcome` and `Trail` with the read-only walk, and the trail it hands out renders the
+same hash form at the same position (ADR-0015).
+
+```rust
+/// What a mutable walk calls. The owned tree only. Every callback defaults to `Continue`.
+pub trait VisitorMut<M = NoMeta> {
+    /// The visitor's own error. The crate's errors convert into it.
+    type Error: From<Error>;
+
+    /// Before any of the node's properties. The walk walks the property map this callback
+    /// leaves behind.
+    fn enter_node(&mut self, node: &mut NodeMut<'_>) -> Result<Visit, Self::Error> {
+        Ok(Visit::Continue)
+    }
+    /// Once per node entered, as `Visitor::exit_node`.
+    fn exit_node(&mut self, node: &mut NodeMut<'_>) -> Result<Visit, Self::Error> {
+        Ok(Visit::Continue)
+    }
+    /// For every property, in property order, leaves included. `holds_node` is asked of the value
+    /// this callback leaves behind.
+    fn enter_property(&mut self, property: &mut PropertyMut<'_>) -> Result<Visit, Self::Error> {
+        Ok(Visit::Continue)
+    }
+    /// Once per property that holds a node and was entered, as `Visitor::exit_property`.
+    fn exit_property(&mut self, property: &mut PropertyMut<'_>) -> Result<Visit, Self::Error> {
+        Ok(Visit::Continue)
+    }
+}
+
+/// A `&mut W` is a mutable visitor.
+impl<M, W: VisitorMut + ?Sized> VisitorMut for &mut W {}
+
+/// One node of a mutable walk: where it is, and its property map.
+pub struct NodeMut<'t> { /* object hash, class hash, &'t mut IndexMap, &'t Trail */ }
+
+impl<'t> NodeMut<'t> {
+    /// The path hash of the object this node is in, or is.
+    pub fn object_hash(&self) -> BinHash;
+    /// The class hash this node carries. Never 0 below the root.
+    pub fn class_hash(&self) -> BinHash;
+    /// Where the node is: empty at the root. A key is borrowed for the callback.
+    pub fn trail(&self) -> &'t Trail<&'t PropertyValueEnum>;
+    /// Whether this node is the object itself.
+    pub fn is_root(&self) -> bool;
+    /// The node read-only, as the read-only walk sees it.
+    pub fn inner(&self) -> OwnedNode<'_>;
+    /// The node's properties.
+    pub fn properties(&self) -> &IndexMap<BinHash, PropertyValueEnum>;
+    /// The node's properties, to insert, remove, reorder or edit.
+    pub fn properties_mut(&mut self) -> &mut IndexMap<BinHash, PropertyValueEnum>;
+}
+
+/// One property of a mutable walk: where it is, and its value.
+pub struct PropertyMut<'t> { /* object hash, node class, field, &'t mut value, &'t Trail */ }
+
+impl<'t> PropertyMut<'t> {
+    /// The path hash of the object the property is in.
+    pub fn object_hash(&self) -> BinHash;
+    /// The class hash of the node the property is on. Never 0 below the root.
+    pub fn node_class_hash(&self) -> BinHash;
+    /// The property's field hash.
+    pub fn field(&self) -> BinHash;
+    /// Where the node the property is on is: empty at the root.
+    pub fn trail(&self) -> &'t Trail<&'t PropertyValueEnum>;
+    /// The value.
+    pub fn value(&self) -> &PropertyValueEnum;
+    /// The value, to edit or to replace with a value of any kind.
+    pub fn value_mut(&mut self) -> &mut PropertyValueEnum;
+}
+
+impl BinObject {
+    /// Walks this object mutably.
+    pub fn walk_mut<W: VisitorMut>(&mut self, visitor: &mut W) -> Result<WalkOutcome, W::Error>;
+}
+impl Bin {
+    /// Walks every object mutably, in file order.
+    pub fn walk_mut<W: VisitorMut>(&mut self, visitor: &mut W) -> Result<WalkOutcome, W::Error>;
+}
+impl BinOverride {
+    /// Walks every embedded object mutably, in file order. Patch records are not walked.
+    pub fn walk_mut<W: VisitorMut>(&mut self, visitor: &mut W) -> Result<WalkOutcome, W::Error>;
+}
+```
+
+The traversal is [section 5.1](#s5.1), callback for callback and answer for answer. Walking an
+object with a `VisitorMut` that edits nothing calls the same callbacks, in the same order, with the
+same trail, as walking it with a `Visitor` that answers the same. Beside that, the tree is whatever
+the last callback left:
+
+- `enter_node` and `exit_node` edit the node's property map. Rule 2 iterates the map as
+  `enter_node` leaves it.
+- `enter_property` edits or replaces the value. Rule 2 asks `holds_node` of the value as
+  `enter_property` leaves it, and rule 3 descends that value. A value replaced by a leaf is a
+  leaf: no descent and no `exit_property`.
+- `exit_property` edits or replaces the value after its nodes.
+- A callback reaches a node inside a container, optional or map through `NodeMut` alone, never
+  as a value, and `NodeMut` sets no class hash. Every kind pin holds by construction. An edit
+  below a pin from a property callback goes through `PropertyValueEnum::as_mut` or `ValueSlot`,
+  which hold it.
+- A property callback reaches no other property of its node. A visitor that reads a sibling reads
+  it from `NodeMut::properties` in `enter_node`.
+
+A key in the trail is the tree's own key, borrowed for the length of the callback that sees it. No
+callback reaches a map key through `&mut`: a map's keys are never a node and never a property
+value.
+
+**A repair.** A visitor that retags a property reads the value in `enter_property` and replaces it
+there:
+
+```rust
+fn enter_property(&mut self, property: &mut PropertyMut<'_>) -> Result<Visit, Error> {
+    if property.node_class_hash() != SKIN_MESH || property.field() != SUBMESH {
+        return Ok(Visit::Continue);
+    }
+    let PropertyValueEnum::String(name) = property.value() else {
+        return Ok(Visit::Continue);
+    };
+    let hash = values::Hash::new(BinHash::hash_str(&name.value));
+    *property.value_mut() = hash.into();
+    Ok(Visit::Continue)
+}
+```
+
 ## <a id="s6"></a>6. Where else the tree and the trail are used
 
 **From the stream.** `BinStream::walk` is the pass: one buffered object at a time, no
@@ -776,12 +912,15 @@ the TOC bounds before anything is decoded (`bin-streaming.md`
 [section 4](bin-streaming.md#s4)). The eager `read()` path stays for a consumer that wants to
 keep the object, and the same visitor runs over it.
 
-**From a repair.** A consumer that edits an owned tree and wants to check its work runs the
-same visitor over `BinObject::walk`. That is `ltk-manager`'s `bin_property_type::fix`
-verifying in memory; the check and its verification are one visitor.
+**From a repair.** A repair edits an owned tree with a `VisitorMut` over `BinObject::walk_mut` and
+checks its work with the check's own `Visitor` over `BinObject::walk`. Both walks hand out a
+`Trail` of the same type, and the address a finding records is the address the repair matches on.
+That is `ltk-manager`'s `bin_property_type::fix`. Over a mounted file the repair reads only the
+objects it edits, with `ObjectStream::read`, and saves through `BinStream::write_patched`
+(`bin-streaming.md` [section 10](bin-streaming.md#s10)).
 
 **From merge and diff.** `Bin::merge` walks two owned trees at once and mutates one;
-`Bin::diff` walks two and emits records. Neither is a `Visitor` walk. Both keep a `Trail` as
+`Bin::diff` walks two and emits records. Neither is a `Visitor` or a `VisitorMut` walk. Both keep a `Trail` as
 they go and build a `ValuePath` from it at each position they report - `Replaced::at`,
 `Lift::at` - so an address means the same thing whichever operation produced it, and no report
 allocates for a position it does not name.
@@ -818,11 +957,20 @@ and over an `ObjectView` of the same bytes, through one generic visitor.
   name table, `to_property_path` then `Bin::resolve` lands on the value the walk was at
   (FR-13, AC-7 of PRD-001).
 - **`BinOverride::walk`** visits the fixture patch's embedded objects and never a record's value.
+- **The mutable walk.** A `VisitorMut` that edits nothing and records the same events as the
+  recording `Visitor` produces the same event list over a copy of the fixture, for every answer
+  the pruning and flow tests give, and leaves the copy equal to the fixture. An edit in each
+  callback lands where [section 5.3](#s5.3) says: a property inserted in `enter_node` is walked, a
+  value replaced in `enter_property` is descended as replaced, a node value replaced by a leaf gets
+  no `exit_property`. `Trail::to_string()` at every node equals the read-only walk's at the same
+  node, and a walk over a map of 10,000 hash-keyed entries grows the trail's capacity by at most
+  one step. `BinOverride::walk_mut` edits embedded objects and leaves every record unchanged.
 - **Corpus, `#[ignore]`, under `LTK_LOL_GAME_DIR`.** Every object in the install walks through
   `BinStream::walk` and through `Bin::walk` of the same chunk with a counting visitor; the two
   visit sequences are identical, and the node count equals the count of `Struct` and `Embedded`
   values with a non-zero class plus one per object, computed by an independent recursion in the
-  test.
+  test. `Bin::walk_mut` of every chunk with a recording `VisitorMut` produces the same visit
+  sequence as `Bin::walk`.
 
 ## <a id="s8"></a>8. Rules
 
@@ -858,3 +1006,7 @@ rules append.
 | W20 | The walk runs over two sealed traits, `TreeNode` and `TreeValue`, implemented by the owned tree and by the views; a visitor is generic over the value type. | A walk over `PropertyValueEnum` only, with `read()` per streamed object; or a walk over the views only. | One traversal, one visitor, both sources; the stream pass materialises nothing and the repair's in-memory check uses the same rule. Sealed, because a third tree would have to be this crate's. | [section 3](#s3), [section 5](#s5); ADR-0014 |
 | W21 | The visitor has `ltk_ritobin`'s CST visitor shape: symmetric enter and exit, a `Visit` answer of `Abort`, `Stop`, `Skip` or `Continue`, a `WalkOutcome`. `Skip` from `enter_property` prunes that value, where the CST's token `Skip` prunes the rest of the node. | A `bool` prune and no early exit. | One visitor idiom across the workspace; and a property, unlike a token, has a subtree of its own to prune. | [section 5](#s5) |
 | W22 | `Leaf` is `#[non_exhaustive]`; `Visit`, `WalkOutcome`, `Child`, `TrailStep` and `Step` are exhaustive. | Marking every new public enum, or none. | The leaf kinds are the game's to extend, and `WadChunkLink` was added once; a consumer's wildcard arm is the price of a minor release carrying the next one. The other enums are this crate's own, and a consumer matching a new `Visit` answer or step kind is told by the compiler. | [section 3](#s3) |
+| W23 | The mutable walk runs over the owned tree only. A view has no mutable walk. | A mutable walk over `ValueView`. | An edit to a buffered object's bytes keeps its size only for a fixed-width leaf; a string edit moves every size field above it. The editable object is the one `read()` returns. | [section 5.3](#s5.3); `bin-streaming.md` [section 10.4](bin-streaming.md#s10.4) |
+| W24 | `VisitorMut` shares `Visit`, `WalkOutcome`, the traversal of [section 5.1](#s5.1) and `Trail<&PropertyValueEnum>` with the read-only walk. The walker extends a map key's borrow in one `unsafe` block, and a callback sees a key only for its own length. | A trail type of the mutable walk's own; resolving addresses collected by the read-only walk. | The address a check records and the address a repair matches on are one rendering of one type, and descent over a map allocates nothing. | [section 5.3](#s5.3); ADR-0015 |
+| W25 | A node callback edits the node's property map, a property callback edits or replaces the property's value, `NodeMut` sets no class hash, and no callback reaches an item of a container, optional or map as a value. | A `&mut PropertyValueEnum` for every value the walk crosses, with pins checked after the walk. | A property carries no kind pin and an item does. A pin checked after the walk reports a broken tree; a pin no callback can reach holds. | [section 5.3](#s5.3) |
+| W26 | The mutable walk iterates the property map `enter_node` leaves and descends the value `enter_property` leaves. | Walking a snapshot taken before the callback. | A retagged value is the value the file holds after the repair, and its nodes are the ones a verification walk visits. | [section 5.3](#s5.3) |
