@@ -20,14 +20,15 @@ use std::{
     io::{self, Cursor, Read, Seek},
     path::{Path, PathBuf},
     rc::Rc,
+    time::{Duration, Instant},
 };
 
 use ltk_hash::BinHash;
 use ltk_meta::{
-    concrete::BinStream,
+    concrete::{BinDelta, BinStream},
     path::{PatchError, ResolveErrorKind, ValueShape},
     traits::PropertyExt as _,
-    walk::{Node, TreeValue, Visit, Visitor},
+    walk::{Node, NodeMut, TreeValue, Visit, Visitor, VisitorMut},
     Bin, BinKind, BinObject, BinOverride, Error, PropertyValueEnum,
 };
 use ltk_wad::Wad;
@@ -542,6 +543,19 @@ impl<'a, V: TreeValue<'a>> Visitor<'a, V> for Visits {
     }
 }
 
+impl VisitorMut for Visits {
+    type Error = Error;
+
+    fn enter_node(&mut self, node: &mut NodeMut<'_>) -> Result<Visit, Error> {
+        self.0.push((
+            *node.object_hash(),
+            *node.class_hash(),
+            node.trail().to_string(),
+        ));
+        Ok(Visit::Continue)
+    }
+}
+
 /// The nodes under `value`, by a recursion independent of the walk: every `Struct` and
 /// `Embedded` with a non-zero class, wherever it sits.
 fn count_nodes(value: &PropertyValueEnum) -> usize {
@@ -575,7 +589,7 @@ struct WalkCounts {
 impl fmt::Display for WalkCounts {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "{} wad archives", self.wads)?;
-        writeln!(f, "{} PROP chunks walked twice", self.prop_chunks)?;
+        writeln!(f, "{} PROP chunks walked three times", self.prop_chunks)?;
         writeln!(f, "{} objects, {} nodes", self.objects, self.nodes)
     }
 }
@@ -599,6 +613,14 @@ fn check_walk_parity(wad_path: &Path, data: &[u8], counts: &mut WalkCounts) {
         .unwrap_or_else(|e: Error| panic!("{}: the streaming walk failed: {e}", context()));
 
     assert_eq!(owned.0, streamed.0, "{}", context());
+
+    let mut edited = eager.clone();
+    let mut mutable = Visits::default();
+    edited
+        .walk_mut(&mut mutable)
+        .unwrap_or_else(|e| panic!("{}: the mutable walk failed: {e}", context()));
+    assert_eq!(owned.0, mutable.0, "{}", context());
+    assert_eq!(edited, eager, "{}", context());
 
     let expected: usize = eager
         .objects
@@ -640,6 +662,141 @@ fn every_shipped_prop_walks_the_same_over_both_trees() {
                 continue;
             }
             check_walk_parity(wad_path, &data, &mut counts);
+        }
+    }
+
+    println!("{counts}");
+    assert!(counts.prop_chunks > 0, "no PROP chunks in {game_dir}");
+}
+
+#[derive(Default)]
+struct DeltaCounts {
+    wads: usize,
+    prop_chunks: usize,
+    bytes: usize,
+    /// Mount, read one object, write the delta replacing it.
+    delta: Duration,
+    /// Parse the whole chunk, write the whole tree.
+    transcode: Duration,
+}
+
+impl fmt::Display for DeltaCounts {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "{} wad archives", self.wads)?;
+        writeln!(
+            f,
+            "{} PROP chunks, {} bytes, rewritten byte for byte through an empty delta",
+            self.prop_chunks, self.bytes
+        )?;
+        writeln!(f, "one-object delta write: {:?}", self.delta)?;
+        write!(f, "whole-file transcode:   {:?}", self.transcode)
+    }
+}
+
+/// The delta write-back against the input and the eager transcode, for one `PROP` chunk.
+fn check_delta_rewrite(wad_path: &Path, data: &[u8], counts: &mut DeltaCounts) {
+    let context = || format!("{}", wad_path.display());
+
+    let mut stream = BinStream::mount(Cursor::new(data))
+        .unwrap_or_else(|e| panic!("{}: the stream did not mount: {e}", context()));
+    let mut out = Vec::with_capacity(data.len());
+    stream
+        .write_patched(&BinDelta::new(), &mut out)
+        .unwrap_or_else(|e| panic!("{}: the empty delta failed: {e}", context()));
+    assert!(
+        out == data,
+        "{}: an empty delta changed the bytes",
+        context()
+    );
+
+    let middle = {
+        let entries = stream.toc().expect("the TOC builds").entries();
+        if entries.is_empty() {
+            counts.prop_chunks += 1;
+            return;
+        }
+        entries[entries.len() / 2].path_hash
+    };
+
+    let started = Instant::now();
+    let mut stream = BinStream::mount(Cursor::new(data)).expect("the stream mounts");
+    let object = stream
+        .object(middle)
+        .and_then(|object| object.expect("the object is in the TOC").read())
+        .unwrap_or_else(|e| panic!("{}: the object did not read: {e}", context()));
+    let mut delta = BinDelta::new();
+    delta.replace(object);
+    let mut patched = Vec::with_capacity(data.len());
+    stream
+        .write_patched(&delta, &mut patched)
+        .unwrap_or_else(|e| panic!("{}: the delta failed: {e}", context()));
+    counts.delta += started.elapsed();
+
+    let started = Instant::now();
+    let eager = Bin::from_reader(&mut Cursor::new(data)).expect("the eager parse succeeds");
+    let mut transcoded = Cursor::new(Vec::with_capacity(data.len()));
+    eager.to_writer(&mut transcoded).expect("the bin writes");
+    counts.transcode += started.elapsed();
+
+    let reread = Bin::from_reader(&mut Cursor::new(&patched))
+        .unwrap_or_else(|e| panic!("{}: the delta output did not read: {e}", context()));
+    assert_eq!(reread, eager, "{}", context());
+
+    let ranges = |bytes: &[u8]| {
+        let mut stream = BinStream::mount(Cursor::new(bytes)).expect("the stream mounts");
+        stream
+            .toc()
+            .expect("the TOC builds")
+            .entries()
+            .iter()
+            .map(|entry| (entry.path_hash, entry.byte_range()))
+            .collect::<Vec<_>>()
+    };
+    for ((hash, before), (_, after)) in ranges(data).into_iter().zip(ranges(&patched)) {
+        if hash != middle {
+            let slice = |bytes: &[u8], range: std::ops::Range<u64>| {
+                bytes[range.start as usize..range.end as usize].to_vec()
+            };
+            assert!(
+                slice(data, before) == slice(&patched, after),
+                "{}: untouched object {hash:08x} changed",
+                context()
+            );
+        }
+    }
+
+    counts.prop_chunks += 1;
+    counts.bytes += data.len();
+}
+
+#[test]
+#[ignore = "needs an installed client; set LTK_LOL_GAME_DIR"]
+fn every_shipped_prop_rewrites_through_a_delta() {
+    let Ok(game_dir) = std::env::var(GAME_DIR) else {
+        panic!("set {GAME_DIR} to the client's Game directory");
+    };
+
+    let mut wad_files = Vec::new();
+    wad_paths(Path::new(&game_dir), &mut wad_files);
+    wad_files.sort();
+    assert!(!wad_files.is_empty(), "no .wad.client under {game_dir}");
+
+    let mut counts = DeltaCounts::default();
+    for wad_path in &wad_files {
+        counts.wads += 1;
+
+        let source = File::open(wad_path).expect("the wad opens");
+        let mut wad = Wad::mount(source).expect("the wad mounts");
+        let chunks: Vec<_> = wad.chunks().as_slice().to_vec();
+
+        for chunk in &chunks {
+            let Ok(data) = wad.load_chunk_decompressed(chunk) else {
+                continue;
+            };
+            if BinKind::identify_from_bytes(&data) != Some(BinKind::Prop) {
+                continue;
+            }
+            check_delta_rewrite(wad_path, &data, &mut counts);
         }
     }
 
