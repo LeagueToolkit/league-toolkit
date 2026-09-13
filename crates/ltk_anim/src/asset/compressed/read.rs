@@ -1,5 +1,12 @@
 use crate::{
-    asset::{self, compressed::frame::Frame, error_metric::ErrorMetric},
+    asset::{
+        self,
+        compressed::{
+            evaluate::{JumpFrameU16, JumpFrameU32},
+            frame::Frame,
+        },
+        error_metric::ErrorMetric,
+    },
     AssetParseError::{InvalidField, InvalidFileVersion, MissingData},
     Compressed,
 };
@@ -18,9 +25,19 @@ bitflags! {
 
 impl Compressed {
     /// Only use this if you already know the animation asset is compressed! If you aren't sure, please use AnimationAsset::from_reader
+    ///
+    /// # Errors
+    ///
+    /// Returns [`InvalidField`] for a negative jump cache count, a duration that is negative
+    /// or not finite, and a frame whose transform type is `3` or whose joint id is not below
+    /// the joint count. Returns [`ReaderError`](crate::AssetParseError::ReaderError) when the
+    /// stream ends before the joints, frames or jump caches its header counts.
     pub fn from_reader<R: Read + Seek + ?Sized>(reader: &mut R) -> asset::Result<Self> {
         use byteorder::{ReadBytesExt as _, LE};
-        use ltk_io_ext::ReaderExt as _;
+        use ltk_io_ext::{
+            untrusted::{self, UntrustedCapacity as _},
+            ReaderExt as _,
+        };
 
         let _magic = reader.read_u64::<LE>()?; // magic is an 8 byte string
 
@@ -38,12 +55,8 @@ impl Compressed {
         let joint_count = reader.read_u32::<LE>()?;
         let frame_count = reader.read_u32::<LE>()?;
         let jump_cache_count = reader.read_i32::<LE>()?;
-        if jump_cache_count < 0 {
-            return Err(InvalidField(
-                "jump cache count",
-                jump_cache_count.to_string(),
-            ));
-        }
+        let jump_cache_count = u32::try_from(jump_cache_count)
+            .map_err(|_| InvalidField("jump cache count", jump_cache_count.to_string()))?;
 
         let duration = reader.read_f32::<LE>()?;
         if !duration.is_finite() || duration < 0.0 {
@@ -76,7 +89,7 @@ impl Compressed {
 
         // Read joint hashes
         reader.seek(SeekFrom::Start(joint_name_hashes_off as u64 + 12))?;
-        let mut joints = Vec::with_capacity(joint_count as usize);
+        let mut joints = Vec::with_untrusted_capacity(joint_count as usize);
         // TODO (alan): consider direct memory reinterp
         for _ in 0..joint_count {
             joints.push(reader.read_u32::<LE>()?);
@@ -84,43 +97,29 @@ impl Compressed {
 
         // Read frames
         reader.seek(SeekFrom::Start(frames_off as u64 + 12))?;
-        let mut frames = Vec::with_capacity(frame_count as usize);
+        let mut frames = Vec::with_untrusted_capacity(frame_count as usize);
         for _ in 0..frame_count {
-            let mut frame = [0; size_of::<Frame>()];
-            reader.read_exact(&mut frame)?;
-            // A frame stores `time` at bytes 0..2 and `joint_id` at bytes 2..4.
-            let raw_joint_id = u16::from_le_bytes([frame[2], frame[3]]);
-            if raw_joint_id >> 14 == 3 {
-                return Err(InvalidField(
-                    "frame transform type",
-                    (raw_joint_id >> 14).to_string(),
-                ));
+            let mut bytes = [0; Frame::SIZE];
+            reader.read_exact(&mut bytes)?;
+            let frame = Frame::from_bytes(bytes)?;
+            if usize::from(frame.joint_id()) >= joints.len() {
+                return Err(InvalidField("frame joint id", frame.joint_id().to_string()));
             }
-            let frame_joint_id = raw_joint_id & 0x3fff;
-            if usize::from(frame_joint_id) >= joint_count as usize {
-                return Err(InvalidField("frame joint id", frame_joint_id.to_string()));
-            }
-            let p = frame.as_ptr() as usize;
-            let align_of = std::mem::align_of::<Frame>();
-            if align_of > 0 && (p & (align_of - 1)) != 0 {
-                panic!("bad alignment!");
-            }
-            let frame = unsafe { std::mem::transmute::<[u8; 10], Frame>(frame) };
             frames.push(frame);
         }
 
-        // Read jump caches
+        // Read jump caches: one jump frame per joint per cache
         reader.seek(SeekFrom::Start(jump_caches_off as u64 + 12))?;
-        let jump_frame_size = match frame_count < 0x10001 {
-            true => 24,
-            false => 48,
+        let jump_frame_size = if frame_count < 0x10001 {
+            size_of::<JumpFrameU16>()
+        } else {
+            size_of::<JumpFrameU32>()
         };
-        let jump_cache_capacity = (jump_cache_count as usize)
-            .checked_mul(jump_frame_size)
-            .and_then(|v| v.checked_mul(joint_count as usize))
+        let jump_caches_len = (jump_cache_count as usize)
+            .checked_mul(joint_count as usize)
+            .and_then(|jump_frames| jump_frames.checked_mul(jump_frame_size))
             .ok_or_else(|| InvalidField("jump cache count", jump_cache_count.to_string()))?;
-        let mut jump_caches = Vec::with_capacity(jump_cache_capacity);
-        reader.read_exact(&mut jump_caches)?;
+        let jump_caches = untrusted::read_bytes(reader, jump_caches_len)?;
 
         Ok(Self {
             flags,

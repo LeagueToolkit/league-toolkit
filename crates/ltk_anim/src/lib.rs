@@ -10,6 +10,7 @@ pub use error::*;
 pub mod asset;
 pub mod quantized;
 pub mod rig;
+mod rotation;
 
 pub use asset::{
     Animation, AnimationAsset, AnimationAssetType, AssetParseError, Compressed,

@@ -1,6 +1,6 @@
-use crate::Joint;
+use crate::{rotation, Joint};
 use byteorder::{ReadBytesExt, LE};
-use glam::Mat4;
+use glam::{Mat4, Quat};
 use ltk_io_ext::ReaderExt;
 use std::io;
 use std::io::SeekFrom;
@@ -48,11 +48,13 @@ impl Joint {
 
         let local_translation = reader.read_vec3::<LE>()?;
         let local_scale = reader.read_vec3::<LE>()?;
-        let local_rotation = reader.read_quat::<LE>()?.normalize();
+        let local_rotation = normalized(reader.read_quat::<LE>()?, "local rotation")?;
 
         let inverse_bind_translation = reader.read_vec3::<LE>()?;
         let inverse_bind_scale = reader.read_vec3::<LE>()?;
         let inverse_bind_rotation = reader.read_quat::<LE>()?;
+        let normalized_inverse_bind_rotation =
+            normalized(inverse_bind_rotation, "inverse bind rotation")?;
 
         let name_off = reader.read_i32::<LE>()?;
         let return_pos = reader.stream_position()?;
@@ -77,7 +79,7 @@ impl Joint {
             local_rotation,
             inverse_bind_transform: Mat4::from_scale_rotation_translation(
                 inverse_bind_scale,
-                inverse_bind_rotation.normalize(),
+                normalized_inverse_bind_rotation,
                 inverse_bind_translation,
             ),
             inverse_bind_translation,
@@ -85,4 +87,18 @@ impl Joint {
             inverse_bind_rotation,
         })
     }
+}
+
+/// Scales a joint rotation to unit length.
+///
+/// # Errors
+///
+/// Returns [`io::ErrorKind::InvalidData`] for a rotation whose length is zero or not finite.
+fn normalized(rotation: Quat, field: &str) -> io::Result<Quat> {
+    rotation::try_normalize(rotation).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("joint {field} {rotation} has no unit length"),
+        )
+    })
 }

@@ -1,58 +1,65 @@
 //! Malformed input handling for animation readers
 
-use ltk_anim::{AssetParseError, Compressed, ParseError, RigResource};
-use std::io::Cursor;
+mod common;
 
-const COMPRESSED_HEADER_LEN: usize = 128;
+use common::{
+    compressed_header, patch, read_i32, uncompressed_header, v3_clip, v3_header, CompressedClip,
+    RawFrame, Transform, V4Clip, V4Key,
+};
+use glam::Quat;
+use ltk_anim::{
+    AnimationAsset, AssetParseError, Compressed, JointBuilder, ParseError, RigResource,
+    Uncompressed,
+};
+use std::collections::HashMap;
+use std::io::{self, Cursor};
 
-/// Builds a compressed animation with one frame per entry. The frame carries
-/// `raw_joint_id` in full, including the transform type bits.
-fn build_compressed(
-    joint_count: u32,
-    frame_count: u32,
-    jump_cache_count: i32,
-    duration: f32,
-    raw_joint_id: u16,
-) -> Vec<u8> {
-    let joints_abs = COMPRESSED_HEADER_LEN;
-    let frames_abs = joints_abs + joint_count as usize * 4;
-    let caches_abs = frames_abs + frame_count as usize * 10;
-    let jump_frame_size = if frame_count < 0x10001 { 24 } else { 48 };
-    let caches_len = jump_cache_count.max(0) as usize * jump_frame_size * joint_count as usize;
+fn read_compressed(buf: Vec<u8>) -> ltk_anim::asset::Result<Compressed> {
+    Compressed::from_reader(&mut Cursor::new(buf))
+}
 
-    let mut buf = Vec::new();
-    buf.extend_from_slice(b"r3d2canm");
-    buf.extend_from_slice(&1u32.to_le_bytes()); // version
-    buf.extend_from_slice(&0u32.to_le_bytes()); // resource size
-    buf.extend_from_slice(&0u32.to_le_bytes()); // format token
-    buf.extend_from_slice(&0u32.to_le_bytes()); // flags
-    buf.extend_from_slice(&joint_count.to_le_bytes());
-    buf.extend_from_slice(&frame_count.to_le_bytes());
-    buf.extend_from_slice(&jump_cache_count.to_le_bytes());
-    buf.extend_from_slice(&duration.to_le_bytes());
-    buf.extend_from_slice(&60.0f32.to_le_bytes()); // fps
-    for _ in 0..6 {
-        buf.extend_from_slice(&0.0f32.to_le_bytes()); // error metrics
-    }
-    for _ in 0..12 {
-        buf.extend_from_slice(&0.0f32.to_le_bytes()); // translation/scale bounds
-    }
-    buf.extend_from_slice(&((frames_abs - 12) as i32).to_le_bytes());
-    buf.extend_from_slice(&((caches_abs - 12) as i32).to_le_bytes());
-    buf.extend_from_slice(&((joints_abs - 12) as i32).to_le_bytes());
-    assert_eq!(buf.len(), COMPRESSED_HEADER_LEN);
+fn read_uncompressed(buf: Vec<u8>) -> ltk_anim::asset::Result<Uncompressed> {
+    Uncompressed::from_reader(&mut Cursor::new(buf))
+}
 
-    for joint in 0..joint_count {
-        buf.extend_from_slice(&joint.to_le_bytes());
-    }
-    for _ in 0..frame_count {
-        buf.extend_from_slice(&0u16.to_le_bytes()); // time
-        buf.extend_from_slice(&raw_joint_id.to_le_bytes());
-        buf.extend_from_slice(&[0u8; 6]); // value
-    }
-    buf.resize(buf.len() + caches_len, 0);
+fn read_rig(buf: Vec<u8>) -> ltk_anim::Result<RigResource> {
+    RigResource::from_reader(&mut Cursor::new(buf))
+}
 
-    buf
+/// A v5 clip of two joints and two frames, as the writer lays it out.
+fn v5_clip() -> Vec<u8> {
+    let frames = vec![ltk_anim::asset::UncompressedFrame::default(); 2];
+    let animation = Uncompressed::new(
+        30.0,
+        vec![glam::Vec3::ZERO],
+        vec![Quat::IDENTITY],
+        HashMap::from([(0xA, frames.clone()), (0xB, frames)]),
+    );
+    let mut buf = Cursor::new(Vec::new());
+    animation.to_writer(&mut buf).unwrap();
+    buf.into_inner()
+}
+
+/// A skeleton of two joints, one of them an influence, as the writer lays it out.
+fn rig() -> Vec<u8> {
+    let rig = RigResource::builder("rig", "asset")
+        .with_root_joint(
+            JointBuilder::new("root")
+                .with_children([JointBuilder::new("child").with_influence(true)]),
+        )
+        .build();
+    let mut buf = Cursor::new(Vec::new());
+    rig.to_writer(&mut buf).unwrap();
+    buf.into_inner()
+}
+
+#[test]
+fn well_formed_inputs_read() {
+    read_compressed(CompressedClip::default().to_bytes()).unwrap();
+    read_uncompressed(v5_clip()).unwrap();
+    read_uncompressed(V4Clip::default().to_bytes()).unwrap();
+    read_uncompressed(v3_clip(2, 3)).unwrap();
+    read_rig(rig()).unwrap();
 }
 
 #[test]
@@ -62,11 +69,41 @@ fn rig_reader_rejects_unknown_format_token() {
 }
 
 #[test]
-fn compressed_reader_rejects_negative_jump_cache_count() {
-    let mut buf = build_compressed(1, 1, 0, 1.0, 0);
-    buf[32..36].copy_from_slice(&(-1i32).to_le_bytes());
+fn rig_reader_rejects_influence_count_past_the_stream_end() {
+    let mut buf = rig();
+    patch(&mut buf, 16, u32::MAX.to_le_bytes());
 
-    let result = Compressed::from_reader(&mut Cursor::new(buf));
+    let result = read_rig(buf);
+    assert!(matches!(
+        result,
+        Err(ParseError::ReaderError(error)) if error.kind() == io::ErrorKind::UnexpectedEof
+    ));
+}
+
+#[test]
+fn rig_reader_rejects_joint_rotation_with_no_unit_length() {
+    let mut buf = rig();
+    // The first joint starts at the joints offset. Its local rotation is at bytes 40..56.
+    let joint = usize::try_from(read_i32(&buf, 20)).unwrap();
+    buf[joint + 40..joint + 56].fill(0);
+
+    let result = read_rig(buf);
+    assert!(matches!(
+        result,
+        Err(ParseError::ReaderError(error)) if error.kind() == io::ErrorKind::InvalidData
+    ));
+}
+
+#[test]
+fn compressed_reader_rejects_negative_jump_cache_count() {
+    let mut buf = CompressedClip::default().to_bytes();
+    patch(
+        &mut buf,
+        compressed_header::JUMP_CACHE_COUNT,
+        (-1i32).to_le_bytes(),
+    );
+
+    let result = read_compressed(buf);
     assert!(matches!(
         result,
         Err(AssetParseError::InvalidField("jump cache count", _))
@@ -75,10 +112,14 @@ fn compressed_reader_rejects_negative_jump_cache_count() {
 
 #[test]
 fn compressed_reader_rejects_non_finite_duration() {
-    let mut buf = build_compressed(1, 1, 0, 1.0, 0);
-    buf[36..40].copy_from_slice(&f32::NAN.to_le_bytes());
+    let mut buf = CompressedClip::default().to_bytes();
+    patch(
+        &mut buf,
+        compressed_header::DURATION,
+        f32::NAN.to_le_bytes(),
+    );
 
-    let result = Compressed::from_reader(&mut Cursor::new(buf));
+    let result = read_compressed(buf);
     assert!(matches!(
         result,
         Err(AssetParseError::InvalidField("duration", _))
@@ -87,10 +128,14 @@ fn compressed_reader_rejects_non_finite_duration() {
 
 #[test]
 fn compressed_reader_rejects_negative_duration() {
-    let mut buf = build_compressed(1, 1, 0, 1.0, 0);
-    buf[36..40].copy_from_slice(&(-1.0f32).to_le_bytes());
+    let mut buf = CompressedClip::default().to_bytes();
+    patch(
+        &mut buf,
+        compressed_header::DURATION,
+        (-1.0f32).to_le_bytes(),
+    );
 
-    let result = Compressed::from_reader(&mut Cursor::new(buf));
+    let result = read_compressed(buf);
     assert!(matches!(
         result,
         Err(AssetParseError::InvalidField("duration", _))
@@ -99,9 +144,12 @@ fn compressed_reader_rejects_negative_duration() {
 
 #[test]
 fn compressed_reader_rejects_frame_joint_id_out_of_range() {
-    let buf = build_compressed(1, 1, 0, 1.0, 5);
+    let clip = CompressedClip {
+        frames: vec![RawFrame::new(0, 5, Transform::Rotation, [0; 3])],
+        ..CompressedClip::default()
+    };
 
-    let result = Compressed::from_reader(&mut Cursor::new(buf));
+    let result = read_compressed(clip.to_bytes());
     assert!(matches!(
         result,
         Err(AssetParseError::InvalidField("frame joint id", _))
@@ -110,9 +158,16 @@ fn compressed_reader_rejects_frame_joint_id_out_of_range() {
 
 #[test]
 fn compressed_reader_rejects_frame_transform_type() {
-    let buf = build_compressed(1, 1, 0, 1.0, 0xC000);
+    let clip = CompressedClip {
+        frames: vec![RawFrame {
+            time: 0,
+            joint_id: 0xC000,
+            value: [0; 3],
+        }],
+        ..CompressedClip::default()
+    };
 
-    let result = Compressed::from_reader(&mut Cursor::new(buf));
+    let result = read_compressed(clip.to_bytes());
     assert!(matches!(
         result,
         Err(AssetParseError::InvalidField("frame transform type", _))
@@ -120,21 +175,248 @@ fn compressed_reader_rejects_frame_transform_type() {
 }
 
 #[test]
-fn uncompressed_reader_rejects_non_finite_frame_duration() {
-    let mut buf = Vec::new();
-    buf.extend_from_slice(b"r3d2anmd");
-    buf.extend_from_slice(&5u32.to_le_bytes()); // version
-    buf.extend_from_slice(&0u32.to_le_bytes()); // resource size
-    buf.extend_from_slice(&0u32.to_le_bytes()); // format token
-    buf.extend_from_slice(&5u32.to_le_bytes()); // version
-    buf.extend_from_slice(&0u32.to_le_bytes()); // flags
-    buf.extend_from_slice(&1u32.to_le_bytes()); // track count
-    buf.extend_from_slice(&1u32.to_le_bytes()); // frame count
-    buf.extend_from_slice(&f32::NAN.to_le_bytes()); // frame duration
+fn compressed_reader_rejects_joint_count_past_the_stream_end() {
+    let mut buf = CompressedClip::default().to_bytes();
+    patch(
+        &mut buf,
+        compressed_header::JOINT_COUNT,
+        u32::MAX.to_le_bytes(),
+    );
 
-    let result = ltk_anim::Uncompressed::from_reader(&mut Cursor::new(buf));
+    let result = read_compressed(buf);
+    assert!(matches!(
+        result,
+        Err(AssetParseError::ReaderError(error)) if error.kind() == io::ErrorKind::UnexpectedEof
+    ));
+}
+
+#[test]
+fn compressed_reader_rejects_frame_count_past_the_stream_end() {
+    let mut buf = CompressedClip::default().to_bytes();
+    patch(
+        &mut buf,
+        compressed_header::FRAME_COUNT,
+        u32::MAX.to_le_bytes(),
+    );
+
+    let result = read_compressed(buf);
+    assert!(matches!(
+        result,
+        Err(AssetParseError::ReaderError(error)) if error.kind() == io::ErrorKind::UnexpectedEof
+    ));
+}
+
+#[test]
+fn compressed_reader_rejects_jump_cache_count_past_the_stream_end() {
+    let mut buf = CompressedClip::default().to_bytes();
+    patch(
+        &mut buf,
+        compressed_header::JUMP_CACHE_COUNT,
+        i32::MAX.to_le_bytes(),
+    );
+
+    let result = read_compressed(buf);
+    assert!(matches!(
+        result,
+        Err(AssetParseError::ReaderError(error)) if error.kind() == io::ErrorKind::UnexpectedEof
+    ));
+}
+
+#[test]
+fn uncompressed_reader_rejects_non_finite_frame_duration() {
+    let mut buf = v5_clip();
+    patch(
+        &mut buf,
+        uncompressed_header::FRAME_DURATION,
+        f32::NAN.to_le_bytes(),
+    );
+
+    let result = read_uncompressed(buf);
     assert!(matches!(
         result,
         Err(AssetParseError::InvalidField("frame duration", _))
+    ));
+}
+
+#[test]
+fn uncompressed_reader_rejects_zero_frame_duration() {
+    let mut buf = v5_clip();
+    patch(
+        &mut buf,
+        uncompressed_header::FRAME_DURATION,
+        0.0f32.to_le_bytes(),
+    );
+
+    let result = read_uncompressed(buf);
+    assert!(matches!(
+        result,
+        Err(AssetParseError::InvalidField("frame duration", _))
+    ));
+}
+
+#[test]
+fn uncompressed_reader_rejects_clip_duration_that_overflows() {
+    let mut buf = v5_clip();
+    patch(
+        &mut buf,
+        uncompressed_header::FRAME_DURATION,
+        f32::MAX.to_le_bytes(),
+    );
+
+    let result = read_uncompressed(buf);
+    assert!(matches!(
+        result,
+        Err(AssetParseError::InvalidField("frame duration", _))
+    ));
+}
+
+#[test]
+fn v5_reader_rejects_frame_count_past_the_stream_end() {
+    let mut buf = v5_clip();
+    patch(
+        &mut buf,
+        uncompressed_header::FRAME_COUNT,
+        u32::MAX.to_le_bytes(),
+    );
+
+    let result = read_uncompressed(buf);
+    assert!(matches!(
+        result,
+        Err(AssetParseError::ReaderError(error)) if error.kind() == io::ErrorKind::UnexpectedEof
+    ));
+}
+
+#[test]
+fn v5_reader_rejects_sections_out_of_order() {
+    let mut buf = v5_clip();
+    // The frames start 4 bytes before the joint hashes. A 4-byte section of negative size
+    // is a multiple of its element size once wrapped to an unsigned size.
+    let joint_hashes = read_i32(&buf, uncompressed_header::JOINT_HASHES_OFFSET);
+    patch(
+        &mut buf,
+        uncompressed_header::FRAMES_OFFSET,
+        (joint_hashes - 4).to_le_bytes(),
+    );
+
+    let result = read_uncompressed(buf);
+    assert!(matches!(
+        result,
+        Err(AssetParseError::InvalidField("joint hashes", _))
+    ));
+}
+
+#[test]
+fn v5_reader_rejects_sections_past_the_stream_end() {
+    let mut buf = v5_clip();
+    for field in [
+        uncompressed_header::JOINT_HASHES_OFFSET,
+        uncompressed_header::VECTOR_PALETTE_OFFSET,
+        uncompressed_header::QUAT_PALETTE_OFFSET,
+        uncompressed_header::FRAMES_OFFSET,
+    ] {
+        let offset = read_i32(&buf, field);
+        patch(&mut buf, field, (offset + 1_000_000).to_le_bytes());
+    }
+
+    let result = read_uncompressed(buf);
+    assert!(matches!(
+        result,
+        Err(AssetParseError::ReaderError(error)) if error.kind() == io::ErrorKind::UnexpectedEof
+    ));
+}
+
+#[test]
+fn v5_reader_rejects_more_joint_hashes_than_tracks() {
+    let mut buf = v5_clip();
+    patch(
+        &mut buf,
+        uncompressed_header::TRACK_COUNT,
+        1u32.to_le_bytes(),
+    );
+
+    let result = read_uncompressed(buf);
+    assert!(matches!(
+        result,
+        Err(AssetParseError::InvalidField("joint hashes", _))
+    ));
+}
+
+#[test]
+fn v4_reader_rejects_frame_count_past_the_stream_end() {
+    let mut buf = V4Clip::default().to_bytes();
+    patch(
+        &mut buf,
+        uncompressed_header::FRAME_COUNT,
+        u32::MAX.to_le_bytes(),
+    );
+
+    let result = read_uncompressed(buf);
+    assert!(matches!(
+        result,
+        Err(AssetParseError::ReaderError(error)) if error.kind() == io::ErrorKind::UnexpectedEof
+    ));
+}
+
+#[test]
+fn v4_reader_rejects_more_joints_than_tracks() {
+    let key = |joint_hash| V4Key {
+        joint_hash,
+        translation_id: 0,
+        scale_id: 1,
+        rotation_id: 0,
+    };
+    let clip = V4Clip {
+        track_count: 1,
+        frames: vec![vec![key(0xA)], vec![key(0xB)]],
+        ..V4Clip::default()
+    };
+
+    let result = read_uncompressed(clip.to_bytes());
+    assert!(matches!(
+        result,
+        Err(AssetParseError::InvalidField("joint hashes", _))
+    ));
+}
+
+#[test]
+fn v4_reader_rejects_rotation_with_no_unit_length() {
+    let clip = V4Clip {
+        quats: vec![[0.0; 4]],
+        ..V4Clip::default()
+    };
+
+    let result = read_uncompressed(clip.to_bytes());
+    assert!(matches!(
+        result,
+        Err(AssetParseError::InvalidField("quaternion palette", _))
+    ));
+}
+
+#[test]
+fn v3_reader_rejects_track_count_past_the_stream_end() {
+    let mut buf = v3_clip(2, 3);
+    patch(&mut buf, v3_header::TRACK_COUNT, u32::MAX.to_le_bytes());
+    patch(&mut buf, v3_header::FRAME_COUNT, u32::MAX.to_le_bytes());
+
+    let result = read_uncompressed(buf);
+    assert!(matches!(
+        result,
+        Err(AssetParseError::ReaderError(error)) if error.kind() == io::ErrorKind::UnexpectedEof
+    ));
+}
+
+#[test]
+fn animation_asset_reader_rejects_what_the_format_reader_rejects() {
+    let mut buf = CompressedClip::default().to_bytes();
+    patch(
+        &mut buf,
+        compressed_header::FRAME_COUNT,
+        u32::MAX.to_le_bytes(),
+    );
+
+    let result = AnimationAsset::from_reader(&mut Cursor::new(buf));
+    assert!(matches!(
+        result,
+        Err(AssetParseError::ReaderError(error)) if error.kind() == io::ErrorKind::UnexpectedEof
     ));
 }

@@ -7,21 +7,33 @@
 
 use crate::{
     asset::{self, uncompressed::UncompressedFrame},
-    quantized, Uncompressed,
+    quantized, rotation, Uncompressed,
 };
 use byteorder::{ReadBytesExt, LE};
 use glam::Vec3;
 use ltk_hash::elf;
-use ltk_io_ext::ReaderExt;
-use std::collections::HashMap;
+use ltk_io_ext::{untrusted::UntrustedCapacity, ReaderExt};
+use std::collections::{hash_map::Entry, HashMap};
 use std::io::{Read, Seek, SeekFrom};
 
-/// Calculates element count from section size, validating alignment
+/// Returns the element count of the section from `start` to `end`.
+///
+/// # Errors
+///
+/// Returns [`InvalidField`](asset::AssetParseError::InvalidField) when `end` is before
+/// `start`, and when the size is not a multiple of `element_size`.
 fn section_count(
     section_name: &'static str,
-    size: usize,
+    start: i32,
+    end: i32,
     element_size: usize,
 ) -> asset::Result<usize> {
+    let size = usize::try_from(end - start).map_err(|_| {
+        asset::AssetParseError::InvalidField(
+            section_name,
+            format!("ends at offset {end}, before its start at offset {start}"),
+        )
+    })?;
     if !size.is_multiple_of(element_size) {
         return Err(asset::AssetParseError::InvalidField(
             section_name,
@@ -34,11 +46,39 @@ fn section_count(
     Ok(size / element_size)
 }
 
+/// Returns the frame rate and the duration of a v4 or v5 clip.
+///
+/// # Errors
+///
+/// Returns [`InvalidField`](asset::AssetParseError::InvalidField) for a frame duration that
+/// is not positive and finite, and for a frame rate or a clip duration that is not finite.
+fn clip_timing(frame_count: usize, frame_duration: f32) -> asset::Result<(f32, f32)> {
+    let fps = 1.0 / frame_duration;
+    let duration = frame_count as f32 * frame_duration;
+    if frame_duration > 0.0 && frame_duration.is_finite() && fps.is_finite() && duration.is_finite()
+    {
+        Ok((fps, duration))
+    } else {
+        Err(asset::AssetParseError::InvalidField(
+            "frame duration",
+            frame_duration.to_string(),
+        ))
+    }
+}
+
 impl Uncompressed {
     /// Parses an uncompressed animation from a reader
     ///
     /// Only use this if you already know the animation asset is uncompressed!
     /// If you aren't sure, please use `AnimationAsset::from_reader`
+    ///
+    /// # Errors
+    ///
+    /// Returns [`InvalidField`](asset::AssetParseError::InvalidField) for a v4 or v5 frame
+    /// duration that is not positive and finite, or whose clip duration is not finite. Returns
+    /// it for v4 or v5 section offsets out of order, for more joints than tracks, and for a
+    /// rotation with no unit length. Returns [`ReaderError`](asset::AssetParseError::ReaderError)
+    /// when the stream ends before the data its header counts.
     pub fn from_reader<R: Read + Seek + ?Sized>(reader: &mut R) -> asset::Result<Self> {
         let _magic = reader.read_u64::<LE>()?; // "r3d2anmd"
         let version = reader.read_u32::<LE>()?;
@@ -64,15 +104,7 @@ impl Uncompressed {
         let track_count = reader.read_u32::<LE>()? as usize;
         let frame_count = reader.read_u32::<LE>()? as usize;
         let frame_duration = reader.read_f32::<LE>()?;
-        if !frame_duration.is_finite() || frame_duration < 0.0 {
-            return Err(asset::AssetParseError::InvalidField(
-                "frame duration",
-                frame_duration.to_string(),
-            ));
-        }
-
-        let fps = 1.0 / frame_duration;
-        let duration = frame_count as f32 * frame_duration;
+        let (fps, duration) = clip_timing(frame_count, frame_duration)?;
 
         let joint_hashes_offset = reader.read_i32::<LE>()?;
         let _asset_name_offset = reader.read_i32::<LE>()?;
@@ -94,73 +126,74 @@ impl Uncompressed {
             return Err(asset::AssetParseError::MissingData("frames"));
         }
 
-        let joint_hash_count = section_count(
-            "joint hashes",
-            (frames_offset - joint_hashes_offset) as usize,
-            4,
-        )?;
+        // Sections in file order: vector palette, quaternion palette, joint hashes, frames
+        let joint_hash_count =
+            section_count("joint hashes", joint_hashes_offset, frames_offset, 4)?;
         let vector_count = section_count(
             "vector palette",
-            (quat_palette_offset - vector_palette_offset) as usize,
+            vector_palette_offset,
+            quat_palette_offset,
             12,
         )?;
         let quat_count = section_count(
             "quaternion palette",
-            (joint_hashes_offset - quat_palette_offset) as usize,
+            quat_palette_offset,
+            joint_hashes_offset,
             6,
         )?;
+        // Each joint hash names one track
+        if joint_hash_count > track_count {
+            return Err(asset::AssetParseError::InvalidField(
+                "joint hashes",
+                format!("{joint_hash_count} joint hashes for {track_count} tracks"),
+            ));
+        }
 
         // Read joint hashes
         reader.seek(SeekFrom::Start(joint_hashes_offset as u64 + 12))?;
-        let mut joint_hashes = Vec::with_capacity(joint_hash_count);
+        let mut joint_hashes = Vec::with_untrusted_capacity(joint_hash_count);
         for _ in 0..joint_hash_count {
             joint_hashes.push(reader.read_u32::<LE>()?);
         }
 
         // Read vector palette
         reader.seek(SeekFrom::Start(vector_palette_offset as u64 + 12))?;
-        let mut vector_palette = Vec::with_capacity(vector_count);
+        let mut vector_palette = Vec::with_untrusted_capacity(vector_count);
         for _ in 0..vector_count {
             vector_palette.push(reader.read_vec3::<LE>()?);
         }
 
         // Read quaternion palette (6-byte quantized)
         reader.seek(SeekFrom::Start(quat_palette_offset as u64 + 12))?;
-        let mut quat_palette = Vec::with_capacity(quat_count);
+        let mut quat_palette = Vec::with_untrusted_capacity(quat_count);
         for _ in 0..quat_count {
             let mut bytes = [0u8; 6];
             reader.read_exact(&mut bytes)?;
             quat_palette.push(quantized::decompress_quat(&bytes).normalize());
         }
 
-        // Initialize joint frames map
-        let mut joint_frames: HashMap<u32, Vec<UncompressedFrame>> =
-            HashMap::with_capacity(track_count);
-        for &hash in &joint_hashes {
-            joint_frames.insert(hash, vec![UncompressedFrame::default(); frame_count]);
-        }
-
-        // Read frames
+        // Read frames. Track `i` holds the frames of joint hash `i`.
+        let mut tracks = vec![Vec::new(); joint_hashes.len()];
         reader.seek(SeekFrom::Start(frames_offset as u64 + 12))?;
-        for frame_id in 0..frame_count {
+        for _ in 0..frame_count {
             for track_id in 0..track_count {
                 let translation_id = reader.read_u16::<LE>()?;
                 let scale_id = reader.read_u16::<LE>()?;
                 let rotation_id = reader.read_u16::<LE>()?;
 
                 // Skip tracks without a valid joint hash
-                let Some(&joint_hash) = joint_hashes.get(track_id) else {
-                    continue;
-                };
-                if let Some(frames) = joint_frames.get_mut(&joint_hash) {
-                    frames[frame_id] = UncompressedFrame {
+                if let Some(frames) = tracks.get_mut(track_id) {
+                    frames.push(UncompressedFrame {
                         translation_id,
                         scale_id,
                         rotation_id,
-                    };
+                    });
                 }
             }
         }
+        // The last track of a joint hash holds its frames.
+        let joint_frames: HashMap<u32, Vec<UncompressedFrame>> =
+            joint_hashes.into_iter().zip(tracks).collect();
 
         Ok(Self {
             duration,
@@ -185,15 +218,7 @@ impl Uncompressed {
         let track_count = reader.read_u32::<LE>()? as usize;
         let frame_count = reader.read_u32::<LE>()? as usize;
         let frame_duration = reader.read_f32::<LE>()?;
-        if !frame_duration.is_finite() || frame_duration < 0.0 {
-            return Err(asset::AssetParseError::InvalidField(
-                "frame duration",
-                frame_duration.to_string(),
-            ));
-        }
-
-        let fps = 1.0 / frame_duration;
-        let duration = frame_count as f32 * frame_duration;
+        let (fps, duration) = clip_timing(frame_count, frame_duration)?;
 
         let _joint_hashes_offset = reader.read_i32::<LE>()?;
         let _asset_name_offset = reader.read_i32::<LE>()?;
@@ -212,34 +237,41 @@ impl Uncompressed {
             return Err(asset::AssetParseError::MissingData("frames"));
         }
 
+        // Sections in file order: vector palette, quaternion palette, frames
         let vector_count = section_count(
             "vector palette",
-            (quat_palette_offset - vector_palette_offset) as usize,
+            vector_palette_offset,
+            quat_palette_offset,
             12,
         )?;
         let quat_count = section_count(
             "quaternion palette",
-            (frames_offset - quat_palette_offset) as usize,
+            quat_palette_offset,
+            frames_offset,
             16, // v4 uses full 16-byte quaternions
         )?;
 
         // Read vector palette
         reader.seek(SeekFrom::Start(vector_palette_offset as u64 + 12))?;
-        let mut vector_palette = Vec::with_capacity(vector_count);
+        let mut vector_palette = Vec::with_untrusted_capacity(vector_count);
         for _ in 0..vector_count {
             vector_palette.push(reader.read_vec3::<LE>()?);
         }
 
         // Read quaternion palette (full 16-byte)
         reader.seek(SeekFrom::Start(quat_palette_offset as u64 + 12))?;
-        let mut quat_palette = Vec::with_capacity(quat_count);
+        let mut quat_palette = Vec::with_untrusted_capacity(quat_count);
         for _ in 0..quat_count {
-            quat_palette.push(reader.read_quat::<LE>()?.normalize());
+            let quat = reader.read_quat::<LE>()?;
+            let quat = rotation::try_normalize(quat).ok_or_else(|| {
+                asset::AssetParseError::InvalidField("quaternion palette", quat.to_string())
+            })?;
+            quat_palette.push(quat);
         }
 
         // Read frames - joint hash is embedded in each frame
         let mut joint_frames: HashMap<u32, Vec<UncompressedFrame>> =
-            HashMap::with_capacity(track_count);
+            HashMap::with_untrusted_capacity(track_count);
 
         reader.seek(SeekFrom::Start(frames_offset as u64 + 12))?;
         for frame_id in 0..frame_count {
@@ -250,15 +282,31 @@ impl Uncompressed {
                 let rotation_id = reader.read_u16::<LE>()?;
                 let _padding = reader.read_u16::<LE>()?;
 
-                let frames = joint_frames
-                    .entry(joint_hash)
-                    .or_insert_with(|| vec![UncompressedFrame::default(); frame_count]);
+                // Each joint takes one track.
+                let joint_count = joint_frames.len();
+                let frames = match joint_frames.entry(joint_hash) {
+                    Entry::Occupied(entry) => entry.into_mut(),
+                    Entry::Vacant(entry) if joint_count < track_count => entry.insert(Vec::new()),
+                    Entry::Vacant(_) => {
+                        return Err(asset::AssetParseError::InvalidField(
+                            "joint hashes",
+                            format!("more joint hashes than the {track_count} tracks"),
+                        ));
+                    }
+                };
+                // A joint holds the default frame at each frame that does not key it.
+                if frames.len() <= frame_id {
+                    frames.resize(frame_id + 1, UncompressedFrame::default());
+                }
                 frames[frame_id] = UncompressedFrame {
                     translation_id,
                     scale_id,
                     rotation_id,
                 };
             }
+        }
+        for frames in joint_frames.values_mut() {
+            frames.resize(frame_count, UncompressedFrame::default());
         }
 
         Ok(Self {
@@ -285,10 +333,11 @@ impl Uncompressed {
         let duration = frame_count as f32 / fps;
 
         // Build palettes and frames as we read
-        let mut quat_palette = Vec::with_capacity(frame_count * track_count);
-        let mut vector_palette = Vec::with_capacity(frame_count * track_count + 1);
+        let key_count = frame_count.saturating_mul(track_count);
+        let mut quat_palette = Vec::with_untrusted_capacity(key_count);
+        let mut vector_palette = Vec::with_untrusted_capacity(key_count.saturating_add(1));
         let mut joint_frames: HashMap<u32, Vec<UncompressedFrame>> =
-            HashMap::with_capacity(track_count);
+            HashMap::with_untrusted_capacity(track_count);
 
         // Add artificial static scale vector at index 0
         vector_palette.push(Vec3::ONE);
@@ -299,7 +348,7 @@ impl Uncompressed {
             let joint_hash = elf::elf(&joint_name) as u32;
             let _flags = reader.read_u32::<LE>()?;
 
-            let mut frames = Vec::with_capacity(frame_count);
+            let mut frames = Vec::with_untrusted_capacity(frame_count);
 
             for _ in 0..frame_count {
                 // Read rotation (quaternion) and translation directly

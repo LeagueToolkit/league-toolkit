@@ -1,6 +1,6 @@
 use byteorder::{ReadBytesExt, LE};
 use glam::Mat4;
-use ltk_io_ext::ReaderExt;
+use ltk_io_ext::{ReaderError, ReaderExt};
 use std::io;
 use std::io::Read;
 
@@ -17,7 +17,10 @@ impl LegacyJoint {
     pub fn from_reader<R: Read + ?Sized>(reader: &mut R, id: i16) -> io::Result<Self> {
         let name = reader
             .read_padded_string::<LE, 32>()
-            .expect("FIXME: better error here");
+            .map_err(|error| match error {
+                ReaderError::ReaderError(error) => error,
+                error => io::Error::new(io::ErrorKind::InvalidData, error),
+            })?;
         let parent_id = reader.read_i32::<LE>()? as i16;
         let radius = reader.read_f32::<LE>()?;
         let mut transform = [[0.0; 4]; 4];

@@ -18,7 +18,7 @@ impl RigResource {
     fn read<R: Read + Seek + ?Sized>(reader: &mut R) -> crate::Result<Self> {
         use crate::{Joint, ParseError};
         use byteorder::{ReadBytesExt, LE};
-        use ltk_io_ext::ReaderExt;
+        use ltk_io_ext::{untrusted::UntrustedCapacity, ReaderExt};
         use std::io::SeekFrom;
 
         let _file_size = reader.read_u32::<LE>()?;
@@ -43,7 +43,7 @@ impl RigResource {
             reader.read_i32::<LE>()?;
         }
 
-        let mut joints = Vec::with_capacity(joint_count);
+        let mut joints = Vec::with_untrusted_capacity(joint_count);
         if joints_off > 0 {
             reader.seek(SeekFrom::Start(joints_off as u64))?;
             for _ in 0..joint_count {
@@ -51,7 +51,7 @@ impl RigResource {
             }
         }
 
-        let mut influences = Vec::with_capacity(influences_count);
+        let mut influences = Vec::with_untrusted_capacity(influences_count);
         if influences_off > 0 {
             reader.seek(SeekFrom::Start(influences_off as u64))?;
             for _ in 0..influences_count {
@@ -60,7 +60,7 @@ impl RigResource {
         }
 
         // These are sorted by hash in ascending order
-        let mut joint_hash_ids = Vec::with_capacity(joint_count);
+        let mut joint_hash_ids = Vec::with_untrusted_capacity(joint_count);
         if joint_indices_off > 0 {
             reader.seek(SeekFrom::Start(joint_indices_off as u64))?;
             for _ in 0..joint_count {
