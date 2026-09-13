@@ -1,4 +1,5 @@
-//! One read-only traversal over every node of a bin object, driven by a [`Visitor`].
+//! One traversal over every node of a bin object, driven by a [`Visitor`], or by a
+//! [`VisitorMut`] that edits the owned tree as it goes.
 //!
 //! The walk is written once, against two sealed traits - [`TreeValue`] and [`TreeNode`] - that
 //! the owned tree (`&PropertyValueEnum<M>`) and the streaming view ([`ValueView`]) both
@@ -14,6 +15,10 @@
 //! The walk carries a [`Trail`]: the steps from the object's root to the current position,
 //! borrowing the tree and allocating nothing per step. A visitor renders it for a node it
 //! reports on and for nothing else.
+//!
+//! [`BinObject::walk_mut`], [`Bin::walk_mut`] and [`BinOverride::walk_mut`] run the same
+//! traversal over the owned tree through `&mut`. A [`VisitorMut`] edits a node's property map
+//! from [`NodeMut`] and a property's value from [`PropertyMut`], under the same [`Trail`].
 //!
 //! ```
 //! use ltk_hash::BinHash;
@@ -55,6 +60,7 @@
 //! # Ok::<(), Error>(())
 //! ```
 
+mod mutable;
 mod owned;
 mod tree;
 mod view;
@@ -62,6 +68,7 @@ mod view;
 #[cfg(test)]
 mod tests;
 
+pub use mutable::{NodeMut, PropertyMut, VisitorMut};
 pub use owned::{OwnedChildren, OwnedNode, OwnedProperties};
 pub use tree::{Child, Leaf, TreeKind, TreeNode, TreeValue};
 pub use view::{ViewChildren, ViewProperties};
