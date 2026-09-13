@@ -7,7 +7,9 @@ use glam::{Mat4, Vec2, Vec3, Vec4};
 use ltk_hash::BinHash;
 use ltk_primitives::Color;
 
-use super::{Leaf, Node, TreeNode, TreeValue, Visit, Visitor, WalkOutcome};
+use super::{
+    Leaf, Node, NodeMut, PropertyMut, TreeNode, TreeValue, Visit, Visitor, VisitorMut, WalkOutcome,
+};
 use crate::{
     concrete::{self, values, Bin, BinObject},
     property::values::{Embedded, UnorderedContainer},
@@ -357,6 +359,76 @@ impl<'a, V: TreeValue<'a>> Visitor<'a, V> for Recorder {
     }
 }
 
+impl VisitorMut for Recorder {
+    type Error = Error;
+
+    fn enter_node(&mut self, node: &mut NodeMut<'_>) -> Result<Visit, Error> {
+        self.record(Event::EnterNode {
+            object: node.object_hash().0,
+            class: node.class_hash().0,
+            trail: node.trail().to_string(),
+            classes: hashes(node.trail().classes()),
+        })
+    }
+
+    fn exit_node(&mut self, node: &mut NodeMut<'_>) -> Result<Visit, Error> {
+        self.record(Event::ExitNode {
+            class: node.class_hash().0,
+            trail: node.trail().to_string(),
+        })
+    }
+
+    fn enter_property(&mut self, property: &mut PropertyMut<'_>) -> Result<Visit, Error> {
+        self.record(Event::EnterProperty {
+            field: property.field().0,
+            trail: property.trail().to_string(),
+            holds_node: property.value().holds_node()?,
+        })
+    }
+
+    fn exit_property(&mut self, property: &mut PropertyMut<'_>) -> Result<Visit, Error> {
+        self.record(Event::ExitProperty {
+            field: property.field().0,
+            trail: property.trail().to_string(),
+        })
+    }
+}
+
+/// Runs a recorder over a copy of `bin` through the mutable walk, and checks the copy is
+/// unchanged.
+fn record_mut(
+    bin: &Bin,
+    answer: fn(&Event) -> Result<Visit, Error>,
+) -> (Recorder, Result<WalkOutcome, Error>) {
+    let mut copy = bin.clone();
+    let mut recorder = Recorder::new(answer);
+    let outcome = copy.walk_mut(&mut recorder);
+    assert_eq!(&copy, bin, "a visitor that edits nothing changed the tree");
+    (recorder, outcome)
+}
+
+/// [`walk_both`] with a recorder, checking the mutable walk records the same events and ends the
+/// same way.
+fn walk_recorders(
+    bin: &Bin,
+    answer: fn(&Event) -> Result<Visit, Error>,
+) -> [(Recorder, Result<WalkOutcome, Error>); 2] {
+    let both = walk_both(bin, || Recorder::new(answer));
+    let (mutable, outcome) = record_mut(bin, answer);
+    assert_eq!(mutable.events, both[0].0.events, "the mutable walk differs");
+    assert_eq!(
+        outcome.as_ref().ok(),
+        both[0].1.as_ref().ok(),
+        "the mutable walk ended differently"
+    );
+    assert_eq!(
+        outcome.as_ref().err().map(ToString::to_string),
+        both[0].1.as_ref().err().map(ToString::to_string),
+        "the mutable walk failed differently"
+    );
+    both
+}
+
 /// Runs one visitor over the owned tree and another over the view of the same bytes.
 fn walk_both<W>(bin: &Bin, make: impl Fn() -> W) -> [(W, Result<WalkOutcome, Error>); 2]
 where
@@ -378,7 +450,7 @@ fn always_continue(_: &Event) -> Result<Visit, Error> {
 }
 
 fn record_both(bin: &Bin, answer: fn(&Event) -> Result<Visit, Error>) -> [Recorder; 2] {
-    let [(owned, a), (viewed, b)] = walk_both(bin, || Recorder::new(answer));
+    let [(owned, a), (viewed, b)] = walk_recorders(bin, answer);
     assert_eq!(
         a.as_ref().ok(),
         b.as_ref().ok(),
@@ -610,8 +682,7 @@ fn stop_unwinds_every_open_exit_and_reports_stopped() {
             _ => Visit::Continue,
         })
     }
-    let [(owned, outcome), (_, viewed_outcome)] =
-        walk_both(&fixture(), || Recorder::new(stop_at_c9));
+    let [(owned, outcome), (_, viewed_outcome)] = walk_recorders(&fixture(), stop_at_c9);
     assert_eq!(outcome.unwrap(), WalkOutcome::Stopped);
     assert_eq!(viewed_outcome.unwrap(), WalkOutcome::Stopped);
     let at = owned
@@ -656,7 +727,7 @@ fn stop_from_enter_property_exits_a_property_that_holds_a_node() {
             _ => Visit::Continue,
         })
     }
-    let [(owned, outcome), _] = walk_both(&fixture(), || Recorder::new(stop_at_struct));
+    let [(owned, outcome), _] = walk_recorders(&fixture(), stop_at_struct);
     assert_eq!(outcome.unwrap(), WalkOutcome::Stopped);
     assert_eq!(
         &owned.events[2..],
@@ -681,8 +752,7 @@ fn abort_runs_no_further_callback_and_reports_aborted() {
             _ => Visit::Continue,
         })
     }
-    let [(owned, outcome), (viewed, viewed_outcome)] =
-        walk_both(&fixture(), || Recorder::new(abort_at_c9));
+    let [(owned, outcome), (viewed, viewed_outcome)] = walk_recorders(&fixture(), abort_at_c9);
     assert_eq!(outcome.unwrap(), WalkOutcome::Aborted);
     assert_eq!(viewed_outcome.unwrap(), WalkOutcome::Aborted);
     assert!(matches!(
@@ -700,8 +770,7 @@ fn a_visitor_error_ends_the_walk_like_an_abort() {
             _ => Ok(Visit::Continue),
         }
     }
-    let [(owned, outcome), (viewed, viewed_outcome)] =
-        walk_both(&fixture(), || Recorder::new(fail_at_c9));
+    let [(owned, outcome), (viewed, viewed_outcome)] = walk_recorders(&fixture(), fail_at_c9);
     assert!(matches!(outcome, Err(Error::EmptyContainer)));
     assert!(matches!(viewed_outcome, Err(Error::EmptyContainer)));
     assert!(matches!(
@@ -880,7 +949,7 @@ fn stop_on_a_leaf_property_exits_nothing_for_it() {
             _ => Visit::Continue,
         })
     }
-    let [(owned, outcome), _] = walk_both(&fixture(), || Recorder::new(stop_at_strings));
+    let [(owned, outcome), _] = walk_recorders(&fixture(), stop_at_strings);
     assert_eq!(outcome.unwrap(), WalkOutcome::Stopped);
     let at = owned
         .events
@@ -912,7 +981,7 @@ fn stop_and_abort_from_an_exit_end_the_walk() {
             _ => Visit::Continue,
         })
     }
-    let [(owned, outcome), _] = walk_both(&fixture(), || Recorder::new(stop_at_exit_property));
+    let [(owned, outcome), _] = walk_recorders(&fixture(), stop_at_exit_property);
     assert_eq!(outcome.unwrap(), WalkOutcome::Stopped);
     let at = owned
         .events
@@ -943,7 +1012,7 @@ fn stop_and_abort_from_an_exit_end_the_walk() {
             _ => Visit::Continue,
         })
     }
-    let [(owned, outcome), _] = walk_both(&fixture(), || Recorder::new(abort_at_exit_node));
+    let [(owned, outcome), _] = walk_recorders(&fixture(), abort_at_exit_node);
     assert_eq!(outcome.unwrap(), WalkOutcome::Aborted);
     assert!(matches!(
         owned.events.last(),
@@ -1141,3 +1210,5 @@ fn a_mutable_reference_to_a_visitor_is_a_visitor() {
     bin.walk(&mut by_ref).unwrap();
     assert_eq!(recorder.nodes().len(), EXPECTED_NODES.len());
 }
+
+mod mutable;
