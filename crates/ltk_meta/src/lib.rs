@@ -185,6 +185,80 @@ Across many files the same shape applies one level up: one task per file, each m
 own [`BinStream`] and walking it sequentially. The per-object walk is microseconds;
 decompression and I/O are where a sweep spends its time.
 
+### Editing and saving
+
+[`walk::VisitorMut`] runs the same traversal over an owned object through `&mut`: a node
+callback edits the node's properties, a property callback edits or replaces the value, and the
+trail is the read-only walk's. [`BinDelta`] holds whole-object edits against a mounted
+[`BinStream`], and [`BinStream::write_patched`] writes the file with them applied: every object
+the delta does not name is copied byte for byte, and only the edited ones are encoded.
+
+```
+use std::io::Cursor;
+use ltk_hash::{BinHash, Hash as _};
+use ltk_meta::{
+    concrete::{values, BinDelta, BinStream},
+    walk::{PropertyMut, Visit, VisitorMut},
+    Error, PropertyValueEnum,
+};
+
+const NAME: BinHash = BinHash(0x0000_0002);
+
+/// Rewrites every `String` under one field as the hash of its text.
+#[derive(Default)]
+struct Rehash {
+    changed: usize,
+}
+
+impl VisitorMut for Rehash {
+    type Error = Error;
+
+    fn enter_property(&mut self, property: &mut PropertyMut<'_>) -> Result<Visit, Error> {
+        if property.field() != NAME {
+            return Ok(Visit::Continue);
+        }
+        let PropertyValueEnum::String(text) = property.value() else {
+            return Ok(Visit::Continue);
+        };
+        let hash = values::Hash::new(BinHash::hash_str(&text.value));
+        *property.value_mut() = hash.into();
+        self.changed += 1;
+        Ok(Visit::Continue)
+    }
+}
+
+# let bin = ltk_meta::concrete::Bin::builder()
+#     .object(
+#         ltk_meta::concrete::BinObject::builder(0x1111_0001u32, 0xAAAA_0001u32)
+#             .property(NAME, values::String::from("hello"))
+#             .build(),
+#     )
+#     .object(ltk_meta::concrete::BinObject::builder(0x1111_0002u32, 0xAAAA_0002u32).build())
+#     .build();
+# let mut file = Cursor::new(Vec::new());
+# bin.to_writer(&mut file)?;
+# let bytes = file.into_inner();
+let mut stream = BinStream::mount(Cursor::new(bytes))?;
+let mut delta = BinDelta::new();
+
+let mut objects = stream.objects_batch([0x1111_0001u32]);
+while let Some(mut object) = objects.next()? {
+    let mut object = object.read()?;
+    let mut rehash = Rehash::default();
+    object.walk_mut(&mut rehash)?;
+    if rehash.changed > 0 {
+        delta.replace(object);
+    }
+}
+
+let mut out = Vec::new();
+stream.write_patched(&delta, &mut out)?;
+# Ok::<(), Error>(())
+```
+
+A handle latched onto the legacy kind numbering refuses the delta; `into_bin()` and
+[`Bin::to_writer`] transcode the whole file instead.
+
 ### Modifying a bin file
 
 ```no_run
@@ -316,9 +390,10 @@ pub use file::{BinFile, BinKind};
 
 pub mod stream;
 pub use stream::{
-    BatchObjects, BinStream, BinToc, ContainerItems, ContainerView, Entries, LruObjectCache,
-    MapEntries, MapView, NoCache, Numbering, ObjectCache, ObjectEntry, ObjectStream, ObjectView,
-    Objects, OptionalView, Properties, PropertyView, StructView, ValueView,
+    BatchObjects, BinDelta, BinStream, BinToc, ContainerItems, ContainerView, Entries,
+    LruObjectCache, MapEntries, MapView, NoCache, Numbering, ObjectCache, ObjectEntry,
+    ObjectStream, ObjectView, Objects, OptionalView, Properties, PropertyView, StructView,
+    ValueView,
 };
 
 mod error;

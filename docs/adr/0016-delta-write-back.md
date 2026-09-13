@@ -55,8 +55,8 @@ also holds, is an error before any byte is written.
 
 - **Positive:** a one-object edit reads the file's header and TOC and that object, and writes the
   rest as copies: 1.73 s against 10.44 s for a transcode, summed over the 49,291 `PROP` chunks of a
-  16.18 install (`bin-streaming.md` [appendix C](../design/bin-streaming.md#appendix-c)). An untouched object keeps every byte, a kind with no widget and a hash no table
-  names included. The version passes through. The manager's repair and the editor's save share one
+  16.18 install (`bin-streaming.md` [appendix C](../design/bin-streaming.md#appendix-c)). An
+  untouched object keeps every byte, a kind with no widget and a hash no table names included. The version passes through. The manager's repair and the editor's save share one
   writer, and the edit itself is ADR-0015's `walk_mut` over the object `read()` returned.
 - **Negative:** a refusal case a transcode does not have, for a legacy-numbered base, and a
   fallback the consumer carries for it. The latch settles only as objects are read, and a base whose
