@@ -97,7 +97,7 @@ impl Container {
     ///
     /// A whole-item replace through one of these skips the kind check [`Container::slot`] makes.
     /// A caller edits inside an item and never replaces one.
-    pub(crate) fn items_mut(&mut self) -> std::slice::IterMut<'_, PropertyValueEnum<M>> {
+    pub(crate) fn items_mut(&mut self) -> std::slice::IterMut<'_, PropertyValueEnum> {
         self.items.iter_mut()
     }
 

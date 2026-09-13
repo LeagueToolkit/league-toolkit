@@ -77,7 +77,7 @@ impl Map {
     /// caller edits inside a value and never replaces one.
     pub(crate) fn entries_mut(
         &mut self,
-    ) -> impl Iterator<Item = (&PropertyValueEnum<M>, &mut PropertyValueEnum<M>)> {
+    ) -> impl Iterator<Item = (&PropertyValueEnum, &mut PropertyValueEnum)> {
         self.entries.iter_mut().map(|(key, value)| (&*key, value))
     }
 

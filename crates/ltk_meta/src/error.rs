@@ -41,6 +41,16 @@ pub enum Error {
     #[error("Mismatched types - expected {expected:?}, got {got:?}")]
     MismatchedContainerTypes { expected: Kind, got: Kind },
 
+    #[error(
+        "Cannot write a delta over a bin read with the legacy property kind numbering - \
+         transcode it with BinStream::into_bin and Bin::to_writer"
+    )]
+    DeltaLegacyNumbering,
+    #[error("The delta names object {0:08x}, which the base bin does not hold")]
+    DeltaMissingObject(BinHash),
+    #[error("The delta appends object {0:08x}, which the written bin also holds")]
+    DeltaDuplicateObject(BinHash),
+
     #[error(transparent)]
     ReaderError(#[from] ltk_io_ext::ReaderError),
     #[error("IO Error - {0}")]

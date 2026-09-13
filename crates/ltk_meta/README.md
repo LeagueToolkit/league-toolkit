@@ -226,7 +226,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     bin.walk(&mut census)?;
     println!("{} nodes, {} hits", census.nodes, census.hits.len());
 
-    let mut stream = ltk_meta::concrete::BinStream::mount(std::fs::File::open("data.bin")?)?;
+    let mut stream = ltk_meta::BinStream::mount(std::fs::File::open("data.bin")?)?;
     let mut census = Census::default();
     stream.walk(&mut census)?;
     Ok(())
@@ -267,6 +267,67 @@ println!("{} nodes, {} hits", counted.nodes, counted.hits.len());
 ```
 
 Across many files the same shape applies one level up: one task per file, each mounting its own `BinStream` and walking it sequentially. The per-object walk is microseconds; decompression and I/O are where a sweep spends its time.
+
+## Editing and saving
+
+`walk::VisitorMut` runs the same traversal over an owned object through `&mut`: a node
+callback edits the node's properties, a property callback edits or replaces the value, and the
+trail is the read-only walk's. `BinDelta` holds whole-object edits against a mounted
+`BinStream`, and `BinStream::write_patched` writes the file with them applied: every object
+the delta does not name is copied byte for byte, and only the edited ones are encoded.
+
+```rust
+use ltk_hash::{BinHash, Hash as _};
+use ltk_meta::{
+    property::values,
+    walk::{PropertyMut, Visit, VisitorMut},
+    BinDelta, BinStream, Error, PropertyValueEnum,
+};
+
+const NAME: BinHash = BinHash(0x0000_0002);
+
+/// Rewrites every `String` under one field as the hash of its text.
+#[derive(Default)]
+struct Rehash {
+    changed: usize,
+}
+
+impl VisitorMut for Rehash {
+    type Error = Error;
+
+    fn enter_property(&mut self, property: &mut PropertyMut<'_>) -> Result<Visit, Error> {
+        if property.field() != NAME {
+            return Ok(Visit::Continue);
+        }
+        let PropertyValueEnum::String(text) = property.value() else {
+            return Ok(Visit::Continue);
+        };
+        let hash = values::Hash::new(BinHash::hash_str(&text.value));
+        *property.value_mut() = hash.into();
+        self.changed += 1;
+        Ok(Visit::Continue)
+    }
+}
+
+let mut stream = BinStream::mount(std::fs::File::open("data.bin")?)?;
+let mut delta = BinDelta::new();
+
+let mut objects = stream.objects_batch([0x1111_0001u32]);
+while let Some(mut object) = objects.next()? {
+    let mut object = object.read()?;
+    let mut rehash = Rehash::default();
+    object.walk_mut(&mut rehash)?;
+    if rehash.changed > 0 {
+        delta.replace(object);
+    }
+}
+
+let mut out = Vec::new();
+stream.write_patched(&delta, &mut out)?;
+```
+
+A handle latched onto the legacy kind numbering refuses the delta; `into_bin()` and
+`Bin::to_writer` transcode the whole file instead.
 
 ## Creating one programmatically
 

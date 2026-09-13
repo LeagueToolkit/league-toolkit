@@ -47,6 +47,9 @@ pub use cache::{LruObjectCache, NoCache, ObjectCache};
 mod cursor;
 pub use cursor::{Entries, ObjectStream, Objects};
 
+mod delta;
+pub use delta::BinDelta;
+
 pub(crate) mod owned;
 
 mod prop;

@@ -10,10 +10,7 @@ use indexmap::IndexMap;
 use ltk_hash::BinHash;
 
 use super::{Interrupt, OwnedNode, Resume, Trail, TrailStep, TreeValue as _, Visit, WalkOutcome};
-use crate::{
-    property::{values, NoMeta},
-    Bin, BinObject, BinOverride, Error, PropertyValueEnum,
-};
+use crate::{property::values, Bin, BinObject, BinOverride, Error, PropertyValueEnum};
 
 /// What a mutable walk calls.
 ///
@@ -26,7 +23,7 @@ use crate::{
     unused_variables,
     reason = "the defaults name their parameters for the reader and use none of them"
 )]
-pub trait VisitorMut<M = NoMeta> {
+pub trait VisitorMut {
     /// The visitor's own error. The crate's errors convert into it.
     type Error: From<Error>;
 
@@ -37,7 +34,7 @@ pub trait VisitorMut<M = NoMeta> {
     /// # Errors
     ///
     /// The visitor's own. An error ends the walk at once, as an [`Visit::Abort`] does.
-    fn enter_node(&mut self, node: &mut NodeMut<'_, M>) -> Result<Visit, Self::Error> {
+    fn enter_node(&mut self, node: &mut NodeMut<'_>) -> Result<Visit, Self::Error> {
         Ok(Visit::Continue)
     }
 
@@ -47,7 +44,7 @@ pub trait VisitorMut<M = NoMeta> {
     /// # Errors
     ///
     /// The visitor's own. An error ends the walk at once, as an [`Visit::Abort`] does.
-    fn exit_node(&mut self, node: &mut NodeMut<'_, M>) -> Result<Visit, Self::Error> {
+    fn exit_node(&mut self, node: &mut NodeMut<'_>) -> Result<Visit, Self::Error> {
         Ok(Visit::Continue)
     }
 
@@ -59,7 +56,7 @@ pub trait VisitorMut<M = NoMeta> {
     /// # Errors
     ///
     /// The visitor's own. An error ends the walk at once, as an [`Visit::Abort`] does.
-    fn enter_property(&mut self, property: &mut PropertyMut<'_, M>) -> Result<Visit, Self::Error> {
+    fn enter_property(&mut self, property: &mut PropertyMut<'_>) -> Result<Visit, Self::Error> {
         Ok(Visit::Continue)
     }
 
@@ -70,29 +67,29 @@ pub trait VisitorMut<M = NoMeta> {
     /// # Errors
     ///
     /// The visitor's own. An error ends the walk at once, as an [`Visit::Abort`] does.
-    fn exit_property(&mut self, property: &mut PropertyMut<'_, M>) -> Result<Visit, Self::Error> {
+    fn exit_property(&mut self, property: &mut PropertyMut<'_>) -> Result<Visit, Self::Error> {
         Ok(Visit::Continue)
     }
 }
 
-/// A `&mut W` is a mutable visitor. A `&mut dyn VisitorMut<M, Error = E>` passes where one is
+/// A `&mut W` is a mutable visitor. A `&mut dyn VisitorMut<Error = E>` passes where one is
 /// wanted.
-impl<M, W: VisitorMut<M> + ?Sized> VisitorMut<M> for &mut W {
+impl<W: VisitorMut + ?Sized> VisitorMut for &mut W {
     type Error = W::Error;
 
-    fn enter_node(&mut self, node: &mut NodeMut<'_, M>) -> Result<Visit, Self::Error> {
+    fn enter_node(&mut self, node: &mut NodeMut<'_>) -> Result<Visit, Self::Error> {
         (**self).enter_node(node)
     }
 
-    fn exit_node(&mut self, node: &mut NodeMut<'_, M>) -> Result<Visit, Self::Error> {
+    fn exit_node(&mut self, node: &mut NodeMut<'_>) -> Result<Visit, Self::Error> {
         (**self).exit_node(node)
     }
 
-    fn enter_property(&mut self, property: &mut PropertyMut<'_, M>) -> Result<Visit, Self::Error> {
+    fn enter_property(&mut self, property: &mut PropertyMut<'_>) -> Result<Visit, Self::Error> {
         (**self).enter_property(property)
     }
 
-    fn exit_property(&mut self, property: &mut PropertyMut<'_, M>) -> Result<Visit, Self::Error> {
+    fn exit_property(&mut self, property: &mut PropertyMut<'_>) -> Result<Visit, Self::Error> {
         (**self).exit_property(property)
     }
 }
@@ -101,14 +98,14 @@ impl<M, W: VisitorMut<M> + ?Sized> VisitorMut<M> for &mut W {
 ///
 /// The class hash is read-only. A node inside a container, optional or map keeps the kind its
 /// holder declares.
-pub struct NodeMut<'t, M = NoMeta> {
+pub struct NodeMut<'t> {
     object_hash: BinHash,
     class_hash: BinHash,
-    properties: &'t mut IndexMap<BinHash, PropertyValueEnum<M>>,
-    trail: &'t Trail<&'t PropertyValueEnum<M>>,
+    properties: &'t mut IndexMap<BinHash, PropertyValueEnum>,
+    trail: &'t Trail<&'t PropertyValueEnum>,
 }
 
-impl<'t, M> NodeMut<'t, M> {
+impl<'t> NodeMut<'t> {
     /// The path hash of the object this node is in, or is.
     #[must_use]
     pub fn object_hash(&self) -> BinHash {
@@ -123,7 +120,7 @@ impl<'t, M> NodeMut<'t, M> {
 
     /// Where the node is: empty at the root. A map key in it is borrowed for the callback.
     #[must_use]
-    pub fn trail(&self) -> &'t Trail<&'t PropertyValueEnum<M>> {
+    pub fn trail(&self) -> &'t Trail<&'t PropertyValueEnum> {
         self.trail
     }
 
@@ -136,24 +133,24 @@ impl<'t, M> NodeMut<'t, M> {
     /// The node read-only, as the read-only walk sees it: lookup by field, and
     /// [`TreeNode::to_struct`](super::TreeNode::to_struct).
     #[must_use]
-    pub fn inner(&self) -> OwnedNode<'_, M> {
+    pub fn inner(&self) -> OwnedNode<'_> {
         OwnedNode::new(self.class_hash, self.properties)
     }
 
     /// The node's properties, in property order.
     #[must_use]
-    pub fn properties(&self) -> &IndexMap<BinHash, PropertyValueEnum<M>> {
+    pub fn properties(&self) -> &IndexMap<BinHash, PropertyValueEnum> {
         self.properties
     }
 
     /// The node's properties, to insert, remove, reorder or edit.
     #[must_use]
-    pub fn properties_mut(&mut self) -> &mut IndexMap<BinHash, PropertyValueEnum<M>> {
+    pub fn properties_mut(&mut self) -> &mut IndexMap<BinHash, PropertyValueEnum> {
         self.properties
     }
 }
 
-impl<M> fmt::Debug for NodeMut<'_, M> {
+impl fmt::Debug for NodeMut<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("NodeMut")
             .field("object_hash", &self.object_hash)
@@ -167,15 +164,15 @@ impl<M> fmt::Debug for NodeMut<'_, M> {
 /// One property of a mutable walk: where it is, and its value.
 ///
 /// A property of a node carries no kind pin: the value can be replaced by a value of any kind.
-pub struct PropertyMut<'t, M = NoMeta> {
+pub struct PropertyMut<'t> {
     object_hash: BinHash,
     node_class_hash: BinHash,
     field: BinHash,
-    value: &'t mut PropertyValueEnum<M>,
-    trail: &'t Trail<&'t PropertyValueEnum<M>>,
+    value: &'t mut PropertyValueEnum,
+    trail: &'t Trail<&'t PropertyValueEnum>,
 }
 
-impl<'t, M> PropertyMut<'t, M> {
+impl<'t> PropertyMut<'t> {
     /// The path hash of the object the property is in.
     #[must_use]
     pub fn object_hash(&self) -> BinHash {
@@ -197,24 +194,24 @@ impl<'t, M> PropertyMut<'t, M> {
     /// Where the node the property is on is: empty at the root. A map key in it is borrowed for
     /// the callback.
     #[must_use]
-    pub fn trail(&self) -> &'t Trail<&'t PropertyValueEnum<M>> {
+    pub fn trail(&self) -> &'t Trail<&'t PropertyValueEnum> {
         self.trail
     }
 
     /// The value.
     #[must_use]
-    pub fn value(&self) -> &PropertyValueEnum<M> {
+    pub fn value(&self) -> &PropertyValueEnum {
         self.value
     }
 
     /// The value, to edit, or to replace with a value of any kind.
     #[must_use]
-    pub fn value_mut(&mut self) -> &mut PropertyValueEnum<M> {
+    pub fn value_mut(&mut self) -> &mut PropertyValueEnum {
         self.value
     }
 }
 
-impl<M> fmt::Debug for PropertyMut<'_, M> {
+impl fmt::Debug for PropertyMut<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("PropertyMut")
             .field("object_hash", &self.object_hash)
@@ -230,12 +227,12 @@ impl<M> fmt::Debug for PropertyMut<'_, M> {
 ///
 /// `'w` is the borrow of the objects the walker walks. A key in the trail is typed for `'w` and is
 /// valid only while it is on the trail.
-struct WalkerMut<'w, M> {
+struct WalkerMut<'w> {
     object_hash: BinHash,
-    trail: Trail<&'w PropertyValueEnum<M>>,
+    trail: Trail<&'w PropertyValueEnum>,
 }
 
-impl<'w, M: 'w> WalkerMut<'w, M> {
+impl<'w> WalkerMut<'w> {
     fn new() -> Self {
         Self {
             // A placeholder: `walk_object` sets the hash before any callback reads it.
@@ -246,9 +243,9 @@ impl<'w, M: 'w> WalkerMut<'w, M> {
 
     /// Walks one object, and reports how it ended. The trail is empty afterwards, however the
     /// walk ended.
-    fn walk_object<W: VisitorMut<M>>(
+    fn walk_object<W: VisitorMut>(
         &mut self,
-        object: &'w mut BinObject<M>,
+        object: &'w mut BinObject,
         visitor: &mut W,
     ) -> Result<WalkOutcome, W::Error> {
         self.object_hash = object.path_hash;
@@ -265,8 +262,8 @@ impl<'w, M: 'w> WalkerMut<'w, M> {
     fn node<'t>(
         &'t self,
         class_hash: BinHash,
-        properties: &'t mut IndexMap<BinHash, PropertyValueEnum<M>>,
-    ) -> NodeMut<'t, M> {
+        properties: &'t mut IndexMap<BinHash, PropertyValueEnum>,
+    ) -> NodeMut<'t> {
         NodeMut {
             object_hash: self.object_hash,
             class_hash,
@@ -279,8 +276,8 @@ impl<'w, M: 'w> WalkerMut<'w, M> {
         &'t self,
         node_class_hash: BinHash,
         field: BinHash,
-        value: &'t mut PropertyValueEnum<M>,
-    ) -> PropertyMut<'t, M> {
+        value: &'t mut PropertyValueEnum,
+    ) -> PropertyMut<'t> {
         PropertyMut {
             object_hash: self.object_hash,
             node_class_hash,
@@ -290,10 +287,10 @@ impl<'w, M: 'w> WalkerMut<'w, M> {
         }
     }
 
-    fn walk_node<W: VisitorMut<M>>(
+    fn walk_node<W: VisitorMut>(
         &mut self,
         class_hash: BinHash,
-        properties: &mut IndexMap<BinHash, PropertyValueEnum<M>>,
+        properties: &mut IndexMap<BinHash, PropertyValueEnum>,
         visitor: &mut W,
     ) -> Result<ControlFlow<Interrupt, Resume>, W::Error> {
         let walked = match visitor.enter_node(&mut self.node(class_hash, properties))? {
@@ -319,10 +316,10 @@ impl<'w, M: 'w> WalkerMut<'w, M> {
         )
     }
 
-    fn walk_properties<W: VisitorMut<M>>(
+    fn walk_properties<W: VisitorMut>(
         &mut self,
         class_hash: BinHash,
-        properties: &mut IndexMap<BinHash, PropertyValueEnum<M>>,
+        properties: &mut IndexMap<BinHash, PropertyValueEnum>,
         visitor: &mut W,
     ) -> Result<ControlFlow<Interrupt>, W::Error> {
         for (&field, value) in properties.iter_mut() {
@@ -367,9 +364,9 @@ impl<'w, M: 'w> WalkerMut<'w, M> {
 
     /// Descends a value that holds a node: the node itself, or every item of a container,
     /// optional or map.
-    fn descend<W: VisitorMut<M>>(
+    fn descend<W: VisitorMut>(
         &mut self,
-        value: &mut PropertyValueEnum<M>,
+        value: &mut PropertyValueEnum,
         visitor: &mut W,
     ) -> Result<ControlFlow<Interrupt>, W::Error> {
         match value {
@@ -407,7 +404,7 @@ impl<'w, M: 'w> WalkerMut<'w, M> {
                     // which is disjoint from the key. A callback sees the trail under a borrow of
                     // its own length and cannot keep a key past it. A panic between push and pop
                     // leaves the key in a trail that is dropped and never read.
-                    let key: &'w PropertyValueEnum<M> = unsafe { &*ptr::from_ref(key) };
+                    let key: &'w PropertyValueEnum = unsafe { &*ptr::from_ref(key) };
                     self.trail.push(TrailStep::Key(key));
                     let walked = self.walk_node(node.class_hash, &mut node.properties, visitor);
                     self.trail.pop();
@@ -424,14 +421,11 @@ impl<'w, M: 'w> WalkerMut<'w, M> {
     }
 
     /// Descends the nodes among `items`, stepping into each by its index.
-    fn descend_items<'i, W: VisitorMut<M>>(
+    fn descend_items<'i, W: VisitorMut>(
         &mut self,
-        items: impl Iterator<Item = &'i mut PropertyValueEnum<M>>,
+        items: impl Iterator<Item = &'i mut PropertyValueEnum>,
         visitor: &mut W,
-    ) -> Result<ControlFlow<Interrupt>, W::Error>
-    where
-        M: 'i,
-    {
+    ) -> Result<ControlFlow<Interrupt>, W::Error> {
         for (index, item) in items.enumerate() {
             let Some(node) = as_node_mut(item) else {
                 continue;
@@ -450,7 +444,7 @@ impl<'w, M: 'w> WalkerMut<'w, M> {
 }
 
 /// `value` as a node, if it is a `Struct` or `Embedded` with a class hash that is not 0.
-fn as_node_mut<M>(value: &mut PropertyValueEnum<M>) -> Option<&mut values::Struct<M>> {
+fn as_node_mut(value: &mut PropertyValueEnum) -> Option<&mut values::Struct> {
     let node = match value {
         PropertyValueEnum::Struct(node) => node,
         PropertyValueEnum::Embedded(embedded) => &mut embedded.0,
@@ -460,8 +454,8 @@ fn as_node_mut<M>(value: &mut PropertyValueEnum<M>) -> Option<&mut values::Struc
 }
 
 /// Walks `objects` in order through one walker. A `Stop` or `Abort` ends the whole walk.
-fn walk_all_mut<'w, M: 'w, W: VisitorMut<M>>(
-    objects: impl IntoIterator<Item = &'w mut BinObject<M>>,
+fn walk_all_mut<'w, W: VisitorMut>(
+    objects: impl IntoIterator<Item = &'w mut BinObject>,
     visitor: &mut W,
 ) -> Result<WalkOutcome, W::Error> {
     let mut walker = WalkerMut::new();
@@ -474,7 +468,7 @@ fn walk_all_mut<'w, M: 'w, W: VisitorMut<M>>(
     Ok(WalkOutcome::Completed)
 }
 
-impl<M> BinObject<M> {
+impl BinObject {
     /// Walks this object mutably, with the tree as each callback leaves it.
     ///
     /// The root, then every node beneath every property `visitor` enters.
@@ -482,30 +476,30 @@ impl<M> BinObject<M> {
     /// # Errors
     ///
     /// Whatever the visitor raises. The owned tree never fails on its own.
-    pub fn walk_mut<W: VisitorMut<M>>(&mut self, visitor: &mut W) -> Result<WalkOutcome, W::Error> {
+    pub fn walk_mut<W: VisitorMut>(&mut self, visitor: &mut W) -> Result<WalkOutcome, W::Error> {
         WalkerMut::new().walk_object(self, visitor)
     }
 }
 
-impl<M> Bin<M> {
+impl Bin {
     /// Walks every object mutably, in file order. A `Stop` or `Abort` ends the whole walk, not
     /// the current object.
     ///
     /// # Errors
     ///
     /// Whatever the visitor raises. The owned tree never fails on its own.
-    pub fn walk_mut<W: VisitorMut<M>>(&mut self, visitor: &mut W) -> Result<WalkOutcome, W::Error> {
+    pub fn walk_mut<W: VisitorMut>(&mut self, visitor: &mut W) -> Result<WalkOutcome, W::Error> {
         walk_all_mut(self.objects.values_mut(), visitor)
     }
 }
 
-impl<M> BinOverride<M> {
+impl BinOverride {
     /// Walks every embedded object mutably, in file order. Patch records are not walked.
     ///
     /// # Errors
     ///
     /// Whatever the visitor raises. The owned tree never fails on its own.
-    pub fn walk_mut<W: VisitorMut<M>>(&mut self, visitor: &mut W) -> Result<WalkOutcome, W::Error> {
+    pub fn walk_mut<W: VisitorMut>(&mut self, visitor: &mut W) -> Result<WalkOutcome, W::Error> {
         walk_all_mut(self.objects.values_mut(), visitor)
     }
 }
