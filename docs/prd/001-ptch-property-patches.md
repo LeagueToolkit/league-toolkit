@@ -9,7 +9,7 @@
   `.scratch/ptch-diff-merge/issues/`
 - **Spec:** `docs/design/ptch-property-patches.md`; `docs/design/value-walk.md` for the walk
   and `ValuePath`
-- **Decisions:** ADR-0001 to ADR-0006, ADR-0012 to ADR-0014
+- **Decisions:** ADR-0001 to ADR-0006, ADR-0012 to ADR-0015
 
 ## <a id="s1"></a>1. Problem
 
@@ -97,6 +97,9 @@ A consumer here is a crate, a tool, or a person building one.
   carrying the class each field was read on, and SHALL render an address in a form that is stable
   across machines and name tables and in a best-effort readable form that says how much of it a
   name table could spell.
+- **FR-15:** The crate SHALL let a visitor edit every node and every property value of an owned
+  object in one walk, addressed by the same trail and hash form as the read-only walk of FR-12, and
+  SHALL keep every container, optional and map holding only the kinds it declares.
 
 ### Non-functional
 
@@ -205,3 +208,6 @@ So the guarantee a mod carries, stated as a user should hear it:
       non-zero class exactly once, in file order, and for every position in a fixture tree with a
       complete name table the address renders to a path that resolves back to the same value
       (FR-12, FR-13).
+- [ ] **AC-8:** A mutable walk over every object in an install that edits nothing visits exactly
+      what the read-only walk visits, and an edit through it never leaves a container, optional
+      or map holding a kind it does not declare (FR-15).
