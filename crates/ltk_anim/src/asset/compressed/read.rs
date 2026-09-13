@@ -38,8 +38,17 @@ impl Compressed {
         let joint_count = reader.read_u32::<LE>()?;
         let frame_count = reader.read_u32::<LE>()?;
         let jump_cache_count = reader.read_i32::<LE>()?;
+        if jump_cache_count < 0 {
+            return Err(InvalidField(
+                "jump cache count",
+                jump_cache_count.to_string(),
+            ));
+        }
 
         let duration = reader.read_f32::<LE>()?;
+        if !duration.is_finite() || duration < 0.0 {
+            return Err(InvalidField("duration", duration.to_string()));
+        }
         let fps = reader.read_f32::<LE>()?;
 
         let rotation_error_metric = ErrorMetric::from_reader(reader)?;
@@ -79,6 +88,18 @@ impl Compressed {
         for _ in 0..frame_count {
             let mut frame = [0; size_of::<Frame>()];
             reader.read_exact(&mut frame)?;
+            // A frame stores `time` at bytes 0..2 and `joint_id` at bytes 2..4.
+            let raw_joint_id = u16::from_le_bytes([frame[2], frame[3]]);
+            if raw_joint_id >> 14 == 3 {
+                return Err(InvalidField(
+                    "frame transform type",
+                    (raw_joint_id >> 14).to_string(),
+                ));
+            }
+            let frame_joint_id = raw_joint_id & 0x3fff;
+            if usize::from(frame_joint_id) >= joint_count as usize {
+                return Err(InvalidField("frame joint id", frame_joint_id.to_string()));
+            }
             let p = frame.as_ptr() as usize;
             let align_of = std::mem::align_of::<Frame>();
             if align_of > 0 && (p & (align_of - 1)) != 0 {
@@ -94,8 +115,11 @@ impl Compressed {
             true => 24,
             false => 48,
         };
-        let mut jump_caches =
-            Vec::with_capacity(jump_cache_count as usize * jump_frame_size * joint_count as usize);
+        let jump_cache_capacity = (jump_cache_count as usize)
+            .checked_mul(jump_frame_size)
+            .and_then(|v| v.checked_mul(joint_count as usize))
+            .ok_or_else(|| InvalidField("jump cache count", jump_cache_count.to_string()))?;
+        let mut jump_caches = Vec::with_capacity(jump_cache_capacity);
         reader.read_exact(&mut jump_caches)?;
 
         Ok(Self {

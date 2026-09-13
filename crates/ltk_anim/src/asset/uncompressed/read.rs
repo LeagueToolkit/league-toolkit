@@ -64,6 +64,12 @@ impl Uncompressed {
         let track_count = reader.read_u32::<LE>()? as usize;
         let frame_count = reader.read_u32::<LE>()? as usize;
         let frame_duration = reader.read_f32::<LE>()?;
+        if !frame_duration.is_finite() || frame_duration < 0.0 {
+            return Err(asset::AssetParseError::InvalidField(
+                "frame duration",
+                frame_duration.to_string(),
+            ));
+        }
 
         let fps = 1.0 / frame_duration;
         let duration = frame_count as f32 * frame_duration;
@@ -179,6 +185,12 @@ impl Uncompressed {
         let track_count = reader.read_u32::<LE>()? as usize;
         let frame_count = reader.read_u32::<LE>()? as usize;
         let frame_duration = reader.read_f32::<LE>()?;
+        if !frame_duration.is_finite() || frame_duration < 0.0 {
+            return Err(asset::AssetParseError::InvalidField(
+                "frame duration",
+                frame_duration.to_string(),
+            ));
+        }
 
         let fps = 1.0 / frame_duration;
         let duration = frame_count as f32 * frame_duration;

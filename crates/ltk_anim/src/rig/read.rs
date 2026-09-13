@@ -11,7 +11,7 @@ impl RigResource {
         reader.rewind()?;
         match format_token == Self::FORMAT_TOKEN {
             true => Self::read(reader),
-            false => Self::read_legacy(reader),
+            false => Err(crate::ParseError::InvalidFileSignature),
         }
     }
 
@@ -94,9 +94,5 @@ impl RigResource {
             joints,
             influences,
         })
-    }
-
-    fn read_legacy<R: Read + ?Sized>(_reader: &mut R) -> crate::Result<Self> {
-        unimplemented!("TODO: impl legacy skeleton");
     }
 }
