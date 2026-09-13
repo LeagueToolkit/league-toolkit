@@ -1,4 +1,5 @@
 pub mod reader;
+pub mod untrusted;
 pub mod writer;
 
 pub use reader::*;

@@ -136,8 +136,9 @@ impl<'a> CompressedEvaluator<'a> {
             else {
                 continue;
             };
-            let jump_frame: &J = bytemuck::from_bytes(bytes);
-            self.init_joint_hot_frame(joint_id, jump_frame);
+            // The jump cache buffer has an alignment of 1.
+            let jump_frame: J = bytemuck::pod_read_unaligned(bytes);
+            self.init_joint_hot_frame(joint_id, &jump_frame);
         }
     }
 
