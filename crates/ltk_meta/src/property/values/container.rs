@@ -93,6 +93,14 @@ impl Container {
         Some(ValueSlot::pinned(item_kind, self.items.get_mut(index)?))
     }
 
+    /// The items, mutably, for walking further down inside the crate.
+    ///
+    /// A whole-item replace through one of these skips the kind check [`Container::slot`] makes.
+    /// A caller edits inside an item and never replaces one.
+    pub(crate) fn items_mut(&mut self) -> std::slice::IterMut<'_, PropertyValueEnum<M>> {
+        self.items.iter_mut()
+    }
+
     /// How many items this container holds.
     #[inline(always)]
     #[must_use]
