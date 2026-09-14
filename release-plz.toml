@@ -6,3 +6,9 @@ git_release_body = "{{ changelog }}"              # release body
 pr_branch_prefix = "release-plz-"                 # PR branch prefix
 pr_labels = ["release"]                           # add the `release` label to the release Pull Request
 release_commits = "^(feat|fix|perf)"              # only feat/fix/perf commits trigger a release
+
+[[package]]
+name = "ltk_wad"
+# The zstd and ruzstd backends are mutually exclusive.
+# release-plz cannot select features for cargo-semver-checks.
+semver_check = false
