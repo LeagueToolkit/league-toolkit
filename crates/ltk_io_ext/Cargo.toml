@@ -1,6 +1,6 @@
 [package]
 name = "ltk_io_ext"
-version = "0.4.4"
+version = "0.4.5"
 edition = "2021"
 description = "I/O extensions used by League Toolkit"
 license = "Apache-2.0"

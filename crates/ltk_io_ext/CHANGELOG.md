@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.5](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_io_ext-v0.4.4...ltk_io_ext-v0.4.5) - 2026-09-14
+
+### Added
+
+- *(ltk_io_ext)* untrusted capacity
+
+### Other
+
+- relicense under Apache-2.0
+- link ritobin-lang
+- rewrite workspace readme
+- rework workflow
+- *(meta)* crate-scoped README with the public surface and examples
+
 ## [0.4.4](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_io_ext-v0.4.3...ltk_io_ext-v0.4.4) - 2026-07-12
 
 ### Added

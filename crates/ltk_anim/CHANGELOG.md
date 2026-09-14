@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.7](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_anim-v0.3.6...ltk_anim-v0.3.7) - 2026-09-14
+
+### Fixed
+
+- *(ltk_anim)* bound counts and read jump caches
+- *(ltk_anim)* error on malformed input
+
+### Other
+
+- relicense under Apache-2.0
+- link ritobin-lang
+- rewrite workspace readme
+- *(ltk_anim)* sort joint hashes by key
+- rework workflow
+- *(meta)* crate-scoped README with the public surface and examples
+
 ## [0.3.6](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_anim-v0.3.5...ltk_anim-v0.3.6) - 2026-07-12
 
 ### Added

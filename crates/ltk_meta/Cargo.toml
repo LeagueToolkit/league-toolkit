@@ -1,6 +1,6 @@
 [package]
 name = "ltk_meta"
-version = "0.8.2"
+version = "0.8.3"
 edition = "2021"
 description = "Metadata formats and utilities for League Toolkit"
 license = "Apache-2.0"
@@ -32,7 +32,7 @@ indexmap = { workspace = true }
 
 serde = { workspace = true, optional = true }
 
-ltk_io_ext = { version = "0.4.4", path = "../ltk_io_ext" }
+ltk_io_ext = { version = "0.4.5", path = "../ltk_io_ext" }
 ltk_primitives = { version = "0.3.5", path = "../ltk_primitives" }
 ltk_hash = { version = "0.4.0", path = "../ltk_hash" }
 
@@ -44,4 +44,4 @@ serde_json = { workspace = true }
 ltk_meta = { path = ".", features = ["serde"] }
 
 # For the `corpus` test only, which reads bins straight out of an installed client.
-ltk_wad = { version = "0.5.4", path = "../ltk_wad" }
+ltk_wad = { version = "0.5.5", path = "../ltk_wad" }
