@@ -14,7 +14,7 @@ use crate::{
     concrete::{self, values, Bin, BinObject},
     property::values::{Embedded, UnorderedContainer},
     property::Kind,
-    stream::ValueView,
+    walk::ViewValue,
     BinOverride, Error, PropertyValueEnum,
 };
 
@@ -433,7 +433,7 @@ fn walk_recorders(
 fn walk_both<W>(bin: &Bin, make: impl Fn() -> W) -> [(W, Result<WalkOutcome, Error>); 2]
 where
     W: for<'a> Visitor<'a, &'a PropertyValueEnum, Error = Error>
-        + for<'a> Visitor<'a, ValueView<'a>, Error = Error>,
+        + for<'a> Visitor<'a, ViewValue<'a>, Error = Error>,
 {
     let mut owned = make();
     let owned_outcome = bin.walk(&mut owned);
@@ -1212,3 +1212,81 @@ fn a_mutable_reference_to_a_visitor_is_a_visitor() {
 }
 
 mod mutable;
+
+#[test]
+fn property_strings_are_decoded_only_when_requested() {
+    let object = BinObject::builder(OBJECT, C1)
+        .property(F_STRUCT, values::String::from("review-marker"))
+        .property(F_EMBED, values::I32::new(7))
+        .build();
+    let bin = Bin::new([object], std::iter::empty::<&str>());
+    let mut bytes = io::Cursor::new(Vec::new());
+    bin.to_writer(&mut bytes).unwrap();
+    let mut bytes = bytes.into_inner();
+    let at = bytes
+        .windows(13)
+        .position(|w| w == b"review-marker")
+        .unwrap();
+    bytes[at] = 0xff;
+
+    struct Inspect {
+        action: Visit,
+        decode: bool,
+        fields: Vec<BinHash>,
+    }
+    impl<'a, V: TreeValue<'a>> Visitor<'a, V> for Inspect {
+        type Error = Error;
+        fn enter_property(
+            &mut self,
+            field: BinHash,
+            value: V,
+            node: &Node<'_, 'a, V>,
+        ) -> Result<Visit, Error> {
+            self.fields.push(field);
+            if value.kind() == Kind::String {
+                assert!(!value.holds_node()?);
+                assert!(value.as_node()?.is_none());
+                assert!(value.children()?.next().is_none());
+                let sibling = node.inner().property(field)?.unwrap();
+                assert_eq!(sibling.kind(), Kind::String);
+                if self.decode {
+                    value.leaf()?;
+                }
+                return Ok(self.action);
+            }
+            Ok(Visit::Continue)
+        }
+    }
+    for (action, outcome, count) in [
+        (Visit::Skip, WalkOutcome::Completed, 2),
+        (Visit::Continue, WalkOutcome::Completed, 2),
+        (Visit::Stop, WalkOutcome::Stopped, 1),
+        (Visit::Abort, WalkOutcome::Aborted, 1),
+    ] {
+        let mut visitor = Inspect {
+            action,
+            decode: false,
+            fields: Vec::new(),
+        };
+        assert_eq!(
+            BinStream::mount(io::Cursor::new(bytes.clone()))
+                .unwrap()
+                .walk(&mut visitor)
+                .unwrap(),
+            outcome
+        );
+        assert_eq!(visitor.fields.len(), count);
+    }
+    let mut visitor = Inspect {
+        action: Visit::Continue,
+        decode: true,
+        fields: Vec::new(),
+    };
+    assert!(matches!(
+        BinStream::mount(io::Cursor::new(bytes))
+            .unwrap()
+            .walk(&mut visitor),
+        Err(Error::Utf8Error(_))
+    ));
+    assert_eq!(visitor.fields, [BinHash(F_STRUCT)]);
+}

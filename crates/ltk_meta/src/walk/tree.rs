@@ -46,10 +46,10 @@ impl TreeKind for Kind {
 
 /// A value the walk can cross.
 ///
-/// Sealed: implemented for `&'a PropertyValueEnum<M>` and for [`ValueView<'a, M>`], and by
+/// Sealed: implemented for `&'a PropertyValueEnum<M>` and for [`ViewValue<'a, M>`], and by
 /// nothing else. A visitor written against this trait runs over either tree.
 ///
-/// [`ValueView<'a, M>`]: crate::stream::ValueView
+/// [`ViewValue<'a, M>`]: super::ViewValue
 pub trait TreeValue<'a>: Copy + sealed::Sealed {
     /// The node type this tree's `Struct` and `Embedded` values are.
     type Node: TreeNode<'a, Value = Self>;
