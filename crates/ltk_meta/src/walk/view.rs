@@ -19,7 +19,7 @@ impl Sealed for StructView<'_> {}
 
 /// A borrowed walk value whose property payload is decoded only on request.
 ///
-/// Property callbacks receive this adapter. [`TreeValue::kind`] reads the property header;
+/// Property callbacks receive this adapter. [`TreeValue::kind`] reads the property header.
 /// [`TreeValue::leaf`] and [`TreeValue::to_value`] decode the payload.
 pub struct ViewValue<'a> {
     inner: ViewValueInner<'a>,
@@ -65,7 +65,15 @@ impl<'a> ViewValue<'a> {
         }
     }
 
-    fn decode(&self) -> Result<ValueView<'a>, Error> {
+    /// The borrowed streaming view of this value.
+    ///
+    /// Leaf payloads decode on request. Complex values expose headers without decoding
+    /// their contents. The view borrows the source bytes and allocates nothing.
+    ///
+    /// # Errors
+    ///
+    /// A header or leaf payload that does not decode.
+    pub fn value_view(&self) -> Result<ValueView<'a>, Error> {
         match self.inner {
             ViewValueInner::Property(p) => p.value_view(),
             ViewValueInner::Decoded(v) => Ok(v),
@@ -221,7 +229,7 @@ impl<'a> TreeValue<'a> for ViewValue<'a> {
         if !self.kind().is_node() && !self.kind().is_container() {
             return Ok(false);
         }
-        Ok(match self.decode()? {
+        Ok(match self.value_view()? {
             ValueView::Struct(s) | ValueView::Embedded(s) => *s.class_hash() != 0,
             ValueView::Container(c) | ValueView::UnorderedContainer(c) => c.item_kind().is_node(),
             ValueView::Optional(o) => o.item_kind().is_node(),
@@ -234,7 +242,7 @@ impl<'a> TreeValue<'a> for ViewValue<'a> {
         if !self.kind().is_node() {
             return Ok(None);
         }
-        Ok(match self.decode()? {
+        Ok(match self.value_view()? {
             ValueView::Struct(s) | ValueView::Embedded(s) if *s.class_hash() != 0 => Some(s),
             _ => None,
         })
@@ -246,7 +254,7 @@ impl<'a> TreeValue<'a> for ViewValue<'a> {
                 inner: ViewChildrenInner::Empty,
             });
         }
-        let inner = match self.decode()? {
+        let inner = match self.value_view()? {
             ValueView::Container(c) | ValueView::UnorderedContainer(c) => {
                 ViewChildrenInner::Items {
                     items: c.iter(),
@@ -261,7 +269,7 @@ impl<'a> TreeValue<'a> for ViewValue<'a> {
     }
 
     fn leaf(&self) -> Result<Option<Leaf<'a>>, Error> {
-        Ok(Some(match self.decode()? {
+        Ok(Some(match self.value_view()? {
             ValueView::None => Leaf::None,
             ValueView::Bool(v) => Leaf::Bool(v),
             ValueView::I8(v) => Leaf::I8(v),
@@ -299,7 +307,7 @@ impl<'a> TreeValue<'a> for ViewValue<'a> {
                 P::$ty(values::$ty::new($v))
             };
         }
-        Ok(match self.decode()? {
+        Ok(match self.value_view()? {
             ValueView::None => P::None(values::None),
             ValueView::Bool(v) => prim!(Bool, v),
             ValueView::I8(v) => prim!(I8, v),

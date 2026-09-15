@@ -226,6 +226,16 @@ impl<'a> TreeValue<'a> for &'a PropertyValueEnum {
 #[derive(Clone, Copy, Debug)]
 pub struct ViewValue<'a> { /* private */ }
 
+impl<'a> ViewValue<'a> {
+    /// The borrowed streaming view. Leaf payloads decode on request.
+    /// Complex values expose headers without decoding their contents.
+    ///
+    /// # Errors
+    ///
+    /// A header or leaf payload that does not decode.
+    pub fn value_view(&self) -> Result<ValueView<'a>, Error>;
+}
+
 impl<'a> TreeValue<'a> for ViewValue<'a> {
     type Node = StructView<'a>;
     type Children = ViewChildren<'a>;
@@ -271,6 +281,12 @@ client does (W19): a visitor reads a texture path as `Leaf::File`, whatever `Kin
 property header. `leaf()` and `to_value()` decode the payload; `holds_node()`, `as_node()`
 and `children()` do not decode a property leaf. Child iterators decode values as they are
 requested. The adapter choice is [ADR-0017](../adr/0017-deferred-walk-values.md).
+
+`ViewValue::value_view()` exposes the borrowed streaming enum without allocating. Container
+item kinds, map key and value kinds, counts and null class hashes are available through its
+variants. Requesting a leaf view decodes that leaf. Complex contents decode only through
+subsequent view access. The access choice is
+[ADR-0018](../adr/0018-borrowed-walk-value-access.md).
 
 ## <a id="s4"></a>4. `ValuePath`
 
