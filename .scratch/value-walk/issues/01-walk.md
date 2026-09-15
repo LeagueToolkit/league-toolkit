@@ -99,6 +99,16 @@ impl<'a, M> TreeValue<'a> for &'a PropertyValueEnum<M> { type Node = OwnedNode<'
 #[derive(Clone, Copy, Debug)]
 pub struct ViewValue<'a, M = NoMeta> { /* private */ }
 
+impl<'a, M> ViewValue<'a, M> {
+    /// The borrowed streaming view. Leaf payloads decode on request.
+    /// Complex values expose headers without decoding their contents.
+    ///
+    /// # Errors
+    ///
+    /// A header or leaf payload that does not decode.
+    pub fn value_view(&self) -> Result<ValueView<'a, M>, Error>;
+}
+
 impl<'a, M: Default> TreeValue<'a> for ViewValue<'a, M> { type Node = StructView<'a, M>; /* ... */ }
 impl<'a, M> TreeNode<'a> for OwnedNode<'a, M> { type Value = &'a PropertyValueEnum<M>; /* ... */ }
 impl<'a, M: Default> TreeNode<'a> for StructView<'a, M> { type Value = ViewValue<'a, M>; /* ... */ }
@@ -288,3 +298,5 @@ depend on it and can land first behind those methods.
       count of objects plus `Struct` and `Embedded` values with a non-zero class (AC-7)
 
 - [ ] An invalid UTF-8 property reaches its callback without decoding; skipping it succeeds and requesting its leaf returns `Error::Utf8Error`
+
+- [ ] `ViewValue::value_view()` exposes container declarations without decoding their contents and reports malformed leaf payloads on request

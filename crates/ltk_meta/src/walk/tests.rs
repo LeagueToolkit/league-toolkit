@@ -1290,3 +1290,126 @@ fn property_strings_are_decoded_only_when_requested() {
     ));
     assert_eq!(visitor.fields, [BinHash(F_STRUCT)]);
 }
+
+#[test]
+fn a_walk_value_exposes_headers_without_decoding_container_leaves() {
+    use crate::stream::ValueView;
+
+    let object = BinObject::builder(OBJECT, C1)
+        .property(
+            F_STRINGS,
+            values::Container::new(
+                Kind::String,
+                vec![values::String::from("header-marker").into()],
+            )
+            .unwrap(),
+        )
+        .property(F_OPT_EMPTY, values::Optional::empty(Kind::F32).unwrap())
+        .property(
+            F_MAP_STRUCT,
+            values::Map::empty(Kind::Hash, Kind::Struct).unwrap(),
+        )
+        .property(F_NULL_STRUCT, null())
+        .build();
+    let bin = Bin::new([object], std::iter::empty::<&str>());
+    let mut bytes = io::Cursor::new(Vec::new());
+    bin.to_writer(&mut bytes).unwrap();
+    let mut bytes = bytes.into_inner();
+    let at = bytes
+        .windows(13)
+        .position(|w| w == b"header-marker")
+        .unwrap();
+    bytes[at] = 0xff;
+
+    struct Headers(usize);
+    impl<'a> Visitor<'a, ViewValue<'a>> for Headers {
+        type Error = Error;
+
+        fn enter_property(
+            &mut self,
+            field: BinHash,
+            value: ViewValue<'a>,
+            _node: &Node<'_, 'a, ViewValue<'a>>,
+        ) -> Result<Visit, Error> {
+            match (field.0, value.value_view()?) {
+                (F_STRINGS, ValueView::Container(items)) => {
+                    assert_eq!(items.item_kind(), Kind::String);
+                    assert_eq!(items.len(), 1);
+                    assert!(matches!(
+                        items.iter().next().unwrap(),
+                        Err(Error::Utf8Error(_))
+                    ));
+                }
+                (F_OPT_EMPTY, ValueView::Optional(optional)) => {
+                    assert_eq!(optional.item_kind(), Kind::F32);
+                    assert!(optional.is_none());
+                }
+                (F_MAP_STRUCT, ValueView::Map(map)) => {
+                    assert_eq!(map.key_kind(), Kind::Hash);
+                    assert_eq!(map.value_kind(), Kind::Struct);
+                    assert_eq!(map.len(), 0);
+                }
+                (F_NULL_STRUCT, ValueView::Struct(node)) => {
+                    assert_eq!(node.class_hash(), BinHash(0));
+                }
+                unexpected => panic!("unexpected field and view: {unexpected:?}"),
+            }
+            self.0 += 1;
+            Ok(Visit::Skip)
+        }
+    }
+
+    let mut headers = Headers(0);
+    let mut stream = BinStream::mount(io::Cursor::new(bytes)).unwrap();
+    assert_eq!(stream.walk(&mut headers).unwrap(), WalkOutcome::Completed);
+    assert_eq!(headers.0, 4);
+}
+
+#[test]
+fn a_walk_value_exposes_decoded_children_and_leaf_errors() {
+    use crate::stream::ValueView;
+
+    let object = BinObject::builder(OBJECT, C1)
+        .property(F_LEAF, values::String::from("leaf-marker"))
+        .property(
+            F_STRINGS,
+            values::Container::new(Kind::U32, vec![values::U32::new(7).into()]).unwrap(),
+        )
+        .build();
+    let bin = Bin::new([object], std::iter::empty::<&str>());
+    let mut bytes = io::Cursor::new(Vec::new());
+    bin.to_writer(&mut bytes).unwrap();
+    let mut bytes = bytes.into_inner();
+    let at = bytes.windows(11).position(|w| w == b"leaf-marker").unwrap();
+    bytes[at] = 0xff;
+
+    struct Inspect(usize);
+    impl<'a> Visitor<'a, ViewValue<'a>> for Inspect {
+        type Error = Error;
+
+        fn enter_property(
+            &mut self,
+            field: BinHash,
+            value: ViewValue<'a>,
+            _node: &Node<'_, 'a, ViewValue<'a>>,
+        ) -> Result<Visit, Error> {
+            if field.0 == F_LEAF {
+                assert_eq!(value.kind(), Kind::String);
+                assert!(matches!(value.value_view(), Err(Error::Utf8Error(_))));
+            } else {
+                let (_, child) = value.children()?.next().unwrap()?;
+                assert!(matches!(child.value_view()?, ValueView::U32(7)));
+                assert!(matches!(child.value_view()?, ValueView::U32(7)));
+            }
+            self.0 += 1;
+            Ok(Visit::Skip)
+        }
+    }
+
+    let mut inspect = Inspect(0);
+    BinStream::mount(io::Cursor::new(bytes))
+        .unwrap()
+        .walk(&mut inspect)
+        .unwrap();
+    assert_eq!(inspect.0, 2);
+}
