@@ -30,7 +30,7 @@ pub trait TreeKind: Copy + sealed::Sealed {
 impl TreeKind for Kind {}
 
 /// A value the walk can cross. Sealed: implemented for `&'a PropertyValueEnum<M>` and for
-/// `ValueView<'a, M>`, and by nothing else.
+/// `ViewValue<'a, M>`, and by nothing else.
 pub trait TreeValue<'a>: Copy + sealed::Sealed {
     type Node: TreeNode<'a, Value = Self>;
     type Children: Iterator<Item = Result<(Child<Self>, Self), Error>>;
@@ -95,9 +95,13 @@ pub enum Leaf<'a> {
 pub struct OwnedNode<'a, M = NoMeta> { /* ... */ }
 
 impl<'a, M> TreeValue<'a> for &'a PropertyValueEnum<M> { type Node = OwnedNode<'a, M>; /* ... */ }
-impl<'a, M: Default> TreeValue<'a> for ValueView<'a, M> { type Node = StructView<'a, M>; /* ... */ }
+/// A borrowed walk value. Property payloads are decoded only on request.
+#[derive(Clone, Copy, Debug)]
+pub struct ViewValue<'a, M = NoMeta> { /* private */ }
+
+impl<'a, M: Default> TreeValue<'a> for ViewValue<'a, M> { type Node = StructView<'a, M>; /* ... */ }
 impl<'a, M> TreeNode<'a> for OwnedNode<'a, M> { type Value = &'a PropertyValueEnum<M>; /* ... */ }
-impl<'a, M: Default> TreeNode<'a> for StructView<'a, M> { type Value = ValueView<'a, M>; /* ... */ }
+impl<'a, M: Default> TreeNode<'a> for StructView<'a, M> { type Value = ViewValue<'a, M>; /* ... */ }
 
 /// What a callback answers. `ltk_ritobin::cst::visitor::Visit`'s shape (W21).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -205,18 +209,18 @@ impl<'a, M: Default> ObjectView<'a, M> {
     /// Walks this object over its buffered bytes: nothing is materialised, a header is
     /// decoded where the walk descends, and a leaf is decoded only when the visitor asks.
     pub fn walk<W>(&self, visitor: &mut W) -> Result<WalkOutcome, W::Error>
-    where W: Visitor<'a, ValueView<'a, M>>;
+    where W: Visitor<'a, ViewValue<'a, M>>;
 }
 impl<R: io::Read + io::Seek, M: Default> ObjectStream<'_, R, M> {
     /// `view()?` then `walk`.
     pub fn walk<E, W>(&mut self, visitor: &mut W) -> Result<WalkOutcome, E>
-    where E: From<Error>, W: for<'a> Visitor<'a, ValueView<'a, M>, Error = E>;
+    where E: From<Error>, W: for<'a> Visitor<'a, ViewValue<'a, M>, Error = E>;
 }
 impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
     /// Walks every object in file order, one buffered object at a time. Holds one object's
     /// bytes at any moment and nothing of the tree.
     pub fn walk<E, W>(&mut self, visitor: &mut W) -> Result<WalkOutcome, E>
-    where E: From<Error>, W: for<'a> Visitor<'a, ValueView<'a, M>, Error = E>;
+    where E: From<Error>, W: for<'a> Visitor<'a, ViewValue<'a, M>, Error = E>;
 }
 ```
 
@@ -226,7 +230,7 @@ impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
 it reads; a pass that decoded every object to visit it would pay for everything. One visitor,
 generic over the value type, runs over `BinStream::walk` in the pass and over `BinObject::walk`
 when a repair verifies its own edit in memory. `Leaf` and `MapKey` carry the client's tag names
-(W19) and the visitor never names `PropertyValueEnum`, `M` or `ValueView`.
+(W19) and the visitor never names `PropertyValueEnum`, `M` or `ViewValue`.
 
 **W21: the visitor is `ltk_ritobin`'s CST visitor shape.** Symmetric enter and exit callbacks,
 a `Visit` answer, a `WalkOutcome`; two nested pairs here because a property, unlike a token, has
@@ -282,3 +286,5 @@ depend on it and can land first behind those methods.
 - [ ] Corpus, `#[ignore]` under `LTK_LOL_GAME_DIR`: every chunk walks through `BinStream::walk`
       and `Bin::walk` with identical visit sequences, and the node count equals an independent
       count of objects plus `Struct` and `Embedded` values with a non-zero class (AC-7)
+
+- [ ] An invalid UTF-8 property reaches its callback without decoding; skipping it succeeds and requesting its leaf returns `Error::Utf8Error`

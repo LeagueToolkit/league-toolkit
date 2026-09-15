@@ -10,6 +10,7 @@ use ltk_io_ext::WriterExt as _;
 use crate::{
     property::NoMeta,
     stream::{BinStream, ObjectEntry},
+    tree::write::WRITE_VERSION,
     BinKind, BinObject, Error,
 };
 
@@ -70,7 +71,7 @@ impl<M> Default for BinDelta<M> {
 }
 
 impl<M> BinDelta<M> {
-    /// An empty delta. Writing it reproduces the base.
+    /// An empty set of edits.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
@@ -132,7 +133,7 @@ impl<M> BinDelta<M> {
         self.dependencies.as_deref()
     }
 
-    /// Whether writing the delta reproduces the base.
+    /// Whether the delta contains no edits.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.replaced.is_empty()
@@ -159,9 +160,6 @@ impl<M> Row<'_, M> {
     }
 }
 
-/// The first header version that carries a dependency list.
-const DEPENDENCIES_VERSION: u32 = 2;
-
 impl<R: io::Read + io::Seek, M: Default + Clone> BinStream<R, M> {
     /// Writes the base with `delta` applied.
     ///
@@ -171,15 +169,17 @@ impl<R: io::Read + io::Seek, M: Default + Clone> BinStream<R, M> {
     /// entry order is the base's file order minus the removed objects, with each replaced object
     /// at its base position, then the appended objects in the order appended.
     ///
-    /// The header writes the version the handle mounted. A version-1 base has no dependency list,
-    /// and a non-empty one written over it writes version 2.
+    /// The output uses version 3 and current property-kind numbering. Every base object is
+    /// checked before output begins, including removed and replaced objects. The check reads
+    /// kinds and verifies sizes without decoding leaf contents.
     ///
     /// # Errors
     ///
-    /// [`Error::DeltaLegacyNumbering`] for a handle latched onto the legacy numbering,
+    /// [`Error::DeltaLegacyNumbering`] for a base using legacy numbering,
     /// [`Error::DeltaMissingObject`] for a replaced or removed hash the base does not hold,
     /// [`Error::DeltaDuplicateObject`] for an appended hash the output also holds, or an I/O
-    /// error from the source or `out`. The first three are raised before any byte reaches `out`.
+    /// error from the source or `out`. Invalid base sizes or kinds also return an error.
+    /// Base validation and delta conflicts fail before any byte reaches `out`.
     pub fn write_patched<W: io::Write>(
         &mut self,
         delta: &BinDelta<M>,
@@ -217,22 +217,22 @@ impl<R: io::Read + io::Seek, M: Default + Clone> BinStream<R, M> {
             .chain(delta.appended.values().map(Row::Edited))
             .collect();
 
+        let mut objects = self.objects();
+        while let Some(mut object) = objects.next()? {
+            if object.view()?.numbering().is_legacy() {
+                return Err(Error::DeltaLegacyNumbering);
+            }
+        }
+
         let dependencies = match &delta.dependencies {
             Some(dependencies) => dependencies.as_slice(),
             None => self.dependencies(),
         };
-        let version = match self.version() {
-            1 if !dependencies.is_empty() => DEPENDENCIES_VERSION,
-            version => version,
-        };
-
         out.write_all(&BinKind::Prop.magic())?;
-        out.write_u32::<LE>(version)?;
-        if version >= DEPENDENCIES_VERSION {
-            out.write_u32::<LE>(count(dependencies.len())?)?;
-            for dependency in dependencies {
-                out.write_len_prefixed_string::<LE, _>(dependency)?;
-            }
+        out.write_u32::<LE>(WRITE_VERSION)?;
+        out.write_u32::<LE>(count(dependencies.len())?)?;
+        for dependency in dependencies {
+            out.write_len_prefixed_string::<LE, _>(dependency)?;
         }
 
         out.write_u32::<LE>(count(rows.len())?)?;
