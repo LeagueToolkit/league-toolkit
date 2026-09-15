@@ -102,13 +102,17 @@ fn object_bytes(bytes: &[u8]) -> Vec<(BinHash, Vec<u8>)> {
 }
 
 #[test]
-fn an_empty_delta_reproduces_the_base_at_every_version() {
+fn an_empty_delta_writes_current_format_at_every_input_version() {
     let without_dependencies = Bin::new(base().objects.into_values(), std::iter::empty::<&str>());
     for (version, bin) in [(1, &without_dependencies), (2, &base()), (3, &base())] {
         let bytes = at_version(bytes_of(bin), version);
         let delta = BinDelta::new();
         assert!(delta.is_empty());
-        assert_eq!(write(&bytes, &delta).unwrap(), bytes, "version {version}");
+        assert_eq!(
+            write(&bytes, &delta).unwrap(),
+            bytes_of(bin),
+            "version {version}"
+        );
     }
 }
 
@@ -157,7 +161,7 @@ fn a_one_property_edit_rereads_as_the_eager_edit_and_keeps_every_other_object() 
 }
 
 #[test]
-fn the_version_passes_through() {
+fn edited_output_uses_the_current_version() {
     let without_dependencies = Bin::new(base().objects.into_values(), std::iter::empty::<&str>());
     for (version, bin) in [(1, &without_dependencies), (2, &base())] {
         let bytes = at_version(bytes_of(bin), version);
@@ -167,13 +171,17 @@ fn the_version_passes_through() {
         delta.replace(object);
 
         let out = write(&bytes, &delta).unwrap();
-        assert_eq!(out[4..8], version.to_le_bytes(), "version {version}");
-        assert_eq!(out, bytes, "re-encoding an unedited object changes nothing");
+        assert_eq!(out[4..8], 3u32.to_le_bytes(), "version {version}");
+        assert_eq!(
+            out,
+            bytes_of(bin),
+            "current-format output matches the eager writer"
+        );
     }
 }
 
 #[test]
-fn a_dependency_list_over_a_version_one_base_writes_version_two() {
+fn a_dependency_list_over_a_version_one_base_writes_current_format() {
     let without_dependencies = Bin::new(base().objects.into_values(), std::iter::empty::<&str>());
     let bytes = at_version(bytes_of(&without_dependencies), 1);
 
@@ -184,9 +192,9 @@ fn a_dependency_list_over_a_version_one_base_writes_version_two() {
         Some(&["common.bin".to_owned(), "other.bin".to_owned()][..])
     );
     let out = write(&bytes, &delta).unwrap();
-    assert_eq!(out[4..8], 2u32.to_le_bytes());
+    assert_eq!(out[4..8], 3u32.to_le_bytes());
     let written = read(&out);
-    assert_eq!(written.version, 2);
+    assert_eq!(written.version, 3);
     assert_eq!(written.dependencies, ["common.bin", "other.bin"]);
     assert_eq!(written.objects, without_dependencies.objects);
 
@@ -194,8 +202,8 @@ fn a_dependency_list_over_a_version_one_base_writes_version_two() {
     empty.set_dependencies(std::iter::empty::<&str>());
     assert_eq!(
         write(&bytes, &empty).unwrap(),
-        bytes,
-        "an empty list stays version 1"
+        bytes_of(&without_dependencies),
+        "an empty list also writes current format"
     );
 }
 
@@ -363,4 +371,60 @@ fn a_shipped_bin_rewrites_byte_for_byte_around_one_edit() {
             assert_eq!(body, original, "{hash:08x}");
         }
     }
+}
+
+#[test]
+fn unread_legacy_objects_refuse_output_before_any_bytes_are_written() {
+    let legacy = BinObject::builder(B, 0xCCCC_0001u32)
+        .property(F_NODE, values::Struct::default())
+        .build();
+    let prefix = BinObject::builder(A, 0xAAAA_0001u32)
+        .property(F_NUMBER, values::I32::new(42))
+        .build();
+    let mut bytes = bytes_of(&Bin::new([prefix, legacy], std::iter::empty::<&str>()));
+    let tag = mount(&bytes)
+        .toc()
+        .unwrap()
+        .entry(BinHash(B))
+        .unwrap()
+        .offset as usize
+        + 14;
+    assert_eq!(bytes[tag], u8::from(crate::PropertyKind::Struct));
+    bytes[tag] = 19;
+
+    let mut appended = BinDelta::new();
+    appended.append(
+        BinObject::builder(D, 0xDDDD_0001u32)
+            .property(F_NODE, values::Struct::default())
+            .build(),
+    );
+    let mut replaced = appended.clone();
+    replaced.replace(BinObject::builder(B, 0xCCCC_0001u32).build());
+    let mut removed = appended.clone();
+    removed.remove(B);
+    for delta in [BinDelta::new(), appended, replaced, removed] {
+        let mut stream = mount(&bytes);
+        stream.object(A).unwrap().unwrap().read().unwrap();
+        assert!(!stream.numbering().is_legacy());
+        let mut out = Vec::new();
+        assert!(matches!(
+            stream.write_patched(&delta, &mut out),
+            Err(Error::DeltaLegacyNumbering)
+        ));
+        assert!(out.is_empty());
+    }
+}
+
+#[test]
+fn malformed_untouched_objects_refuse_output_before_any_bytes_are_written() {
+    let mut bytes = bytes_of(&base());
+    let entry = mount(&bytes).toc().unwrap().entries()[0];
+    let count = entry.offset as usize + 8;
+    bytes[count..count + 2].copy_from_slice(&0u16.to_le_bytes());
+    let mut out = Vec::new();
+    assert!(matches!(
+        mount(&bytes).write_patched(&BinDelta::new(), &mut out),
+        Err(Error::InvalidSize(..))
+    ));
+    assert!(out.is_empty());
 }

@@ -2,7 +2,7 @@
 //! [`VisitorMut`] that edits the owned tree as it goes.
 //!
 //! The walk is written once, against two sealed traits - [`TreeValue`] and [`TreeNode`] - that
-//! the owned tree (`&PropertyValueEnum`) and the streaming view ([`ValueView`]) both
+//! the owned tree (`&PropertyValueEnum`) and the streaming view ([`ViewValue`]) both
 //! implement. A visitor is generic over the value type and runs over either unchanged:
 //! [`BinObject::walk`] and [`Bin::walk`] over the owned tree, [`ObjectView::walk`] and
 //! [`BinStream::walk`] over a buffered object's bytes.
@@ -70,7 +70,7 @@ mod tests;
 pub use mutable::{NodeMut, PropertyMut, VisitorMut};
 pub use owned::{OwnedChildren, OwnedNode, OwnedProperties};
 pub use tree::{Child, Leaf, TreeKind, TreeNode, TreeValue};
-pub use view::{ViewChildren, ViewProperties};
+pub use view::{ViewChildren, ViewProperties, ViewValue};
 
 use std::{
     fmt, io,
@@ -80,7 +80,7 @@ use std::{
 use ltk_hash::BinHash;
 
 use crate::{
-    stream::{BinStream, ObjectStream, ObjectView, ValueView},
+    stream::{BinStream, ObjectStream, ObjectView},
     Bin, BinObject, BinOverride, Error, PropertyValueEnum,
 };
 
@@ -120,7 +120,7 @@ pub enum WalkOutcome {
 /// What a walk calls.
 ///
 /// Generic over the tree's value type: one visitor runs over the owned tree
-/// (`V = &PropertyValueEnum`) and over the view (`V = ValueView<'a>`) alike.
+/// (`V = &PropertyValueEnum`) and over the view (`V = ViewValue<'a>`) alike.
 ///
 /// Every callback has a default that continues. A visitor implements only what it reads.
 #[expect(
@@ -626,7 +626,7 @@ impl<'a> ObjectView<'a> {
     /// whatever the visitor raises.
     pub fn walk<W>(&self, visitor: &mut W) -> Result<WalkOutcome, W::Error>
     where
-        W: Visitor<'a, ValueView<'a>>,
+        W: Visitor<'a, ViewValue<'a>>,
     {
         Walker::new().walk_object(self.path_hash(), self.as_struct(), visitor)
     }
@@ -645,7 +645,7 @@ impl<R: io::Read + io::Seek> ObjectStream<'_, R> {
     pub fn walk<E, W>(&mut self, visitor: &mut W) -> Result<WalkOutcome, E>
     where
         E: From<Error>,
-        W: for<'a> Visitor<'a, ValueView<'a>, Error = E>,
+        W: for<'a> Visitor<'a, ViewValue<'a>, Error = E>,
     {
         self.view()?.walk(visitor)
     }
@@ -662,7 +662,7 @@ impl<R: io::Read + io::Seek> BinStream<R> {
     pub fn walk<E, W>(&mut self, visitor: &mut W) -> Result<WalkOutcome, E>
     where
         E: From<Error>,
-        W: for<'a> Visitor<'a, ValueView<'a>, Error = E>,
+        W: for<'a> Visitor<'a, ViewValue<'a>, Error = E>,
     {
         let mut objects = self.objects();
         while let Some(mut object) = objects.next()? {

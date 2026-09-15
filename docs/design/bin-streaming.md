@@ -792,7 +792,7 @@ pub struct BinDelta {
 impl Default for BinDelta {}
 
 impl BinDelta {
-    /// An empty delta: writing it reproduces the base.
+    /// An empty set of edits.
     pub fn new() -> Self;
 
     /// Writes `object` in place of the base object with the same path hash, and cancels a
@@ -818,7 +818,7 @@ impl BinDelta {
     pub fn appended(&self) -> indexmap::map::Values<'_, BinHash, BinObject>;
     /// The dependency list the delta writes, or `None` for the base's.
     pub fn dependencies(&self) -> Option<&[String]>;
-    /// Whether writing the delta reproduces the base.
+    /// Whether the delta contains no edits.
     pub fn is_empty(&self) -> bool;
 }
 
@@ -830,8 +830,9 @@ impl<R: io::Read + io::Seek> BinStream<R> {
     /// `Error::DeltaLegacyNumbering` for a base the handle reads under the legacy numbering,
     /// `Error::DeltaMissingObject` for a replaced or removed hash the base does not hold,
     /// `Error::DeltaDuplicateObject` for an appended hash the output also holds, or an I/O
-    /// error from the source or `out`.
-    pub fn write_patched<W: io::Write>(&mut self, delta: &BinDelta, out: &mut W)
+    /// error from the source or `out`. Invalid base sizes or kinds also return an error.
+    /// Base validation and delta conflicts fail before any byte reaches `out`.
+    pub fn write_patched<W: io::Write>(&mut self, delta: &BinDelta<M>, out: &mut W)
         -> Result<(), Error>;
 }
 ```
@@ -844,28 +845,25 @@ impl<R: io::Read + io::Seek> BinStream<R> {
   replaced or appended object's class hash in the class table is the object's own.
 - **Untouched means bit-identical.** An object the delta does not name is never deserialized -
   its bytes are copied from `byte_range()`. A kind with no widget, a hash no table names, a
-  container order, a duplicate key: none of it is interpreted, and none of it is lost.
-- **The version passes through.** The header writes the version the handle mounted. A version-1
-  base has no dependency list; a delta that writes a non-empty one over it writes version 2, the
-  version that carries one. A replaced or appended object is encoded by `BinObject::to_writer`,
-  the same body at every version.
-- **A legacy-latched base refuses the delta write.** Raw-copied objects keep the legacy kind
-  numbering and re-encoded ones write the current numbering: a mixed, corrupt file. A handle
-  whose `numbering()` is `Legacy` returns `Error::DeltaLegacyNumbering`, whose message names the
-  fallback: `into_bin()` + `Bin::to_writer`. The latch settles as objects are read. A base whose
-  legacy objects are all unread writes without refusing. No shipped file latches
-  ([appendix A](#appendix-a)).
+  container order, a duplicate key: their bytes remain unchanged.
+- **Current-format output.** The header writes version 3, the eager writer's output version,
+  including the dependency list. Replaced and appended objects use current property-kind
+  numbering through `BinObject::to_writer`.
+- **Legacy bases refuse the delta write.** Every base object's structure is checked before any
+  output, including removed and replaced objects. A handle using legacy numbering returns
+  `Error::DeltaLegacyNumbering`. The error names the explicit conversion path:
+  `into_bin()` + `Bin::to_writer`. Detection follows [section 8](#s8); mounting or reading a
+  prefix alone does not establish current numbering for the whole base.
 - **A delta names the base it was built against.** A replaced or removed hash the base does not
   hold is `Error::DeltaMissingObject`. An appended hash equal to a base object the delta keeps or
   replaces is `Error::DeltaDuplicateObject`. Both are raised before any byte reaches `out`.
-- **Size mismatches cannot reach this path.** Raw copy-through never walks an unedited object. A
-  lying size field in one is copied exactly as its declared range states, and the output
-  reproduces the input byte for byte. An edited object is an object `read()` returned, and a size
-  mismatch in it is `Error::InvalidSize` from that read ([section 7](#s7)).
-- **Memory.** The write holds the TOC, one encoded object at a time, and the reader's buffer. `out`
-  needs only `io::Write`: an object is encoded into a reused buffer and written whole.
-- **Cost.** A one-object delta over a shipped install costs a sixth of a whole-file transcode
-  ([appendix C](#appendix-c)).
+- **Base structure is validated.** An invalid size or kind fails before any output. The check
+  follows [section 7](#s7) and does not decode leaf contents.
+- **Memory.** The write holds the TOC, output rows, one buffered base object and one encoded
+  object. `out` needs only `io::Write`.
+- **Cost.** Validation scans every base object's structure. Writing copies untouched objects
+  and encodes edited objects. Time is linear in the input and output sizes; memory is linear
+  in the object count and the largest buffered objects.
 
 ### <a id="s10.4"></a>10.4 What this deliberately is not
 
@@ -906,7 +904,7 @@ rather than growing a second one. For every `PROP` and `PTCH` chunk:
 - every declared size equals `PropertyExt::size` over the parsed values, which attests that shipped
   files are size-clean and not merely parse-clean, and is the debug-assert cross-check for skip
   distances;
-- for every `PROP` chunk, `write_patched` with an empty delta reproduces the chunk byte for byte,
+- for every current-format `PROP` chunk, `write_patched` with an empty delta reproduces the chunk byte for byte,
   and a delta replacing one object with its own `read()` re-reads equal to `Bin::from_reader` of the
   chunk with every other object's bytes unchanged. The same test times that delta against a
   whole-file transcode ([appendix C](#appendix-c)).
@@ -920,17 +918,16 @@ through the stream and the eager path.
 
 Unit tests in `crates/ltk_meta/src/stream/delta/` pin [section 10.3](#s10.3) over synthetic bins:
 
-- An empty delta reproduces the input byte for byte, at versions 1, 2 and 3.
+- An empty delta writes the same current-format bytes as the eager writer from versions 1, 2 and 3.
 - A one-property edit re-reads equal to the same edit applied to the eager tree, and every other
   object's bytes in the output equal its bytes in the input.
-- A version-1 or version-2 base saves with its header version; a non-empty dependency list over a
-  version-1 base writes version 2.
+- A version-1 or version-2 base saves at version 3, with or without a dependency edit.
 - Removing, replacing with a different class, and appending objects update the class table and
   the counts, and the output re-reads equal to the same edits applied to the eager tree.
 - A replaced or removed hash the base does not hold, and an appended hash the output also
   holds, raise their errors and write nothing to `out`.
-- A handle latched onto the legacy numbering returns `Error::DeltaLegacyNumbering`, and the message
-  names `into_bin`.
+- A legacy base, read or unread, returns `Error::DeltaLegacyNumbering` before output; the message
+  names `into_bin`. A malformed untouched object also fails before output.
 
 ## <a id="s13"></a>13. Rules
 
@@ -965,10 +962,10 @@ rules append.
 | S19 | The view iterators are named types (`Properties`, `ContainerItems`, `MapEntries`). | `impl Iterator` returns. | A returned `impl Iterator` cannot be named by a caller storing one, and would have had to spell out its lifetime capture anyway. The named types also carry `Debug`, `Clone`, `FusedIterator` and an exact `size_hint`. | [section 4.3](#s4.3) |
 | S20 | Every view is `Copy` for every `M`, with the impls written by hand. | Deriving `Clone`, `Copy` and `Debug`. | `M` is a phantom, so a derive would demand `M: Copy` for a field that holds nothing. | [section 4.3](#s4.3) |
 | S21 | Scope is `PROP` and `PTCH` reading, with `into_bin()` as the upgrade, and one write path: the delta rewrite of a `PROP`. | A read-only stream, with every save a whole-file transcode. | The views and cursors hand out bytes nobody can edit in place; the unit of an edit is an owned object. | [section 10](#s10), [section 11](#s11) |
-| S22 | A save is a delta rewrite of the whole `.bin`: untouched objects copied through byte-exactly, edited ones re-encoded, the version passed through. PTCH authoring is out of scope. | A whole-file transcode; patching bytes in place; emitting a `PTCH` as the save format. | A save costs the edited objects, and an untouched object keeps every byte. | [section 10](#s10); ADR-0016 |
+| S22 | A save is a delta rewrite of the whole `.bin`: untouched objects copied through byte-exactly, edited ones re-encoded, version 3 and current numbering enforced. PTCH authoring is out of scope. | A whole-file transcode; patching bytes in place; emitting a `PTCH` as the save format. | Validation scans the base; encoding covers edited objects; untouched objects keep every byte. | [section 10](#s10); ADR-0016 |
 | S23 | `BinToc::largest` answers the largest declared object size before any body is decoded. | Leaving the consumer to fold over `entries()`. | It is the number a consumer bounds a streamed read by, and naming it says that the TOC is where it comes from. | [section 4](#s4) |
 | S24 | A `PTCH` stream's object cursors yield embedded objects only; `patches()` alone reads records. | One cursor interleaving objects and records. | The two are different content: objects are what the game loads, records are edits to a base it does not hold. A consumer walking content wants the first and never the second. | [section 5](#s5) |
-| S25 | `ObjectView`, `StructView` and `ValueView` implement the walk's `TreeNode` and `TreeValue`; `BinStream::walk` sweeps a file through a visitor with nothing materialised. | A walk over the owned tree with `read()` per object. | The views exist so a consumer pays for what it reads; a pass that decoded every object to visit it would pay for everything. | `value-walk.md` [section 3](value-walk.md#s3), [section 5](value-walk.md#s5); ADR-0014 |
+| S25 | `StructView` and `ViewValue` implement the walk's `TreeNode` and `TreeValue`; `BinStream::walk` sweeps a file through a visitor with nothing materialised. | A walk over the owned tree with `read()` per object. | The views exist so a consumer pays for what it reads; a pass that decoded every object to visit it would pay for everything. | `value-walk.md` [section 3](value-walk.md#s3), [section 5](value-walk.md#s5); ADR-0014 |
 
 ## <a id="appendix-a"></a>Appendix A. Corpus measurements
 
