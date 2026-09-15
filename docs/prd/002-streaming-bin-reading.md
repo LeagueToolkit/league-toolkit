@@ -6,7 +6,7 @@
 - **Tracking:** [#192](https://github.com/LeagueToolkit/league-toolkit/issues/192) (umbrella);
   tickets in `.scratch/bin-streaming/issues/`
 - **Spec:** `docs/design/bin-streaming.md`
-- **Decisions:** ADR-0007 to ADR-0011
+- **Decisions:** ADR-0007 to ADR-0011, ADR-0016
 
 ## <a id="s1"></a>1. Problem
 
@@ -130,9 +130,9 @@ Facts the format imposes, read off the client's loader
   (PRD-001), and `ValueView` makes the descent thin - which is exactly why it waits for a consumer
   rather than shipping speculatively. Named follow-on, spec
   [section 11](../design/bin-streaming.md#s11).
-- **Writing, in v1.** The stream is read-only. The delta-rewrite *contract* is specified (spec
-  [section 10](../design/bin-streaming.md#s10)) because the editor's flow depends on its shape; the
-  implementation is a later stage.
+- **Writing beyond the delta.** The views and cursors are read-only. The one write path is the
+  delta rewrite of FR-12 (spec [section 10](../design/bin-streaming.md#s10), ADR-0016); an edit is
+  made on an owned object.
 - **PTCH authoring.** A delta is upstream of either output form, and nothing here forecloses
   rendering one as patch records later.
 - **Parallel access within one file.** One cursor at a time per handle, `&mut self` throughout. The
@@ -159,3 +159,6 @@ Facts the format imposes, read off the client's loader
 - [ ] **AC-7:** A file in legacy numbering reads identically through the stream and the eager path.
 - [ ] **AC-8:** For every `PTCH` chunk in an install, the object cursors yield the same objects
       the eager `BinOverride::objects` holds and read no byte of the record list (FR-14).
+- [ ] **AC-9:** An empty delta written through the stream reproduces every `PROP` chunk in an
+      install byte for byte, and a one-object edit leaves every other object's bytes unchanged
+      (FR-12).

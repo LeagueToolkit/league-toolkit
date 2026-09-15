@@ -4,31 +4,37 @@ title: "Bin streaming: delta write-back (the editor's save path)"
 labels: crate:ltk_meta, enhancement, format:bin, area:writing
 ---
 
-Part of #192 (design: `docs/design/bin-streaming.md` [section 10](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/bin-streaming.md#s10)). Saving an edit as a rewritten `.bin`. PTCH authoring is explicitly out of scope — a delta is upstream of either output form, and nothing here forecloses rendering one as patch records later.
+Part of #192 (design: `docs/design/bin-streaming.md` [section 10](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/bin-streaming.md#s10); requirement PRD-002 FR-12; decision ADR-0016). Saving an edit as a rewritten `.bin`: the mounted base with whole-object edits applied, every untouched object copied byte for byte and only the edited ones encoded. PTCH authoring is out of scope.
+
+The consumers are the bin editor's save and `ltk-manager`'s repair. Both edit a few objects of a
+file. The repair reads the objects its findings name with `objects_batch` and `read()`, edits each
+with `walk_mut` (value-walk mutable walk), and writes the file with `write_patched` in place of
+`into_bin()` + `to_writer`.
 
 ## Proposed surface
 
 ```rust
-/// Edits held against a mounted base. Costs O(edited objects), not O(file).
-#[derive(Debug, Default, Clone)]
-pub struct BinDelta<M = NoMeta> {
-    /// Objects to write in place of the base's, keyed by path hash.
-    replaced: IndexMap<BinHash, BinObject<M>>,
-    /// Base objects to drop.
-    removed: HashSet<BinHash>,
-    /// New objects, appended after the base's in file order.
-    appended: Vec<BinObject<M>>,
-    /// `None` keeps the base's dependency list.
-    dependencies: Option<Vec<String>>,
+/// Whole-object edits held against a mounted base. Costs O(edited objects), not O(file).
+#[derive(Debug, Clone, PartialEq)]
+pub struct BinDelta<M = NoMeta> { /* ... */ }
+
+impl<M> Default for BinDelta<M> {}
+
+impl<M> BinDelta<M> {
+    pub fn new() -> Self;
+    pub fn replace(&mut self, object: BinObject<M>) -> Option<BinObject<M>>;
+    pub fn remove(&mut self, path_hash: impl Into<BinHash>) -> Option<BinObject<M>>;
+    pub fn append(&mut self, object: BinObject<M>) -> Option<BinObject<M>>;
+    pub fn set_dependencies(&mut self, dependencies: impl IntoIterator<Item = impl Into<String>>);
+    pub fn replacement(&self, path_hash: impl Into<BinHash>) -> Option<&BinObject<M>>;
+    pub fn is_removed(&self, path_hash: impl Into<BinHash>) -> bool;
+    pub fn appended(&self) -> indexmap::map::Values<'_, BinHash, BinObject<M>>;
+    pub fn dependencies(&self) -> Option<&[String]>;
+    pub fn is_empty(&self) -> bool;
 }
 
 impl<R: io::Read + io::Seek, M: Default + Clone> BinStream<R, M> {
     /// Writes the base with `delta` applied.
-    ///
-    /// Header and class table are rebuilt for the final entry set; every untouched
-    /// object is raw-copied **byte for byte** from its [`ObjectEntry`] range; replaced
-    /// and appended objects are serialized through the eager writer. Entry order is the
-    /// base's file order, minus `removed`, with `replaced` in place and `appended` last.
     pub fn write_patched<W: io::Write>(&mut self, delta: &BinDelta<M>, out: &mut W)
         -> Result<(), Error>;
 }
@@ -36,24 +42,20 @@ impl<R: io::Read + io::Seek, M: Default + Clone> BinStream<R, M> {
 
 ## Invariants
 
-- **Untouched means bit-identical.** An object the delta does not name is never deserialized — its bytes are copied from `byte_range()`. A kind with no widget, a hash no table names, a container order, a duplicate key — none of it can be lost, because none of it is interpreted.
-- **The version passes through.** The header writes the version that was read, so saving one edit does not upgrade the file; only edited objects re-encode through the current writer.
-- **A legacy-latched base refuses the delta write** with a dedicated error — raw-copied objects would keep legacy kind numbering while re-encoded ones wrote modern numbering, a mixed, corrupt file. The documented fallback is a full `into_bin()` + `to_writer` transcode, or read-only.
-- **Size mismatches cannot reach this path.** Raw copy-through never walks an unedited object, so a lying size field in one is copied exactly as its declared range states, reproducing the input byte for byte; an edited object was necessarily read, and a mismatch there already failed the read with `Error::InvalidSize`.
-- **Not an in-place file update.** The write always produces a complete new stream; the consumer saves to a temp file and renames over, then remounts (the mounted handle still describes the old bytes).
+The rules are `bin-streaming.md` [section 10.3](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/bin-streaming.md#s10.3). The ones a reviewer checks the output against:
 
-This completes the bin editor's loop end to end: mount → TOC rows → `view()` to browse → `read()` on first edit → mutate through the value-slot surface → `write_patched` to a temp file → rename → remount. (The editing path takes `read()`, never `cached_object()` — the cache hands out shared `Arc`s, and an edit wants exclusive ownership; `Arc::make_mut` is the escape hatch when both are wanted.)
+- **Untouched means bit-identical.** An object the delta does not name is never deserialized; its bytes are copied from `byte_range()`.
+- **Current-format output.** Every output writes version 3 and current property-kind numbering.
+- **A legacy base refuses, read or unread, before output.** Every base object is structurally validated. Legacy numbering fails with `Error::DeltaLegacyNumbering`, whose message names `into_bin()` + `Bin::to_writer`.
+- **A delta names its base.** A replaced or removed hash the base does not hold is `Error::DeltaMissingObject`; an appended hash the output also holds is `Error::DeltaDuplicateObject`. Both before any byte reaches `out`.
 
-Parked, on three arguments rather than on time:
+ADR-0016 records why a delta write and not a whole-file transcode.
 
-- **There is no fidelity to recover.** The downstream consumer's own accepted decision record has a bin repair re-encode the whole file, and states that the bytes it did not address come back the same. Byte-exact copy-through of untouched objects buys a guarantee that consumer already holds.
-- **This design already treats a uniform re-encode as correct output.** The legacy refusal above names a full `into_bin()` + `to_writer` transcode as the fallback for a latched base ([section 8](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/bin-streaming.md#s8)) — a whole-file re-encode is a supported way to save, not a lossy last resort.
-- **A delta write *introduces* a refusal case a re-encode does not have.** That refusal exists only because raw-copied and re-encoded objects can disagree about kind numbering. A consumer that always re-encodes never meets a mixed-numbering file, and carries no fallback path for one.
+Nothing here is blocked. The repair flow of `bin-streaming.md` [section 10.1](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/bin-streaming.md#s10.1) also takes the mutable walk (#237), which depends on nothing here either.
 
-What is left is a CPU saving, and it is unmeasured. So this comes back with a number attached: `into_bin()` + `to_writer` measured as a share of a repair's wall-clock, once the streaming reads are adopted downstream. If the transcode is a visible share of that time, the delta writer earns its refusal case; if it is noise, it does not.
-
-- [ ] An empty delta reproduces the input byte-for-byte, for every PROP chunk in an install (corpus test)
+- [ ] An empty delta writes the same version-3 bytes as the eager writer from versions 1, 2 and 3; current-format corpus chunks reproduce byte for byte
 - [ ] A one-property edit re-reads equal to the same edit applied to the eager tree, and every other object's bytes are unchanged
-- [ ] A version-1/2 base saves with its header version intact; editing an object re-encodes that object without upgrading the header
-- [ ] Removing and appending objects updates the class table and counts consistently (round-trip)
-- [ ] A legacy-latched base returns the dedicated refusal error; the error message names the fallback
+- [ ] A version-1/2 base saves at version 3, with or without a dependency edit
+- [ ] Removing, replacing with a different class, and appending objects update the class table and counts consistently (round-trip)
+- [ ] A missing replaced or removed hash and a duplicate appended hash raise their errors and write nothing
+- [ ] A legacy base, read or unread, returns the refusal error before output; malformed untouched objects also fail before output

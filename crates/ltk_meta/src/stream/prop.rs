@@ -484,6 +484,23 @@ impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
         Ok(entry)
     }
 
+    /// Copies the source's bytes in `range` to `out`, reading nothing into a value.
+    pub(crate) fn copy_range(
+        &mut self,
+        range: std::ops::Range<u64>,
+        out: &mut impl io::Write,
+    ) -> Result<(), Error> {
+        self.seek_to(range.start)?;
+        let want = range.end - range.start;
+        let copied = io::copy(&mut io::Read::take(&mut self.reader, want), out)?;
+        match copied < want {
+            true => Err(Error::IOError(io::Error::from(
+                io::ErrorKind::UnexpectedEof,
+            ))),
+            false => Ok(()),
+        }
+    }
+
     /// Reads an object's `u16` property count, given the absolute offset of that field.
     pub(crate) fn read_property_count(&mut self, offset: u64) -> Result<u16, Error> {
         self.seek_to(offset)?;
