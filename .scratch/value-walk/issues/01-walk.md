@@ -95,7 +95,7 @@ pub enum Leaf<'a> {
 pub struct NodeRef<'a, M = NoMeta> { /* ... */ }
 
 impl<'a, M> TreeValue<'a> for &'a PropertyValueEnum<M> { type Node = NodeRef<'a, M>; /* ... */ }
-/// A borrowed walk value. Property payloads are decoded only on request.
+/// A borrowed walk value: a kind and the bytes it is written in, decoded only on request.
 #[derive(Clone, Copy, Debug)]
 pub struct ViewValue<'a, M = NoMeta> { /* private */ }
 

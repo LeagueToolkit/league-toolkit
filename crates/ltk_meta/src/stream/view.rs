@@ -11,7 +11,7 @@
 //! escape hatches ([`PropertyView::value`]) infer without a turbofish; the borrowed data itself
 //! carries no metadata.
 
-mod value;
+pub(crate) mod value;
 pub use value::{
     ContainerItems, ContainerView, MapEntries, MapView, OptionalView, StructView, ValueView,
 };
@@ -197,6 +197,11 @@ impl<'a, M> PropertyView<'a, M> {
     #[must_use]
     pub fn raw(&self) -> &'a [u8] {
         self.value.rest()
+    }
+
+    /// The cursor at the value's own bytes, header included. Decodes nothing.
+    pub(crate) fn cursor(&self) -> Cursor<'a> {
+        self.value
     }
 
     /// The value's wire shape, read from the few header bytes ahead of its body.
