@@ -10,7 +10,7 @@ use glam::{Mat4, Vec2, Vec3, Vec4};
 use ltk_hash::{BinHash, Hash as _, WadHash};
 use ltk_primitives::Color;
 
-use super::{FloatBits, MapKey, UnnameableKind, ValuePath, ValueSegment};
+use super::{FloatBits, MapKey, NamelessKind, ValuePath, ValueSegment};
 use crate::path::FieldNames;
 use crate::{
     property::{values, Kind, NoMeta},
@@ -351,7 +351,7 @@ fn every_segment_renders_in_all_three_forms() {
             (Ok(got), Ok(expected)) => assert_eq!(got.as_str(), expected),
             (Err(error), Err(kind)) => {
                 assert_eq!(error.segment, 1);
-                assert_eq!(error.kind, UnnameableKind::Key(kind));
+                assert_eq!(error.kind, NamelessKind::Key(kind));
             }
             (got, expected) => panic!("{hash_form}: got {got:?}, expected {expected:?}"),
         }
@@ -364,13 +364,13 @@ fn a_float_key_with_no_json_literal_has_no_client_path() {
         let path = position_then(ValueSegment::Key(MapKey::F32(FloatBits::new(value))));
         assert_eq!(
             path.to_property_path(&Table).unwrap_err().kind,
-            UnnameableKind::Key(Kind::F32)
+            NamelessKind::Key(Kind::F32)
         );
     }
 }
 
 #[test]
-fn the_first_unnameable_segment_is_reported_not_the_last() {
+fn the_first_nameless_segment_is_reported_not_the_last() {
     let unknown = BinHash(0x0bad_0001);
     let path: ValuePath = [
         ValueSegment::Field(BinHash::hash_str(POSITION)),
@@ -385,7 +385,7 @@ fn the_first_unnameable_segment_is_reported_not_the_last() {
     assert_eq!(error.segment, 1);
     assert_eq!(
         error.kind,
-        UnnameableKind::Field {
+        NamelessKind::Field {
             field: unknown,
             class: None
         }
@@ -405,10 +405,10 @@ fn a_name_that_does_not_hash_back_to_its_field_is_not_used() {
 }
 
 #[test]
-fn segments_that_spell_no_property_path_are_unnameable() {
+fn segments_that_spell_no_property_path_are_nameless() {
     let empty = ValuePath::new().to_property_path(&names()).unwrap_err();
     assert_eq!(empty.segment, 0);
-    assert!(matches!(empty.kind, UnnameableKind::Path(_)));
+    assert!(matches!(empty.kind, NamelessKind::Path(_)));
 
     let leading: ValuePath = [
         ValueSegment::Index(0),
@@ -418,13 +418,13 @@ fn segments_that_spell_no_property_path_are_unnameable() {
     .collect();
     let error = leading.to_property_path(&names()).unwrap_err();
     assert_eq!(error.segment, 0);
-    assert!(matches!(error.kind, UnnameableKind::Path(_)));
+    assert!(matches!(error.kind, NamelessKind::Path(_)));
 
     let mut twice = position_then(ValueSegment::Index(0));
     twice.push(ValueSegment::Index(1));
     let error = twice.to_property_path(&names()).unwrap_err();
     assert_eq!(error.segment, 2);
-    assert!(matches!(error.kind, UnnameableKind::Path(_)));
+    assert!(matches!(error.kind, NamelessKind::Path(_)));
 }
 
 #[test]
@@ -476,7 +476,7 @@ fn every_name_table_shape_answers_by_its_key() {
     );
     assert_eq!(
         path.to_property_path(&by_class).unwrap_err().kind,
-        UnnameableKind::Field {
+        NamelessKind::Field {
             field: size,
             class: None
         }
@@ -522,7 +522,7 @@ fn an_index_past_u32_or_a_path_past_the_length_limit_is_no_property_path() {
     .collect();
     let error = far.to_property_path(&names()).unwrap_err();
     assert_eq!(error.segment, 1);
-    assert!(matches!(error.kind, UnnameableKind::Path(_)));
+    assert!(matches!(error.kind, NamelessKind::Path(_)));
 
     let name = "a".repeat(crate::path::PropertyPath::MAX_LEN + 1);
     let field = BinHash::hash_str(&name);
@@ -531,7 +531,7 @@ fn an_index_past_u32_or_a_path_past_the_length_limit_is_no_property_path() {
         .to_property_path(&HashMap::from([(field, name)]))
         .unwrap_err();
     assert_eq!(error.segment, 0);
-    assert!(matches!(error.kind, UnnameableKind::Path(_)));
+    assert!(matches!(error.kind, NamelessKind::Path(_)));
 }
 
 #[test]

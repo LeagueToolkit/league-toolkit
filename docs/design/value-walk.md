@@ -430,9 +430,9 @@ impl ValuePath {
     ///
     /// # Errors
     ///
-    /// [`Unnameable`] at the first segment that cannot be spelled: a field `names` has no usable
+    /// [`Nameless`] at the first segment that cannot be spelled: a field `names` has no usable
     /// plaintext for, a key with no `{...}` literal, or segments that spell no property path.
-    pub fn to_property_path(&self, names: &dyn FieldNames) -> Result<PropertyPath, Unnameable>;
+    pub fn to_property_path(&self, names: &dyn FieldNames) -> Result<PropertyPath, Nameless>;
 
     /// The path for reading: every hash `names` can spell, spelled; the rest left as hex.
     pub fn to_named(&self, names: &dyn FieldNames) -> NamedPath;
@@ -472,16 +472,16 @@ impl fmt::Display for NamedPath { /* `text` */ }
 /// A position `to_property_path` could not spell.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("{kind} (segment {segment})")]
-pub struct Unnameable {
+pub struct Nameless {
     /// Index into `ValuePath::segments` of the first segment that could not be spelled. 0 for a
     /// path with no segments.
     pub segment: usize,
-    pub kind: UnnameableKind,
+    pub kind: NamelessKind,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
-pub enum UnnameableKind {
+pub enum NamelessKind {
     /// `names` has no plaintext for `field` that is a property name hashing back to it; `class`
     /// is the context it was asked with.
     Field { field: BinHash, class: Option<BinHash> },
@@ -494,9 +494,9 @@ pub enum UnnameableKind {
 }
 ```
 
-`Unnameable` follows D30 of `ptch-property-patches.md`: a struct carrying a position and a public
+`Nameless` follows D30 of `ptch-property-patches.md`: a struct carrying a position and a public
 kind. It reports the first unspellable segment, not the last. Every prefix of the path shorter than
-that segment spells, and a diff writes a lifted record at the longest such prefix (`Lift::Unnameable`,
+that segment spells, and a diff writes a lifted record at the longest such prefix (`Lift::Nameless`,
 `ptch-property-patches.md` [section 12](ptch-property-patches.md#s12)).
 
 A path from a walk begins with a field and never holds two subscripts in a row. Over a tree,
@@ -511,17 +511,17 @@ field segment nowhere in the text. A `ValuePath` with no segments renders as the
 
 | segment                            | hash form           | named form, when the table spells it | `to_property_path`                 |
 | ------------------------------- | ------------------- | ------------------------------------ | ---------------------------------- |
-| `Field`                         | `1e6ba0c4`          | `Position`                           | `Position`; else `Unnameable`      |
+| `Field`                         | `1e6ba0c4`          | `Position`                           | `Position`; else `Nameless`         |
 | `Index(3)`                      | `[3]`               | `[3]`                                | `[3]`                              |
 | `Key` of an integer kind        | `{12}`              | `{12}`                               | `{12}`                             |
 | `Key` of `Bool` or `BitBool`    | `{true}`            | `{true}`                             | `{true}`                           |
 | `Key` of `F32`                  | `{1.5}`             | `{1.5}`                              | `{1.5}`                            |
-| `Key` of `F32`, `NaN` or infinite | `{NaN}`, `{inf}`  | `{NaN}`, `{inf}`                     | `Unnameable`, `Key(Kind::F32)`     |
+| `Key` of `F32`, `NaN` or infinite | `{NaN}`, `{inf}`  | `{NaN}`, `{inf}`                     | `Nameless`, `Key(Kind::F32)`        |
 | `Key` of `String`               | `{"weapon"}`        | `{"weapon"}`                         | `{"weapon"}`                       |
 | `Key` of `Hash`                 | `{1e6ba0c4}`        | `{"Weapon"}`, via `FieldNames::hash` | `{510369988}`, the raw value       |
 | `Key` of `WadChunkLink`         | `{00c9fd8f1a2b3c4d}` | `{00c9fd8f1a2b3c4d}`                | `{56855261380033613}`, the raw value |
-| `Key` of a vector, `Color`, `Matrix44` | `{(1, 2)}`   | `{(1, 2)}`                           | `Unnameable`, `Key(kind)`          |
-| `Key` of `None`                 | `{}`                | `{}`                                 | `Unnameable`, `Key(Kind::None)`    |
+| `Key` of a vector, `Color`, `Matrix44` | `{(1, 2)}`   | `{(1, 2)}`                           | `Nameless`, `Key(kind)`             |
+| `Key` of `None`                 | `{}`                | `{}`                                 | `Nameless`, `Key(Kind::None)`       |
 
 Hex is lowercase, zero-padded to the hash's width: eight digits for a `BinHash`, sixteen for a
 `WadHash`. A string key is written as a JSON string, escaped as `serde_json` would write it. An
@@ -1039,7 +1039,7 @@ and over an `ObjectView` of the same bytes, through one generic visitor.
 - **Deferral.** Over a view of a container holding a malformed string, every item is reached and
   the item after the malformed one reads; only `as_leaf()` on the malformed item fails.
 - **Rendering.** Every row of [section 4.2](#s4.2), in all three forms; `NamedPath::named` plus
-  `unnamed` equals the number of field segments plus hash-kind keys; `Unnameable::segment` is the first
+  `unnamed` equals the number of field segments plus hash-kind keys; `Nameless::segment` is the first
   unspellable segment, not the last.
 - **The round trip.** For every node and every leaf position of the fixture tree, with a complete
   name table, `to_property_path` then `Bin::resolve` lands on the value the walk was at

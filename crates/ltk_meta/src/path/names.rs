@@ -26,7 +26,7 @@ use ltk_hash::BinHash;
 /// let path: ValuePath = [ValueSegment::Field(size), ValueSegment::Index(1)].into_iter().collect();
 ///
 /// assert_eq!(path.to_property_path(&names)?.as_str(), "Size[1]");
-/// # Ok::<(), ltk_meta::path::Unnameable>(())
+/// # Ok::<(), ltk_meta::path::Nameless>(())
 /// ```
 pub trait FieldNames {
     /// The plaintext of `field`, if known, given the class of the node it was read on.

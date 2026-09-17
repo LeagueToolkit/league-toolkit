@@ -26,7 +26,7 @@ pub use names::FieldNames;
 
 mod value;
 pub use value::{
-    Fields, FloatBits, MapKey, NamedPath, Unnameable, UnnameableKind, ValuePath, ValueSegment,
+    Fields, FloatBits, MapKey, NamedPath, Nameless, NamelessKind, ValuePath, ValueSegment,
 };
 
 #[cfg(test)]

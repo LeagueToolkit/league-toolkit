@@ -48,18 +48,18 @@ impl fmt::Display for NamedPath {
 /// A position [`ValuePath::to_property_path`] cannot spell.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("{kind} (segment {segment})")]
-pub struct Unnameable {
+pub struct Nameless {
     /// The index into [`ValuePath::segments`] of the first segment that cannot be spelled. 0 for a path
     /// with no segments.
     pub segment: usize,
     /// Why it cannot be spelled.
-    pub kind: UnnameableKind,
+    pub kind: NamelessKind,
 }
 
-/// The kinds of [`Unnameable`].
+/// The kinds of [`Nameless`].
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
-pub enum UnnameableKind {
+pub enum NamelessKind {
     /// The table has no plaintext for `field`, or none that is a property name hashing back to
     /// it. `class` is the class the table was asked with.
     #[error("no name for field {field:08x}")]
@@ -91,14 +91,14 @@ impl ValuePath {
     ///
     /// # Errors
     ///
-    /// [`Unnameable`] at the first segment that cannot be spelled.
+    /// [`Nameless`] at the first segment that cannot be spelled.
     ///
     /// # Examples
     ///
     /// ```
     /// use std::collections::HashMap;
     /// use ltk_hash::{BinHash, Hash as _};
-    /// use ltk_meta::path::{MapKey, ValueSegment, UnnameableKind, ValuePath};
+    /// use ltk_meta::path::{MapKey, ValueSegment, NamelessKind, ValuePath};
     ///
     /// let lookup = BinHash::hash_str("Lookup");
     /// let names = HashMap::from([(lookup, "Lookup".to_owned())]);
@@ -110,13 +110,13 @@ impl ValuePath {
     ///
     /// let unknown: ValuePath = [ValueSegment::Field(BinHash(0x1234))].into_iter().collect();
     /// let error = unknown.to_property_path(&names).unwrap_err();
-    /// assert!(matches!(error.kind, UnnameableKind::Field { .. }));
-    /// # Ok::<(), ltk_meta::path::Unnameable>(())
+    /// assert!(matches!(error.kind, NamelessKind::Field { .. }));
+    /// # Ok::<(), ltk_meta::path::Nameless>(())
     /// ```
-    pub fn to_property_path(&self, names: &dyn FieldNames) -> Result<PropertyPath, Unnameable> {
-        let grammar = |segment, error| Unnameable {
+    pub fn to_property_path(&self, names: &dyn FieldNames) -> Result<PropertyPath, Nameless> {
+        let grammar = |segment, error| Nameless {
             segment,
-            kind: UnnameableKind::Path(error),
+            kind: NamelessKind::Path(error),
         };
         let no_property = |segment| {
             grammar(
@@ -131,9 +131,9 @@ impl ValuePath {
             match item {
                 ValueSegment::Field(_) => {
                     let (field, class) = fields.next().expect("one class per field segment");
-                    let name = spell_field(names, field, class).ok_or(Unnameable {
+                    let name = spell_field(names, field, class).ok_or(Nameless {
                         segment,
-                        kind: UnnameableKind::Field { field, class },
+                        kind: NamelessKind::Field { field, class },
                     })?;
                     match &mut path {
                         Some(path) => path.push_field(&name),
@@ -163,9 +163,9 @@ impl ValuePath {
                             KeyLiteral::Number(&number)
                         }
                         other => {
-                            number = decimal(other).ok_or(Unnameable {
+                            number = decimal(other).ok_or(Nameless {
                                 segment,
-                                kind: UnnameableKind::Key(other.kind()),
+                                kind: NamelessKind::Key(other.kind()),
                             })?;
                             KeyLiteral::Number(&number)
                         }

@@ -10,7 +10,7 @@ use ltk_hash::BinHash;
 
 use crate::{
     merge::{combines, key_index, map_keys},
-    path::{FieldNames, MapKey, PropertyPath, Unnameable, UnnameableKind, ValuePath, ValueShape},
+    path::{FieldNames, MapKey, Nameless, NamelessKind, PropertyPath, ValuePath, ValueShape},
     property::values,
     walk::{Trail, TrailSegment},
     Bin, BinObject, BinOverride, PropertyPatch, PropertyValueEnum,
@@ -56,13 +56,13 @@ pub enum Lift {
     },
     /// No client path spells `at`: a field on it has no name in the table, or a key has no
     /// literal.
-    Unnameable {
+    Nameless {
         /// The object the position is in.
         object_hash: BinHash,
         /// The position a record could not be written at.
         at: ValuePath,
         /// The first segment that cannot be spelled, and why.
-        cause: Unnameable,
+        cause: Nameless,
     },
     /// The two sides hold different shapes at `at`. No record changes the shape of a value: the
     /// patch type rule skips it.
@@ -80,7 +80,7 @@ impl Lift {
     pub fn object_hash(&self) -> BinHash {
         match self {
             Self::MapInsert { object_hash, .. }
-            | Self::Unnameable { object_hash, .. }
+            | Self::Nameless { object_hash, .. }
             | Self::Mismatch { object_hash, .. } => *object_hash,
         }
     }
@@ -89,9 +89,9 @@ impl Lift {
     #[must_use]
     pub fn at(&self) -> &ValuePath {
         match self {
-            Self::MapInsert { at, .. }
-            | Self::Unnameable { at, .. }
-            | Self::Mismatch { at, .. } => at,
+            Self::MapInsert { at, .. } | Self::Nameless { at, .. } | Self::Mismatch { at, .. } => {
+                at
+            }
         }
     }
 }
@@ -102,7 +102,7 @@ impl fmt::Display for Lift {
         write!(f, "{:08x} {}: ", self.object_hash(), self.at())?;
         match self {
             Self::MapInsert { keys, .. } => write!(f, "{keys} map entries inserted"),
-            Self::Unnameable { cause, .. } => write!(f, "unnameable, {cause}"),
+            Self::Nameless { cause, .. } => write!(f, "nameless, {cause}"),
             Self::Mismatch { .. } => f.write_str("shapes differ"),
         }
     }
@@ -410,16 +410,16 @@ impl<'e, M: Clone + PartialEq> Differ<'_, 'e, M> {
         Some(escalate.map_or(Ok(()), Err))
     }
 
-    /// A [`Lift::Unnameable`] at an entry whose key literal resolves to an earlier entry,
+    /// A [`Lift::Nameless`] at an entry whose key literal resolves to an earlier entry,
     /// escalating to the map.
     fn shadowed_key(&mut self, key: &MapKey) -> Result<(), Escalate> {
         let segment = self.trail.len() - 1;
-        self.lift(|object_hash, at| Lift::Unnameable {
+        self.lift(|object_hash, at| Lift::Nameless {
             object_hash,
             at,
-            cause: Unnameable {
+            cause: Nameless {
                 segment,
-                kind: UnnameableKind::Key(key.kind()),
+                kind: NamelessKind::Key(key.kind()),
             },
         });
         Err(segment)
@@ -440,7 +440,7 @@ impl<'e, M: Clone + PartialEq> Differ<'_, 'e, M> {
         Err(self.trail.len() - 1)
     }
 
-    /// A record of `value` at the trail's position, or a [`Lift::Unnameable`] escalating to the
+    /// A record of `value` at the trail's position, or a [`Lift::Nameless`] escalating to the
     /// longest prefix every segment of which is spelled.
     fn record(
         &mut self,
@@ -455,7 +455,7 @@ impl<'e, M: Clone + PartialEq> Differ<'_, 'e, M> {
             }
             Err(cause) => {
                 let to = cause.segment;
-                self.report.lifted.push(Lift::Unnameable {
+                self.report.lifted.push(Lift::Nameless {
                     object_hash: self.object_hash,
                     at,
                     cause,

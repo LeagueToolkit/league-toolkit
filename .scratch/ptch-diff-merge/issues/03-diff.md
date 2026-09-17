@@ -31,7 +31,7 @@ pub enum Lift {
     /// The edit adds `keys` entries to the map at `at`. No record inserts a map entry.
     MapInsert { object_hash: BinHash, at: ValuePath, keys: usize },
     /// No client path spells `at`: a field on it has no name, or a key has no literal.
-    Unnameable { object_hash: BinHash, at: ValuePath, cause: Unnameable },
+    Nameless { object_hash: BinHash, at: ValuePath, cause: Nameless },
     /// The two sides hold different shapes at `at`. No record changes a value's shape.
     Mismatch { object_hash: BinHash, at: ValuePath },
 }
@@ -74,7 +74,7 @@ class is a plain record (D11), and a map entry matches by its `MapKey` (D36).
 
 **Three things escalate a record** to an ancestor, or to the whole object at the root: a map entry
 the edit adds (`Lift::MapInsert`), a change of shape the type rule skips (`Lift::Mismatch`), and a
-position no client path spells (`Lift::Unnameable`). An object of another class goes whole into
+position no client path spells (`Lift::Nameless`). An object of another class goes whole into
 `BinOverride::objects` with a mismatch at its root (D35).
 
 **D33 (ADR-0019): an escalated record carries the base merged with the edit.** The invariant holds

@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use ltk_hash::Hash as _;
 
 use super::*;
-use crate::path::{MapKey, UnnameableKind, ValuePath, ValueSegment};
+use crate::path::{MapKey, NamelessKind, ValuePath, ValueSegment};
 use crate::walk::ChildSegment;
 
 /// At one node: the trail's hash form, the owned address's hash form, the address's class
@@ -173,7 +173,7 @@ struct RoundTrip<'n> {
     names: &'n HashMap<BinHash, String>,
     positions: Vec<(
         ValuePath,
-        Result<crate::path::PropertyPath, crate::path::Unnameable>,
+        Result<crate::path::PropertyPath, crate::path::Nameless>,
         PropertyValueEnum,
     )>,
 }
@@ -223,7 +223,7 @@ fn every_nameable_position_resolves_through_its_client_path() {
     bin.walk(&mut round_trip).unwrap();
 
     let mut resolved = 0;
-    let mut unnameable = 0;
+    let mut nameless = 0;
     for (path, client, value) in round_trip.positions {
         match client {
             Ok(client) => {
@@ -240,11 +240,11 @@ fn every_nameable_position_resolves_through_its_client_path() {
                 resolved += 1;
             }
             Err(error) => {
-                unnameable += 1;
+                nameless += 1;
                 let ValueSegment::Key(key) = &path.segments()[error.segment] else {
-                    panic!("{path}: only a key is unnameable here, got {error}");
+                    panic!("{path}: only a key is nameless here, got {error}");
                 };
-                assert_eq!(error.kind, UnnameableKind::Key(key.kind()), "{path}");
+                assert_eq!(error.kind, NamelessKind::Key(key.kind()), "{path}");
                 assert!(
                     matches!(
                         key.kind(),
@@ -263,5 +263,5 @@ fn every_nameable_position_resolves_through_its_client_path() {
     // 9 nested nodes of the fixture and 13 keyed nodes whose key has a literal; 46 leaf
     // properties: 43 on the root and one on each of C2, C3 and C9. The 6 other keyed nodes sit
     // under a `None`, vector, matrix or colour key.
-    assert_eq!((resolved, unnameable), (68, 6));
+    assert_eq!((resolved, nameless), (68, 6));
 }

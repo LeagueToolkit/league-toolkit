@@ -110,9 +110,9 @@ impl ValuePath {
     ///
     /// # Errors
     ///
-    /// [`Unnameable`] at the first segment that cannot be spelled: a field `names` has no usable
+    /// [`Nameless`] at the first segment that cannot be spelled: a field `names` has no usable
     /// plaintext for, a key with no `{...}` literal, or segments that spell no property path.
-    pub fn to_property_path(&self, names: &dyn FieldNames) -> Result<PropertyPath, Unnameable>;
+    pub fn to_property_path(&self, names: &dyn FieldNames) -> Result<PropertyPath, Nameless>;
 
     /// The path for reading: every hash `names` can spell, spelled; the rest left as hex.
     pub fn to_named(&self, names: &dyn FieldNames) -> NamedPath;
@@ -152,16 +152,16 @@ impl fmt::Display for NamedPath { /* `text` */ }
 /// A position `to_property_path` could not spell.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("{kind} (segment {segment})")]
-pub struct Unnameable {
+pub struct Nameless {
     /// Index into `ValuePath::segments` of the first segment that could not be spelled. 0 for a
     /// path with no segments.
     pub segment: usize,
-    pub kind: UnnameableKind,
+    pub kind: NamelessKind,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
-pub enum UnnameableKind {
+pub enum NamelessKind {
     /// `names` has no plaintext for `field` that is a property name hashing back to it; `class`
     /// is the context it was asked with.
     Field { field: BinHash, class: Option<BinHash> },
@@ -257,15 +257,15 @@ coerces a number either way.
 
 Blocked by #225 (the trail and the tree traits the address is copied from)
 
-- [ ] `ValuePath`, `ValueSegment`, `MapKey`, `NamedPath`, `Unnameable` and `UnnameableKind` carry the
+- [ ] `ValuePath`, `ValueSegment`, `MapKey`, `NamedPath`, `Nameless` and `NamelessKind` carry the
       traits above; two `F32` keys with the same bits are equal and hash the same; `Display` on
       `ValuePath` writes the hash form of every row of the rendering table
 - [ ] `MapKey::try_from` accepts every kind `Kind::is_valid_map_key` admits and rejects the rest
       with `InvalidKeyType`; `to_value` round-trips
 - [ ] `to_property_path` produces a path that `Bin::resolve` lands on the same value with, for
       every position in a fixture tree with a complete name table (AC-7)
-- [ ] `to_property_path` reports the first unnameable segment rather than the last, and a `Key` segment
-      whose kind has no literal is reported as `UnnameableKind::Key`, not silently rendered
+- [ ] `to_property_path` reports the first nameless segment rather than the last, and a `Key` segment
+      whose kind has no literal is reported as `NamelessKind::Key`, not silently rendered
 - [ ] `to_named` spells every hash `names` knows and leaves the rest as hex; `named` plus `unnamed`
       equals the count of field segments plus hash-kind keys
 - [ ] `push_field`, `pop`, `push` and `FromIterator` keep one class per field segment; `fields()`
@@ -273,7 +273,7 @@ Blocked by #225 (the trail and the tree traits the address is copied from)
 - [ ] `FieldNames` is implemented for `()`, the two `HashMap` shapes, `&T`, and
       `ltk_ritobin::hashes::HashMapProvider`
 - [ ] A name that does not hash back to its field is not used; a `NaN` or infinite `F32` key has no
-      client path; segments that spell no property path are `UnnameableKind::Path`
+      client path; segments that spell no property path are `NamelessKind::Path`
 - [ ] `MapKey` and `ValueSegment` display as the hash form writes them, and `ValuePath`'s hash form
       is its segments' displays with `.` before every field but the first segment
 - [ ] `Trail::to_value_path` and `Node::to_value_path` render as the trail does at every node, over the
