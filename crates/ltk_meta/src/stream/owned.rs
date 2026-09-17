@@ -131,12 +131,9 @@ pub(crate) fn read_string(cur: &mut Cursor<'_>) -> Result<values::String, Error>
 ///
 /// See [`read_value`].
 pub(crate) fn read_container(cur: &mut Cursor<'_>) -> Result<values::Container, Error> {
-    // Checked before the body is walked, not after: a nested item kind would make every byte
-    // that follows mean something else.
-    let item_kind = cur.kind()?;
-    if item_kind.is_container() {
-        return Err(Error::InvalidNesting(item_kind));
-    }
+    // Read before the body is walked, not after: a nested item kind would make every byte that
+    // follows mean something else.
+    let item_kind = cur.item_kind()?;
 
     let items = cur.sized_region(|cur| {
         let count = cur.u32()?;
@@ -156,14 +153,8 @@ pub(crate) fn read_container(cur: &mut Cursor<'_>) -> Result<values::Container, 
 ///
 /// See [`read_value`].
 pub(crate) fn read_map(cur: &mut Cursor<'_>) -> Result<values::Map, Error> {
-    let key_kind = cur.kind()?;
-    if !key_kind.is_valid_map_key() {
-        return Err(Error::InvalidKeyType(key_kind));
-    }
-    let value_kind = cur.kind()?;
-    if value_kind.is_container() {
-        return Err(Error::InvalidNesting(value_kind));
-    }
+    let key_kind = cur.key_kind()?;
+    let value_kind = cur.item_kind()?;
 
     let entries = cur.sized_region(|cur| {
         let count = cur.u32()?;
@@ -185,10 +176,7 @@ pub(crate) fn read_map(cur: &mut Cursor<'_>) -> Result<values::Map, Error> {
 ///
 /// See [`read_value`].
 pub(crate) fn read_optional(cur: &mut Cursor<'_>) -> Result<values::Optional, Error> {
-    let item_kind = cur.kind()?;
-    if item_kind.is_container() {
-        return Err(Error::InvalidNesting(item_kind));
-    }
+    let item_kind = cur.item_kind()?;
 
     let value = match cur.bool()? {
         true => Some(read_value(cur, item_kind)?),

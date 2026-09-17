@@ -208,10 +208,7 @@ pub struct ContainerView<'a> {
 
 impl<'a> ContainerView<'a> {
     fn read(cur: &mut Cursor<'a>) -> Result<Self, Error> {
-        let item_kind = cur.kind()?;
-        if item_kind.is_container() {
-            return Err(Error::InvalidNesting(item_kind));
-        }
+        let item_kind = cur.item_kind()?;
 
         let size = cur.u32()? as usize;
         let mut items = Cursor::new(cur.take(size)?, cur.numbering());
@@ -457,14 +454,8 @@ pub struct MapView<'a> {
 
 impl<'a> MapView<'a> {
     fn read(cur: &mut Cursor<'a>) -> Result<Self, Error> {
-        let key_kind = cur.kind()?;
-        if !key_kind.is_valid_map_key() {
-            return Err(Error::InvalidKeyType(key_kind));
-        }
-        let value_kind = cur.kind()?;
-        if value_kind.is_container() {
-            return Err(Error::InvalidNesting(value_kind));
-        }
+        let key_kind = cur.key_kind()?;
+        let value_kind = cur.item_kind()?;
 
         let size = cur.u32()? as usize;
         let mut entries = Cursor::new(cur.take(size)?, cur.numbering());
@@ -614,10 +605,7 @@ pub struct OptionalView<'a> {
 
 impl<'a> OptionalView<'a> {
     fn read(cur: &mut Cursor<'a>) -> Result<Self, Error> {
-        let item_kind = cur.kind()?;
-        if item_kind.is_container() {
-            return Err(Error::InvalidNesting(item_kind));
-        }
+        let item_kind = cur.item_kind()?;
 
         let value = match cur.bool()? {
             true => Some(Cursor::new(cur.take_value(item_kind)?, cur.numbering())),

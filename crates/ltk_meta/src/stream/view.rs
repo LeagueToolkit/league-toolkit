@@ -207,8 +207,9 @@ impl<'a> PropertyView<'a> {
     ///
     /// # Errors
     ///
-    /// [`Error::InvalidPropertyTypePrimitive`] if a header kind byte does not decode, or
-    /// [`Error::IOError`] if the value's bytes end inside its header.
+    /// [`Error::InvalidPropertyTypePrimitive`] if a header kind byte does not decode,
+    /// [`Error::InvalidNesting`] or [`Error::InvalidKeyType`] for a header the value model has
+    /// no value for, or [`Error::IOError`] if the value's bytes end inside its header.
     pub fn shape(&self) -> Result<ValueShape, Error> {
         self.value.value_shape(self.kind)
     }
