@@ -1249,7 +1249,7 @@ fn property_strings_are_decoded_only_when_requested() {
                 assert!(!value.can_contain_node()?);
                 assert!(value.as_node()?.is_none());
                 assert!(value.children()?.next().is_none());
-                let sibling = node.inner().property(field)?.unwrap();
+                let sibling = node.inner().get(field)?.unwrap();
                 assert_eq!(sibling.kind(), Kind::String);
                 if self.decode {
                     value.as_leaf()?;

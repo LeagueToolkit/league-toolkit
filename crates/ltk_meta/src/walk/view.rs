@@ -115,7 +115,7 @@ impl<'a> TreeNode<'a> for StructView<'a> {
         }
     }
 
-    fn property(&self, field: BinHash) -> Result<Option<Self::Value>, Error> {
+    fn get(&self, field: BinHash) -> Result<Option<Self::Value>, Error> {
         Ok(StructView::property(self, field)?.map(RawValue::property))
     }
 
