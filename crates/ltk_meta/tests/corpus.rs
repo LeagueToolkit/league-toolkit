@@ -250,7 +250,7 @@ struct DiffCounts {
     records: usize,
     objects: usize,
     map_inserts: usize,
-    unnameable: usize,
+    nameless: usize,
     mismatches: usize,
     /// Diff records carrying a whole container a shipped record indexes into.
     containers: usize,
@@ -267,8 +267,8 @@ impl fmt::Display for DiffCounts {
         )?;
         writeln!(
             f,
-            "lifted: {} map inserts, {} unnameable, {} mismatches",
-            self.map_inserts, self.unnameable, self.mismatches
+            "lifted: {} map inserts, {} nameless, {} mismatches",
+            self.map_inserts, self.nameless, self.mismatches
         )?;
         writeln!(
             f,
@@ -346,7 +346,7 @@ fn every_shipped_patch_diffs_back_inside_its_records() {
             for lift in &report.lifted {
                 match lift {
                     Lift::MapInsert { .. } => counts.map_inserts += 1,
-                    Lift::Unnameable { .. } => counts.unnameable += 1,
+                    Lift::Nameless { .. } => counts.nameless += 1,
                     Lift::Mismatch { .. } => counts.mismatches += 1,
                     _ => {}
                 }

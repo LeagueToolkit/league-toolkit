@@ -181,7 +181,7 @@ fn an_unnamed_field_lifts_to_the_nearest_named_ancestor_or_the_object() {
         )]
     );
     assert_eq!(report.lifted.len(), 1);
-    let ltk_meta::Lift::Unnameable {
+    let ltk_meta::Lift::Nameless {
         at: lifted, cause, ..
     } = &report.lifted[0]
     else {
@@ -354,7 +354,7 @@ fn a_shipped_patch_diffs_back_to_records_inside_the_ones_it_carries() {
     let (patch, report) = base.diff(&edited, &names);
     assert_eq!(report.lifted.len(), 2);
     for lift in &report.lifted {
-        let ltk_meta::Lift::Unnameable {
+        let ltk_meta::Lift::Nameless {
             at: lifted, cause, ..
         } = lift
         else {
@@ -436,19 +436,19 @@ proptest! {
 
             // An unspellable segment is lifted once, where it was met, never again at an
             // ancestor that still holds it.
-            let unnameable: Vec<_> = report
+            let nameless: Vec<_> = report
                 .lifted
                 .iter()
                 .filter_map(|lift| match lift {
-                    ltk_meta::Lift::Unnameable { object_hash, at, cause } => {
+                    ltk_meta::Lift::Nameless { object_hash, at, cause } => {
                         Some((*object_hash, at, cause.segment))
                     }
                     _ => None,
                 })
                 .collect();
-            for (object, at, segment) in &unnameable {
+            for (object, at, segment) in &nameless {
                 prop_assert!(*segment < at.len());
-                for (other_object, other, other_segment) in &unnameable {
+                for (other_object, other, other_segment) in &nameless {
                     let is_ancestor = other.len() < at.len()
                         && other.segments() == &at.segments()[..other.len()];
                     prop_assert!(
@@ -550,7 +550,7 @@ fn a_float_key_the_resolver_cannot_tell_apart_lifts_its_map() {
     );
     assert!(matches!(
         report.lifted[..],
-        [ltk_meta::Lift::Unnameable { .. }]
+        [ltk_meta::Lift::Nameless { .. }]
     ));
     assert_applies_as_merge(&base, &edited, patch);
 }
@@ -590,7 +590,7 @@ fn siblings_under_one_unnamed_field_each_lift_at_their_own_position() {
         .lifted
         .iter()
         .map(|lift| match lift {
-            ltk_meta::Lift::Unnameable { at, cause, .. } => (at.clone(), cause.segment),
+            ltk_meta::Lift::Nameless { at, cause, .. } => (at.clone(), cause.segment),
             other => panic!("{other}"),
         })
         .collect();

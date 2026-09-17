@@ -1,7 +1,7 @@
 //! [`ValuePath`]: where a position is inside one object, by hash and by position.
 
 mod render;
-pub use render::{NamedPath, Unnameable, UnnameableKind};
+pub use render::{NamedPath, Nameless, NamelessKind};
 
 #[cfg(test)]
 mod tests;

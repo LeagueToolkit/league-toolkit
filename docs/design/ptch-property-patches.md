@@ -928,7 +928,7 @@ pub enum Lift {
     /// The edit adds `keys` entries to the map at `at`. No record inserts a map entry.
     MapInsert { object_hash: BinHash, at: ValuePath, keys: usize },
     /// No client path spells `at`: a field on it has no name, or a key has no literal.
-    Unnameable { object_hash: BinHash, at: ValuePath, cause: Unnameable },
+    Nameless { object_hash: BinHash, at: ValuePath, cause: Nameless },
     /// The two sides hold different shapes at `at`. No record changes a value's shape.
     Mismatch { object_hash: BinHash, at: ValuePath },
 }
@@ -988,7 +988,7 @@ Three things stop a record at its position, and each escalates it:
 | ------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------ |
 | `MapInsert`   | the edit adds an entry to a map                                                 | the map                                                |
 | `Mismatch`    | the two values differ in `ValueShape`, which the type rule skips ([section 9.3](#s9.3)) | the parent position                             |
-| `Unnameable`  | `to_property_path` cannot spell the position, or its `{key}` resolves to an earlier entry | the longest prefix before the unspellable segment |
+| `Nameless`    | `to_property_path` cannot spell the position, or its `{key}` resolves to an earlier entry | the longest prefix before the unspellable segment |
 
 An escalated record carries the base's value at its position with the edit merged over it
 (ADR-0019), and replaces every record its descendants wrote. Where two escalations meet, the
@@ -1001,7 +1001,7 @@ ancestor that holds it.
 Two map cases follow the merge. A key `edited` repeats is diffed against the base's entry with the
 earlier occurrences merged over it. The resolver matches a `{key}` with `==`, and `0.0` equals
 `-0.0`: in a float-keyed map holding both, the later of the two has no literal of its own, and a
-difference at it lifts as `Unnameable` to the map.
+difference at it lifts as `Nameless` to the map.
 
 **The invariant.** For any `base` and `edited`,
 
@@ -1322,9 +1322,9 @@ holding only the names its record paths spell.
 | ------------------------------------------------------------------------ | --------------- |
 | PTCH chunks diffed back, applying cleanly and equal to the merge         | 238 of 238      |
 | records / whole objects                                                  | 23,315 / 582    |
-| lifts: map insert / unnameable / mismatch                                | 0 / 3,249 / 0   |
+| lifts: map insert / nameless / mismatch                                   | 0 / 3,249 / 0   |
 | records carrying a whole container a shipped record indexes into         | 58              |
 | records outside every shipped record                                     | 0               |
 
-An unnameable lift is a field no record path spells, the table's only names: `Size` under a record
+A nameless lift is a field no record path spells, the table's only names: `Size` under a record
 carrying a whole `Position.UIRect` is one.
