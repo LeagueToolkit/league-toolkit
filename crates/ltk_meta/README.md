@@ -20,8 +20,11 @@ Two kinds of file share the `.bin` extension and this crate reads both:
 | `ValueSlot` | A mutable handle on one value, carrying the kind its holder pins it to - what `resolve_mut` hands back |
 | `concrete` | The value model with the metadata parameter pinned - start here - plus the three streaming names Rust cannot infer without it: `BinStream`, `LruObjectCache`, `NoCache` |
 | `path::PropertyPath` | Property addressing (`Position.Anchors.Anchor`, `Elements[3]`, `Lookup{"weapon"}`), with `Bin::resolve`, `resolve_mut` and `Bin::patch` |
+| `path::ValuePath`, `path::ValueSegment`, `path::MapKey`, `path::FieldNames` | An address for any position inside an object, by hash and by position; its client path and readable form, spelled through a name table |
 | `path::ValueShape` | What a value is - kind, item kind, map key kind, embed class - as the resolver's type rule and the streaming header peek both speak it |
 | `BinOverride`, `ApplyReport` | PTCH files: read, build, `check` against / `apply` onto a base `Bin` |
+| `MergeReport`, `Replaced` | `Bin::merge`: one bin layered over another, and every value it overwrote |
+| `DiffReport`, `DiffOptions`, `Lift` | `Bin::diff`: the difference between two bins as a `BinOverride`, and every place a record carries more than the change |
 | `BinFile`, `BinKind` | Reading a `.bin` when you don't know which kind it is |
 | `traits` | `ReadProperty` / `WriteProperty` / `PropertyExt` (serialized size), for generic code over values |
 | `Error` | One `thiserror` enum for the whole crate (`miette` diagnostics included) |
@@ -457,6 +460,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if report.is_clean() {
         patch_bin.apply(&mut base);
     }
+    Ok(())
+}
+```
+
+## Merging and diffing
+
+`merge` layers an edited bin over a base in place: the edit wins at every value it reaches, a map combines key by key, a struct or embed of the same class combines field by field, and whatever only the base holds survives. The report names every value the edit overwrote, and `mismatched` marks the ones whose shape differs - the mark a type migration leaves on a stale mod.
+
+`diff` writes the difference as a `BinOverride`. A record cannot insert a map entry, change a value's shape or address a field with no name. At each of those places the diff writes one record at an ancestor holding the base merged with the edit, and reports a `Lift`. Applied to its base, the patch equals the merge.
+
+```rust
+use std::{collections::HashMap, fs::File};
+use ltk_hash::{BinHash, Hash as _};
+use ltk_meta::Bin;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let base = Bin::from_reader(&mut File::open("game.bin")?)?;
+    let edited = Bin::from_reader(&mut File::open("mod.bin")?)?;
+
+    let mut merged = base.clone();
+    let report = merged.merge(&edited);
+    for replaced in report.replaced.iter().filter(|r| r.mismatched) {
+        println!("type changed at {replaced}");
+    }
+
+    let names = HashMap::from([(BinHash::hash_str("Size"), "Size".to_owned())]);
+    let (patch, report) = base.diff(&edited, &names);
+    for lift in &report.lifted {
+        println!("{lift}"); // e.g. "01000001 1e6ba0c4: 2 map entries inserted"
+    }
+
+    let mut applied = base.clone();
+    patch.apply(&mut applied);
+    assert_eq!(applied.objects, merged.objects);
     Ok(())
 }
 ```
