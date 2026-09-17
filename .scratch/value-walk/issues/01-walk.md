@@ -36,9 +36,13 @@ pub trait TreeValue<'a>: Copy + sealed::Sealed {
     type Children: Iterator<Item = Result<(ChildSegment<Self>, Self), Error>>;
 
     fn kind(&self) -> Kind;
-    /// Whether this value is a node or can contain one: a `Struct` or `Embedded` whose class hash
-    /// is not 0, or a container, optional or map whose item kind [`TreeKind::is_node`].
-    fn can_contain_node(&self) -> Result<bool, Error>;
+    /// What this value's header declares: kind, item and key kinds, class and count. Over a view
+    /// nothing below the header is read.
+    fn declaration(&self) -> Result<Declaration, Error>;
+    /// Whether this value is a node or can contain one: a `Struct` or `Embedded` whose class
+    /// hash is not 0, or a container, optional or map whose item kind [`TreeKind::is_node`]. Read
+    /// off `declaration`.
+    fn can_contain_node(&self) -> Result<bool, Error> { /* provided */ }
     /// This value as a node, if it is a `Struct` or `Embedded` with a class hash that is not 0.
     fn as_node(&self) -> Result<Option<Self::Node>, Error>;
     /// The values inside this one, with the segment reaching each. Empty for a leaf and a node.
@@ -63,6 +67,18 @@ pub trait TreeNode<'a>: Copy + sealed::Sealed {
     fn get(&self, field: BinHash) -> Result<Option<Self::Value>, Error>;
     /// The whole node, owned, as a `Struct`. Allocates.
     fn to_struct(&self) -> Result<values::Struct, Error>;
+}
+
+/// What a value's header declares. A pointer's class is recorded, 0 for the null pointer; an
+/// optional counts 0 or 1. `ValueShape` converts from it without the count or a pointer's class.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub struct Declaration {
+    pub kind: Kind,
+    pub item_kind: Option<Kind>,
+    pub key_kind: Option<Kind>,
+    pub class: Option<BinHash>,
+    pub count: Option<usize>,
 }
 
 /// The segment from a container, optional or map to one value inside it.
@@ -300,3 +316,4 @@ depend on it and can land first behind those methods.
 - [ ] An invalid UTF-8 property reaches its callback without decoding; skipping it succeeds and requesting its leaf returns `Error::Utf8Error`
 
 - [ ] `RawValue::value_view()` exposes container declarations without decoding their contents and reports malformed leaf payloads on request
+- [ ] `declaration()` agrees between the two trees for every root property's value and every item, key and value inside it; `ValueShape::from` of it equals `ValueShape::of` the owned value; over a view it succeeds on a container whose leaf payload does not decode
