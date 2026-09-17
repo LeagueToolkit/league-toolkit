@@ -1,7 +1,7 @@
 ---
 issue: 219
 title: "ValuePath: addressing a position in a bin by hash"
-labels: crate:ltk_meta, enhancement, format:bin, area:api
+labels: crate:ltk_meta, enhancement, format:bin, area:api, blocked
 ---
 
 Part of #218 (design: `docs/design/value-walk.md` [section 4](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/value-walk.md#s4)).
@@ -23,21 +23,22 @@ In `ltk_meta::path`, beside `PropertyPath`:
 /// whose plaintext is unknown - and never written to a file. The object it is inside is
 /// carried beside it, never in it.
 ///
-/// Beside the steps it keeps the **class context**: for each `Field` step, the class hash of
+/// Beside the segments it keeps the **class context**: for each `Field` segment, the class hash of
 /// the node the field was read on, which is what a name table is asked with (ADR-0012). A
-/// class of 0 means unknown. The context is not part of the address: two paths with the same
-/// steps are equal whatever their classes, and the hash form does not print them.
+/// class of 0 means unknown - no node carries the null class (W2), so the value is free. The
+/// context is not part of the address: two paths with the same segments are equal whatever
+/// their classes, and the hash form does not print them.
 ///
-/// `PartialEq`, `Eq` and `Hash` are written by hand over the steps alone (W16).
+/// `PartialEq`, `Eq` and `Hash` are written by hand over the segments alone (W16).
 #[derive(Clone, Debug, Default)]
-pub struct ValuePath { /* steps: Vec<Step>, classes: Vec<BinHash>, one per Field step */ }
-impl PartialEq for ValuePath { /* steps only */ }
+pub struct ValuePath { /* segments: Vec<ValueSegment>, classes: Vec<BinHash>, one per Field segment */ }
+impl PartialEq for ValuePath { /* segments only */ }
 impl Eq for ValuePath {}
-impl Hash for ValuePath { /* steps only */ }
+impl Hash for ValuePath { /* segments only */ }
 
-/// One step from a node toward a position inside it.
+/// One segment from a node toward a position inside it.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Step {
+pub enum ValueSegment {
     /// A property of a node, by the field's name hash.
     Field(BinHash),
     /// A container element by position, or the value of a present optional, which is always 0.
@@ -49,7 +50,8 @@ pub enum Step {
 /// A map key, owned and metadata-free: every kind `Kind::is_valid_map_key` admits.
 ///
 /// Floats are held as their bit patterns so the key is `Eq` and `Hash`: two keys are equal
-/// when the file would write the same bytes for them. The client's names for the tags (W19).
+/// when the file would write the same bytes for them, which is the only equality a map on the
+/// wire has. The client's names for the tags, as `Leaf` (W19).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum MapKey {
     None,
@@ -58,16 +60,18 @@ pub enum MapKey {
     F32(FloatBits),
     Vector2([FloatBits; 2]), Vector3([FloatBits; 3]), Vector4([FloatBits; 4]),
     Matrix44([FloatBits; 16]),
-    Color(Color),
+    Color(Color<u8>),
     String(String),
     Hash(BinHash),
     File(WadHash),
 }
 
-/// An `f32` by its bits: `Eq` and `Hash`, and equal exactly when the wire bytes are.
+/// An `f32` by its bits: `Eq` and `Hash`, and equal exactly when the wire bytes are. A `NaN`
+/// equals itself when the bits agree, and `-0.0` differs from `0.0`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct FloatBits(u32);
 impl FloatBits { pub fn new(value: f32) -> Self; pub fn get(self) -> f32; }
+impl From<f32> for FloatBits {}
 
 impl MapKey {
     pub fn kind(&self) -> Kind;
@@ -79,21 +83,21 @@ impl<M> TryFrom<&PropertyValueEnum<M>> for MapKey { type Error = Error; /* Inval
 
 impl ValuePath {
     pub fn new() -> Self;
-    pub fn steps(&self) -> &[Step];
+    pub fn segments(&self) -> &[ValueSegment];
     pub fn len(&self) -> usize;
     pub fn is_empty(&self) -> bool;
 
-    /// Appends a field step, recording `class` - the class hash of the node `field` is on -
+    /// Appends a field segment, recording `class` - the class hash of the node `field` is on -
     /// in the class context. Pass 0 when it is not known.
     pub fn push_field(&mut self, field: BinHash, class: BinHash);
     pub fn push_index(&mut self, index: usize);
     pub fn push_key(&mut self, key: MapKey);
-    /// Appends `step` with no class: a `Field` records 0.
-    pub fn push(&mut self, step: Step);
-    /// Removes the last step, and its class if it was a field.
-    pub fn pop(&mut self) -> Option<Step>;
+    /// Appends `segment` with no class: a `Field` records 0.
+    pub fn push(&mut self, segment: ValueSegment);
+    /// Removes the last segment, and its class if it was a field.
+    pub fn pop(&mut self) -> Option<ValueSegment>;
 
-    /// Every field step with its class, in order; `None` where the class is unknown.
+    /// Every field segment with its class, in order; `None` where the class is unknown.
     pub fn fields(&self) -> Fields<'_>;
 
     /// The client path naming the same position, if every field has a name and every key a
@@ -101,24 +105,24 @@ impl ValuePath {
     ///
     /// # Errors
     ///
-    /// [`Unnameable`] at the first step that cannot be spelled: a field `names` has no plaintext
-    /// for, or a key whose kind has no `{...}` literal.
+    /// [`Unnameable`] at the first segment that cannot be spelled: a field `names` has no usable
+    /// plaintext for, a key with no `{...}` literal, or segments that spell no property path.
     pub fn to_property_path(&self, names: &dyn FieldNames) -> Result<PropertyPath, Unnameable>;
 
     /// The path for reading: every hash `names` can spell, spelled; the rest left as hex.
     pub fn to_named(&self, names: &dyn FieldNames) -> NamedPath;
 }
 
-impl fmt::Display for ValuePath { /* the hash form */ }
-/// Steps only; every field's class is unknown.
-impl FromIterator<Step> for ValuePath {}
-impl Extend<Step> for ValuePath {}
+impl fmt::Display for ValuePath { /* the hash form, section 4.2 */ }
+/// Segments only; every field's class is unknown.
+impl FromIterator<ValueSegment> for ValuePath {}
+impl Extend<ValueSegment> for ValuePath {}
 /// The iterator behind [`ValuePath::fields`]: `(field, class)` pairs.
 #[derive(Clone, Debug)]
 pub struct Fields<'a> { /* ... */ }
 impl Iterator for Fields<'_> { type Item = (BinHash, Option<BinHash>); }
-impl<'a> IntoIterator for &'a ValuePath { type Item = &'a Step; /* ... */ }
-impl IntoIterator for ValuePath { type Item = Step; /* ... */ }
+impl<'a> IntoIterator for &'a ValuePath { type Item = &'a ValueSegment; /* ... */ }
+impl IntoIterator for ValuePath { type Item = ValueSegment; /* ... */ }
 
 /// A best-effort readable rendering of a [`ValuePath`].
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -133,47 +137,75 @@ pub struct NamedPath {
 }
 
 impl NamedPath {
-    /// Every hash was spelled.
+    /// Every hash was spelled. A complete named path names the same position as the
+    /// `PropertyPath` that `to_property_path` would produce.
     pub fn is_complete(&self) -> bool;
 }
 
 impl fmt::Display for NamedPath { /* `text` */ }
 
 /// A position `to_property_path` could not spell.
-#[derive(Debug, Clone, PartialEq, thiserror::Error)]
-#[error("{kind} (step {step})")]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("{kind} (segment {segment})")]
 pub struct Unnameable {
-    /// Index into `ValuePath::steps` of the first step that could not be spelled.
-    pub step: usize,
+    /// Index into `ValuePath::segments` of the first segment that could not be spelled. 0 for a
+    /// path with no segments.
+    pub segment: usize,
     pub kind: UnnameableKind,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum UnnameableKind {
-    /// `names` has no plaintext for `field`; `class` is the context it was asked with.
+    /// `names` has no plaintext for `field` that is a property name hashing back to it; `class`
+    /// is the context it was asked with.
     Field { field: BinHash, class: Option<BinHash> },
-    /// A map key of a kind the path grammar has no literal for.
+    /// A map key of a kind the path grammar has no literal for, or an `F32` key that is `NaN` or
+    /// an infinity.
     Key(Kind),
+    /// The segments spell no property path: none at all, a subscript first, a subscript after a
+    /// subscript, an index past `u32::MAX`, or text past `PropertyPath::MAX_LEN`.
+    Path(PropertyPathError),
 }
 
 /// Plaintext for the hashes a `ValuePath` carries.
+///
+/// `ltk_ritobin::hashes::HashMapProvider` implements this; it is the smaller trait `ltk_meta`
+/// can own without depending on it.
 pub trait FieldNames {
     /// The plaintext of `field`, if known, given the class of the node it was read on.
     ///
     /// A table keyed by field alone ignores `class`; a table keyed by class - a meta class
     /// dump - needs it and answers nothing for `None`. Either way the name must hash back to
-    /// `field` under `BinHash::hash_str`.
+    /// `field` under `BinHash::hash_str`, which is what makes `to_property_path` resolve where
+    /// the walk was.
     fn field(&self, field: BinHash, class: Option<BinHash>) -> Option<Cow<'_, str>>;
 
     /// The plaintext behind a `Hash`-kind map key, if known. Named form only.
     fn hash(&self, hash: BinHash) -> Option<Cow<'_, str>> { None }
 }
 
+/// Names nothing: every hash renders as hex.
 impl FieldNames for () {}
-impl FieldNames for HashMap<BinHash, String> {}
-impl FieldNames for HashMap<(BinHash, BinHash), String> {}
+/// Keyed by field alone; `class` is ignored.
+impl<S: BuildHasher> FieldNames for HashMap<BinHash, String, S> {}
+/// Keyed by `(class, field)`.
+impl<S: BuildHasher> FieldNames for HashMap<(BinHash, BinHash), String, S> {}
 impl<T: FieldNames + ?Sized> FieldNames for &T {}
+
+// ltk_meta::walk: the walk's side of the address.
+pub trait TreeValue<'a> {
+    /// This value as a map key. Every kind `Kind::is_valid_map_key` admits converts.
+    fn map_key(&self) -> Result<MapKey, Error>;
+}
+impl<'a, V: TreeValue<'a>> Trail<V> {
+    /// The owned address: every segment copied, every key decoded, the class context carried over.
+    pub fn to_value_path(&self) -> Result<ValuePath, Error>;
+}
+impl<'t, 'a, V: TreeValue<'a>> Node<'t, 'a, V> {
+    /// The node's address, copied out of the trail.
+    pub fn value_path(&self) -> Result<ValuePath, Error>;
+}
 ```
 
 `ltk_ritobin::hashes::HashMapProvider` implements `FieldNames`: `field` through its field table
@@ -187,19 +219,19 @@ breaks `PropertyPath::new` and produces text the client misreads. What earns the
 **totality**: every position in a value tree has a `ValuePath`, including the ones a report most
 needs to name and a `PropertyPath` cannot - a container element, a map entry.
 
-**W4 (ADR-0012): the class context rides beside the steps.** The tables a consumer holds are
+**W4 (ADR-0012): the class context rides beside the segments.** The tables a consumer holds are
 keyed by class (`lol-meta-classes`, the manager's migration tables), so naming a field takes the
 class it was read on, and by the time a report is rendered the tree that would say is gone. The
-class is context for the name table and not part of the address: `Step::Field` carries the field
-alone, two paths with the same steps are equal whatever their classes (W16), the hash form does
-not print them, and a path built from steps alone has none (W15).
+class is context for the name table and not part of the address: `ValueSegment::Field` carries the field
+alone, two paths with the same segments are equal whatever their classes (W16), the hash form does
+not print them, and a path built from segments alone has none (W15).
 
 **W17: the context is the concrete class.** The object's class hash, or the class a `Struct` or
 `Embedded` carries - for a pointer, the class the client constructs, which may be a descendant of
 the declared one. A field may be declared on a base class, and a class-keyed table walks the base
 chain itself, as the client does from `cls+56`.
 
-**W18: a `Key` step's client path is unattested.** The `{key}` literal is JSON by D10; the
+**W18: a `Key` segment's client path is unattested.** The `{key}` literal is JSON by D10; the
 reversing notes' worked example writes bare text, and no shipped record uses one. The round trip
 attests this crate's resolver, not the client's.
 
@@ -207,23 +239,35 @@ attests this crate's resolver, not the client's.
 an owned, metadata-free `MapKey` with floats as bits, so `ValuePath` is `Eq` and `Hash` and a
 repair can key its findings on it directly.
 
+**W28: a piece of an address is a segment.** `ValuePath` holds `ValueSegment`s and a `Trail` holds
+`TrailSegment`s; `path::Segment` stays the piece of a `PropertyPath`.
+
+**A name spells a field only when it hashes back to it** and is a property name. A table answer
+that fails either test counts as no answer, and `to_property_path` resolves where the walk was.
+
 **Rendering** is the `PropertyPath` grammar with hex where a name is unknown, one table for all
 three forms in `value-walk.md` [section 4.2](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/value-walk.md#s4.2). `to_property_path` writes a `Hash` key as its raw
 decimal value even when a name is known (W11): the value is what is attested and the client
 coerces a number either way.
 
-- [ ] `ValuePath`, `Step`, `MapKey`, `NamedPath`, `Unnameable` and `UnnameableKind` carry the
+Blocked by #225 (the trail and the tree traits the address is copied from)
+
+- [ ] `ValuePath`, `ValueSegment`, `MapKey`, `NamedPath`, `Unnameable` and `UnnameableKind` carry the
       traits above; two `F32` keys with the same bits are equal and hash the same; `Display` on
       `ValuePath` writes the hash form of every row of the rendering table
 - [ ] `MapKey::try_from` accepts every kind `Kind::is_valid_map_key` admits and rejects the rest
       with `InvalidKeyType`; `to_value` round-trips
 - [ ] `to_property_path` produces a path that `Bin::resolve` lands on the same value with, for
       every position in a fixture tree with a complete name table (AC-7)
-- [ ] `to_property_path` reports the first unnameable step rather than the last, and a `Key` step
+- [ ] `to_property_path` reports the first unnameable segment rather than the last, and a `Key` segment
       whose kind has no literal is reported as `UnnameableKind::Key`, not silently rendered
 - [ ] `to_named` spells every hash `names` knows and leaves the rest as hex; `named` plus `unnamed`
-      equals the count of field steps plus hash-kind keys
-- [ ] `push_field`, `pop`, `push` and `FromIterator` keep one class per field step; `fields()`
-      yields `None` for a class of 0; two paths with equal steps and different classes are equal
+      equals the count of field segments plus hash-kind keys
+- [ ] `push_field`, `pop`, `push` and `FromIterator` keep one class per field segment; `fields()`
+      yields `None` for a class of 0; two paths with equal segments and different classes are equal
 - [ ] `FieldNames` is implemented for `()`, the two `HashMap` shapes, `&T`, and
       `ltk_ritobin::hashes::HashMapProvider`
+- [ ] A name that does not hash back to its field is not used; a `NaN` or infinite `F32` key has no
+      client path; segments that spell no property path are `UnnameableKind::Path`
+- [ ] `Trail::to_value_path` and `Node::value_path` render as the trail does at every node, over the
+      owned tree and the view alike, and `map_key` agrees between the two trees

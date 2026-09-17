@@ -73,7 +73,7 @@ callback. The walk iterates the property map `enter_node` leaves and descends th
 `enter_property` leaves (W26).
 
 **The trail is `Trail`.** The walker holds each map key's borrow past the reborrow it came from, in
-one `unsafe` block, and a callback sees a key only for its own length (W24). No trail step
+one `unsafe` block, and a callback sees a key only for its own length (W24). No trail segment
 allocates.
 
 **Kind pins hold by construction (W25).** A node callback edits the property map, a property
@@ -95,7 +95,7 @@ Blocked by #225: `Visit`, `WalkOutcome`, `Trail` and `NodeRef` are its types.
       equal, and leaves every kind pin intact
 - [ ] `Trail::to_string()` and `Trail::classes()` at every node equal the read-only walk's at the
       same node
-- [ ] A walk over a map of 10,000 hash-keyed entries grows the trail's capacity by at most one step
+- [ ] A walk over a map of 10,000 hash-keyed entries grows the trail's capacity by at most one segment
 - [ ] `Skip` from each callback, `Stop` and `Abort` end the walk as the read-only walk does, and a
       visitor error ends it like an `Abort` and is returned
 - [ ] `BinOverride::walk_mut` edits the fixture patch's embedded objects and leaves every record

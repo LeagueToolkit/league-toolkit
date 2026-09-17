@@ -172,26 +172,26 @@ impl<'t, 'a, V: TreeValue<'a>> Node<'t, 'a, V> {
     pub fn value_path(&self) -> Result<ValuePath, Error>;
 }
 
-/// The steps from an object's root to the walk's position. A map key is the tree's own
+/// The segments from an object's root to the walk's position. A map key is the tree's own
 /// value, never a copy.
 #[derive(Debug)]
-pub struct Trail<V> { /* Vec<TrailStep<V>>, Vec<BinHash> */ }
+pub struct Trail<V> { /* Vec<TrailSegment<V>>, Vec<BinHash> */ }
 
-/// One step of a [`Trail`]. The borrowing form of [`Step`].
+/// One segment of a [`Trail`]. The borrowing form of [`ValueSegment`].
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum TrailStep<V> {
+pub enum TrailSegment<V> {
     Field(BinHash),
     Index(usize),
     Key(V),
 }
 
 impl<'a, V: TreeValue<'a>> Trail<V> {
-    pub fn steps(&self) -> &[TrailStep<V>];
+    pub fn segments(&self) -> &[TrailSegment<V>];
     pub fn len(&self) -> usize;
     pub fn is_empty(&self) -> bool;
-    /// The class of the node each field step was read on, one per `Field` step. Never 0.
+    /// The class of the node each field segment was read on, one per `Field` segment. Never 0.
     pub fn classes(&self) -> &[BinHash];
-    /// The owned address: every step copied, every key decoded to a `MapKey`, the class
+    /// The owned address: every segment copied, every key decoded to a `MapKey`, the class
     /// context carried over.
     pub fn to_value_path(&self) -> Result<ValuePath, Error>;
 }
@@ -258,7 +258,7 @@ shown every property through `enter_property`, leaves included, and descends onl
 with nothing decoded. A `Struct` or `Embedded` with class 0 is the client's null pointer and is not a node
 (W2). An optional's value is `Index(0)`, as the path grammar addresses it (D9).
 
-**The trail allocates nothing per step.** Keys are the tree's own values; text and owned steps
+**The trail allocates nothing per segment.** Keys are the tree's own values; text and owned segments
 are made only by `Display`, `to_value_path` or `Node::value_path`, which a visitor calls for a
 node it reports on (W9).
 
@@ -285,10 +285,10 @@ depend on it and can land first behind those methods.
       both trees
 - [ ] `as_leaf()` and `map_key()` agree between the two trees for every leaf kind and every key
       kind `Kind::is_valid_map_key` admits
-- [ ] `Trail::classes()` has one entry per field step at every node, equal to the class of the
+- [ ] `Trail::classes()` has one entry per field segment at every node, equal to the class of the
       node that field was read on, and `to_value_path()?.fields()` yields the same pairs
 - [ ] `Trail::to_string()` equals `to_value_path()?.to_string()` at every node; a walk over a
-      map of 10,000 hash-keyed entries grows the trail's capacity by at most one step, and over
+      map of 10,000 hash-keyed entries grows the trail's capacity by at most one segment, and over
       a view allocates nothing else
 - [ ] `BinOverride::walk` visits the fixture patch's embedded objects and never a record's value
 - [ ] `Bin::walk` over `lolminimap_uibase.bin` visits 66 root nodes in file order, and
