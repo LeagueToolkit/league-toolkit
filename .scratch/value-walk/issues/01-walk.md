@@ -36,7 +36,7 @@ pub trait TreeValue<'a>: Copy + sealed::Sealed {
     type Children: Iterator<Item = Result<(ChildSegment<Self>, Self), Error>>;
 
     fn kind(&self) -> Kind;
-    /// Whether entering this value can reach a node: a `Struct` or `Embedded` whose class hash
+    /// Whether this value is a node or can contain one: a `Struct` or `Embedded` whose class hash
     /// is not 0, or a container, optional or map whose item kind [`TreeKind::is_node`].
     fn can_contain_node(&self) -> Result<bool, Error>;
     /// This value as a node, if it is a `Struct` or `Embedded` with a class hash that is not 0.

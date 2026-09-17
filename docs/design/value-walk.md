@@ -132,7 +132,7 @@ pub trait TreeValue<'a>: Copy + sealed::Sealed {
 
     fn kind(&self) -> Kind;
 
-    /// Whether entering this value can reach a node.
+    /// Whether this value is a node or can contain one.
     ///
     /// True for a `Struct` or `Embedded` whose class hash is not 0, and for a container,
     /// optional or map whose item kind [`TreeKind::is_node`]. An empty optional or container
