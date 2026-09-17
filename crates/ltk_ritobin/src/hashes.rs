@@ -211,7 +211,7 @@ impl HashProvider for HashMapProvider {
 }
 
 /// Names a [`ValuePath`](ltk_meta::path::ValuePath) from the field and hash tables. The field
-/// table is keyed by field alone, so the class is ignored.
+/// table is keyed by field alone and ignores the class.
 impl ltk_meta::path::FieldNames for HashMapProvider {
     fn field(&self, field: BinHash, _class: Option<BinHash>) -> Option<Cow<'_, str>> {
         self.lookup_field(field)
