@@ -388,6 +388,9 @@ pub use data_override::{
 mod file;
 pub use file::{BinFile, BinKind};
 
+mod merge;
+pub use merge::{MergeReport, Replaced};
+
 pub mod stream;
 pub use stream::{
     BatchObjects, BinDelta, BinStream, BinToc, ContainerItems, ContainerView, Entries,
