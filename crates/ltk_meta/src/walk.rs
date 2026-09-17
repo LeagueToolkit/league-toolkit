@@ -80,6 +80,7 @@ use std::{
 use ltk_hash::BinHash;
 
 use crate::{
+    path::ValuePath,
     stream::{BinStream, ObjectStream, ObjectView},
     Bin, BinObject, BinOverride, Error, PropertyValueEnum,
 };
@@ -261,6 +262,16 @@ impl<'t, 'a, V: TreeValue<'a>> Node<'t, 'a, V> {
     pub fn is_root(&self) -> bool {
         self.trail.is_empty()
     }
+
+    /// The node's address, copied out of the trail. Allocates. A visitor calls it for a node it
+    /// reports on.
+    ///
+    /// # Errors
+    ///
+    /// The same as [`Trail::to_value_path`].
+    pub fn value_path(&self) -> Result<ValuePath, Error> {
+        self.trail.to_value_path()
+    }
 }
 
 impl<'a, V: TreeValue<'a>> Clone for Node<'_, 'a, V> {
@@ -355,6 +366,30 @@ impl<V> Trail<V> {
     fn clear(&mut self) {
         self.segments.clear();
         self.classes.clear();
+    }
+}
+
+impl<'a, V: TreeValue<'a>> Trail<V> {
+    /// The owned address: every segment copied, every key decoded to a [`MapKey`](crate::path::MapKey), the class
+    /// context carried over.
+    ///
+    /// # Errors
+    ///
+    /// Over a view, a key that does not decode. The owned tree never fails.
+    pub fn to_value_path(&self) -> Result<ValuePath, Error> {
+        let mut path = ValuePath::new();
+        let mut classes = self.classes.iter();
+        for segment in &self.segments {
+            match segment {
+                TrailSegment::Field(field) => {
+                    let class = classes.next().expect("the trail keeps one class per field");
+                    path.push_field(*field, *class);
+                }
+                TrailSegment::Index(index) => path.push_index(*index),
+                TrailSegment::Key(key) => path.push_key(key.map_key()?),
+            }
+        }
+        Ok(path)
     }
 }
 

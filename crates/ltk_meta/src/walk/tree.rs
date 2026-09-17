@@ -6,7 +6,7 @@ use glam::{Mat4, Vec2, Vec3, Vec4};
 use ltk_hash::{BinHash, WadHash};
 use ltk_primitives::Color;
 
-use crate::{property::values, property::Kind, Error, PropertyValueEnum};
+use crate::{path::MapKey, property::values, property::Kind, Error, PropertyValueEnum};
 
 pub(crate) mod sealed {
     pub trait Sealed {}
@@ -91,6 +91,18 @@ pub trait TreeValue<'a>: Copy + sealed::Sealed {
     ///
     /// Over a view, a leaf that does not decode. The owned tree never fails.
     fn as_leaf(&self) -> Result<Option<Leaf<'a>>, Error>;
+
+    /// This value as a map key. Every kind [`Kind::is_valid_map_key`] admits converts.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidKeyType`] for a kind no map is keyed by. Over a view, a leaf that does not
+    /// decode.
+    fn map_key(&self) -> Result<MapKey, Error> {
+        self.as_leaf()?
+            .and_then(MapKey::from_leaf)
+            .ok_or(Error::InvalidKeyType(self.kind()))
+    }
 
     /// The whole value, owned. Allocates. A visitor reaches for it for a subtree, not for a
     /// leaf.

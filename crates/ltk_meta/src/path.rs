@@ -16,10 +16,18 @@
 //! # Ok::<(), ltk_meta::path::PropertyPathError>(())
 //! ```
 
-mod parse;
+pub(crate) mod parse;
 
 mod resolve;
 pub use resolve::{PatchError, ResolveError, ResolveErrorKind, ValueShape};
+
+mod names;
+pub use names::FieldNames;
+
+mod value;
+pub use value::{
+    Fields, FloatBits, MapKey, NamedPath, Unnameable, UnnameableKind, ValuePath, ValueSegment,
+};
 
 #[cfg(test)]
 mod tests;
