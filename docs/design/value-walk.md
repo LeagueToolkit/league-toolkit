@@ -281,9 +281,8 @@ client does (W19): a visitor reads a texture path as `Leaf::File`, whatever `Kin
 property, a container item, a map key or a map value. `kind()` reads nothing. `holds_node()`,
 `as_node()` and `children()` read headers and no payload. `leaf()` decodes that one value, and
 `to_value()` reads the whole subtree through the reader an owned read uses. A child iterator
-yields the bytes of each value and decodes none of them, so a malformed item is reached and
-fails only where it is read. The deferral is
-[ADR-0017](../adr/0017-deferred-walk-values.md).
+yields the bytes of each value and decodes none of them. A malformed item is reached, and it
+fails where it is read. The deferral is [ADR-0017](../adr/0017-deferred-walk-values.md).
 
 `ViewValue::value_view()` exposes the borrowed streaming enum without allocating. Container
 item kinds, map key and value kinds, counts and null class hashes are available through its
