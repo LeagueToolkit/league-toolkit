@@ -8,11 +8,12 @@ use ltk_hash::BinHash;
 use ltk_primitives::Color;
 
 use super::{
-    ChildSegment, Leaf, Node, NodeRefMut, PropertyRefMut, TreeNode, TreeValue, Visit, Visitor,
-    VisitorMut, WalkOutcome,
+    ChildSegment, Declaration, Leaf, Node, NodeRefMut, PropertyRefMut, TreeNode, TreeValue, Visit,
+    Visitor, VisitorMut, WalkOutcome,
 };
 use crate::{
     concrete::{self, values, Bin, BinObject},
+    path::ValueShape,
     property::values::{Embedded, UnorderedContainer},
     property::Kind,
     walk::RawValue,
@@ -912,10 +913,142 @@ fn map_keys_of_every_kind_agree_between_the_trees() {
     }
 }
 
+/// Collects the declaration of every root property's value and of every value inside it, by
+/// hash-form address.
+#[derive(Default)]
+struct Declarations(Vec<(String, Declaration)>);
+
+impl Declarations {
+    fn record<'a, V: TreeValue<'a>>(&mut self, at: String, value: V) -> Result<(), Error> {
+        let declaration = value.declaration()?;
+        assert_eq!(
+            ValueShape::from(declaration),
+            ValueShape::of(&value.to_value()?),
+            "{at}"
+        );
+        for child in value.children()? {
+            let (segment, child) = child?;
+            let child_at = match segment {
+                ChildSegment::Index(index) => format!("{at}[{index}]"),
+                ChildSegment::Key(key) => format!("{at}{{{}}}", key.map_key()?),
+            };
+            self.record(child_at, child)?;
+        }
+        self.0.push((at, declaration));
+        Ok(())
+    }
+}
+
+impl<'a, V: TreeValue<'a>> Visitor<'a, V> for Declarations {
+    type Error = Error;
+
+    fn enter_property(
+        &mut self,
+        field: BinHash,
+        value: V,
+        _node: &Node<'_, 'a, V>,
+    ) -> Result<Visit, Error> {
+        self.record(format!("{field:08x}"), value)?;
+        Ok(Visit::Skip)
+    }
+}
+
+#[test]
+fn declarations_agree_between_the_trees_for_every_value() {
+    let bin = fixture();
+    let [(owned, a), (viewed, b)] = walk_both(&bin, Declarations::default);
+    a.unwrap();
+    b.unwrap();
+    assert_eq!(owned.0, viewed.0);
+
+    let at = |address: &str| {
+        owned
+            .0
+            .iter()
+            .find(|(at, _)| at == address)
+            .map(|(_, declaration)| *declaration)
+            .unwrap_or_else(|| panic!("no value at {address}"))
+    };
+    let declared = |kind, item_kind, key_kind, class: Option<u32>, count| Declaration {
+        kind,
+        item_kind,
+        key_kind,
+        class: class.map(BinHash),
+        count,
+    };
+    use Kind as K;
+    assert_eq!(
+        at("00000001"),
+        declared(K::Struct, None, None, Some(C2), None)
+    );
+    assert_eq!(
+        at("00000002"),
+        declared(K::Embedded, None, None, Some(C3), None)
+    );
+    assert_eq!(
+        at("00000003"),
+        declared(K::Struct, None, None, Some(0), None)
+    );
+    assert_eq!(
+        at("00000004"),
+        declared(K::Embedded, None, None, Some(0), None)
+    );
+    assert_eq!(
+        at("00000005"),
+        declared(K::Container, Some(K::Struct), None, None, Some(3))
+    );
+    assert_eq!(
+        at("00000005[1]"),
+        declared(K::Struct, None, None, Some(0), None)
+    );
+    assert_eq!(
+        at("00000006"),
+        declared(
+            K::UnorderedContainer,
+            Some(K::Embedded),
+            None,
+            None,
+            Some(2)
+        )
+    );
+    assert_eq!(
+        at("00000006[0]"),
+        declared(K::Embedded, None, None, Some(C5), None)
+    );
+    assert_eq!(
+        at("00000007"),
+        declared(K::Optional, Some(K::Struct), None, None, Some(1))
+    );
+    assert_eq!(
+        at("00000009"),
+        declared(K::Optional, Some(K::Embedded), None, None, Some(0))
+    );
+    assert_eq!(
+        at("0000000a"),
+        declared(K::Map, Some(K::Struct), Some(K::Hash), None, Some(2))
+    );
+    assert_eq!(
+        at("0000000a{000000bb}"),
+        declared(K::Struct, None, None, Some(0), None)
+    );
+    assert_eq!(
+        at("0000000c"),
+        declared(K::Container, Some(K::String), None, None, Some(2))
+    );
+    assert_eq!(
+        at("0000000c[0]"),
+        declared(K::String, None, None, None, None)
+    );
+    for kind in LEAF_KINDS {
+        let address = format!("{:08x}", F_LEAVES + kind as u32);
+        assert_eq!(at(&address), declared(kind, None, None, None, None));
+    }
+}
+
 #[test]
 fn the_class_context_holds_the_class_of_every_enclosing_node() {
     let [owned, _] = record_both(&fixture(), always_continue);
-    // A field step is read on exactly one node: the context is the open nodes, root first.
+    // A field segment is read on exactly one node: the context is the open nodes, root first.
     let mut open: Vec<u32> = Vec::new();
     for event in &owned.events {
         match event {
@@ -1105,7 +1238,7 @@ impl<'a, V: TreeValue<'a>> Visitor<'a, V> for Capacities {
     fn enter_node(&mut self, node: &Node<'_, 'a, V>) -> Result<Visit, Error> {
         let trail = node.trail();
         self.0
-            .push((trail.steps.capacity(), trail.classes.capacity()));
+            .push((trail.segments.capacity(), trail.classes.capacity()));
         Ok(Visit::Continue)
     }
 }
@@ -1131,7 +1264,7 @@ fn a_map_of_ten_thousand_entries_grows_the_trail_once() {
     let [(owned, _), (viewed, _)] = walk_both(&bin, Capacities::default);
     for visited in [owned, viewed] {
         assert_eq!(visited.0.len(), 10_001);
-        // The root sees an empty trail; every entry after it sees the same two-step trail, at a
+        // The root sees an empty trail; every entry after it sees the same two-segment trail, at a
         // capacity that never moves once it is set.
         let first = visited.0[1];
         assert!(first.0 <= 4 && first.1 <= 4, "{first:?}");
@@ -1215,6 +1348,7 @@ fn a_mutable_reference_to_a_visitor_is_a_visitor() {
 }
 
 mod mutable;
+mod value_path;
 
 #[test]
 fn property_strings_are_decoded_only_when_requested() {
@@ -1295,7 +1429,7 @@ fn property_strings_are_decoded_only_when_requested() {
 }
 
 #[test]
-fn a_walk_value_exposes_headers_without_decoding_container_leaves() {
+fn a_walk_value_declares_and_exposes_headers_without_decoding_container_leaves() {
     use crate::stream::ValueView;
 
     let object = BinObject::builder(OBJECT, C1)
@@ -1334,6 +1468,23 @@ fn a_walk_value_exposes_headers_without_decoding_container_leaves() {
             value: RawValue<'a>,
             _node: &Node<'_, 'a, RawValue<'a>>,
         ) -> Result<Visit, Error> {
+            let declaration = value.declaration()?;
+            let expected = match field.0 {
+                F_STRINGS => (Some(Kind::String), None, None, Some(1)),
+                F_OPT_EMPTY => (Some(Kind::F32), None, None, Some(0)),
+                F_MAP_STRUCT => (Some(Kind::Struct), Some(Kind::Hash), None, Some(0)),
+                F_NULL_STRUCT => (None, None, Some(BinHash(0)), None),
+                unexpected => panic!("unexpected field: {unexpected:x}"),
+            };
+            assert_eq!(
+                (
+                    declaration.item_kind,
+                    declaration.key_kind,
+                    declaration.class,
+                    declaration.count
+                ),
+                expected
+            );
             match (field.0, value.value_view()?) {
                 (F_STRINGS, ValueView::Container(items)) => {
                     assert_eq!(items.item_kind(), Kind::String);

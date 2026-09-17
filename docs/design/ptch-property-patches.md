@@ -11,11 +11,11 @@ is the bug and gets edited. Two things it does not hold:
 - **Why an option was chosen over the alternatives it beat** - `docs/adr/0001` to `0006`, cited as
   ADR-NNNN from the rules in [section 17](#s17).
 
-Implemented today: [section 4](#s4) to [section 9](#s9) - reading, writing, the path language,
-resolution and apply. Designed and not yet built: [section 10](#s10) to [section 14](#s14) (merge,
-`ValuePath`, diff, join, the per-record surface), tracked as #219 to #223, and [section 15](#s15)
-(ritobin text). `ValuePath` itself, and the walk that produces one, are specified in
-`value-walk.md`.
+The crate implements [section 4](#s4) to [section 12](#s12): reading, writing, the path language,
+resolution, apply, merge, `ValuePath` and diff. [section 13](#s13) and [section 14](#s14) (join,
+the per-record surface) are designed and not built, tracked as #223 and #239, and so is
+[section 15](#s15) (ritobin text). `ValuePath` itself, and the walk that produces one, are
+specified in `value-walk.md`.
 
 ## <a id="s1"></a>1. Summary
 
@@ -81,9 +81,11 @@ holds the argument; the definition lives here.
 - **diff** - render the difference between two bins as a patch bin, escalating where a record
   cannot carry what the walk found ([section 12](#s12)).
 - **join** - concatenate several patches over one target, reporting collisions ([section 13](#s13)).
-- **skip** and **escalate** - a skip is a record that did not apply and changed nothing. An
-  escalation is a diff emitting a coarser record than the difference it found - a whole map instead
-  of the one key that changed - which loses precision but stays expressible.
+- **skip** - a record that did not apply and changed nothing.
+- **escalate** and **lift** - an escalation is a diff writing a difference into a record at an
+  ancestor of the position it was found at, or into a whole object: a whole map instead of the one
+  key the edit added. The record carries the base's value with the edit merged over it
+  (ADR-0019). A lift is the report of one escalation: where, and why ([section 12](#s12)).
 
 **Addresses**
 
@@ -779,6 +781,10 @@ They share one descent. The invariant that ties them is in [section 12](#s12).
 never a difference - that is the whole of ADR-0012, and the record language has no way to express a
 removal in any case.
 
+An object only `edited` has is added whole. An object on both sides with the same class combines
+property by property. An object on both sides with different classes is replaced whole by
+`edited`'s (D35). Below an object:
+
 | base                                 | edited                | action                                                                                            |
 | ------------------------------------ | --------------------- | ------------------------------------------------------------------------------------------------- |
 | property absent                      | any                   | insert `edited`'s value                                                                           |
@@ -787,71 +793,89 @@ removal in any case.
 | Struct with class 0 (a null pointer) | any                   | replace                                                                                           |
 | Map, same key and value kinds        | Map                   | recurse on common keys, append `edited`'s new ones in its order, keep base-only keys              |
 | Map, different key or value kinds    | any                   | replace                                                                                           |
-| Container, UnorderedContainer        | any                   | replace whole. A list has no key to combine by, and ADR-0012's "a plain value replaces" covers it |
+| Container, UnorderedContainer        | any                   | replace whole (D22)                                                                               |
 | Optional, both present               | Optional              | recurse into the contained value                                                                  |
 | Optional, either absent              | Optional              | replace                                                                                           |
 | any leaf kind                        | equal value           | nothing                                                                                           |
 | any leaf kind                        | different value       | replace                                                                                           |
-| any                                  | different kind        | replace, and count it in the report                                                               |
+| any                                  | different kind        | replace, with `mismatched` set                                                                    |
 
-Key equality is `key_eq` from [section 9](#s9), so metadata is ignored there. A `Map` merge is
-quadratic on entry counts unless the walk indexes one side first; shipped maps reach the low
-thousands of entries, so index the base side.
+"Replace" happens only where the two values differ. A replacement is reported with the value the
+base held, moved out of the base. It is `mismatched` when the two sides differ in `ValueShape` -
+kind, item and key kinds, an Embed's class - or are Structs of different classes.
 
-Dependencies merge as a union: `base`'s list in its order, then anything only `edited` has.
+A map entry is matched by its `MapKey` (D36): metadata is ignored, and a float key matches by its
+bits. The base's keys are indexed once per map, and a key the base holds twice matches its first
+entry. A key `edited` repeats merges over the entry its earlier occurrence merged or appended. A map
+holding an entry that breaks its declared kinds, or a key that converts to no `MapKey`, replaces
+whole.
+
+Dependencies merge as a union: `base`'s list in its order, then anything only `edited` has, each
+reported in `dependencies_added`.
 
 ```rust
 /// What a merge did: what it overwrote, and what it added.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct MergeReport<M = NoMeta> {
-    /// Objects taken whole from the edit because the base had no such hash.
+    /// Objects taken whole from the edit: the base had no object with the hash.
     pub objects_added: Vec<BinHash>,
-    /// Objects that existed on both sides and were combined.
+    /// Objects on both sides with the same class, combined property by property.
     pub objects_merged: Vec<BinHash>,
-    /// Every leaf the edit overwrote, with the value the base held there.
+    /// Objects on both sides with different classes, each as the base held it.
+    pub objects_replaced: Vec<BinObject<M>>,
+    /// Every value the edit overwrote inside a combined object, with the value the base held.
     pub replaced: Vec<Replaced<M>>,
-    /// Properties the base object did not have.
+    /// Properties the base did not have, inserted from the edit.
     pub inserted: usize,
-    /// Map entries the base map did not have.
+    /// Map entries the base did not have, appended from the edit.
     pub keys_inserted: usize,
+    /// Dependencies the base did not declare, appended from the edit.
+    pub dependencies_added: Vec<String>,
 }
+impl<M> Default for MergeReport<M> {}
 
-/// One leaf the edit overwrote.
+impl<M> MergeReport<M> {
+    /// Whether the merge left the base as it was: nothing added, replaced or inserted.
+    pub fn is_unchanged(&self) -> bool;
+}
+// Display: "1 added, 2 merged, 0 replaced; 3 values replaced (1 mismatched), 4 inserted, 5 keys inserted, 0 dependencies added"
+
+/// One value the edit overwrote.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct Replaced<M = NoMeta> {
-    /// Where it happened.
+    /// The object the value is in. 0 for a merge of a `Struct` or a value.
+    pub object_hash: BinHash,
+    /// Where the value is, inside that object.
     pub at: ValuePath,
-    /// What the base held. Moved out of the base rather than cloned, so recording every
-    /// replacement costs nothing a merge was not already paying.
+    /// What the base held. Moved out of the base, never cloned.
     pub was: PropertyValueEnum<M>,
-    /// Whether the two sides held different kinds, or a Struct of a different class.
-    ///
-    /// This is the one a user needs shown. It is not a curiosity: an exact-tag mismatch
-    /// between a mod's value and the game's is the signature of a **type migration**, and
-    /// Riot performs those in place - 337 times in three years, then 327 in the single
-    /// 16.17 `String` -> `File` patch, hitting `StaticMaterialShaderSamplerDef.texturePath`
-    /// and `AnimationResourceData.mAnimationFilePath`, which is to say retexturing and
-    /// custom animations. The client applies the tag rule exactly and drops a value whose
-    /// tag does not match, silently, so a mod that predates the migration loses those
-    /// fields with nothing said. Merging writes the mod's stale value through, which
-    /// reproduces the loss; this flag is what lets a caller catch it first.
+    /// Whether the two sides held different shapes.
     pub mismatched: bool,
 }
+// Display: "01000001 1e6ba0c4 (mismatched)"
 
 impl<M: Clone + PartialEq> Bin<M> {
-    /// Layers `edited` over this bin, in place: ADR-0012's merge.
+    /// Layers `edited` over this bin, in place. A merge never refuses.
     pub fn merge(&mut self, edited: &Self) -> MergeReport<M>;
 }
 impl<M: Clone + PartialEq> BinObject<M>         { /* the same, over properties */ }
-impl<M: Clone + PartialEq> values::Struct<M>    { /* the same */ }
+impl<M: Clone + PartialEq> values::Struct<M>    { /* the same, object_hash 0 */ }
 impl<M: Clone + PartialEq> PropertyValueEnum<M> { /* the same, one value against one value */ }
 ```
 
-`M: PartialEq` is what decides "different value", so a metadata that varies per occurrence makes
-every leaf differ. `ltk_ritobin`'s `PropertyValueEnum<Span>` is that case: map it through
-`no_meta()` before merging, or merge the `NoMeta` trees and re-print. Stated, not solved.
+`mismatched` is the flag a user needs shown. An exact-tag mismatch between a mod's value and the
+game's is the signature of a **type migration**. Riot performs those in place: 337 times in three
+years, and 327 in the single 16.17 `String` -> `File` patch, which hit
+`StaticMaterialShaderSamplerDef.texturePath` and `AnimationResourceData.mAnimationFilePath`. The
+client applies the tag rule exactly and drops a value whose tag does not match, with nothing said.
+A merge writes the mod's stale value through, and `mismatched` marks it.
+
+`M: PartialEq` decides "different value" (D24). A metadata that varies per occurrence makes every
+leaf differ: `ltk_ritobin`'s `PropertyValueEnum<Span>` goes through `no_meta()` first. A float leaf
+compares with `==`. A `NaN` leaf differs from itself: a merge replaces it and a diff records it.
+`-0.0` equals `0.0`: a change of sign is neither replaced nor recorded.
 
 ### <a id="s10.2"></a>10.2 What a stale mod looks like in the report
 
@@ -874,19 +898,20 @@ trail `merge` and `diff` keep as they walk, and build a `ValuePath` from at each
 report, is `value-walk.md` [section 6](value-walk.md#s6).
 
 What this document adds is where the two operations put one: `Replaced::at`
-([section 10.1](#s10.1)) and `Lift::at` ([section 12](#s12)) are `ValuePath`s inside the object
-the surrounding report names, so an address here never carries the object hash (D13).
+([section 10.1](#s10.1)) and `Lift::at` ([section 12](#s12)) are `ValuePath`s inside one object,
+and the object hash sits beside each as `object_hash` (D13, D34).
 
 ## <a id="s12"></a>12. The diff
 
-**Parked.** Designed here, not scheduled. Its only consumer would be an authoring flow that turns
-a modder's edited bin into a `PTCH` on the install it was made on, and no such flow exists yet;
-the manager's overlay build needs `merge`, not `diff`. Same treatment as the streaming design's
-follow-on resolver: written down so the shape is settled, built when something asks for it.
+`Bin::diff` renders the difference between two bins as a patch, escalating where a record cannot
+say what the walk found. It is what `league-mod` runs to convert a mod's replaced bins into a
+`.ptch` and into game-data declarations (its `docs/research/bin-diff-to-declarations.md`), and the
+operation FR-10 asks for. The declaration renderer there reads `DiffReport::lifted` and rewrites a
+lifted map as its own edits.
 
 ```rust
-/// Whether a diff may say that the edit dropped an object.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+/// How a diff treats what the edit leaves out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[non_exhaustive]
 pub struct DiffOptions {
     /// An object in the base and not in the edit goes on [`BinOverride::deleted`].
@@ -896,32 +921,38 @@ pub struct DiffOptions {
     pub deletions: bool,
 }
 
-/// Where the record language could not say what the walk found.
-#[derive(Debug, Clone, PartialEq)]
+/// A place the record language could not carry what the diff found there.
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Lift {
-    /// The edit adds a map entry. No record inserts one, so the whole map went into one record,
-    /// and base-only keys of any other base will not survive it.
-    MapInsert { at: ValuePath, keys: usize },
-    /// A field hash on the path has no known name, so the record was written at the nearest
-    /// nameable ancestor, or the whole object was taken.
-    Unnameable { at: ValuePath, hash: BinHash },
-    /// The two sides held different kinds or classes here, so the ancestor replaced whole.
-    Mismatch { at: ValuePath },
+    /// The edit adds `keys` entries to the map at `at`. No record inserts a map entry.
+    MapInsert { object_hash: BinHash, at: ValuePath, keys: usize },
+    /// No client path spells `at`: a field on it has no name, or a key has no literal.
+    Nameless { object_hash: BinHash, at: ValuePath, cause: Nameless },
+    /// The two sides hold different shapes at `at`. No record changes a value's shape.
+    Mismatch { object_hash: BinHash, at: ValuePath },
 }
+impl Lift {
+    pub fn object_hash(&self) -> BinHash;
+    pub fn at(&self) -> &ValuePath;
+}
+// Display: "01000001 1e6ba0c4: 2 map entries inserted"
 
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct DiffReport {
     /// Records emitted.
     pub records: usize,
-    /// Objects taken whole into [`BinOverride::objects`].
+    /// Objects taken whole into [`BinOverride::objects`], in the edit's order.
     pub objects: Vec<BinHash>,
-    /// Objects put on the delete list. Always empty unless [`DiffOptions::deletions`].
+    /// Objects put on the delete list. Empty unless [`DiffOptions::deletions`].
     pub deleted: Vec<BinHash>,
-    /// Every place the walk stopped short of the leaf, in walk order.
+    /// Dependencies the edit declares and the base does not.
+    pub dependencies: Vec<String>,
+    /// Every escalation, in walk order.
     pub lifted: Vec<Lift>,
 }
+// Display: "3 records, 1 objects, 0 deleted, 0 dependencies, 2 lifted"
 
 impl<M: Clone + PartialEq> Bin<M> {
     /// The patch that turns this bin into `edited`, as far as records can say it.
@@ -932,22 +963,57 @@ impl<M: Clone + PartialEq> Bin<M> {
 }
 ```
 
-The escalation ladder, applied at the first position the record language cannot carry: a record at
-the leaf, else a record carrying the whole value at the nearest expressible ancestor, else the whole
-object into `BinOverride::objects`. Each rung taken lands in `DiffReport::lifted` with its reason,
-so an authoring tool can tell an author what their patch will not survive.
+The diff walks the two bins with the descent of [section 10.1](#s10.1), keeping a trail, and a
+record path is the trail's `ValuePath` spelled by `to_property_path` with `names`. At the object
+level:
+
+- An object only `edited` has goes into `BinOverride::objects` whole.
+- An object on both sides with different classes goes in whole, as `edited` holds it, with a
+  `Lift::Mismatch` at its root (D35).
+- An object on both sides with the same class is diffed property by property.
+- With `DiffOptions::deletions`, every object only the base has goes on `BinOverride::deleted`.
+- `DiffReport::dependencies` names the dependencies only `edited` declares. A patch carries none
+  (D3).
+
+Below an object, a position whose two values are equal writes nothing. A position that combines -
+a Struct or Embed of the same non-zero class, a map of the same kinds, two present optionals of the
+same item kind - writes the records its children write. Any other difference is a record of
+`edited`'s value at the position: a changed leaf, a replaced container, an optional that gained or
+lost its value, a property the base lacks. A Pointer of another class is such a record: the type
+rule leaves a Pointer's class out (D11).
+
+Three things stop a record at its position, and each escalates it:
+
+| lift          | when                                                                           | the record goes to                                     |
+| ------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------ |
+| `MapInsert`   | the edit adds an entry to a map                                                 | the map                                                |
+| `Mismatch`    | the two values differ in `ValueShape`, which the type rule skips ([section 9.3](#s9.3)) | the parent position                             |
+| `Nameless`    | `to_property_path` cannot spell the position, or its `{key}` resolves to an earlier entry | the longest prefix before the unspellable segment |
+
+An escalated record carries the base's value at its position with the edit merged over it
+(ADR-0019), and replaces every record its descendants wrote. Where two escalations meet, the
+shallower wins. At the root, the carrier is the whole object: the base's copy merged with the
+edit's goes into `BinOverride::objects`. The walk carries on below an escalation. Every place
+that escalates is reported, and a record covering several lifts is reported once per lift. A
+segment that cannot be spelled is lifted at every position that meets it, and never again at an
+ancestor that holds it.
+
+Two map cases follow the merge. A key `edited` repeats is diffed against the base's entry with the
+earlier occurrences merged over it. The resolver matches a `{key}` with `==`, and `0.0` equals
+`-0.0`: in a float-keyed map holding both, the later of the two has no literal of its own, and a
+difference at it lifts as `Nameless` to the map.
 
 **The invariant.** For any `base` and `edited`,
 
 ```text
-base.diff(edited).apply(base)  ==  base.merge(edited)      when DiffReport::lifted is empty
+base.diff(edited).apply(base)  ==  base.merge(edited)      on objects, whatever was lifted
 ```
 
-and where it is not empty, every position the two results differ at is named by a `Lift`. That is
-the property test, and it is the honest statement of what an exported `.ptch` costs against the
-in-process merge. With `deletions` on and nothing lifted, the result is `edited` itself, except for
-properties and keys `edited` dropped inside an object it kept - those survive, by design and
-because no record can remove them.
+and the patch applies with no skip. A lift marks a record that carries more than the difference:
+applied to another base, it overwrites whatever that base holds anywhere inside its value. With
+nothing lifted, every record writes exactly one difference. With `deletions` on, the patch applied
+to its base holds `edited`'s objects, except for properties and keys `edited` dropped inside an
+object it kept: those survive, and no record removes one.
 
 ## <a id="s13"></a>13. Joining several patches
 
@@ -1114,20 +1180,45 @@ Both come from `UI.wad.client` of client 16.16.804.9184.
 `linked` on a `PTCH`, a `patches` entry that is not a `patch`, and a `path` that fails
 `PropertyPath::new`.
 
-**Merge, diff and join:**
+**Merge, diff and join** (`crates/ltk_meta/tests/merge.rs`, `diff.rs`, generated pairs from
+`tests/common`):
 
-- **Property tests.** `merge` is idempotent (`base.merge(e).merge(e)` equals `base.merge(e)`) and
-  absorbing (`base.merge(base)` equals `base`).
-- **Corpus, against an install.** Every shipped `PTCH` applied to the objects it names, with
-  `ApplyReport::outcomes` asserted against the counts in [appendix B](#appendix-b), so the
-  per-record surface cannot drift from the aggregate one.
-- **Parked with the diff**, for whenever it is built: diff each applied result back against the
-  objects it came from and assert the record set matches the original modulo `Lift`s, plus
-  [section 12](#s12)'s invariant on generated pairs. 23,047 shipped records is a larger diff corpus
-  than anything written by hand.
+- **Merge by case.** Every row of [section 10.1](#s10.1): a base-only property and map key
+  survive, an edit-only key follows the base's in the edit's order, a node of the same class
+  combines and one of another class replaces whole, a map of other kinds and a container replace
+  whole, an optional combines what it holds, objects are added, combined or replaced, dependencies
+  merge as a union. A key matches by its bits and a base's repeated key at its first entry, a key
+  the edit repeats merges over its earlier occurrence, a map breaking its kinds replaces whole
+  without a panic, a `NaN` leaf is replaced, and a merge that only adds a dependency is not
+  unchanged. A `String` merged over a `File` of the same field is one mismatch.
+- **Merge properties.** On generated pairs, `merge` is idempotent (a second merge of the same edit
+  reports `is_unchanged`) and absorbing (`base.merge(base)` equals `base` and is unchanged), and
+  every `Replaced` resolves, through its `at` spelled as a client path, to `was` in the base and to
+  the edit's value in the result.
 - **The ADR's specimen.** The 847-object mod bin over the 1,473-object game bin: merged, all 1,151
   dropped `ResourceResolver` keys are present, all 4,788 of the mod's own bindings survive, and the
-  84 it adds are there. That fixture is the manager's; `ltk_meta` gets the reduced case.
+  84 it adds are there. That fixture is the manager's; `ltk_meta` holds the reduced case.
+- **Diff by case.** A changed leaf and a new property are one record each; a changed entry is a
+  record at its key and a new one lifts the map; an unnamed field lifts to its named ancestor, or
+  to the object with no names at all; a changed shape lifts to the parent and a changed class takes
+  the object; a new object is taken whole and an omitted one is deleted only with `deletions`;
+  equal bins diff to an empty patch. A key the edit repeats diffs as the merge applies it, a
+  shadowed float key lifts its map, siblings under one unnamed field each lift at their own
+  position, and a `NaN` leaf is recorded where a change of sign is not.
+- **Diff properties.** On generated pairs, with a complete name table, a partial one and an empty
+  one: the invariant of [section 12](#s12), a clean `check` and `apply`, a segment that cannot be
+  spelled lifted once. With a complete table only a map insert or a shape lifts, and no record
+  writes what the base already holds there.
+- **The shipped fixture.** `uiflipped` applied to `uibase` and diffed back: every record lies
+  inside a record of `uiflipped` on the same object, and the patch applies to `uibase` as
+  `uiflipped` does. With only the names the records' paths spell, the two records carrying a whole
+  `Position.UIRect` lift `Size`, and with `UiElementRect`'s fields named nothing lifts.
+- **Corpus, against an install.** Every shipped `PTCH` applied to the objects it names and diffed
+  back applies cleanly and equals the merge. Every record it writes lies inside a shipped record, or
+  carries the whole container a shipped record indexes into (D22), and every whole object is one
+  the patch carries or one a lift took at its root. Every shipped
+  `PTCH` applied with `ApplyReport::outcomes` asserted against the counts in
+  [appendix B](#appendix-b) is the per-record surface's test ([section 14](#s14)).
 - **`ValuePath` round trip** is `value-walk.md` [section 7](value-walk.md#s7).
 
 ## <a id="s17"></a>17. Rules
@@ -1162,9 +1253,13 @@ rules append.
 | D7 | A patch object whose hash is already in the base replaces it, reported in `ApplyReport::replaced`. | Keeping both, as the client does. | The client's merged table would hold both with unspecified lookup order. Unattested in shipped data. | [section 9.5](#s9.5) |
 | D17 | `apply(self, base)` consumes the patch. `check(&self, base)` borrows. | `apply(&self, base)`, cloning internally. | Moving clones nothing and needs no `M: Clone`; reuse is the caller's explicit `clone()` (C-CALLER-CONTROL). | [section 9.5](#s9.5) |
 | D22 | Containers replace whole. No element-wise merge and no LCS. | A positional or keyed element merge. | ADR-0012's semantics are the client's, and a list has no key to combine by. | [section 10.1](#s10.1); ADR-0004 |
-| D24 | `merge` and `diff` need `M: PartialEq` and compare whatever `M` compares. | Comparing values while ignoring metadata. | A span-carrying tree goes through `no_meta()` first; a crate-level exception would surprise everyone who did not want it. | [section 10.1](#s10.1) |
+| D24 | `merge` and `diff` need `M: PartialEq` and compare whatever `M` compares. A float leaf compares with `==`: a `NaN` leaf differs from itself, and `-0.0` equals `0.0`. | Comparing values while ignoring metadata; comparing floats by their bits. | A span-carrying tree goes through `no_meta()` first. `PartialEq` is the value model's equality for every kind. A float a text round trip moved by its last bit differs under either rule. | [section 10.1](#s10.1) |
 | D21 | `DiffOptions::deletions` is off by default: a bin that omits an object says nothing about it. | Emitting a delete for every absent object. | Omission is how mods are authored; deliberate deletion is a tool's explicit choice. | [section 12](#s12) |
-| D27 | `Bin::diff` is designed and parked, not scheduled. | Building it alongside `merge`. | Its only consumer would be an authoring flow that does not exist; the overlay build needs `merge`. | [section 12](#s12); ADR-0004 |
+| D27 | `Bin::diff` is built beside `merge` and shares its descent. `league-mod`'s conversion of a mod's replaced bins is its consumer. | Keeping it parked until an authoring flow asks for it. | The conversion writes a `.ptch` from the diff and reads `DiffReport::lifted` to render declarations. | [section 12](#s12); ADR-0004 |
+| D33 | An escalated record, and a whole object taken at the root, carry the base's value with the edit merged over it. The patch applied to its base equals the merge whatever was lifted. | Carrying the edit's value; writing no record for an escalated difference. | Applied to its own base, an escalated record loses nothing a merge keeps. | [section 12](#s12); ADR-0019 |
+| D34 | A merge or diff report carries the object hash beside every position: `Replaced::object_hash`, and `object_hash` on every `Lift`. | One report per object; a position holding the object. | A report on a `Bin` covers many objects, and D13 keeps the object out of a path. | [section 10.1](#s10.1), [section 11](#s11), [section 12](#s12) |
+| D35 | An object on both sides with different classes is replaced whole by `merge`, reported in `MergeReport::objects_replaced`, and taken whole by `diff` with a `Lift::Mismatch` at its root. | Combining its properties under one of the classes. | It is the rule for a Struct or Embed of another class, applied at the root. No record changes an object's class. | [section 10.1](#s10.1), [section 12](#s12) |
+| D36 | A map entry is matched by its `MapKey`: metadata ignored, a float key by its bits. The base's keys are indexed once per map, and a key the edit repeats merges over its earlier occurrence. | `key_eq` over every pair of entries. | Bit equality is the only equality a map on the wire has (`value-walk.md` W5), and a shipped map reaches thousands of entries. | [section 10.1](#s10.1) |
 | D23 | `join` reports collisions; `apply` resolves them by applying in order, last writer winning. | `join` picking a winner. | Which override should win is policy, and a manager that knows the user's load order has more to go on than this crate. | [section 13](#s13) |
 | D25 | No schema enters `ltk_meta`. Reproducing the client's apply is in scope; judging a mod against Riot's meta classes is not. | A schema trait taken by `apply_with` / `strip_noops`. | The crate must work with no dump present, and a dump is build-versioned data. | [section 14](#s14); ADR-0006 |
 | D26 | Stripping no-op records is a post-pass outside the crate, served by `ApplyReport::outcomes` and `BinOverride::retain_with`. | A `strip_noops` inside `ltk_meta`. | Follows from D25. Only the insert case needs a default at all, and stripping the wrong one silently reverts the mod. | [section 14](#s14); ADR-0006 |
@@ -1217,3 +1312,19 @@ independently: a shipped record never mismatches a type, subscripts something un
 off the end of a container or walks into a null pointer. The "no such object" count is lower than
 [section 3.1](#s3.1)'s 173 because that measurement resolved only against the `uibase` bin in the
 same directory, where this one reaches every object in the archive.
+
+Client **16.18.817.5716**, every `.wad.client` in the install. Run by
+`every_shipped_patch_diffs_back_inside_its_records` in the same file: each shipped `PTCH` applied
+to the objects it names, and that result diffed back against those objects with a name table
+holding only the names its record paths spell.
+
+| measurement                                                              | result          |
+| ------------------------------------------------------------------------ | --------------- |
+| PTCH chunks diffed back, applying cleanly and equal to the merge         | 238 of 238      |
+| records / whole objects                                                  | 23,315 / 582    |
+| lifts: map insert / nameless / mismatch                                   | 0 / 3,249 / 0   |
+| records carrying a whole container a shipped record indexes into         | 58              |
+| records outside every shipped record                                     | 0               |
+
+A nameless lift is a field no record path spells, the table's only names: `Size` under a record
+carrying a whole `Position.UIRect` is one.

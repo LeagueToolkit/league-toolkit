@@ -104,7 +104,7 @@ impl<'a> Parser<'a> {
     }
 }
 
-pub(super) fn is_name_char(c: char) -> bool {
+pub(crate) fn is_name_char(c: char) -> bool {
     !matches!(c, '.' | '[' | ']' | '{' | '}' | '(' | ')') && !c.is_control()
 }
 

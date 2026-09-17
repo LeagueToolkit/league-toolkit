@@ -36,9 +36,13 @@ pub trait TreeValue<'a>: Copy + sealed::Sealed {
     type Children: Iterator<Item = Result<(ChildSegment<Self>, Self), Error>>;
 
     fn kind(&self) -> Kind;
-    /// Whether this value is a node or can contain one: a `Struct` or `Embedded` whose class hash
-    /// is not 0, or a container, optional or map whose item kind [`TreeKind::is_node`].
-    fn can_contain_node(&self) -> Result<bool, Error>;
+    /// What this value's header declares: kind, item and key kinds, class and count. Over a view
+    /// nothing below the header is read.
+    fn declaration(&self) -> Result<Declaration, Error>;
+    /// Whether this value is a node or can contain one: a `Struct` or `Embedded` whose class
+    /// hash is not 0, or a container, optional or map whose item kind [`TreeKind::is_node`]. Read
+    /// off `declaration`.
+    fn can_contain_node(&self) -> Result<bool, Error> { /* provided */ }
     /// This value as a node, if it is a `Struct` or `Embedded` with a class hash that is not 0.
     fn as_node(&self) -> Result<Option<Self::Node>, Error>;
     /// The values inside this one, with the segment reaching each. Empty for a leaf and a node.
@@ -63,6 +67,18 @@ pub trait TreeNode<'a>: Copy + sealed::Sealed {
     fn get(&self, field: BinHash) -> Result<Option<Self::Value>, Error>;
     /// The whole node, owned, as a `Struct`. Allocates.
     fn to_struct(&self) -> Result<values::Struct, Error>;
+}
+
+/// What a value's header declares. A pointer's class is recorded, 0 for the null pointer; an
+/// optional counts 0 or 1. `ValueShape` converts from it without the count or a pointer's class.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub struct Declaration {
+    pub kind: Kind,
+    pub item_kind: Option<Kind>,
+    pub key_kind: Option<Kind>,
+    pub class: Option<BinHash>,
+    pub count: Option<usize>,
 }
 
 /// The segment from a container, optional or map to one value inside it.
@@ -169,29 +185,29 @@ impl<'t, 'a, V: TreeValue<'a>> Node<'t, 'a, V> {
     pub fn trail(&self) -> &'t Trail<V>;
     pub fn is_root(&self) -> bool;
     /// The node's address, copied out of the trail. Allocates.
-    pub fn value_path(&self) -> Result<ValuePath, Error>;
+    pub fn to_value_path(&self) -> Result<ValuePath, Error>;
 }
 
-/// The steps from an object's root to the walk's position. A map key is the tree's own
+/// The segments from an object's root to the walk's position. A map key is the tree's own
 /// value, never a copy.
 #[derive(Debug)]
-pub struct Trail<V> { /* Vec<TrailStep<V>>, Vec<BinHash> */ }
+pub struct Trail<V> { /* Vec<TrailSegment<V>>, Vec<BinHash> */ }
 
-/// One step of a [`Trail`]. The borrowing form of [`Step`].
+/// One segment of a [`Trail`]. The borrowing form of [`ValueSegment`].
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum TrailStep<V> {
+pub enum TrailSegment<V> {
     Field(BinHash),
     Index(usize),
     Key(V),
 }
 
 impl<'a, V: TreeValue<'a>> Trail<V> {
-    pub fn steps(&self) -> &[TrailStep<V>];
+    pub fn segments(&self) -> &[TrailSegment<V>];
     pub fn len(&self) -> usize;
     pub fn is_empty(&self) -> bool;
-    /// The class of the node each field step was read on, one per `Field` step. Never 0.
+    /// The class of the node each field segment was read on, one per `Field` segment. Never 0.
     pub fn classes(&self) -> &[BinHash];
-    /// The owned address: every step copied, every key decoded to a `MapKey`, the class
+    /// The owned address: every segment copied, every key decoded to a `MapKey`, the class
     /// context carried over.
     pub fn to_value_path(&self) -> Result<ValuePath, Error>;
 }
@@ -258,15 +274,15 @@ shown every property through `enter_property`, leaves included, and descends onl
 with nothing decoded. A `Struct` or `Embedded` with class 0 is the client's null pointer and is not a node
 (W2). An optional's value is `Index(0)`, as the path grammar addresses it (D9).
 
-**The trail allocates nothing per step.** Keys are the tree's own values; text and owned steps
-are made only by `Display`, `to_value_path` or `Node::value_path`, which a visitor calls for a
+**The trail allocates nothing per segment.** Keys are the tree's own values; text and owned segments
+are made only by `Display`, `to_value_path` or `Node::to_value_path`, which a visitor calls for a
 node it reports on (W9).
 
 **The walk is fallible over both trees, in the visitor's error (W6).** A view's header can fail
 to decode and a visitor reading a leaf can too; the tree's errors convert through `From`, and a
 `Stop` is an outcome, not an error.
 
-Blocked by #219: `Node::value_path`, `Trail::to_value_path` and `MapKey` are its types.
+Blocked by #219: `Node::to_value_path`, `Trail::to_value_path` and `MapKey` are its types.
 `TreeKind`, the tree traits, `Leaf`, `Visitor`, `Node`, `Trail` and every entry point do not
 depend on it and can land first behind those methods.
 
@@ -285,10 +301,10 @@ depend on it and can land first behind those methods.
       both trees
 - [ ] `as_leaf()` and `map_key()` agree between the two trees for every leaf kind and every key
       kind `Kind::is_valid_map_key` admits
-- [ ] `Trail::classes()` has one entry per field step at every node, equal to the class of the
+- [ ] `Trail::classes()` has one entry per field segment at every node, equal to the class of the
       node that field was read on, and `to_value_path()?.fields()` yields the same pairs
 - [ ] `Trail::to_string()` equals `to_value_path()?.to_string()` at every node; a walk over a
-      map of 10,000 hash-keyed entries grows the trail's capacity by at most one step, and over
+      map of 10,000 hash-keyed entries grows the trail's capacity by at most one segment, and over
       a view allocates nothing else
 - [ ] `BinOverride::walk` visits the fixture patch's embedded objects and never a record's value
 - [ ] `Bin::walk` over `lolminimap_uibase.bin` visits 66 root nodes in file order, and
@@ -300,3 +316,4 @@ depend on it and can land first behind those methods.
 - [ ] An invalid UTF-8 property reaches its callback without decoding; skipping it succeeds and requesting its leaf returns `Error::Utf8Error`
 
 - [ ] `RawValue::value_view()` exposes container declarations without decoding their contents and reports malformed leaf payloads on request
+- [ ] `declaration()` agrees between the two trees for every root property's value and every item, key and value inside it; `ValueShape::from` of it equals `ValueShape::of` the owned value; over a view it succeeds on a container whose leaf payload does not decode

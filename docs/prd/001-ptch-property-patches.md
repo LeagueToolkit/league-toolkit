@@ -1,6 +1,6 @@
 # PRD-001: PTCH patch support in `ltk_meta`
 
-- **Status:** In progress - phases 1 and 2 implemented, 3 and 4 designed
+- **Status:** In progress - reading, writing, apply, the walk, `ValuePath`, merge and diff implemented; join, the per-record surface and ritobin text designed
 - **Created:** 2026-08-31
 - **Crates:** `ltk_meta`, `ltk_ritobin`, `ltk_file`
 - **Tracking:** [#172](https://github.com/LeagueToolkit/league-toolkit/issues/172),
@@ -9,7 +9,7 @@
   `.scratch/ptch-diff-merge/issues/`
 - **Spec:** `docs/design/ptch-property-patches.md`; `docs/design/value-walk.md` for the walk
   and `ValuePath`
-- **Decisions:** ADR-0001 to ADR-0006, ADR-0012 to ADR-0015
+- **Decisions:** ADR-0001 to ADR-0006, ADR-0012 to ADR-0015, ADR-0019
 
 ## <a id="s1"></a>1. Problem
 
@@ -59,6 +59,10 @@ A consumer here is a crate, a tool, or a person building one.
    with an address for any node I report on, so that each health-check rule is a visitor rather
    than its own walker - the manager has two hand-written walkers today and is about to need a
    third that runs several rules over one pass.
+8. As **`league-mod`'s bin conversion**, I want the difference between a mod's replaced bin and
+   the game's copy as a patch, with every place a record carries more than the change named, so
+   that I write the patch as a `.ptch` and render what it lifts as game-data declarations
+   (`league-mod` `docs/research/bin-diff-to-declarations.md`).
 
 ## <a id="s4"></a>4. Requirements
 
@@ -86,7 +90,7 @@ A consumer here is a crate, a tool, or a person building one.
 - **FR-9:** The crate SHALL concatenate several patches aimed at one target and report every
   position two of them write.
 - **FR-10:** The crate SHALL be able to express the difference between two bins as a patch, and
-  SHALL report every difference the record language cannot carry. *(Parked - ADR-0004.)*
+  SHALL report every difference the record language cannot carry.
 - **FR-11:** The crate SHALL offer one entry point that reads whichever kind of bin a file holds.
 - **FR-12:** The crate SHALL walk every node of an object - the object and every nested struct
   and embed - in a fixed order, calling a visitor once per node, and SHALL let the visitor decline
