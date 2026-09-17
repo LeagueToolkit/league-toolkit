@@ -1,4 +1,4 @@
-//! The owned tree as the walk sees it: `&PropertyValueEnum<M>` and [`OwnedNode`].
+//! The owned tree as the walk sees it: `&PropertyValueEnum<M>` and [`NodeRef`].
 
 use std::{fmt, iter::Enumerate, slice};
 
@@ -18,12 +18,12 @@ use crate::{
 /// The owned tree's node: a class hash and a borrowed property map.
 ///
 /// [`BinObject`] and [`values::Struct`] both view as one, through `From`.
-pub struct OwnedNode<'a, M = NoMeta> {
+pub struct NodeRef<'a, M = NoMeta> {
     class_hash: BinHash,
     properties: &'a IndexMap<BinHash, PropertyValueEnum<M>>,
 }
 
-impl<'a, M> OwnedNode<'a, M> {
+impl<'a, M> NodeRef<'a, M> {
     /// A node over `properties`, carrying `class_hash`.
     #[must_use]
     pub fn new(
@@ -37,46 +37,46 @@ impl<'a, M> OwnedNode<'a, M> {
     }
 }
 
-impl<'a, M> From<&'a BinObject<M>> for OwnedNode<'a, M> {
+impl<'a, M> From<&'a BinObject<M>> for NodeRef<'a, M> {
     fn from(object: &'a BinObject<M>) -> Self {
         Self::new(object.class_hash, &object.properties)
     }
 }
 
-impl<'a, M> From<&'a values::Struct<M>> for OwnedNode<'a, M> {
+impl<'a, M> From<&'a values::Struct<M>> for NodeRef<'a, M> {
     fn from(value: &'a values::Struct<M>) -> Self {
         Self::new(value.class_hash, &value.properties)
     }
 }
 
 // By hand rather than derived: a derived `Copy` would demand `M: Copy` for a borrow.
-impl<M> Clone for OwnedNode<'_, M> {
+impl<M> Clone for NodeRef<'_, M> {
     fn clone(&self) -> Self {
         *self
     }
 }
-impl<M> Copy for OwnedNode<'_, M> {}
+impl<M> Copy for NodeRef<'_, M> {}
 
-impl<M> fmt::Debug for OwnedNode<'_, M> {
+impl<M> fmt::Debug for NodeRef<'_, M> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("OwnedNode")
+        f.debug_struct("NodeRef")
             .field("class_hash", &self.class_hash)
             .field("property_count", &self.properties.len())
             .finish()
     }
 }
 
-impl<M> Sealed for OwnedNode<'_, M> {}
+impl<M> Sealed for NodeRef<'_, M> {}
 impl<M> Sealed for &PropertyValueEnum<M> {}
 
-/// The properties of an [`OwnedNode`], in order.
+/// The properties of a [`NodeRef`], in order.
 #[must_use = "iterators are lazy and do nothing unless consumed"]
 #[derive(Debug)]
-pub struct OwnedProperties<'a, M = NoMeta> {
+pub struct PropertiesRef<'a, M = NoMeta> {
     inner: indexmap::map::Iter<'a, BinHash, PropertyValueEnum<M>>,
 }
 
-impl<'a, M> Iterator for OwnedProperties<'a, M> {
+impl<'a, M> Iterator for PropertiesRef<'a, M> {
     type Item = Result<(BinHash, &'a PropertyValueEnum<M>), Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -88,19 +88,19 @@ impl<'a, M> Iterator for OwnedProperties<'a, M> {
     }
 }
 
-impl<M> ExactSizeIterator for OwnedProperties<'_, M> {}
-impl<M> std::iter::FusedIterator for OwnedProperties<'_, M> {}
+impl<M> ExactSizeIterator for PropertiesRef<'_, M> {}
+impl<M> std::iter::FusedIterator for PropertiesRef<'_, M> {}
 
-impl<'a, M> TreeNode<'a> for OwnedNode<'a, M> {
+impl<'a, M> TreeNode<'a> for NodeRef<'a, M> {
     type Value = &'a PropertyValueEnum<M>;
-    type Properties = OwnedProperties<'a, M>;
+    type Properties = PropertiesRef<'a, M>;
 
     fn class_hash(&self) -> BinHash {
         self.class_hash
     }
 
     fn properties(&self) -> Self::Properties {
-        OwnedProperties {
+        PropertiesRef {
             inner: self.properties.iter(),
         }
     }
@@ -125,25 +125,25 @@ impl<'a, M> TreeNode<'a> for OwnedNode<'a, M> {
 /// The values inside an owned container, optional or map.
 #[must_use = "iterators are lazy and do nothing unless consumed"]
 #[derive(Debug)]
-pub struct OwnedChildren<'a, M = NoMeta> {
-    inner: OwnedChildrenInner<'a, M>,
+pub struct ChildrenRef<'a, M = NoMeta> {
+    inner: ChildrenRefInner<'a, M>,
 }
 
 #[derive(Debug)]
-enum OwnedChildrenInner<'a, M> {
+enum ChildrenRefInner<'a, M> {
     Items(Enumerate<slice::Iter<'a, PropertyValueEnum<M>>>),
     Entries(slice::Iter<'a, (PropertyValueEnum<M>, PropertyValueEnum<M>)>),
 }
 
-impl<'a, M> Iterator for OwnedChildren<'a, M> {
+impl<'a, M> Iterator for ChildrenRef<'a, M> {
     type Item = Result<(Child<&'a PropertyValueEnum<M>>, &'a PropertyValueEnum<M>), Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match &mut self.inner {
-            OwnedChildrenInner::Items(items) => items
+            ChildrenRefInner::Items(items) => items
                 .next()
                 .map(|(index, value)| Ok((Child::Index(index), value))),
-            OwnedChildrenInner::Entries(entries) => entries
+            ChildrenRefInner::Entries(entries) => entries
                 .next()
                 .map(|(key, value)| Ok((Child::Key(key), value))),
         }
@@ -151,18 +151,18 @@ impl<'a, M> Iterator for OwnedChildren<'a, M> {
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         match &self.inner {
-            OwnedChildrenInner::Items(items) => items.size_hint(),
-            OwnedChildrenInner::Entries(entries) => entries.size_hint(),
+            ChildrenRefInner::Items(items) => items.size_hint(),
+            ChildrenRefInner::Entries(entries) => entries.size_hint(),
         }
     }
 }
 
-impl<M> ExactSizeIterator for OwnedChildren<'_, M> {}
-impl<M> std::iter::FusedIterator for OwnedChildren<'_, M> {}
+impl<M> ExactSizeIterator for ChildrenRef<'_, M> {}
+impl<M> std::iter::FusedIterator for ChildrenRef<'_, M> {}
 
 impl<'a, M> TreeValue<'a> for &'a PropertyValueEnum<M> {
-    type Node = OwnedNode<'a, M>;
-    type Children = OwnedChildren<'a, M>;
+    type Node = NodeRef<'a, M>;
+    type Children = ChildrenRef<'a, M>;
 
     fn kind(&self) -> Kind {
         PropertyValueEnum::kind(self)
@@ -186,27 +186,27 @@ impl<'a, M> TreeValue<'a> for &'a PropertyValueEnum<M> {
             PropertyValueEnum::Embedded(e) => &e.0,
             _ => return Ok(None),
         };
-        Ok((*node.class_hash != 0).then(|| OwnedNode::from(node)))
+        Ok((*node.class_hash != 0).then(|| NodeRef::from(node)))
     }
 
     fn children(&self) -> Result<Self::Children, Error> {
         let inner = match self {
             PropertyValueEnum::Container(c) => {
-                OwnedChildrenInner::Items(c.items().iter().enumerate())
+                ChildrenRefInner::Items(c.items().iter().enumerate())
             }
             PropertyValueEnum::UnorderedContainer(c) => {
-                OwnedChildrenInner::Items(c.0.items().iter().enumerate())
+                ChildrenRefInner::Items(c.0.items().iter().enumerate())
             }
-            PropertyValueEnum::Optional(o) => OwnedChildrenInner::Items(
+            PropertyValueEnum::Optional(o) => ChildrenRefInner::Items(
                 o.value()
                     .map_or(&[][..], slice::from_ref)
                     .iter()
                     .enumerate(),
             ),
-            PropertyValueEnum::Map(m) => OwnedChildrenInner::Entries(m.entries().iter()),
-            _ => OwnedChildrenInner::Items([].iter().enumerate()),
+            PropertyValueEnum::Map(m) => ChildrenRefInner::Entries(m.entries().iter()),
+            _ => ChildrenRefInner::Items([].iter().enumerate()),
         };
-        Ok(OwnedChildren { inner })
+        Ok(ChildrenRef { inner })
     }
 
     fn leaf(&self) -> Result<Option<Leaf<'a>>, Error> {
@@ -303,7 +303,7 @@ pub(crate) fn strip_meta<M>(value: &PropertyValueEnum<M>) -> Result<PropertyValu
 }
 
 fn strip_struct<M>(value: &values::Struct<M>) -> Result<values::Struct, Error> {
-    OwnedNode::from(value).to_struct()
+    NodeRef::from(value).to_struct()
 }
 
 fn strip_container<M>(value: &values::Container<M>) -> Result<values::Container, Error> {

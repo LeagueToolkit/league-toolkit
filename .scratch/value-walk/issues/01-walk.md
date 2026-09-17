@@ -92,9 +92,9 @@ pub enum Leaf<'a> {
 /// The owned tree's node: a class hash and a borrowed property map. `BinObject` and
 /// `values::Struct` both view as one.
 #[derive(Clone, Copy, Debug)]
-pub struct OwnedNode<'a, M = NoMeta> { /* ... */ }
+pub struct NodeRef<'a, M = NoMeta> { /* ... */ }
 
-impl<'a, M> TreeValue<'a> for &'a PropertyValueEnum<M> { type Node = OwnedNode<'a, M>; /* ... */ }
+impl<'a, M> TreeValue<'a> for &'a PropertyValueEnum<M> { type Node = NodeRef<'a, M>; /* ... */ }
 /// A borrowed walk value. Property payloads are decoded only on request.
 #[derive(Clone, Copy, Debug)]
 pub struct ViewValue<'a, M = NoMeta> { /* private */ }
@@ -110,7 +110,7 @@ impl<'a, M> ViewValue<'a, M> {
 }
 
 impl<'a, M: Default> TreeValue<'a> for ViewValue<'a, M> { type Node = StructView<'a, M>; /* ... */ }
-impl<'a, M> TreeNode<'a> for OwnedNode<'a, M> { type Value = &'a PropertyValueEnum<M>; /* ... */ }
+impl<'a, M> TreeNode<'a> for NodeRef<'a, M> { type Value = &'a PropertyValueEnum<M>; /* ... */ }
 impl<'a, M: Default> TreeNode<'a> for StructView<'a, M> { type Value = ViewValue<'a, M>; /* ... */ }
 
 /// What a callback answers. `ltk_ritobin::cst::visitor::Visit`'s shape (W21).

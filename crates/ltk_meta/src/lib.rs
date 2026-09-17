@@ -198,7 +198,7 @@ use std::io::Cursor;
 use ltk_hash::{BinHash, Hash as _};
 use ltk_meta::{
     concrete::{values, BinDelta, BinStream},
-    walk::{PropertyMut, Visit, VisitorMut},
+    walk::{PropertyRefMut, Visit, VisitorMut},
     Error, PropertyValueEnum,
 };
 
@@ -213,7 +213,7 @@ struct Rehash {
 impl VisitorMut for Rehash {
     type Error = Error;
 
-    fn enter_property(&mut self, property: &mut PropertyMut<'_>) -> Result<Visit, Error> {
+    fn enter_property(&mut self, property: &mut PropertyRefMut<'_>) -> Result<Visit, Error> {
         if property.field() != NAME {
             return Ok(Visit::Continue);
         }

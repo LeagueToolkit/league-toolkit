@@ -24,29 +24,29 @@ In `ltk_meta::walk`:
 pub trait VisitorMut<M = NoMeta> {
     type Error: From<Error>;
 
-    fn enter_node(&mut self, node: &mut NodeMut<'_, M>) -> Result<Visit, Self::Error>;
-    fn exit_node(&mut self, node: &mut NodeMut<'_, M>) -> Result<Visit, Self::Error>;
-    fn enter_property(&mut self, property: &mut PropertyMut<'_, M>) -> Result<Visit, Self::Error>;
-    fn exit_property(&mut self, property: &mut PropertyMut<'_, M>) -> Result<Visit, Self::Error>;
+    fn enter_node(&mut self, node: &mut NodeRefMut<'_, M>) -> Result<Visit, Self::Error>;
+    fn exit_node(&mut self, node: &mut NodeRefMut<'_, M>) -> Result<Visit, Self::Error>;
+    fn enter_property(&mut self, property: &mut PropertyRefMut<'_, M>) -> Result<Visit, Self::Error>;
+    fn exit_property(&mut self, property: &mut PropertyRefMut<'_, M>) -> Result<Visit, Self::Error>;
 }
 
 impl<M, W: VisitorMut<M> + ?Sized> VisitorMut<M> for &mut W {}
 
-pub struct NodeMut<'t, M = NoMeta> { /* object hash, class hash, &'t mut IndexMap, &'t Trail */ }
+pub struct NodeRefMut<'t, M = NoMeta> { /* object hash, class hash, &'t mut IndexMap, &'t Trail */ }
 
-impl<'t, M> NodeMut<'t, M> {
+impl<'t, M> NodeRefMut<'t, M> {
     pub fn object_hash(&self) -> BinHash;
     pub fn class_hash(&self) -> BinHash;
     pub fn trail(&self) -> &'t Trail<&'t PropertyValueEnum<M>>;
     pub fn is_root(&self) -> bool;
-    pub fn inner(&self) -> OwnedNode<'_, M>;
+    pub fn inner(&self) -> NodeRef<'_, M>;
     pub fn properties(&self) -> &IndexMap<BinHash, PropertyValueEnum<M>>;
     pub fn properties_mut(&mut self) -> &mut IndexMap<BinHash, PropertyValueEnum<M>>;
 }
 
-pub struct PropertyMut<'t, M = NoMeta> { /* object hash, node class, field, &'t mut value, &'t Trail */ }
+pub struct PropertyRefMut<'t, M = NoMeta> { /* object hash, node class, field, &'t mut value, &'t Trail */ }
 
-impl<'t, M> PropertyMut<'t, M> {
+impl<'t, M> PropertyRefMut<'t, M> {
     pub fn object_hash(&self) -> BinHash;
     pub fn node_class_hash(&self) -> BinHash;
     pub fn field(&self) -> BinHash;
@@ -77,13 +77,13 @@ one `unsafe` block, and a callback sees a key only for its own length (W24). No 
 allocates.
 
 **Kind pins hold by construction (W25).** A node callback edits the property map, a property
-callback edits the value, `NodeMut` sets no class hash, and no callback reaches an item of a
+callback edits the value, `NodeRefMut` sets no class hash, and no callback reaches an item of a
 container, optional or map as a value.
 
 **Owned only (W23).** A view's bytes are not editable in place; the unit of an edit is the object
 `read()` returns.
 
-Blocked by #225: `Visit`, `WalkOutcome`, `Trail` and `OwnedNode` are its types.
+Blocked by #225: `Visit`, `WalkOutcome`, `Trail` and `NodeRef` are its types.
 
 - [ ] A `VisitorMut` that edits nothing and records every callback produces the same event list as
       the recording `Visitor` over the `value-walk.md` [section 7](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/value-walk.md#s7) fixture, for every answer the flow tests
@@ -91,7 +91,7 @@ Blocked by #225: `Visit`, `WalkOutcome`, `Trail` and `OwnedNode` are its types.
 - [ ] A property inserted in `enter_node` is walked; a property removed in `enter_node` is not
 - [ ] A value replaced in `enter_property` is descended as replaced, and a node value replaced by a
       leaf gets no `exit_property`
-- [ ] An edit made through `NodeMut` at a node inside a container, optional and map writes, re-reads
+- [ ] An edit made through `NodeRefMut` at a node inside a container, optional and map writes, re-reads
       equal, and leaves every kind pin intact
 - [ ] `Trail::to_string()` and `Trail::classes()` at every node equal the read-only walk's at the
       same node
