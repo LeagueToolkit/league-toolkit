@@ -1215,6 +1215,7 @@ fn a_mutable_reference_to_a_visitor_is_a_visitor() {
 }
 
 mod mutable;
+mod value_path;
 
 #[test]
 fn property_strings_are_decoded_only_when_requested() {

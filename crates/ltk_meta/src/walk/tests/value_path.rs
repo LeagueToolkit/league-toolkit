@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use ltk_hash::Hash as _;
 
 use super::*;
-use crate::path::{MapKey, Step, UnnameableKind, ValuePath};
+use crate::path::{MapKey, UnnameableKind, ValuePath, ValueSegment};
 use crate::walk::ChildSegment;
 
 /// At one node: the trail's hash form, the owned address's hash form, the address's class
@@ -241,7 +241,7 @@ fn every_nameable_position_resolves_through_its_client_path() {
             }
             Err(error) => {
                 unnameable += 1;
-                let Step::Key(key) = &path.steps()[error.step] else {
+                let ValueSegment::Key(key) = &path.segments()[error.segment] else {
                     panic!("{path}: only a key is unnameable here, got {error}");
                 };
                 assert_eq!(error.kind, UnnameableKind::Key(key.kind()), "{path}");
