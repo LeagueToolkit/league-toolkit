@@ -8,7 +8,7 @@ use std::{collections::HashMap, io::Cursor};
 use ltk_hash::{BinHash, Hash as _};
 use ltk_meta::{
     path::{PropertyPath, Subscript, ValuePath, ValueSegment},
-    property::{values, NoMeta},
+    property::values,
     Bin, BinObject, BinOverride, PropertyPatch, PropertyValueEnum,
 };
 use proptest::prelude::*;
@@ -22,7 +22,7 @@ fn hash(name: &str) -> BinHash {
 }
 
 fn object(path: u32, class: u32, properties: Vec<(&str, PropertyValueEnum)>) -> BinObject {
-    BinObject::<NoMeta>::builder(path, class)
+    BinObject::builder(path, class)
         .properties(
             properties
                 .into_iter()
@@ -44,7 +44,6 @@ fn node(class: u32, properties: Vec<(&str, PropertyValueEnum)>) -> PropertyValue
             .into_iter()
             .map(|(name, value)| (hash(name), value))
             .collect(),
-        meta: NoMeta,
     }
     .into()
 }

@@ -382,10 +382,10 @@ impl MapKey {
 /// # Errors
 ///
 /// [`Error::InvalidKeyType`] for a kind no map is keyed by.
-impl<M> TryFrom<&PropertyValueEnum<M>> for MapKey {
+impl TryFrom<&PropertyValueEnum> for MapKey {
     type Error = Error;
 
-    fn try_from(value: &PropertyValueEnum<M>) -> Result<Self, Error> {
+    fn try_from(value: &PropertyValueEnum) -> Result<Self, Error> {
         value.map_key()
     }
 }

@@ -139,7 +139,7 @@ impl fmt::Display for DiffReport {
     }
 }
 
-impl<M: Clone + PartialEq> Bin<M> {
+impl Bin {
     /// The patch that turns this bin into `edited`, as far as records can say it.
     ///
     /// The patch applied to this bin equals `self.merge(edited)`. A difference goes into a
@@ -157,7 +157,7 @@ impl<M: Clone + PartialEq> Bin<M> {
     /// ```
     /// use std::collections::HashMap;
     /// use ltk_hash::{BinHash, Hash as _};
-    /// use ltk_meta::concrete::{values, Bin, BinObject};
+    /// use ltk_meta::{property::values, Bin, BinObject};
     ///
     /// let size = BinHash::hash_str("Size");
     /// let names = HashMap::from([(size, "Size".to_owned())]);
@@ -171,7 +171,7 @@ impl<M: Clone + PartialEq> Bin<M> {
     /// assert_eq!(patch.patches[0].path.as_str(), "Size");
     /// assert!(report.lifted.is_empty());
     /// ```
-    pub fn diff(&self, edited: &Self, names: &dyn FieldNames) -> (BinOverride<M>, DiffReport) {
+    pub fn diff(&self, edited: &Self, names: &dyn FieldNames) -> (BinOverride, DiffReport) {
         self.diff_with(edited, names, &DiffOptions::default())
     }
 
@@ -183,7 +183,7 @@ impl<M: Clone + PartialEq> Bin<M> {
         edited: &Self,
         names: &dyn FieldNames,
         options: &DiffOptions,
-    ) -> (BinOverride<M>, DiffReport) {
+    ) -> (BinOverride, DiffReport) {
         let mut patch = BinOverride::new();
         let mut differ = Differ {
             names,
@@ -251,22 +251,22 @@ impl<M: Clone + PartialEq> Bin<M> {
 }
 
 /// A record not yet attached to its object: a path and the value it writes.
-type Pending<M> = (PropertyPath, PropertyValueEnum<M>);
+type Pending = (PropertyPath, PropertyValueEnum);
 
 /// The depth a difference has to be recorded at or above: a record at a position whose trail is
 /// longer than this cannot carry it. 0 is the whole object.
 type Escalate = usize;
 
 /// One diff: the name table, the report it builds and the trail it reports positions with.
-struct Differ<'n, 'e, M> {
+struct Differ<'n, 'e> {
     names: &'n dyn FieldNames,
     object_hash: BinHash,
-    trail: Trail<&'e PropertyValueEnum<M>>,
+    trail: Trail<&'e PropertyValueEnum>,
     report: DiffReport,
 }
 
-impl<'e, M: Clone + PartialEq> Differ<'_, 'e, M> {
-    fn take_object(&mut self, patch: &mut BinOverride<M>, object: BinObject<M>) {
+impl<'e> Differ<'_, 'e> {
+    fn take_object(&mut self, patch: &mut BinOverride, object: BinObject) {
         self.report.objects.push(object.path_hash);
         patch.objects.insert(object.path_hash, object);
     }
@@ -285,10 +285,10 @@ impl<'e, M: Clone + PartialEq> Differ<'_, 'e, M> {
 
     fn properties(
         &mut self,
-        base: &IndexMap<BinHash, PropertyValueEnum<M>>,
-        edited: &'e IndexMap<BinHash, PropertyValueEnum<M>>,
+        base: &IndexMap<BinHash, PropertyValueEnum>,
+        edited: &'e IndexMap<BinHash, PropertyValueEnum>,
         class: BinHash,
-        records: &mut Vec<Pending<M>>,
+        records: &mut Vec<Pending>,
     ) -> Result<(), Escalate> {
         let mut escalate = None;
         for (field, value) in edited {
@@ -306,9 +306,9 @@ impl<'e, M: Clone + PartialEq> Differ<'_, 'e, M> {
     /// Diffs the value at the trail's position.
     fn value(
         &mut self,
-        base: &PropertyValueEnum<M>,
-        edited: &'e PropertyValueEnum<M>,
-        records: &mut Vec<Pending<M>>,
+        base: &PropertyValueEnum,
+        edited: &'e PropertyValueEnum,
+        records: &mut Vec<Pending>,
     ) -> Result<(), Escalate> {
         use PropertyValueEnum as V;
 
@@ -363,9 +363,9 @@ impl<'e, M: Clone + PartialEq> Differ<'_, 'e, M> {
     /// merged over it, as [`Bin::merge`] applies them in order.
     fn map(
         &mut self,
-        base: &values::Map<M>,
-        edited: &'e values::Map<M>,
-        records: &mut Vec<Pending<M>>,
+        base: &values::Map,
+        edited: &'e values::Map,
+        records: &mut Vec<Pending>,
     ) -> Option<Result<(), Escalate>> {
         let index = key_index(base)?;
         let keys = map_keys(edited)?;
@@ -377,7 +377,7 @@ impl<'e, M: Clone + PartialEq> Differ<'_, 'e, M> {
         let mut escalate = None;
         let mut inserted = HashSet::new();
         // The base's entries a repeated key has written, as the merge leaves them.
-        let mut written: HashMap<usize, PropertyValueEnum<M>> = HashMap::new();
+        let mut written: HashMap<usize, PropertyValueEnum> = HashMap::new();
         for ((key, value), map_key) in edited.entries().iter().zip(&keys) {
             let Some(at) = index.get(map_key).copied() else {
                 inserted.insert(map_key);
@@ -429,9 +429,9 @@ impl<'e, M: Clone + PartialEq> Differ<'_, 'e, M> {
     /// accepts one, else a [`Lift::Mismatch`] escalating to the parent.
     fn replace(
         &mut self,
-        base: &PropertyValueEnum<M>,
-        edited: &PropertyValueEnum<M>,
-        records: &mut Vec<Pending<M>>,
+        base: &PropertyValueEnum,
+        edited: &PropertyValueEnum,
+        records: &mut Vec<Pending>,
     ) -> Result<(), Escalate> {
         if ValueShape::of(base).matches(&ValueShape::of(edited)) {
             return self.record(records, || edited.clone());
@@ -444,8 +444,8 @@ impl<'e, M: Clone + PartialEq> Differ<'_, 'e, M> {
     /// longest prefix every segment of which is spelled.
     fn record(
         &mut self,
-        records: &mut Vec<Pending<M>>,
-        value: impl FnOnce() -> PropertyValueEnum<M>,
+        records: &mut Vec<Pending>,
+        value: impl FnOnce() -> PropertyValueEnum,
     ) -> Result<(), Escalate> {
         let at = self.at();
         match at.to_property_path(self.names) {
@@ -471,7 +471,7 @@ impl<'e, M: Clone + PartialEq> Differ<'_, 'e, M> {
 /// The resolver matches a float key with `==`, and a key matches by its bits here. `0.0` and
 /// `-0.0` are the two keys that are equal under `==` with different bits: the later of the two
 /// is shadowed. A `NaN` key has no literal at all.
-fn shadowed<M>(map: &values::Map<M>, at: usize) -> bool {
+fn shadowed(map: &values::Map, at: usize) -> bool {
     let PropertyValueEnum::F32(key) = &map.entries()[at].0 else {
         return false;
     };
@@ -482,10 +482,7 @@ fn shadowed<M>(map: &values::Map<M>, at: usize) -> bool {
 }
 
 /// `base` with `edited` merged over it.
-fn merged<M: Clone + PartialEq>(
-    base: &PropertyValueEnum<M>,
-    edited: &PropertyValueEnum<M>,
-) -> PropertyValueEnum<M> {
+fn merged(base: &PropertyValueEnum, edited: &PropertyValueEnum) -> PropertyValueEnum {
     let mut merged = base.clone();
     merged.merge(edited);
     merged

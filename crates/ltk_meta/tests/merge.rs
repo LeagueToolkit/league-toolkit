@@ -6,7 +6,7 @@ mod common;
 use ltk_hash::{BinHash, Hash as _};
 use ltk_meta::{
     path::{MapKey, ValuePath, ValueSegment},
-    property::{values, Kind, NoMeta},
+    property::{values, Kind},
     Bin, BinObject, PropertyValueEnum,
 };
 use proptest::prelude::*;
@@ -20,7 +20,7 @@ fn hash(name: &str) -> BinHash {
 }
 
 fn object(path: u32, class: u32, properties: Vec<(&str, PropertyValueEnum)>) -> BinObject {
-    BinObject::<NoMeta>::builder(path, class)
+    BinObject::builder(path, class)
         .properties(
             properties
                 .into_iter()
@@ -40,7 +40,6 @@ fn node(class: u32, properties: Vec<(&str, PropertyValueEnum)>) -> values::Struc
             .into_iter()
             .map(|(name, value)| (hash(name), value))
             .collect(),
-        meta: NoMeta,
     }
 }
 
@@ -177,7 +176,7 @@ fn a_node_of_the_same_class_combines_and_one_of_another_class_replaces_whole() {
             "Embed",
             values::Embedded(node(INNER, vec![("A", int(1))])).into(),
         ),
-        ("Null", values::Struct::<NoMeta>::default().into()),
+        ("Null", values::Struct::default().into()),
     ]);
     let edited = one(vec![
         ("Same", node(INNER, vec![("B", int(3))]).into()),
@@ -519,8 +518,8 @@ fn a_nan_leaf_differs_from_itself_and_is_replaced() {
 
 #[test]
 fn a_merge_that_only_adds_a_dependency_changes_the_base() {
-    let mut base = Bin::<NoMeta>::builder().dependency("a.bin").build();
-    let edited = Bin::<NoMeta>::builder().dependency("b.bin").build();
+    let mut base = Bin::builder().dependency("a.bin").build();
+    let edited = Bin::builder().dependency("b.bin").build();
 
     let report = base.merge(&edited);
 

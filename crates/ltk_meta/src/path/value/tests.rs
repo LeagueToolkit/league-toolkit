@@ -13,7 +13,7 @@ use ltk_primitives::Color;
 use super::{FloatBits, MapKey, UnnameableKind, ValuePath, ValueSegment};
 use crate::path::FieldNames;
 use crate::{
-    property::{values, Kind, NoMeta},
+    property::{values, Kind},
     walk::Leaf,
     Error, PropertyValueEnum,
 };
@@ -129,11 +129,11 @@ fn keys_and_values() -> Vec<(PropertyValueEnum, Option<MapKey>)> {
         ),
         (values::ObjectLink::new(0x0bee_f000u32).into(), None),
         (values::BitBool::new(true).into(), None),
-        (values::Struct::<NoMeta>::default().into(), None),
-        (values::Embedded::<NoMeta>::default().into(), None),
-        (values::Container::<NoMeta>::default().into(), None),
-        (values::Optional::<NoMeta>::default().into(), None),
-        (values::Map::<NoMeta>::default().into(), None),
+        (values::Struct::default().into(), None),
+        (values::Embedded::default().into(), None),
+        (values::Container::default().into(), None),
+        (values::Optional::default().into(), None),
+        (values::Map::default().into(), None),
     ]
 }
 

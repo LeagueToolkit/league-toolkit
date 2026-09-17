@@ -7,7 +7,7 @@ use ltk_hash::BinHash;
 
 use crate::{
     path::{MapKey, ValuePath, ValueShape},
-    property::{values, NoMeta, ValueSlot},
+    property::{values, ValueSlot},
     walk::{Trail, TrailSegment},
     Bin, BinObject, PropertyValueEnum,
 };
@@ -17,7 +17,7 @@ use crate::{
 /// # Examples
 ///
 /// ```
-/// use ltk_meta::concrete::{values, Bin, BinObject};
+/// use ltk_meta::{property::values, Bin, BinObject};
 ///
 /// let mut base = Bin::builder()
 ///     .object(BinObject::builder(0x1u32, 0xc1u32).property(0xau32, values::I32::new(1)).build())
@@ -32,16 +32,16 @@ use crate::{
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
-pub struct MergeReport<M = NoMeta> {
+pub struct MergeReport {
     /// Objects taken whole from the edit: the base had no object with the hash.
     pub objects_added: Vec<BinHash>,
     /// Objects on both sides with the same class, combined property by property.
     pub objects_merged: Vec<BinHash>,
     /// Objects on both sides with different classes. The edit's object replaced each, and each
     /// is held here as the base held it.
-    pub objects_replaced: Vec<BinObject<M>>,
+    pub objects_replaced: Vec<BinObject>,
     /// Every value the edit overwrote inside a combined object, with the value the base held.
-    pub replaced: Vec<Replaced<M>>,
+    pub replaced: Vec<Replaced>,
     /// Properties the base did not have, inserted from the edit.
     pub inserted: usize,
     /// Map entries the base did not have, appended from the edit.
@@ -50,7 +50,7 @@ pub struct MergeReport<M = NoMeta> {
     pub dependencies_added: Vec<String>,
 }
 
-impl<M> Default for MergeReport<M> {
+impl Default for MergeReport {
     fn default() -> Self {
         Self {
             objects_added: Vec::new(),
@@ -64,7 +64,7 @@ impl<M> Default for MergeReport<M> {
     }
 }
 
-impl<M> MergeReport<M> {
+impl MergeReport {
     /// Whether the merge left the base as it was: nothing added, replaced or inserted.
     #[must_use]
     pub fn is_unchanged(&self) -> bool {
@@ -79,7 +79,7 @@ impl<M> MergeReport<M> {
 
 /// `"1 added, 2 merged, 0 replaced; 3 values replaced (1 mismatched), 4 inserted, 5 keys
 /// inserted, 0 dependencies added"`.
-impl<M> fmt::Display for MergeReport<M> {
+impl fmt::Display for MergeReport {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -100,13 +100,13 @@ impl<M> fmt::Display for MergeReport<M> {
 /// One value the edit overwrote.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
-pub struct Replaced<M = NoMeta> {
+pub struct Replaced {
     /// The object the value is in. 0 for a merge of a `Struct` or a value, which is in no object.
     pub object_hash: BinHash,
     /// Where the value is, inside that object.
     pub at: ValuePath,
     /// What the base held. Moved out of the base, never cloned.
-    pub was: PropertyValueEnum<M>,
+    pub was: PropertyValueEnum,
     /// Whether the two sides held different shapes: a different kind, a container, optional or
     /// map declaring different kinds, or a `Struct` or `Embedded` of a different class.
     ///
@@ -116,7 +116,7 @@ pub struct Replaced<M = NoMeta> {
     pub mismatched: bool,
 }
 
-impl<M> fmt::Display for Replaced<M> {
+impl fmt::Display for Replaced {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:08x} {}", self.object_hash, self.at)?;
         if self.mismatched {
@@ -126,7 +126,7 @@ impl<M> fmt::Display for Replaced<M> {
     }
 }
 
-impl<M: Clone + PartialEq> Bin<M> {
+impl Bin {
     /// Layers `edited` over this bin, in place.
     ///
     /// The edit wins at every value it reaches, and whatever only this bin holds survives. An
@@ -135,7 +135,7 @@ impl<M: Clone + PartialEq> Bin<M> {
     /// as a union: this bin's in order, then the edit's new ones.
     ///
     /// A merge never refuses.
-    pub fn merge(&mut self, edited: &Self) -> MergeReport<M> {
+    pub fn merge(&mut self, edited: &Self) -> MergeReport {
         let mut merger = Merger::new();
         for (object_hash, object) in &edited.objects {
             match self.objects.get_mut(object_hash) {
@@ -156,21 +156,21 @@ impl<M: Clone + PartialEq> Bin<M> {
     }
 }
 
-impl<M: Clone + PartialEq> BinObject<M> {
+impl BinObject {
     /// Layers `edited` over this object, in place. See [`Bin::merge`].
-    pub fn merge(&mut self, edited: &Self) -> MergeReport<M> {
+    pub fn merge(&mut self, edited: &Self) -> MergeReport {
         let mut merger = Merger::new();
         merger.object(self, edited);
         merger.report
     }
 }
 
-impl<M: Clone + PartialEq> values::Struct<M> {
+impl values::Struct {
     /// Layers `edited` over this `Struct`, in place. See [`Bin::merge`].
     ///
     /// Two structs of the same class that is not 0 combine property by property. Anything else
     /// that differs is replaced whole.
-    pub fn merge(&mut self, edited: &Self) -> MergeReport<M> {
+    pub fn merge(&mut self, edited: &Self) -> MergeReport {
         let mut merger = Merger::new();
         if combines(self, edited) {
             merger.properties(&mut self.properties, &edited.properties, edited.class_hash);
@@ -183,9 +183,9 @@ impl<M: Clone + PartialEq> values::Struct<M> {
     }
 }
 
-impl<M: Clone + PartialEq> PropertyValueEnum<M> {
+impl PropertyValueEnum {
     /// Layers `edited` over this value, in place. See [`Bin::merge`].
-    pub fn merge(&mut self, edited: &Self) -> MergeReport<M> {
+    pub fn merge(&mut self, edited: &Self) -> MergeReport {
         let mut merger = Merger::new();
         merger.value(self, edited);
         merger.report
@@ -193,12 +193,12 @@ impl<M: Clone + PartialEq> PropertyValueEnum<M> {
 }
 
 /// Whether two nodes combine property by property: the same class, and not the null pointer.
-pub(crate) fn combines<M>(base: &values::Struct<M>, edited: &values::Struct<M>) -> bool {
+pub(crate) fn combines(base: &values::Struct, edited: &values::Struct) -> bool {
     base.class_hash == edited.class_hash && *base.class_hash != 0
 }
 
 /// Whether two values differ in shape: [`ValueShape`], or the class of a `Struct`.
-fn shapes_differ<M>(base: &PropertyValueEnum<M>, edited: &PropertyValueEnum<M>) -> bool {
+fn shapes_differ(base: &PropertyValueEnum, edited: &PropertyValueEnum) -> bool {
     let classes_differ = match (base, edited) {
         (PropertyValueEnum::Struct(b), PropertyValueEnum::Struct(e)) => {
             b.class_hash != e.class_hash
@@ -210,7 +210,7 @@ fn shapes_differ<M>(base: &PropertyValueEnum<M>, edited: &PropertyValueEnum<M>) 
 
 /// The key of every entry of `map`, by position of its first occurrence. `None` when a key does
 /// not convert, which only a map built around its own constructor holds.
-pub(crate) fn key_index<M>(map: &values::Map<M>) -> Option<HashMap<MapKey, usize>> {
+pub(crate) fn key_index(map: &values::Map) -> Option<HashMap<MapKey, usize>> {
     let mut index = HashMap::with_capacity(map.entries().len());
     for (at, key) in map_keys(map)?.into_iter().enumerate() {
         index.entry(key).or_insert(at);
@@ -220,7 +220,7 @@ pub(crate) fn key_index<M>(map: &values::Map<M>) -> Option<HashMap<MapKey, usize
 
 /// The key of every entry of `map`, in order. `None` when an entry breaks the map's declared
 /// kinds or a key does not convert, which only a map built around its own constructor holds.
-pub(crate) fn map_keys<M>(map: &values::Map<M>) -> Option<Vec<MapKey>> {
+pub(crate) fn map_keys(map: &values::Map) -> Option<Vec<MapKey>> {
     map.entries()
         .iter()
         .map(|(key, value)| {
@@ -231,13 +231,13 @@ pub(crate) fn map_keys<M>(map: &values::Map<M>) -> Option<Vec<MapKey>> {
 }
 
 /// One merge: the report it builds and the trail it reports positions with.
-struct Merger<'e, M> {
+struct Merger<'e> {
     object_hash: BinHash,
-    trail: Trail<&'e PropertyValueEnum<M>>,
-    report: MergeReport<M>,
+    trail: Trail<&'e PropertyValueEnum>,
+    report: MergeReport,
 }
 
-impl<'e, M: Clone + PartialEq> Merger<'e, M> {
+impl<'e> Merger<'e> {
     fn new() -> Self {
         Self {
             object_hash: BinHash(0),
@@ -246,7 +246,7 @@ impl<'e, M: Clone + PartialEq> Merger<'e, M> {
         }
     }
 
-    fn object(&mut self, base: &mut BinObject<M>, edited: &'e BinObject<M>) {
+    fn object(&mut self, base: &mut BinObject, edited: &'e BinObject) {
         if base.class_hash != edited.class_hash {
             let was = mem::replace(base, edited.clone());
             self.report.objects_replaced.push(was);
@@ -260,8 +260,8 @@ impl<'e, M: Clone + PartialEq> Merger<'e, M> {
 
     fn properties(
         &mut self,
-        base: &mut IndexMap<BinHash, PropertyValueEnum<M>>,
-        edited: &'e IndexMap<BinHash, PropertyValueEnum<M>>,
+        base: &mut IndexMap<BinHash, PropertyValueEnum>,
+        edited: &'e IndexMap<BinHash, PropertyValueEnum>,
         class: BinHash,
     ) {
         for (field, value) in edited {
@@ -279,7 +279,7 @@ impl<'e, M: Clone + PartialEq> Merger<'e, M> {
         }
     }
 
-    fn value(&mut self, base: &mut PropertyValueEnum<M>, edited: &'e PropertyValueEnum<M>) {
+    fn value(&mut self, base: &mut PropertyValueEnum, edited: &'e PropertyValueEnum) {
         use PropertyValueEnum as V;
 
         match (&mut *base, edited) {
@@ -316,7 +316,7 @@ impl<'e, M: Clone + PartialEq> Merger<'e, M> {
 
     /// Combines two maps of the same kinds entry by entry. `false`, leaving `base` untouched,
     /// when an entry on either side breaks its map's kinds or has a key that does not convert.
-    fn map(&mut self, base: &mut values::Map<M>, edited: &'e values::Map<M>) -> bool {
+    fn map(&mut self, base: &mut values::Map, edited: &'e values::Map) -> bool {
         let Some(mut index) = key_index(base) else {
             return false;
         };
@@ -344,7 +344,7 @@ impl<'e, M: Clone + PartialEq> Merger<'e, M> {
     }
 
     /// Records a replacement at the trail's position.
-    fn record(&mut self, was: PropertyValueEnum<M>, mismatched: bool) {
+    fn record(&mut self, was: PropertyValueEnum, mismatched: bool) {
         let at = self
             .trail
             .to_value_path()

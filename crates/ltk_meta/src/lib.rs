@@ -357,7 +357,8 @@ equals the merge.
 use std::collections::HashMap;
 use ltk_hash::{BinHash, Hash as _};
 use ltk_meta::{
-    concrete::{values, Bin, BinObject},
+    property::values,
+    Bin, BinObject,
     property::Kind,
     Lift,
 };

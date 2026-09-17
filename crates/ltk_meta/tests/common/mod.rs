@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 use indexmap::IndexMap;
 use ltk_hash::{BinHash, Hash as _};
 use ltk_meta::{
-    property::{values, Kind, NoMeta},
+    property::{values, Kind},
     Bin, BinObject, PropertyValueEnum,
 };
 use proptest::{prelude::*, strategy::Union};
@@ -48,7 +48,6 @@ fn node(class: u32, properties: IndexMap<BinHash, PropertyValueEnum>) -> values:
         } else {
             properties
         },
-        meta: NoMeta,
     }
 }
 
