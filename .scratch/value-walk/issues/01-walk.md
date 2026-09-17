@@ -169,7 +169,7 @@ impl<'t, 'a, V: TreeValue<'a>> Node<'t, 'a, V> {
     pub fn trail(&self) -> &'t Trail<V>;
     pub fn is_root(&self) -> bool;
     /// The node's address, copied out of the trail. Allocates.
-    pub fn value_path(&self) -> Result<ValuePath, Error>;
+    pub fn to_value_path(&self) -> Result<ValuePath, Error>;
 }
 
 /// The segments from an object's root to the walk's position. A map key is the tree's own
@@ -259,14 +259,14 @@ with nothing decoded. A `Struct` or `Embedded` with class 0 is the client's null
 (W2). An optional's value is `Index(0)`, as the path grammar addresses it (D9).
 
 **The trail allocates nothing per segment.** Keys are the tree's own values; text and owned segments
-are made only by `Display`, `to_value_path` or `Node::value_path`, which a visitor calls for a
+are made only by `Display`, `to_value_path` or `Node::to_value_path`, which a visitor calls for a
 node it reports on (W9).
 
 **The walk is fallible over both trees, in the visitor's error (W6).** A view's header can fail
 to decode and a visitor reading a leaf can too; the tree's errors convert through `From`, and a
 `Stop` is an outcome, not an error.
 
-Blocked by #219: `Node::value_path`, `Trail::to_value_path` and `MapKey` are its types.
+Blocked by #219: `Node::to_value_path`, `Trail::to_value_path` and `MapKey` are its types.
 `TreeKind`, the tree traits, `Leaf`, `Visitor`, `Node`, `Trail` and every entry point do not
 depend on it and can land first behind those methods.
 

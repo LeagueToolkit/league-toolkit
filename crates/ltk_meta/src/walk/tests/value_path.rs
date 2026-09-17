@@ -13,7 +13,7 @@ use crate::walk::ChildSegment;
 /// context and the trail's.
 type Address = (String, String, Vec<Option<BinHash>>, Vec<BinHash>);
 
-/// An [`Address`] at every node. `Node::value_path` is checked against the trail's as it goes.
+/// An [`Address`] at every node. `Node::to_value_path` is checked against the trail's as it goes.
 #[derive(Default)]
 struct Addresses(Vec<Address>);
 
@@ -22,7 +22,7 @@ impl<'a, V: TreeValue<'a>> Visitor<'a, V> for Addresses {
 
     fn enter_node(&mut self, node: &Node<'_, 'a, V>) -> Result<Visit, Error> {
         let path = node.trail().to_value_path()?;
-        assert_eq!(node.value_path()?, path);
+        assert_eq!(node.to_value_path()?, path);
         self.0.push((
             node.trail().to_string(),
             path.to_string(),
@@ -183,7 +183,7 @@ impl<'a> Visitor<'a, &'a PropertyValueEnum> for RoundTrip<'_> {
 
     fn enter_node(&mut self, node: &Node<'_, 'a, &'a PropertyValueEnum>) -> Result<Visit, Error> {
         if !node.is_root() {
-            let path = node.value_path()?;
+            let path = node.to_value_path()?;
             let value = node.inner().to_struct()?;
             self.positions.push((
                 path.clone(),
@@ -201,7 +201,7 @@ impl<'a> Visitor<'a, &'a PropertyValueEnum> for RoundTrip<'_> {
         node: &Node<'_, 'a, &'a PropertyValueEnum>,
     ) -> Result<Visit, Error> {
         if !value.can_contain_node()? {
-            let mut path = node.value_path()?;
+            let mut path = node.to_value_path()?;
             path.push_field(field, node.class_hash());
             self.positions.push((
                 path.clone(),

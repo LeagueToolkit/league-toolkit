@@ -270,7 +270,7 @@ impl<'t, 'a, V: TreeValue<'a>> Node<'t, 'a, V> {
     /// # Errors
     ///
     /// The same as [`Trail::to_value_path`].
-    pub fn value_path(&self) -> Result<ValuePath, Error> {
+    pub fn to_value_path(&self) -> Result<ValuePath, Error> {
         self.trail.to_value_path()
     }
 }
