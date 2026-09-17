@@ -46,6 +46,8 @@ pub struct MergeReport<M = NoMeta> {
     pub inserted: usize,
     /// Map entries the base did not have, appended from the edit.
     pub keys_inserted: usize,
+    /// Dependencies the base did not declare, appended from the edit.
+    pub dependencies_added: Vec<String>,
 }
 
 impl<M> Default for MergeReport<M> {
@@ -57,6 +59,7 @@ impl<M> Default for MergeReport<M> {
             replaced: Vec::new(),
             inserted: 0,
             keys_inserted: 0,
+            dependencies_added: Vec::new(),
         }
     }
 }
@@ -70,17 +73,18 @@ impl<M> MergeReport<M> {
             && self.replaced.is_empty()
             && self.inserted == 0
             && self.keys_inserted == 0
+            && self.dependencies_added.is_empty()
     }
 }
 
 /// `"1 added, 2 merged, 0 replaced; 3 values replaced (1 mismatched), 4 inserted, 5 keys
-/// inserted"`.
+/// inserted, 0 dependencies added"`.
 impl<M> fmt::Display for MergeReport<M> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "{} added, {} merged, {} replaced; {} values replaced ({} mismatched), {} inserted, \
-             {} keys inserted",
+             {} keys inserted, {} dependencies added",
             self.objects_added.len(),
             self.objects_merged.len(),
             self.objects_replaced.len(),
@@ -88,6 +92,7 @@ impl<M> fmt::Display for MergeReport<M> {
             self.replaced.iter().filter(|r| r.mismatched).count(),
             self.inserted,
             self.keys_inserted,
+            self.dependencies_added.len(),
         )
     }
 }
@@ -144,6 +149,7 @@ impl<M: Clone + PartialEq> Bin<M> {
         for dependency in &edited.dependencies {
             if !self.dependencies.contains(dependency) {
                 self.dependencies.push(dependency.clone());
+                merger.report.dependencies_added.push(dependency.clone());
             }
         }
         merger.report
@@ -187,12 +193,12 @@ impl<M: Clone + PartialEq> PropertyValueEnum<M> {
 }
 
 /// Whether two nodes combine property by property: the same class, and not the null pointer.
-fn combines<M>(base: &values::Struct<M>, edited: &values::Struct<M>) -> bool {
+pub(crate) fn combines<M>(base: &values::Struct<M>, edited: &values::Struct<M>) -> bool {
     base.class_hash == edited.class_hash && *base.class_hash != 0
 }
 
 /// Whether two values differ in shape: [`ValueShape`], or the class of a `Struct`.
-pub(crate) fn mismatched<M>(base: &PropertyValueEnum<M>, edited: &PropertyValueEnum<M>) -> bool {
+fn shapes_differ<M>(base: &PropertyValueEnum<M>, edited: &PropertyValueEnum<M>) -> bool {
     let classes_differ = match (base, edited) {
         (PropertyValueEnum::Struct(b), PropertyValueEnum::Struct(e)) => {
             b.class_hash != e.class_hash
@@ -206,10 +212,22 @@ pub(crate) fn mismatched<M>(base: &PropertyValueEnum<M>, edited: &PropertyValueE
 /// not convert, which only a map built around its own constructor holds.
 pub(crate) fn key_index<M>(map: &values::Map<M>) -> Option<HashMap<MapKey, usize>> {
     let mut index = HashMap::with_capacity(map.entries().len());
-    for (at, (key, _)) in map.entries().iter().enumerate() {
-        index.entry(MapKey::try_from(key).ok()?).or_insert(at);
+    for (at, key) in map_keys(map)?.into_iter().enumerate() {
+        index.entry(key).or_insert(at);
     }
     Some(index)
+}
+
+/// The key of every entry of `map`, in order. `None` when an entry breaks the map's declared
+/// kinds or a key does not convert, which only a map built around its own constructor holds.
+pub(crate) fn map_keys<M>(map: &values::Map<M>) -> Option<Vec<MapKey>> {
+    map.entries()
+        .iter()
+        .map(|(key, value)| {
+            let fits = key.kind() == map.key_kind() && value.kind() == map.value_kind();
+            fits.then(|| MapKey::try_from(key).ok()).flatten()
+        })
+        .collect()
 }
 
 /// One merge: the report it builds and the trail it reports positions with.
@@ -290,24 +308,19 @@ impl<'e, M: Clone + PartialEq> Merger<'e, M> {
         }
 
         if *base != *edited {
-            let mismatched = mismatched(base, edited);
+            let mismatched = shapes_differ(base, edited);
             let was = mem::replace(base, edited.clone());
             self.record(was, mismatched);
         }
     }
 
     /// Combines two maps of the same kinds entry by entry. `false`, leaving `base` untouched,
-    /// when a key on either side does not convert to a [`MapKey`].
+    /// when an entry on either side breaks its map's kinds or has a key that does not convert.
     fn map(&mut self, base: &mut values::Map<M>, edited: &'e values::Map<M>) -> bool {
         let Some(mut index) = key_index(base) else {
             return false;
         };
-        let Some(keys) = edited
-            .entries()
-            .iter()
-            .map(|(key, _)| MapKey::try_from(key).ok())
-            .collect::<Option<Vec<_>>>()
-        else {
+        let Some(keys) = map_keys(edited) else {
             return false;
         };
 
@@ -322,7 +335,7 @@ impl<'e, M: Clone + PartialEq> Merger<'e, M> {
                 None => {
                     index.insert(map_key, base.entries().len());
                     base.push(key.clone(), value.clone())
-                        .expect("an entry of a map with the same kinds fits");
+                        .expect("map_keys checked the entry against the kinds both maps declare");
                     self.report.keys_inserted += 1;
                 }
             }

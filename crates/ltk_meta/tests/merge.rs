@@ -301,6 +301,7 @@ fn objects_are_added_combined_or_replaced_and_dependencies_merge_as_a_union() {
     let report = base.merge(&edited);
 
     assert_eq!(base.dependencies, ["a.bin", "b.bin", "c.bin"]);
+    assert_eq!(report.dependencies_added, ["c.bin"]);
     assert_eq!(
         base,
         Bin::builder()
@@ -323,7 +324,7 @@ fn objects_are_added_combined_or_replaced_and_dependencies_merge_as_a_union() {
     assert_eq!(
         report.to_string(),
         "1 added, 1 merged, 1 replaced; 0 values replaced (0 mismatched), 1 inserted, 0 keys \
-         inserted"
+         inserted, 1 dependencies added"
     );
 }
 
@@ -438,4 +439,106 @@ proptest! {
         prop_assert_eq!(&merged, &base);
         prop_assert!(report.is_unchanged(), "{}", report);
     }
+}
+
+fn float_keyed(entries: &[(f32, i32)]) -> PropertyValueEnum {
+    values::Map::new(
+        Kind::F32,
+        Kind::I32,
+        entries
+            .iter()
+            .map(|(key, value)| (values::F32::new(*key).into(), int(*value)))
+            .collect(),
+    )
+    .unwrap()
+    .into()
+}
+
+#[test]
+fn a_map_of_other_kinds_replaces_whole_and_a_key_matches_by_its_bits() {
+    let mut base = one(vec![
+        ("Kinds", lookup(&[(1, "a")])),
+        ("Floats", float_keyed(&[(0.0, 1), (-0.0, 2)])),
+        ("Twice", lookup(&[(1, "first"), (1, "second")])),
+    ]);
+    let edited = one(vec![
+        ("Kinds", float_keyed(&[(1.0, 1)])),
+        ("Floats", float_keyed(&[(-0.0, 20)])),
+        ("Twice", lookup(&[(1, "edited")])),
+    ]);
+
+    let report = base.merge(&edited);
+
+    assert_eq!(
+        base,
+        one(vec![
+            ("Kinds", float_keyed(&[(1.0, 1)])),
+            ("Floats", float_keyed(&[(0.0, 1), (-0.0, 20)])),
+            ("Twice", lookup(&[(1, "edited"), (1, "second")])),
+        ])
+    );
+    assert!(report.replaced[0].mismatched, "a map of other kinds");
+    assert_eq!(report.keys_inserted, 0);
+}
+
+#[test]
+fn a_repeated_key_in_the_edit_merges_over_the_entry_it_already_merged() {
+    let mut base = one(vec![("Lookup", lookup(&[(1, "base")]))]);
+    let edited = one(vec![(
+        "Lookup",
+        lookup(&[(1, "first"), (1, "second"), (2, "new"), (2, "newer")]),
+    )]);
+
+    let report = base.merge(&edited);
+
+    assert_eq!(
+        base,
+        one(vec![("Lookup", lookup(&[(1, "second"), (2, "newer")]))])
+    );
+    assert_eq!(report.keys_inserted, 1);
+}
+
+#[test]
+fn a_nan_leaf_differs_from_itself_and_is_replaced() {
+    let nan = || -> PropertyValueEnum { values::F32::new(f32::NAN).into() };
+    let mut base = one(vec![("Nan", nan()), ("Zero", values::F32::new(0.0).into())]);
+    let edited = one(vec![
+        ("Nan", nan()),
+        ("Zero", values::F32::new(-0.0).into()),
+    ]);
+
+    let report = base.merge(&edited);
+
+    assert_eq!(
+        report.replaced.len(),
+        1,
+        "NaN is replaced, -0.0 over 0.0 is not"
+    );
+    assert_eq!(report.replaced[0].at, path([field("Nan")]));
+}
+
+#[test]
+fn a_merge_that_only_adds_a_dependency_changes_the_base() {
+    let mut base = Bin::<NoMeta>::builder().dependency("a.bin").build();
+    let edited = Bin::<NoMeta>::builder().dependency("b.bin").build();
+
+    let report = base.merge(&edited);
+
+    assert_eq!(report.dependencies_added, ["b.bin"]);
+    assert!(!report.is_unchanged());
+}
+
+#[test]
+fn a_map_whose_entries_break_its_declared_kinds_replaces_whole_without_panicking() {
+    // Deserializing skips the constructor's kind checks.
+    let mut json = serde_json::to_value(lookup(&[(1, "a")])).unwrap();
+    json["value"]["entries"][0][1] = serde_json::to_value(int(7)).unwrap();
+    let broken: PropertyValueEnum = serde_json::from_value(json).unwrap();
+
+    let mut base = one(vec![("Lookup", lookup(&[(2, "b")]))]);
+    let edited = one(vec![("Lookup", broken.clone())]);
+
+    base.merge(&edited);
+
+    assert_eq!(base, one(vec![("Lookup", broken)]));
 }
