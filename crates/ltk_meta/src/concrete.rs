@@ -50,6 +50,7 @@
 pub type Bin = crate::Bin;
 pub type BinObject = crate::BinObject;
 pub type BinStream<R> = crate::stream::BinStream<R>;
+pub type BinDelta = crate::stream::BinDelta;
 pub type LruObjectCache = crate::stream::LruObjectCache;
 pub use crate::stream::NoCache;
 pub type BinFile = crate::BinFile;

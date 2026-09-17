@@ -47,6 +47,9 @@ pub use cache::{LruObjectCache, NoCache, ObjectCache};
 mod cursor;
 pub use cursor::{Entries, ObjectStream, Objects};
 
+mod delta;
+pub use delta::BinDelta;
+
 pub(crate) mod owned;
 
 mod prop;
@@ -55,7 +58,7 @@ pub use prop::BinStream;
 mod toc;
 pub use toc::{BinToc, ObjectEntry};
 
-mod view;
+pub(crate) mod view;
 pub use view::{
     ContainerItems, ContainerView, MapEntries, MapView, ObjectView, OptionalView, Properties,
     PropertyView, StructView, ValueView,

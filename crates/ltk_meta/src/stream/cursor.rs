@@ -157,7 +157,9 @@ impl<'a, R: io::Read + io::Seek, M: Default> ObjectStream<'a, R, M> {
     ///
     /// [`Error::InvalidSize`] if the object's declared size disagrees with what its property
     /// counts consume, [`Error::InvalidPropertyTypePrimitive`] if a kind byte decodes under
-    /// neither numbering, or an I/O error from the source.
+    /// neither numbering, [`Error::InvalidNesting`] for a container, optional or map declaring
+    /// one of those three as what it holds, [`Error::InvalidKeyType`] for a map declaring a key
+    /// kind no map is keyed by, or an I/O error from the source.
     pub fn view(&mut self) -> Result<ObjectView<'_, M>, Error> {
         let entry = self.entry;
         ObjectView::new(entry, self.stream.view_object(entry)?)

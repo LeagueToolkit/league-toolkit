@@ -11,7 +11,7 @@
 //! escape hatches ([`PropertyView::value`]) infer without a turbofish; the borrowed data itself
 //! carries no metadata.
 
-mod value;
+pub(crate) mod value;
 pub use value::{
     ContainerItems, ContainerView, MapEntries, MapView, OptionalView, StructView, ValueView,
 };
@@ -141,6 +141,11 @@ impl<'a, M> ObjectView<'a, M> {
         find_property(self.properties(), name_hash.into())
     }
 
+    /// The object as a struct: its class hash and its properties, the path hash left behind.
+    pub(crate) fn as_struct(&self) -> StructView<'a, M> {
+        StructView::from_parts(self.class_hash, self.property_count, self.properties)
+    }
+
     /// The object's raw bytes — its whole declared range, size field included.
     ///
     /// This is the range a byte-exact copy of the object covers, which is what the delta
@@ -194,6 +199,11 @@ impl<'a, M> PropertyView<'a, M> {
         self.value.rest()
     }
 
+    /// The cursor at the value's own bytes, header included. Decodes nothing.
+    pub(crate) fn cursor(&self) -> Cursor<'a> {
+        self.value
+    }
+
     /// The value's wire shape, read from the few header bytes ahead of its body.
     ///
     /// The same [`ValueShape`] the resolver's type rule uses, filled by the rules of
@@ -202,8 +212,9 @@ impl<'a, M> PropertyView<'a, M> {
     ///
     /// # Errors
     ///
-    /// [`Error::InvalidPropertyTypePrimitive`] if a header kind byte does not decode, or
-    /// [`Error::IOError`] if the value's bytes end inside its header.
+    /// [`Error::InvalidPropertyTypePrimitive`] if a header kind byte does not decode,
+    /// [`Error::InvalidNesting`] or [`Error::InvalidKeyType`] for a header the value model has
+    /// no value for, or [`Error::IOError`] if the value's bytes end inside its header.
     pub fn shape(&self) -> Result<ValueShape, Error> {
         self.value.value_shape(self.kind)
     }
