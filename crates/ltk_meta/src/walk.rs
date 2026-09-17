@@ -316,7 +316,7 @@ pub struct Trail<V> {
 }
 
 impl<V> Trail<V> {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             segments: Vec::new(),
             classes: Vec::new(),
@@ -348,22 +348,22 @@ impl<V> Trail<V> {
         &self.classes
     }
 
-    fn push_field(&mut self, field: BinHash, class: BinHash) {
+    pub(crate) fn push_field(&mut self, field: BinHash, class: BinHash) {
         self.segments.push(TrailSegment::Field(field));
         self.classes.push(class);
     }
 
-    fn push(&mut self, segment: TrailSegment<V>) {
+    pub(crate) fn push(&mut self, segment: TrailSegment<V>) {
         self.segments.push(segment);
     }
 
-    fn pop(&mut self) {
+    pub(crate) fn pop(&mut self) {
         if let Some(TrailSegment::Field(_)) = self.segments.pop() {
             self.classes.pop();
         }
     }
 
-    fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         self.segments.clear();
         self.classes.clear();
     }

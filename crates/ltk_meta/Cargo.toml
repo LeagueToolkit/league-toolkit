@@ -40,6 +40,7 @@ ltk_hash = { version = "0.4.0", path = "../ltk_hash" }
 approx = { workspace = true }
 insta = { workspace = true }
 serde_json = { workspace = true }
+proptest = { workspace = true }
 
 ltk_meta = { path = ".", features = ["serde"] }
 ltk_wad = { path = "../ltk_wad" }
