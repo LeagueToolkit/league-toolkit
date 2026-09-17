@@ -26,10 +26,10 @@ use std::{
 use ltk_hash::BinHash;
 use ltk_meta::{
     concrete::{BinDelta, BinStream},
-    path::{PatchError, ResolveErrorKind, ValueShape},
+    path::{PatchError, PropertyPath, ResolveErrorKind, Subscript, ValueShape},
     traits::PropertyExt as _,
     walk::{Node, NodeRefMut, TreeValue, Visit, Visitor, VisitorMut},
-    Bin, BinKind, BinObject, BinOverride, Error, PropertyValueEnum,
+    Bin, BinKind, BinObject, BinOverride, Error, Lift, PropertyValueEnum,
 };
 use ltk_wad::Wad;
 
@@ -242,6 +242,175 @@ fn every_shipped_patch_reads_rewrites_and_resolves() {
         counts.unexpected.is_empty(),
         "records skipped for a reason section 2.1 measured as zero:\n{}",
         counts.unexpected.join("\n")
+    );
+}
+
+#[derive(Default)]
+struct DiffCounts {
+    patches: usize,
+    records: usize,
+    objects: usize,
+    map_inserts: usize,
+    unnameable: usize,
+    mismatches: usize,
+    /// Diff records carrying a whole container a shipped record indexes into.
+    containers: usize,
+    /// A diff record that lies outside every record of the patch it came from.
+    outside: Vec<String>,
+}
+
+impl fmt::Display for DiffCounts {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(
+            f,
+            "{} patches diffed back: {} records, {} whole objects",
+            self.patches, self.records, self.objects
+        )?;
+        writeln!(
+            f,
+            "lifted: {} map inserts, {} unnameable, {} mismatches",
+            self.map_inserts, self.unnameable, self.mismatches
+        )?;
+        writeln!(
+            f,
+            "{} records carry a whole container a shipped record indexes into",
+            self.containers
+        )?;
+        write!(f, "{} records outside the patch", self.outside.len())
+    }
+}
+
+/// A path's segments as `(name hash, subscript)`, which is what the client resolves by.
+fn resolved_by(path: &PropertyPath) -> Vec<(BinHash, Option<Subscript<'_>>)> {
+    path.segments()
+        .map(|segment| (segment.name_hash(), segment.subscript.clone()))
+        .collect()
+}
+
+/// Whether `original` subscripts the container `list` names: every segment of `list` but its last
+/// matches, and the next segment of `original` names the same property.
+fn indexes_into(
+    original: &[(BinHash, Option<Subscript<'_>>)],
+    list: &[(BinHash, Option<Subscript<'_>>)],
+) -> bool {
+    let Some(((name, subscript), parents)) = list.split_last() else {
+        return false;
+    };
+    subscript.is_none()
+        && original.len() > parents.len()
+        && original[..parents.len()] == *parents
+        && original[parents.len()].0 == *name
+}
+
+/// `ptch-property-patches.md` section 16: every shipped patch, applied to the objects it names
+/// and diffed back, is a patch that applies as the merge does and writes nothing outside the
+/// records it came from, but for the whole container one of them indexes into.
+#[test]
+#[ignore = "needs an installed client; set LTK_LOL_GAME_DIR"]
+fn every_shipped_patch_diffs_back_inside_its_records() {
+    let Ok(game_dir) = std::env::var(GAME_DIR) else {
+        panic!("set {GAME_DIR} to the client's Game directory");
+    };
+
+    let mut wad_files = Vec::new();
+    wad_paths(Path::new(&game_dir), &mut wad_files);
+    wad_files.sort();
+
+    let mut ignored = Counts::default();
+    let mut counts = DiffCounts::default();
+    for wad_path in &wad_files {
+        let patches = patches(wad_path, &mut ignored);
+        if patches.is_empty() {
+            continue;
+        }
+        let wanted: HashSet<BinHash> = patches
+            .iter()
+            .flat_map(|patch_bin| patch_bin.patches.iter().map(|patch| patch.object_hash))
+            .collect();
+        let objects = wanted_objects(wad_path, &wanted, &mut ignored);
+        let base = Bin::new(objects.into_values(), std::iter::empty::<&str>());
+
+        for patch_bin in &patches {
+            counts.patches += 1;
+            let mut edited = base.clone();
+            patch_bin.clone().apply(&mut edited);
+            let names: HashMap<BinHash, String> = patch_bin
+                .patches
+                .iter()
+                .flat_map(|record| record.path.segments())
+                .map(|segment| (segment.name_hash(), segment.name.to_owned()))
+                .collect();
+
+            let (diff, report) = base.diff(&edited, &names);
+            counts.records += report.records;
+            counts.objects += report.objects.len();
+            for lift in &report.lifted {
+                match lift {
+                    Lift::MapInsert { .. } => counts.map_inserts += 1,
+                    Lift::Unnameable { .. } => counts.unnameable += 1,
+                    Lift::Mismatch { .. } => counts.mismatches += 1,
+                    _ => {}
+                }
+            }
+            for record in &diff.patches {
+                let path = resolved_by(&record.path);
+                let on_object = patch_bin
+                    .patches
+                    .iter()
+                    .filter(|original| original.object_hash == record.object_hash);
+                let inside = on_object
+                    .clone()
+                    .any(|original| path.starts_with(&resolved_by(&original.path)));
+                // A container replaces whole (D22): a record inside one element is the whole list,
+                // named by the shipped path's segment that subscripts it.
+                let container = matches!(
+                    record.value,
+                    PropertyValueEnum::Container(_) | PropertyValueEnum::UnorderedContainer(_)
+                ) && on_object
+                    .clone()
+                    .any(|original| indexes_into(&resolved_by(&original.path), &path));
+                if container {
+                    counts.containers += 1;
+                }
+                if !inside && !container {
+                    counts
+                        .outside
+                        .push(format!("{:08x} {}", record.object_hash, record.path));
+                }
+            }
+
+            // A whole object is one the patch carries, or one a lift took at its root.
+            for object in &report.objects {
+                let carried = patch_bin.objects.contains_key(object)
+                    || report
+                        .lifted
+                        .iter()
+                        .any(|lift| lift.object_hash() == *object);
+                if !carried {
+                    counts.outside.push(format!("{object:08x} whole"));
+                }
+            }
+
+            let mut applied = base.clone();
+            let applied_report = diff.apply(&mut applied);
+            assert!(
+                applied_report.is_clean(),
+                "{}: {:?}",
+                wad_path.display(),
+                applied_report.skipped
+            );
+            let mut merged = base.clone();
+            merged.merge(&edited);
+            assert_eq!(applied.objects, merged.objects, "{}", wad_path.display());
+        }
+    }
+
+    println!("{counts}");
+    assert!(counts.patches > 0, "no PTCH chunks in {game_dir}");
+    assert!(
+        counts.outside.is_empty(),
+        "diff records outside the patch they came from:\n{}",
+        counts.outside.join("\n")
     );
 }
 
