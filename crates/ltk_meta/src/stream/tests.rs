@@ -691,6 +691,39 @@ fn reading_one_object_equals_the_eager_parse_of_it() {
 }
 
 #[test]
+fn a_container_that_declares_a_container_item_is_refused_as_the_object_lands() {
+    let (_, mut bytes) = sample_bin();
+    // The `0x0003` property of the second object: its name hash, its kind byte, then the item
+    // kind byte the file declares.
+    let header = [0x03, 0, 0, 0, u8::from(PropertyKind::Container)];
+    let at = bytes
+        .windows(header.len())
+        .position(|window| window == header)
+        .expect("the container property");
+    bytes[at + header.len()] = u8::from(PropertyKind::Container);
+
+    let mut stream = BinStream::mount(io::Cursor::new(&bytes)).expect("the stream mounts");
+    let error = stream
+        .object(BinHash(0x1111_0002))
+        .expect("the TOC builds")
+        .expect("the object exists")
+        .view()
+        .expect_err("a container item kind is refused");
+    assert!(
+        matches!(error, Error::InvalidNesting(PropertyKind::Container)),
+        "unexpected error: {error}"
+    );
+
+    // The eager reader raises the same variant for the same bytes.
+    let error = Bin::from_reader(&mut io::Cursor::new(&bytes))
+        .expect_err("a container item kind is refused");
+    assert!(
+        matches!(error, Error::InvalidNesting(PropertyKind::Container)),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
 fn a_size_the_counts_disagree_with_is_an_invalid_size_error() {
     let (bin, mut bytes) = every_kind_bin();
     let object_hash = only_object(&bin);
