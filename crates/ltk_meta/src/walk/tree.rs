@@ -233,7 +233,7 @@ impl Leaf<'_> {
         }
     }
 
-    /// Writes this leaf as the text inside a `{key}` step of the hash form.
+    /// Writes this leaf as the text inside a `{key}` segment of the hash form.
     ///
     /// An integer in decimal, a bool as `true` or `false`, a float in its shortest
     /// round-trip form, a string as a JSON string, a hash as lowercase zero-padded hex, a

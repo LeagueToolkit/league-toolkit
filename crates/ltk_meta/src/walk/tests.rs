@@ -914,7 +914,7 @@ fn map_keys_of_every_kind_agree_between_the_trees() {
 #[test]
 fn the_class_context_holds_the_class_of_every_enclosing_node() {
     let [owned, _] = record_both(&fixture(), always_continue);
-    // Each field step sits on exactly one node: the context is the open nodes, root first.
+    // Each field segment sits on exactly one node: the context is the open nodes, root first.
     let mut open: Vec<u32> = Vec::new();
     for event in &owned.events {
         match event {
@@ -1104,7 +1104,7 @@ impl<'a, V: TreeValue<'a>> Visitor<'a, V> for Capacities {
     fn enter_node(&mut self, node: &Node<'_, 'a, V>) -> Result<Visit, Error> {
         let trail = node.trail();
         self.0
-            .push((trail.steps.capacity(), trail.classes.capacity()));
+            .push((trail.segments.capacity(), trail.classes.capacity()));
         Ok(Visit::Continue)
     }
 }
@@ -1130,8 +1130,8 @@ fn a_map_of_ten_thousand_entries_grows_the_trail_once() {
     let [(owned, _), (viewed, _)] = walk_both(&bin, Capacities::default);
     for visited in [owned, viewed] {
         assert_eq!(visited.0.len(), 10_001);
-        // The root sees an empty trail. Every entry after it sees the same two-step trail, at a
-        // capacity that never moves once it is set.
+        // The root sees an empty trail. Every entry after it sees the same two-segment trail,
+        // at a capacity that never moves once it is set.
         let first = visited.0[1];
         assert!(first.0 <= 4 && first.1 <= 4, "{first:?}");
         assert!(visited.0[1..].iter().all(|c| *c == first));
