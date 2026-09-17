@@ -302,6 +302,9 @@ for joint in rig.joints() {
 - `BinOverride` - Top-level container of a `PTCH` file: a patch applied over one base `Bin`
 - `PropertyPatch` / `path::PropertyPath` - One override record and the property path it addresses
 - `ApplyReport` - What laying a `BinOverride` over a `Bin` did, or would do
+- `path::ValuePath` / `path::ValueSegment` / `path::FieldNames` - An address for any position inside an object, by hash; spelled as a `PropertyPath` through a name table
+- `MergeReport` / `Replaced` - What `Bin::merge` did: one bin layered over another
+- `DiffReport` / `Lift` - What `Bin::diff` did: two bins into a `BinOverride`, with every escalation named
 - `ValueSlot` - A mutable handle on one value, carrying the kind its container declared
 - `BinFile` / `BinKind` - Either kind of file, chosen by the file's magic
 
@@ -538,6 +541,27 @@ A handle latched onto the legacy kind numbering refuses the delta. `into_bin()` 
 `Bin::to_writer` transcode the whole file instead. The design is in
 `value-walk.md` [section 5.3](design/value-walk.md#s5.3) and `bin-streaming.md`
 [section 10](design/bin-streaming.md#s10).
+
+**Merging and Diffing**:
+```rust
+use std::collections::HashMap;
+use ltk_meta::Bin;
+
+// The edit wins at every value it reaches; whatever only the base holds survives.
+let mut merged = base.clone();
+let report = merged.merge(&edited);
+println!("{report}"); // "0 added, 1 merged, 0 replaced; 2 values replaced (0 mismatched), ..."
+
+// The difference as a patch. Applied to `base`, it equals the merge.
+let names: HashMap<ltk_hash::BinHash, String> = HashMap::new();
+let (patch, report) = base.diff(&edited, &names);
+for lift in &report.lifted {
+    println!("{lift}"); // a record wider than the change: a map insert, a shape, an unnamed field
+}
+```
+
+The design is `ptch-property-patches.md` [section 10](design/ptch-property-patches.md#s10) and
+[section 12](design/ptch-property-patches.md#s12).
 
 **Path/Name Hashing**: Object paths and property names are stored as FNV-1a hashes. Use community hash databases or `ltk_hash::fnv1a::hash_lower()` to compute hashes.
 
