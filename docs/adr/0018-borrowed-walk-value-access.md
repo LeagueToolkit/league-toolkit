@@ -1,6 +1,6 @@
 # ADR-0018: Borrowed walk value access
 
-- **Status:** Accepted
+- **Status:** Superseded by ADR-0020
 - **Date:** 2026-09-15
 - **Crates:** `ltk_meta`
 - **Related:** ADR-0017, `docs/design/value-walk.md`

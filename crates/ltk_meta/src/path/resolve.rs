@@ -83,7 +83,6 @@ impl ValueShape {
 /// let pointer: PropertyValueEnum = values::Struct {
 ///     class_hash: 0xC1A5_0001u32.into(),
 ///     properties: Default::default(),
-///     meta: Default::default(),
 /// }
 /// .into();
 /// let declaration = (&pointer).declaration()?;

@@ -11,7 +11,7 @@ is the bug and gets edited. Two things it does not hold:
 - **Why this exists, who asks for it, and what it must do** -
   `docs/prd/001-ptch-property-patches.md` (FR-7, FR-8, FR-12, FR-13, FR-15), cited here as FR-N.
 - **Why an option was chosen over the alternatives it beat** - ADR-0005, ADR-0012, ADR-0013,
-  ADR-0014 and ADR-0015, cited from the rules in [section 8](#s8).
+  ADR-0014, ADR-0015 and ADR-0020, cited from the rules in [section 8](#s8).
 
 The mutable walk of [section 5.3](#s5.3) is #237.
 
@@ -83,6 +83,9 @@ Every term this document uses in a specific sense.
   mutable walk is a `VisitorMut`; a visitor of the read-only walk is a `Visitor`.
 - **kind pin** - the kind a container, optional or map declares for every item it holds. A
   property of a node carries no pin.
+- **declaration** - what a value's header declares: its kind, its kind pins, the class of a
+  `Struct` or `Embedded`, and how many items a container, optional or map holds. Over a view it is
+  read from the header, and nothing below the header is read. `Declaration` holds one.
 
 **Addresses**
 
@@ -130,7 +133,18 @@ pub trait TreeValue<'a>: Copy + sealed::Sealed {
 
     fn kind(&self) -> Kind;
 
-    /// Whether this value is a node or can contain one.
+    /// What this value's header declares: its kind, item and key kinds, class and count.
+    /// Over a view, a leaf is not read, and a container's items, a map's entries and a node's
+    /// properties stay unread.
+    ///
+    /// # Errors
+    ///
+    /// Over a view, a header that does not decode: a truncated header, a kind byte that is no
+    /// kind, `Error::InvalidNesting` for a container item kind, or `Error::InvalidKeyType` for a
+    /// key kind no map is keyed by. The owned tree never fails.
+    fn declaration(&self) -> Result<Declaration, Error>;
+
+    /// Whether this value is a node or can contain one, read off `declaration`.
     ///
     /// True for a `Struct` or `Embedded` whose class hash is not 0, and for a container,
     /// optional or map whose item kind [`TreeKind::is_node`]. An empty optional or container
@@ -138,8 +152,8 @@ pub trait TreeValue<'a>: Copy + sealed::Sealed {
     ///
     /// # Errors
     ///
-    /// Over a view, a header that does not decode. The owned tree never fails.
-    fn can_contain_node(&self) -> Result<bool, Error>;
+    /// Those of `declaration`. The owned tree never fails.
+    fn can_contain_node(&self) -> Result<bool, Error> { /* provided */ }
 
     /// This value as a node, if it is a `Struct` or `Embedded` with a class hash that is not 0.
     fn as_node(&self) -> Result<Option<Self::Node>, Error>;
@@ -182,6 +196,26 @@ pub trait TreeNode<'a>: Copy + sealed::Sealed {
     /// for a root, the object's path hash is `Node::object_hash`.
     fn to_struct(&self) -> Result<values::Struct, Error>;
 }
+
+/// What a value's header declares. Each field is `None` for a kind that declares nothing of it.
+/// Non-exhaustive: built by the crate and read by field.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub struct Declaration {
+    pub kind: Kind,
+    /// For a container or an optional the item kind, for a map the value kind.
+    pub item_kind: Option<Kind>,
+    /// For a map the key kind.
+    pub key_kind: Option<Kind>,
+    /// For a `Struct` or an `Embedded` the class it carries. 0 is the null pointer.
+    pub class: Option<BinHash>,
+    /// For a container or a map the number of items it holds, and for an optional 0 or 1.
+    pub count: Option<usize>,
+}
+
+/// The part of a declaration the patch type rule compares: every field but the count, and the
+/// class of an `Embedded` only (ADR-0003).
+impl From<Declaration> for ValueShape {}
 
 /// The segment from a container, optional or map to one value inside it.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -276,17 +310,19 @@ under either.
 client does (W19): a visitor reads a texture path as `Leaf::File`, whatever `Kind` calls it.
 
 `RawValue` is a kind and the bytes the value is written in, whatever position it holds: a
-property, a container item, a map key or a map value. `kind()` reads nothing. `can_contain_node()`,
-`as_node()` and `children()` read headers and no payload. `as_leaf()` decodes that one value, and
-`to_value()` reads the whole subtree through the reader an owned read uses. A child iterator
-yields the bytes of each value and decodes none of them. A malformed item is reached, and it
-fails where it is read. The deferral is [ADR-0017](../adr/0017-deferred-walk-values.md).
+property, a container item, a map key or a map value. `kind()` reads nothing. `declaration()`,
+`can_contain_node()`, `as_node()` and `children()` read headers and no payload. `as_leaf()`
+decodes that one value, and `to_value()` reads the whole subtree through the reader an owned
+read uses. A child iterator yields the bytes of each value and decodes none of them. A malformed
+item is reached, and it fails where it is read. The deferral is
+[ADR-0017](../adr/0017-deferred-walk-values.md).
 
-`RawValue::value_view()` exposes the borrowed streaming enum without allocating. Container
-item kinds, map key and value kinds, counts and null class hashes are available through its
-variants. Requesting a leaf view decodes that leaf. Complex contents decode only through
-subsequent view access. The access choice is
-[ADR-0018](../adr/0018-borrowed-walk-value-access.md).
+`TreeValue::declaration()` answers item kinds, map key and value kinds, counts and classes over
+either tree, a null pointer's class 0 included. The owned tree and `ValueShape::of` read the same
+declaration. The choice is [ADR-0020](../adr/0020-declaration-on-tree-values.md).
+
+`RawValue::value_view()` exposes the borrowed streaming enum without allocating. Requesting a
+leaf view decodes that leaf. Complex contents decode only through subsequent view access.
 
 ## <a id="s4"></a>4. `ValuePath`
 
@@ -993,6 +1029,9 @@ and over an `ObjectView` of the same bytes, through one generic visitor.
   walk over a map of 10,000 hash-keyed entries allocates nothing in the trail (a counting
   allocator, or the trail's capacity measured before and after). Over a view, nothing beyond
   the trail allocates at all.
+- **Declarations.** `declaration()` agrees between the two trees for every root property's value
+  and for every item, key and value inside it, and `ValueShape::from` of it equals `ValueShape::of`
+  the owned value. Over a view it succeeds on a container whose leaf payload does not decode.
 - **Leaves and keys.** `as_leaf()` over both trees agrees for every leaf kind; `map_key()` agrees
   and round-trips through `MapKey::to_value`; two `F32` keys with the same bits are equal and
   `Hash` on them agrees.
@@ -1032,7 +1071,7 @@ rules append.
 
 | ID | Rule | Instead of | Why | Spec |
 | -- | ---- | ---------- | --- | ---- |
-| W1 | The walk's prune is `TreeValue::can_contain_node`, built on `TreeKind::is_node` (`Struct`, `Embedded`), asked of the tree before the visitor. Both are traits in `walk`; `Kind` and `PropertyValueEnum` carry no inherent walk predicate. `Kind::is_primitive` plays no part. | Inherent `Kind::is_node` and `PropertyValueEnum::can_contain_node`; or entering everything `is_primitive` does not cover. | "Node" is the walk's vocabulary, defined in this document, and a method on `Kind` shows the word to every reader of the crate with nothing beside it to say what it means. `ObjectLink` and `BitBool` are neither primitive nor a node, so the complement of `is_primitive` enters containers that hold nothing. | [section 3](#s3), [section 5.1](#s5.1) |
+| W1 | The walk's prune is `TreeValue::can_contain_node`, read off `TreeValue::declaration` with `TreeKind::is_node` (`Struct`, `Embedded`), asked of the tree before the visitor. Both are traits in `walk`; `Kind` and `PropertyValueEnum` carry no inherent walk predicate. `Kind::is_primitive` plays no part. | Inherent `Kind::is_node` and `PropertyValueEnum::can_contain_node`; or entering everything `is_primitive` does not cover. | "Node" is the walk's vocabulary, defined in this document, and a method on `Kind` shows the word to every reader of the crate with nothing beside it to say what it means. `ObjectLink` and `BitBool` are neither primitive nor a node, so the complement of `is_primitive` enters containers that hold nothing. | [section 3](#s3), [section 5.1](#s5.1) |
 | W2 | A `Struct` or `Embedded` with class 0 is not a node and is not entered. | Visiting it as a node with class 0. | It is the client's null pointer, has no properties, and the resolver already treats it as one (`NullPointer`). A visitor keyed on class would otherwise see a class no meta class dump has. | [section 5.1](#s5.1) |
 | W3 | `ltk_meta` owns one single-visitor walk with a trail; scheduling several visitors over one walk, and what each does with a node, is the consumer's. | A multi-visitor walk with per-visitor pruning in the crate; or only a predicate and a segment enum. | The single-visitor descent is identical for every consumer and is what merge and diff need; the active-set policy is one consumer's and would pin its shape under semver. | [section 5](#s5); ADR-0013 |
 | W4 | A `ValuePath` keeps a class context beside its segments - the class of the node each field was read on - and `ValueSegment::Field` carries the field hash alone. | `Field { class, field }`, or no class anywhere. | Naming a field takes the class it is on, and every table a consumer holds is keyed by class; keeping it beside the segments leaves `ValueSegment` the address and the context free to grow. | [section 4.1](#s4.1); ADR-0012 |
@@ -1060,3 +1099,4 @@ rules append.
 | W26 | The mutable walk iterates the property map `enter_node` leaves and descends the value `enter_property` leaves. | Walking a snapshot taken before the callback. | A retagged value is the value the file holds after the repair, and its nodes are the ones a verification walk visits. | [section 5.3](#s5.3) |
 | W27 | A handle that borrows the owned tree ends in `Ref`, and one that borrows it mutably ends in `RefMut`: `NodeRef`, `PropertiesRef` and `ChildrenRef` under the read-only walk, `NodeRefMut` and `PropertyRefMut` under the mutable walk. The view's iterators keep the `View` prefix, and the value its tree is made of is `RawValue`. | `OwnedNode`, `OwnedProperties`, `OwnedChildren`, `NodeMut` and `PropertyMut`; `ViewValue` beside the streaming `ValueView`. | Each of these types borrows the tree and owns none of it. `std::cell::Ref` and `RefMut` name a shared and a unique borrow the same way. A `RawValue` carries a kind and undecoded bytes; a `ValueView` carries one decoded value, and a name that reverses another's reads as the other. | [section 3](#s3), [section 5.3](#s5.3) |
 | W28 | A piece of an address is a segment: a `ValuePath` holds `ValueSegment`s, a `Trail` holds `TrailSegment`s, and `path::Segment` is a piece of a `PropertyPath`. | `Step` and `TrailStep`; or renaming `PropertyPath`'s `Segment` to free the name. | One word names a piece of a path in all three types. `path::Segment` is published, and a rename breaks every caller of it. | [section 4.1](#s4.1), [section 5](#s5) |
+| W29 | A `Declaration` records a pointer's class, 0 for the null pointer, and counts an optional as 0 or 1. `ValueShape` converts from it without the count and without a pointer's class. | A `ValueShape` plus a count; or an optional counted as `None`, as `PropertyView::item_count` answers. | A type check keyed on class reads a pointer's class, and the patch type rule leaves it out (ADR-0003). An optional holding a value holds one item. | [section 3](#s3); [ADR-0020](../adr/0020-declaration-on-tree-values.md) |
