@@ -2,7 +2,7 @@
 //! [`VisitorMut`] that edits the owned tree as it goes.
 //!
 //! The walk is written once, against two sealed traits - [`TreeValue`] and [`TreeNode`] - that
-//! the owned tree (`&PropertyValueEnum`) and the streaming view ([`ViewValue`]) both
+//! the owned tree (`&PropertyValueEnum`) and the streaming view ([`RawValue`]) both
 //! implement. A visitor is generic over the value type and runs over either unchanged:
 //! [`BinObject::walk`] and [`Bin::walk`] over the owned tree, [`ObjectView::walk`] and
 //! [`BinStream::walk`] over a buffered object's bytes.
@@ -69,8 +69,8 @@ mod tests;
 
 pub use mutable::{NodeRefMut, PropertyRefMut, VisitorMut};
 pub use owned::{ChildrenRef, NodeRef, PropertiesRef};
-pub use tree::{Child, Leaf, TreeKind, TreeNode, TreeValue};
-pub use view::{ViewChildren, ViewProperties, ViewValue};
+pub use tree::{ChildSegment, Leaf, TreeKind, TreeNode, TreeValue};
+pub use view::{RawValue, ViewChildren, ViewProperties};
 
 use std::{
     fmt, io,
@@ -120,7 +120,7 @@ pub enum WalkOutcome {
 /// What a walk calls.
 ///
 /// Generic over the tree's value type: one visitor runs over the owned tree
-/// (`V = &PropertyValueEnum`) and over the view (`V = ViewValue<'a>`) alike.
+/// (`V = &PropertyValueEnum`) and over the view (`V = RawValue<'a>`) alike.
 ///
 /// Every callback has a default that continues. A visitor implements only what it reads.
 #[expect(
@@ -152,8 +152,8 @@ pub trait Visitor<'a, V: TreeValue<'a>> {
     }
 
     /// Called for every property of a node, in file order, leaves included. The value is the
-    /// tree's, undecoded until read. Only a value that [`TreeValue::holds_node`] is descended
-    /// on [`Visit::Continue`]; a leaf is a call and nothing more.
+    /// tree's, undecoded until read. Only a value [`TreeValue::can_contain_node`] answers true
+    /// for is descended on [`Visit::Continue`]; a leaf is a call and nothing more.
     ///
     /// # Errors
     ///
@@ -373,7 +373,7 @@ impl<'a, V: TreeValue<'a>> fmt::Display for Trail<V> {
                 TrailStep::Index(index) => write!(f, "[{index}]")?,
                 TrailStep::Key(key) => {
                     f.write_str("{")?;
-                    match key.leaf() {
+                    match key.as_leaf() {
                         Ok(Some(leaf)) => leaf.write_key(f)?,
                         Ok(None) | Err(_) => f.write_str("?")?,
                     }
@@ -468,7 +468,7 @@ impl<'a, V: TreeValue<'a>> Walker<V> {
         for property in node.properties() {
             let (field, value) = property?;
             let visit = visitor.enter_property(field, value, &self.node(node))?;
-            if !value.holds_node()? {
+            if !value.can_contain_node()? {
                 match visit {
                     Visit::Abort => return Ok(Break(Interrupt::Abort)),
                     Visit::Stop => return Ok(Break(Interrupt::Unwind)),
@@ -521,13 +521,13 @@ impl<'a, V: TreeValue<'a>> Walker<V> {
         }
 
         for child in value.children()? {
-            let (step, item) = child?;
+            let (segment, item) = child?;
             let Some(node) = item.as_node()? else {
                 continue;
             };
-            self.trail.push(match step {
-                Child::Index(index) => TrailStep::Index(index),
-                Child::Key(key) => TrailStep::Key(key),
+            self.trail.push(match segment {
+                ChildSegment::Index(index) => TrailStep::Index(index),
+                ChildSegment::Key(key) => TrailStep::Key(key),
             });
             let walked = self.walk_node(node, visitor);
             self.trail.pop();
@@ -626,7 +626,7 @@ impl<'a> ObjectView<'a> {
     /// whatever the visitor raises.
     pub fn walk<W>(&self, visitor: &mut W) -> Result<WalkOutcome, W::Error>
     where
-        W: Visitor<'a, ViewValue<'a>>,
+        W: Visitor<'a, RawValue<'a>>,
     {
         Walker::new().walk_object(self.path_hash(), self.as_struct(), visitor)
     }
@@ -645,7 +645,7 @@ impl<R: io::Read + io::Seek> ObjectStream<'_, R> {
     pub fn walk<E, W>(&mut self, visitor: &mut W) -> Result<WalkOutcome, E>
     where
         E: From<Error>,
-        W: for<'a> Visitor<'a, ViewValue<'a>, Error = E>,
+        W: for<'a> Visitor<'a, RawValue<'a>, Error = E>,
     {
         self.view()?.walk(visitor)
     }
@@ -662,7 +662,7 @@ impl<R: io::Read + io::Seek> BinStream<R> {
     pub fn walk<E, W>(&mut self, visitor: &mut W) -> Result<WalkOutcome, E>
     where
         E: From<Error>,
-        W: for<'a> Visitor<'a, ViewValue<'a>, Error = E>,
+        W: for<'a> Visitor<'a, RawValue<'a>, Error = E>,
     {
         let mut objects = self.objects();
         while let Some(mut object) = objects.next()? {

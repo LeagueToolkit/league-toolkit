@@ -1,11 +1,11 @@
-//! The streaming view as the walk sees it: [`ValueView`] and [`StructView`].
+//! The streaming view as the walk sees it: [`RawValue`] and [`StructView`].
 
 use std::fmt;
 
 use ltk_hash::BinHash;
 
 use super::{
-    tree::{sealed::Sealed, Child, Leaf, TreeKind as _, TreeNode, TreeValue},
+    tree::{sealed::Sealed, ChildSegment, Leaf, TreeKind as _, TreeNode, TreeValue},
     Error,
 };
 use crate::{
@@ -19,36 +19,36 @@ use crate::{
     PropertyValueEnum,
 };
 
-impl Sealed for ViewValue<'_> {}
+impl Sealed for RawValue<'_> {}
 impl Sealed for StructView<'_> {}
 
 /// A borrowed walk value: a kind, and the bytes the value is written in.
 ///
 /// Nothing is decoded until a method asks for it, wherever the value came from: a property, a
 /// container item, a map key or a map value. [`TreeValue::kind`] reads nothing.
-/// [`TreeValue::leaf`] and [`TreeValue::to_value`] decode the bytes.
-pub struct ViewValue<'a> {
+/// [`TreeValue::as_leaf`] and [`TreeValue::to_value`] decode the bytes.
+pub struct RawValue<'a> {
     kind: Kind,
     at: Cursor<'a>,
 }
 
-impl Copy for ViewValue<'_> {}
-impl Clone for ViewValue<'_> {
+impl Copy for RawValue<'_> {}
+impl Clone for RawValue<'_> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl fmt::Debug for ViewValue<'_> {
+impl fmt::Debug for RawValue<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ViewValue")
+        f.debug_struct("RawValue")
             .field("kind", &self.kind)
             .field("bytes", &self.at.rest().len())
             .finish()
     }
 }
 
-impl<'a> ViewValue<'a> {
+impl<'a> RawValue<'a> {
     /// A value of `kind` written at `at`, the header included.
     fn new(kind: Kind, at: Cursor<'a>) -> Self {
         Self { kind, at }
@@ -79,11 +79,11 @@ pub struct ViewProperties<'a> {
 }
 
 impl<'a> Iterator for ViewProperties<'a> {
-    type Item = Result<(BinHash, ViewValue<'a>), Error>;
+    type Item = Result<(BinHash, RawValue<'a>), Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let property = self.inner.next()?;
-        Some(property.map(|p| (p.name_hash(), ViewValue::property(p))))
+        Some(property.map(|p| (p.name_hash(), RawValue::property(p))))
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -102,7 +102,7 @@ impl fmt::Debug for ViewProperties<'_> {
 }
 
 impl<'a> TreeNode<'a> for StructView<'a> {
-    type Value = ViewValue<'a>;
+    type Value = RawValue<'a>;
     type Properties = ViewProperties<'a>;
 
     fn class_hash(&self) -> BinHash {
@@ -116,7 +116,7 @@ impl<'a> TreeNode<'a> for StructView<'a> {
     }
 
     fn property(&self, field: BinHash) -> Result<Option<Self::Value>, Error> {
-        Ok(StructView::property(self, field)?.map(ViewValue::property))
+        Ok(StructView::property(self, field)?.map(RawValue::property))
     }
 
     fn to_struct(&self) -> Result<values::Struct, Error> {
@@ -157,7 +157,7 @@ enum ViewChildrenInner<'a> {
 }
 
 impl<'a> Iterator for ViewChildren<'a> {
-    type Item = Result<(Child<ViewValue<'a>>, ViewValue<'a>), Error>;
+    type Item = Result<(ChildSegment<RawValue<'a>>, RawValue<'a>), Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match &mut self.inner {
@@ -167,13 +167,13 @@ impl<'a> Iterator for ViewChildren<'a> {
                 index,
             } => {
                 let item = items.next()?;
-                let step = Child::Index(*index);
+                let segment = ChildSegment::Index(*index);
                 *index += 1;
-                Some(item.map(|at| (step, ViewValue::new(*item_kind, at))))
+                Some(item.map(|at| (segment, RawValue::new(*item_kind, at))))
             }
             ViewChildrenInner::Optional { value, item_kind } => value
                 .take()
-                .map(|at| Ok((Child::Index(0), ViewValue::new(*item_kind, at)))),
+                .map(|at| Ok((ChildSegment::Index(0), RawValue::new(*item_kind, at)))),
             ViewChildrenInner::Entries {
                 entries,
                 key_kind,
@@ -182,8 +182,8 @@ impl<'a> Iterator for ViewChildren<'a> {
                 let entry = entries.next()?;
                 Some(entry.map(|(key, value)| {
                     (
-                        Child::Key(ViewValue::new(*key_kind, key)),
-                        ViewValue::new(*value_kind, value),
+                        ChildSegment::Key(RawValue::new(*key_kind, key)),
+                        RawValue::new(*value_kind, value),
                     )
                 }))
             }
@@ -221,7 +221,7 @@ impl fmt::Debug for ViewChildren<'_> {
     }
 }
 
-impl<'a> TreeValue<'a> for ViewValue<'a> {
+impl<'a> TreeValue<'a> for RawValue<'a> {
     type Node = StructView<'a>;
     type Children = ViewChildren<'a>;
 
@@ -229,7 +229,7 @@ impl<'a> TreeValue<'a> for ViewValue<'a> {
         self.kind
     }
 
-    fn holds_node(&self) -> Result<bool, Error> {
+    fn can_contain_node(&self) -> Result<bool, Error> {
         if !self.kind().is_node() && !self.kind().is_container() {
             return Ok(false);
         }
@@ -279,7 +279,7 @@ impl<'a> TreeValue<'a> for ViewValue<'a> {
         Ok(children(inner))
     }
 
-    fn leaf(&self) -> Result<Option<Leaf<'a>>, Error> {
+    fn as_leaf(&self) -> Result<Option<Leaf<'a>>, Error> {
         Ok(Some(match self.value_view()? {
             ValueView::None => Leaf::None,
             ValueView::Bool(v) => Leaf::Bool(v),
