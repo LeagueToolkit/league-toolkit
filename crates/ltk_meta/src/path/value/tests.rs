@@ -533,3 +533,37 @@ fn an_index_past_u32_or_a_path_past_the_length_limit_is_no_property_path() {
     assert_eq!(error.segment, 0);
     assert!(matches!(error.kind, UnnameableKind::Path(_)));
 }
+
+#[test]
+fn a_key_and_a_segment_display_as_the_hash_form_writes_them() {
+    let keys = [
+        (MapKey::I32(-12), "-12"),
+        (MapKey::F32(FloatBits::new(1.5)), "1.5"),
+        (MapKey::String("a\"b".into()), r#""a\"b""#),
+        (MapKey::Hash(BinHash(0x1e6b_a0c4)), "1e6ba0c4"),
+        (
+            MapKey::File(WadHash(0x00c9_fd8f_1a2b_3c4d)),
+            "00c9fd8f1a2b3c4d",
+        ),
+        (
+            MapKey::Color(Color {
+                r: 1,
+                g: 2,
+                b: 3,
+                a: 4,
+            }),
+            "(1, 2, 3, 4)",
+        ),
+        (MapKey::None, ""),
+    ];
+    for (key, text) in keys {
+        assert_eq!(key.to_string(), text);
+    }
+
+    assert_eq!(ValueSegment::Field(BinHash(0xaa)).to_string(), "000000aa");
+    assert_eq!(ValueSegment::Index(3).to_string(), "[3]");
+    assert_eq!(
+        ValueSegment::Key(MapKey::String("weapon".into())).to_string(),
+        r#"{"weapon"}"#
+    );
+}

@@ -329,6 +329,9 @@ pub enum ValueSegment {
     /// A map entry, by its key.
     Key(MapKey),
 }
+/// The segment in the hash form: `1e6ba0c4`, `[3]`, `{"weapon"}`. A path writes `.` before a
+/// field that follows another segment.
+impl fmt::Display for ValueSegment {}
 
 /// A map key, owned and metadata-free: every kind `Kind::is_valid_map_key` admits.
 ///
@@ -363,6 +366,8 @@ impl MapKey {
     pub fn to_value(&self) -> PropertyValueEnum;
 }
 impl TryFrom<&PropertyValueEnum> for MapKey { type Error = Error; /* InvalidKeyType */ }
+/// The text inside a `{key}` segment of the hash form: `"weapon"`, `1e6ba0c4`, `(1, 2)`.
+impl fmt::Display for MapKey {}
 
 impl ValuePath {
     pub fn new() -> Self;
@@ -649,7 +654,7 @@ impl<'t, 'a, V: TreeValue<'a>> Node<'t, 'a, V> {
     pub fn is_root(&self) -> bool;
     /// The node's address, copied out of the trail. Allocates; call it for a node worth
     /// reporting on.
-    pub fn value_path(&self) -> Result<ValuePath, Error>;
+    pub fn to_value_path(&self) -> Result<ValuePath, Error>;
 }
 
 /// The segments from an object's root to the walk's position.
