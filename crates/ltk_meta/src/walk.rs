@@ -60,7 +60,7 @@
 //! ```
 
 mod mutable;
-mod owned;
+pub(crate) mod owned;
 mod tree;
 mod view;
 
@@ -69,7 +69,7 @@ mod tests;
 
 pub use mutable::{NodeRefMut, PropertyRefMut, VisitorMut};
 pub use owned::{ChildrenRef, NodeRef, PropertiesRef};
-pub use tree::{ChildSegment, Leaf, TreeKind, TreeNode, TreeValue};
+pub use tree::{ChildSegment, Declaration, Leaf, TreeKind, TreeNode, TreeValue};
 pub use view::{RawValue, ViewChildren, ViewProperties};
 
 use std::{

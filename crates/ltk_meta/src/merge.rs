@@ -6,9 +6,9 @@ use indexmap::IndexMap;
 use ltk_hash::BinHash;
 
 use crate::{
-    path::{MapKey, ValuePath, ValueShape},
+    path::{MapKey, ValuePath},
     property::{values, ValueSlot},
-    walk::{Trail, TrailSegment},
+    walk::{self, Trail, TrailSegment},
     Bin, BinObject, PropertyValueEnum,
 };
 
@@ -197,15 +197,19 @@ pub(crate) fn combines(base: &values::Struct, edited: &values::Struct) -> bool {
     base.class_hash == edited.class_hash && *base.class_hash != 0
 }
 
-/// Whether two values differ in shape: [`ValueShape`], or the class of a `Struct`.
+/// Whether two values differ in shape: a `Declaration` field other than the count. A
+/// pointer's class counts.
 fn shapes_differ(base: &PropertyValueEnum, edited: &PropertyValueEnum) -> bool {
-    let classes_differ = match (base, edited) {
-        (PropertyValueEnum::Struct(b), PropertyValueEnum::Struct(e)) => {
-            b.class_hash != e.class_hash
-        }
-        _ => false,
+    let shape = |value| {
+        let declaration = walk::owned::declaration(value);
+        (
+            declaration.kind,
+            declaration.item_kind,
+            declaration.key_kind,
+            declaration.class,
+        )
     };
-    classes_differ || !ValueShape::of(base).matches(&ValueShape::of(edited))
+    shape(base) != shape(edited)
 }
 
 /// The key of every entry of `map`, by position of its first occurrence. `None` when a key does

@@ -6,7 +6,7 @@ use indexmap::IndexMap;
 use ltk_hash::BinHash;
 
 use super::{
-    tree::{sealed::Sealed, ChildSegment, Leaf, TreeKind as _, TreeNode, TreeValue},
+    tree::{sealed::Sealed, ChildSegment, Declaration, Leaf, TreeNode, TreeValue},
     Error,
 };
 use crate::{property::values, property::Kind, BinObject, PropertyValueEnum};
@@ -110,6 +110,33 @@ impl<'a> TreeNode<'a> for NodeRef<'a> {
     }
 }
 
+/// What `value` declares. [`TreeValue::declaration`] over the owned tree, which never fails.
+pub(crate) fn declaration(value: &PropertyValueEnum) -> Declaration {
+    use PropertyValueEnum as V;
+
+    let mut declaration = Declaration::bare(value.kind());
+    match value {
+        V::Struct(node) | V::Embedded(values::Embedded(node)) => {
+            declaration.class = Some(node.class_hash);
+        }
+        V::Container(items) | V::UnorderedContainer(values::UnorderedContainer(items)) => {
+            declaration.item_kind = Some(items.item_kind());
+            declaration.count = Some(items.len());
+        }
+        V::Optional(option) => {
+            declaration.item_kind = Some(option.item_kind());
+            declaration.count = Some(usize::from(option.is_some()));
+        }
+        V::Map(map) => {
+            declaration.item_kind = Some(map.value_kind());
+            declaration.key_kind = Some(map.key_kind());
+            declaration.count = Some(map.entries().len());
+        }
+        _ => {}
+    }
+    declaration
+}
+
 /// The values inside an owned container, optional or map.
 #[must_use = "iterators are lazy and do nothing unless consumed"]
 #[derive(Debug)]
@@ -156,16 +183,8 @@ impl<'a> TreeValue<'a> for &'a PropertyValueEnum {
         PropertyValueEnum::kind(self)
     }
 
-    fn can_contain_node(&self) -> Result<bool, Error> {
-        Ok(match self {
-            PropertyValueEnum::Struct(s) => *s.class_hash != 0,
-            PropertyValueEnum::Embedded(e) => *e.0.class_hash != 0,
-            PropertyValueEnum::Container(c) => c.item_kind().is_node(),
-            PropertyValueEnum::UnorderedContainer(c) => c.0.item_kind().is_node(),
-            PropertyValueEnum::Optional(o) => o.item_kind().is_node(),
-            PropertyValueEnum::Map(m) => m.value_kind().is_node(),
-            _ => false,
-        })
+    fn declaration(&self) -> Result<Declaration, Error> {
+        Ok(declaration(self))
     }
 
     fn as_node(&self) -> Result<Option<Self::Node>, Error> {
