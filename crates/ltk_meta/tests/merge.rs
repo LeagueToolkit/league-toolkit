@@ -410,13 +410,24 @@ proptest! {
         base in common::bin(),
         edited in common::bin(),
     ) {
-        let mut once = base;
-        once.merge(&edited);
+        let mut once = base.clone();
+        let first = once.merge(&edited);
         let mut twice = once.clone();
         let report = twice.merge(&edited);
 
         prop_assert_eq!(&twice, &once);
         prop_assert!(report.is_unchanged(), "{}", report);
+
+        // Every replacement is reported where it happened, with what the base held there.
+        let names = common::names();
+        for replaced in &first.replaced {
+            let path = replaced.at.to_property_path(&names).unwrap();
+            prop_assert_eq!(base.resolve(replaced.object_hash, &path).unwrap(), &replaced.was);
+            prop_assert_eq!(
+                once.resolve(replaced.object_hash, &path).unwrap(),
+                edited.resolve(replaced.object_hash, &path).unwrap()
+            );
+        }
     }
 
     #[test]
