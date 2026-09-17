@@ -12,8 +12,8 @@
 //! so is every property of it that can hold a node. Every callback answers a [`Visit`]; the
 //! walk returns a [`WalkOutcome`], or the visitor's own error.
 //!
-//! The walk carries a [`Trail`]: the steps from the object's root to the current position,
-//! borrowing the tree and allocating nothing per step. A visitor renders it for a node it
+//! The walk carries a [`Trail`]: the segments from the object's root to the current position,
+//! borrowing the tree and allocating nothing per segment. A visitor renders it for a node it
 //! reports on and for nothing else.
 //!
 //! [`BinObject::walk_mut`], [`Bin::walk_mut`] and [`BinOverride::walk_mut`] run the same
@@ -281,9 +281,9 @@ impl<'a, V: TreeValue<'a>> fmt::Debug for Node<'_, 'a, V> {
     }
 }
 
-/// One step of a [`Trail`]: a field, an index or a map entry. A key is the tree's value.
+/// One segment of a [`Trail`]: a field, an index or a map entry. A key is the tree's value.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum TrailStep<V> {
+pub enum TrailSegment<V> {
     /// A property of a node, by the field's name hash.
     Field(BinHash),
     /// A container element by position, or the value of a present optional, which is always 0.
@@ -292,46 +292,46 @@ pub enum TrailStep<V> {
     Key(V),
 }
 
-/// The steps from an object's root to the walk's position.
+/// The segments from an object's root to the walk's position.
 ///
 /// Borrows the tree - a map key is the tree's own value, never a copy. Descending a map of ten
 /// thousand entries allocates nothing. Text is made only by `Display`.
 ///
-/// Beside the steps the trail keeps the **class context**: for each `Field` step, the class
+/// Beside the segments the trail keeps the **class context**: for each `Field` segment, the class
 /// hash of the node the field was read on. It is what a name table is asked with.
 #[derive(Debug)]
 pub struct Trail<V> {
-    steps: Vec<TrailStep<V>>,
+    segments: Vec<TrailSegment<V>>,
     classes: Vec<BinHash>,
 }
 
 impl<V> Trail<V> {
     fn new() -> Self {
         Self {
-            steps: Vec::new(),
+            segments: Vec::new(),
             classes: Vec::new(),
         }
     }
 
-    /// The steps, root first.
+    /// The segments, root first.
     #[must_use]
-    pub fn steps(&self) -> &[TrailStep<V>] {
-        &self.steps
+    pub fn segments(&self) -> &[TrailSegment<V>] {
+        &self.segments
     }
 
-    /// How many steps the trail holds.
+    /// How many segments the trail holds.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.steps.len()
+        self.segments.len()
     }
 
     /// Whether the trail is at the root.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.steps.is_empty()
+        self.segments.is_empty()
     }
 
-    /// The class of the node each field step was read on, one per `Field` step, in order.
+    /// The class of the node each field segment was read on, one per `Field` segment, in order.
     /// Never 0: the walk always knows.
     #[must_use]
     pub fn classes(&self) -> &[BinHash] {
@@ -339,22 +339,22 @@ impl<V> Trail<V> {
     }
 
     fn push_field(&mut self, field: BinHash, class: BinHash) {
-        self.steps.push(TrailStep::Field(field));
+        self.segments.push(TrailSegment::Field(field));
         self.classes.push(class);
     }
 
-    fn push(&mut self, step: TrailStep<V>) {
-        self.steps.push(step);
+    fn push(&mut self, segment: TrailSegment<V>) {
+        self.segments.push(segment);
     }
 
     fn pop(&mut self) {
-        if let Some(TrailStep::Field(_)) = self.steps.pop() {
+        if let Some(TrailSegment::Field(_)) = self.segments.pop() {
             self.classes.pop();
         }
     }
 
     fn clear(&mut self) {
-        self.steps.clear();
+        self.segments.clear();
         self.classes.clear();
     }
 }
@@ -363,16 +363,16 @@ impl<V> Trail<V> {
 /// field hash as eight lowercase hex digits. A key that does not decode renders as `{?}`.
 impl<'a, V: TreeValue<'a>> fmt::Display for Trail<V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for (i, step) in self.steps.iter().enumerate() {
-            match step {
-                TrailStep::Field(field) => {
+        for (i, segment) in self.segments.iter().enumerate() {
+            match segment {
+                TrailSegment::Field(field) => {
                     if i > 0 {
                         f.write_str(".")?;
                     }
                     write!(f, "{field:08x}")?;
                 }
-                TrailStep::Index(index) => write!(f, "[{index}]")?,
-                TrailStep::Key(key) => {
+                TrailSegment::Index(index) => write!(f, "[{index}]")?,
+                TrailSegment::Key(key) => {
                     f.write_str("{")?;
                     match key.as_leaf() {
                         Ok(Some(leaf)) => leaf.write_key(f)?,
@@ -527,8 +527,8 @@ impl<'a, V: TreeValue<'a>> Walker<V> {
                 continue;
             };
             self.trail.push(match segment {
-                ChildSegment::Index(index) => TrailStep::Index(index),
-                ChildSegment::Key(key) => TrailStep::Key(key),
+                ChildSegment::Index(index) => TrailSegment::Index(index),
+                ChildSegment::Key(key) => TrailSegment::Key(key),
             });
             let walked = self.walk_node(node, visitor);
             self.trail.pop();
