@@ -179,7 +179,7 @@ pub trait TreeNode<'a>: Copy + sealed::Sealed {
     fn properties(&self) -> Self::Properties;
     /// One property by field hash: the owned tree's keyed lookup, or the view's in-place
     /// scan (`ObjectView::property`).
-    fn property(&self, field: BinHash) -> Result<Option<Self::Value>, Error>;
+    fn get(&self, field: BinHash) -> Result<Option<Self::Value>, Error>;
     /// The whole node, owned, as a `Struct` carrying this class and every property. Allocates;
     /// for a root, the object's path hash is `Node::object_hash`.
     fn to_struct(&self) -> Result<values::Struct, Error>;

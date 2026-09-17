@@ -105,7 +105,7 @@ impl<'a, M> TreeNode<'a> for NodeRef<'a, M> {
         }
     }
 
-    fn property(&self, field: BinHash) -> Result<Option<Self::Value>, Error> {
+    fn get(&self, field: BinHash) -> Result<Option<Self::Value>, Error> {
         Ok(self.properties.get(&field))
     }
 

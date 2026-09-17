@@ -60,7 +60,7 @@ pub trait TreeNode<'a>: Copy + sealed::Sealed {
 
     fn class_hash(&self) -> BinHash;
     fn properties(&self) -> Self::Properties;
-    fn property(&self, field: BinHash) -> Result<Option<Self::Value>, Error>;
+    fn get(&self, field: BinHash) -> Result<Option<Self::Value>, Error>;
     /// The whole node, owned, as a `Struct`. Allocates.
     fn to_struct(&self) -> Result<values::Struct, Error>;
 }

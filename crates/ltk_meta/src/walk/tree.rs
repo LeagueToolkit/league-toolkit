@@ -128,7 +128,7 @@ pub trait TreeNode<'a>: Copy + sealed::Sealed {
     ///
     /// Over a view, a kind byte that does not decode before the property is reached. The
     /// owned tree never fails.
-    fn property(&self, field: BinHash) -> Result<Option<Self::Value>, Error>;
+    fn get(&self, field: BinHash) -> Result<Option<Self::Value>, Error>;
 
     /// The whole node, owned, as a `Struct` carrying this class and every property.
     /// Allocates. The object's path hash is not part of a `Struct`; a root's is
