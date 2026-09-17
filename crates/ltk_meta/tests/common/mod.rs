@@ -5,8 +5,6 @@
 //! keys and leaf values come from small sets, so two bins meet on many objects, nodes and keys.
 //! No float is `NaN`: a `NaN` leaf never equals itself.
 
-#![expect(dead_code, reason = "each test binary uses a different subset")]
-
 use std::collections::{HashMap, HashSet};
 
 use indexmap::IndexMap;

@@ -348,6 +348,51 @@ bin.patch(
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
+### Merging and diffing bins
+
+[`Bin::merge`] layers an edited bin over a base in place: the edit wins at every value it
+reaches, a map combines key by key, a struct combines field by field, and whatever only the base
+holds survives. [`Bin::diff`] writes the difference as a [`BinOverride`], and names every place a
+record carries more than the change in [`DiffReport::lifted`]. Applied to its base, the patch
+equals the merge.
+
+```
+use std::collections::HashMap;
+use ltk_hash::{BinHash, Hash as _};
+use ltk_meta::{
+    concrete::{values, Bin, BinObject},
+    property::Kind,
+    Lift,
+};
+
+let lookup = BinHash::hash_str("Lookup");
+let names = HashMap::from([(lookup, "Lookup".to_owned())]);
+let bin = |entries: &[(u32, i32)]| {
+    let entries = entries
+        .iter()
+        .map(|(key, value)| (values::Hash::new(*key).into(), values::I32::new(*value).into()))
+        .collect();
+    let map = values::Map::new(Kind::Hash, Kind::I32, entries).unwrap();
+    Bin::builder()
+        .object(BinObject::builder(0x1u32, 0xc1u32).property(lookup, map).build())
+        .build()
+};
+let base = bin(&[(1, 10), (2, 20)]);
+let edited = bin(&[(2, 21), (3, 30)]);
+
+let mut merged = base.clone();
+let report = merged.merge(&edited);
+assert_eq!(merged, bin(&[(1, 10), (2, 21), (3, 30)]));
+assert_eq!((report.replaced.len(), report.keys_inserted), (1, 1));
+
+// No record inserts a map entry: the map goes whole into one record, key 1 included.
+let (patch, report) = base.diff(&edited, &names);
+assert!(matches!(report.lifted[..], [Lift::MapInsert { keys: 1, .. }]));
+let mut applied = base.clone();
+patch.apply(&mut applied);
+assert_eq!(applied, merged);
+```
+
 ### Reading a `.bin` of unknown kind
 
 The extension does not say which kind a file is, so either read it as a [`BinFile`] and
@@ -390,6 +435,9 @@ pub use file::{BinFile, BinKind};
 
 mod merge;
 pub use merge::{MergeReport, Replaced};
+
+mod diff;
+pub use diff::{DiffOptions, DiffReport, Lift};
 
 pub mod stream;
 pub use stream::{
