@@ -9,7 +9,7 @@
 //! The views are plain shared references: hold as many properties at once as you like, compare
 //! them, go back to an earlier one. The borrowed data itself carries no metadata.
 
-mod value;
+pub(crate) mod value;
 pub use value::{
     ContainerItems, ContainerView, MapEntries, MapView, OptionalView, StructView, ValueView,
 };
@@ -192,6 +192,11 @@ impl<'a> PropertyView<'a> {
     #[must_use]
     pub fn raw(&self) -> &'a [u8] {
         self.value.rest()
+    }
+
+    /// The cursor at the value's own bytes, header included. Decodes nothing.
+    pub(crate) fn cursor(&self) -> Cursor<'a> {
+        self.value
     }
 
     /// The value's wire shape, read from the few header bytes ahead of its body.

@@ -10,24 +10,26 @@ use super::{
 };
 use crate::{
     property::{values, Kind},
-    stream::{ContainerItems, MapEntries, Properties, PropertyView, StructView, ValueView},
+    stream::{
+        layout::Cursor,
+        owned,
+        view::value::{EntryCursors, ItemCursors},
+        Properties, PropertyView, StructView, ValueView,
+    },
     PropertyValueEnum,
 };
 
 impl Sealed for ViewValue<'_> {}
 impl Sealed for StructView<'_> {}
 
-/// A borrowed walk value whose property payload is decoded only on request.
+/// A borrowed walk value: a kind, and the bytes the value is written in.
 ///
-/// Property callbacks receive this adapter. [`TreeValue::kind`] reads the property header.
-/// [`TreeValue::leaf`] and [`TreeValue::to_value`] decode the payload.
+/// Nothing is decoded until a method asks for it, wherever the value came from: a property, a
+/// container item, a map key or a map value. [`TreeValue::kind`] reads nothing.
+/// [`TreeValue::leaf`] and [`TreeValue::to_value`] decode the bytes.
 pub struct ViewValue<'a> {
-    inner: ViewValueInner<'a>,
-}
-
-enum ViewValueInner<'a> {
-    Property(PropertyView<'a>),
-    Decoded(ValueView<'a>),
+    kind: Kind,
+    at: Cursor<'a>,
 }
 
 impl Copy for ViewValue<'_> {}
@@ -36,33 +38,24 @@ impl Clone for ViewValue<'_> {
         *self
     }
 }
-impl Copy for ViewValueInner<'_> {}
-impl Clone for ViewValueInner<'_> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
 
 impl fmt::Debug for ViewValue<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.inner {
-            ViewValueInner::Property(p) => f.debug_tuple("ViewValue").field(&p).finish(),
-            ViewValueInner::Decoded(v) => f.debug_tuple("ViewValue").field(&v).finish(),
-        }
+        f.debug_struct("ViewValue")
+            .field("kind", &self.kind)
+            .field("bytes", &self.at.rest().len())
+            .finish()
     }
 }
 
 impl<'a> ViewValue<'a> {
-    fn property(property: PropertyView<'a>) -> Self {
-        Self {
-            inner: ViewValueInner::Property(property),
-        }
+    /// A value of `kind` written at `at`, the header included.
+    fn new(kind: Kind, at: Cursor<'a>) -> Self {
+        Self { kind, at }
     }
 
-    fn decoded(value: ValueView<'a>) -> Self {
-        Self {
-            inner: ViewValueInner::Decoded(value),
-        }
+    fn property(property: PropertyView<'a>) -> Self {
+        Self::new(property.kind(), property.cursor())
     }
 
     /// The borrowed streaming view of this value.
@@ -74,10 +67,8 @@ impl<'a> ViewValue<'a> {
     ///
     /// A header or leaf payload that does not decode.
     pub fn value_view(&self) -> Result<ValueView<'a>, Error> {
-        match self.inner {
-            ViewValueInner::Property(p) => p.value_view(),
-            ViewValueInner::Decoded(v) => Ok(v),
-        }
+        let mut at = self.at;
+        ValueView::read(&mut at, self.kind)
     }
 }
 
@@ -141,7 +132,7 @@ impl<'a> TreeNode<'a> for StructView<'a> {
     }
 }
 
-/// The values inside a viewed container, optional or map, each decoded as it is reached.
+/// The values inside a viewed container, optional or map, each left undecoded.
 #[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct ViewChildren<'a> {
     inner: ViewChildrenInner<'a>,
@@ -149,11 +140,19 @@ pub struct ViewChildren<'a> {
 
 enum ViewChildrenInner<'a> {
     Items {
-        items: ContainerItems<'a>,
+        items: ItemCursors<'a>,
+        item_kind: Kind,
         index: usize,
     },
-    Optional(Option<ValueView<'a>>),
-    Entries(MapEntries<'a>),
+    Optional {
+        value: Option<Cursor<'a>>,
+        item_kind: Kind,
+    },
+    Entries {
+        entries: EntryCursors<'a>,
+        key_kind: Kind,
+        value_kind: Kind,
+    },
     Empty,
 }
 
@@ -162,21 +161,29 @@ impl<'a> Iterator for ViewChildren<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         match &mut self.inner {
-            ViewChildrenInner::Items { items, index } => {
+            ViewChildrenInner::Items {
+                items,
+                item_kind,
+                index,
+            } => {
                 let item = items.next()?;
                 let step = Child::Index(*index);
                 *index += 1;
-                Some(item.map(|value| (step, ViewValue::decoded(value))))
+                Some(item.map(|at| (step, ViewValue::new(*item_kind, at))))
             }
-            ViewChildrenInner::Optional(value) => value
+            ViewChildrenInner::Optional { value, item_kind } => value
                 .take()
-                .map(|v| Ok((Child::Index(0), ViewValue::decoded(v)))),
-            ViewChildrenInner::Entries(entries) => {
+                .map(|at| Ok((Child::Index(0), ViewValue::new(*item_kind, at)))),
+            ViewChildrenInner::Entries {
+                entries,
+                key_kind,
+                value_kind,
+            } => {
                 let entry = entries.next()?;
                 Some(entry.map(|(key, value)| {
                     (
-                        Child::Key(ViewValue::decoded(key)),
-                        ViewValue::decoded(value),
+                        Child::Key(ViewValue::new(*key_kind, key)),
+                        ViewValue::new(*value_kind, value),
                     )
                 }))
             }
@@ -187,11 +194,11 @@ impl<'a> Iterator for ViewChildren<'a> {
     fn size_hint(&self) -> (usize, Option<usize>) {
         match &self.inner {
             ViewChildrenInner::Items { items, .. } => items.size_hint(),
-            ViewChildrenInner::Optional(value) => {
+            ViewChildrenInner::Optional { value, .. } => {
                 let n = usize::from(value.is_some());
                 (n, Some(n))
             }
-            ViewChildrenInner::Entries(entries) => entries.size_hint(),
+            ViewChildrenInner::Entries { entries, .. } => entries.size_hint(),
             ViewChildrenInner::Empty => (0, Some(0)),
         }
     }
@@ -203,8 +210,8 @@ impl fmt::Debug for ViewChildren<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let (kind, remaining) = match &self.inner {
             ViewChildrenInner::Items { items, .. } => ("items", items.size_hint().0),
-            ViewChildrenInner::Optional(value) => ("optional", usize::from(value.is_some())),
-            ViewChildrenInner::Entries(entries) => ("entries", entries.size_hint().0),
+            ViewChildrenInner::Optional { value, .. } => ("optional", usize::from(value.is_some())),
+            ViewChildrenInner::Entries { entries, .. } => ("entries", entries.size_hint().0),
             ViewChildrenInner::Empty => ("empty", 0),
         };
         f.debug_struct("ViewChildren")
@@ -219,10 +226,7 @@ impl<'a> TreeValue<'a> for ViewValue<'a> {
     type Children = ViewChildren<'a>;
 
     fn kind(&self) -> Kind {
-        match self.inner {
-            ViewValueInner::Property(p) => p.kind(),
-            ViewValueInner::Decoded(v) => v.kind(),
-        }
+        self.kind
     }
 
     fn holds_node(&self) -> Result<bool, Error> {
@@ -249,23 +253,30 @@ impl<'a> TreeValue<'a> for ViewValue<'a> {
     }
 
     fn children(&self) -> Result<Self::Children, Error> {
+        let children = |inner| ViewChildren { inner };
         if !self.kind().is_container() {
-            return Ok(ViewChildren {
-                inner: ViewChildrenInner::Empty,
-            });
+            return Ok(children(ViewChildrenInner::Empty));
         }
         let inner = match self.value_view()? {
             ValueView::Container(c) | ValueView::UnorderedContainer(c) => {
                 ViewChildrenInner::Items {
-                    items: c.iter(),
+                    items: c.cursors(),
+                    item_kind: c.item_kind(),
                     index: 0,
                 }
             }
-            ValueView::Optional(o) => ViewChildrenInner::Optional(o.get()?),
-            ValueView::Map(m) => ViewChildrenInner::Entries(m.iter()),
+            ValueView::Optional(o) => ViewChildrenInner::Optional {
+                value: o.cursor(),
+                item_kind: o.item_kind(),
+            },
+            ValueView::Map(m) => ViewChildrenInner::Entries {
+                entries: m.cursors(),
+                key_kind: m.key_kind(),
+                value_kind: m.value_kind(),
+            },
             _ => ViewChildrenInner::Empty,
         };
-        Ok(ViewChildren { inner })
+        Ok(children(inner))
     }
 
     fn leaf(&self) -> Result<Option<Leaf<'a>>, Error> {
@@ -301,76 +312,7 @@ impl<'a> TreeValue<'a> for ViewValue<'a> {
     }
 
     fn to_value(&self) -> Result<PropertyValueEnum, Error> {
-        use PropertyValueEnum as P;
-        macro_rules! prim {
-            ($ty:ident, $v:expr) => {
-                P::$ty(values::$ty::new($v))
-            };
-        }
-        Ok(match self.value_view()? {
-            ValueView::None => P::None(values::None),
-            ValueView::Bool(v) => prim!(Bool, v),
-            ValueView::I8(v) => prim!(I8, v),
-            ValueView::U8(v) => prim!(U8, v),
-            ValueView::I16(v) => prim!(I16, v),
-            ValueView::U16(v) => prim!(U16, v),
-            ValueView::I32(v) => prim!(I32, v),
-            ValueView::U32(v) => prim!(U32, v),
-            ValueView::I64(v) => prim!(I64, v),
-            ValueView::U64(v) => prim!(U64, v),
-            ValueView::F32(v) => prim!(F32, v),
-            ValueView::Vector2(v) => prim!(Vector2, v),
-            ValueView::Vector3(v) => prim!(Vector3, v),
-            ValueView::Vector4(v) => prim!(Vector4, v),
-            ValueView::Matrix44(v) => prim!(Matrix44, v),
-            ValueView::Color(v) => prim!(Color, v),
-            ValueView::String(v) => prim!(String, v.to_owned()),
-            ValueView::Hash(v) => prim!(Hash, v),
-            ValueView::WadChunkLink(v) => prim!(WadChunkLink, v),
-            ValueView::ObjectLink(v) => prim!(ObjectLink, v),
-            ValueView::BitBool(v) => prim!(BitBool, v),
-            ValueView::Struct(s) => P::Struct(struct_of(s)?),
-            ValueView::Embedded(s) => P::Embedded(values::Embedded(struct_of(s)?)),
-            ValueView::Container(c) => P::Container(container_of(c.item_kind(), c.iter())?),
-            ValueView::UnorderedContainer(c) => P::UnorderedContainer(values::UnorderedContainer(
-                container_of(c.item_kind(), c.iter())?,
-            )),
-            ValueView::Optional(o) => P::Optional(values::Optional::new(
-                o.item_kind(),
-                o.get()?
-                    .map(|v| ViewValue::decoded(v).to_value())
-                    .transpose()?,
-            )?),
-            ValueView::Map(m) => P::Map(values::Map::new(
-                m.key_kind(),
-                m.value_kind(),
-                m.iter()
-                    .map(|entry| {
-                        let (k, v) = entry?;
-                        Ok((
-                            ViewValue::decoded(k).to_value()?,
-                            ViewValue::decoded(v).to_value()?,
-                        ))
-                    })
-                    .collect::<Result<_, Error>>()?,
-            )?),
-        })
+        let mut at = self.at;
+        owned::read_value(&mut at, self.kind)
     }
-}
-
-/// A null pointer stays a null pointer: class 0 and no properties.
-fn struct_of(view: StructView<'_>) -> Result<values::Struct, Error> {
-    if *view.class_hash() == 0 {
-        return Ok(values::Struct::default());
-    }
-    view.to_struct()
-}
-
-fn container_of(item_kind: Kind, items: ContainerItems<'_>) -> Result<values::Container, Error> {
-    values::Container::new(
-        item_kind,
-        items
-            .map(|item| ViewValue::decoded(item?).to_value())
-            .collect::<Result<_, Error>>()?,
-    )
 }

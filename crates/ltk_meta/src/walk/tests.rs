@@ -8,7 +8,7 @@ use ltk_hash::BinHash;
 use ltk_primitives::Color;
 
 use super::{
-    Leaf, Node, NodeRefMut, PropertyRefMut, TreeNode, TreeValue, Visit, Visitor, VisitorMut,
+    Child, Leaf, Node, NodeRefMut, PropertyRefMut, TreeNode, TreeValue, Visit, Visitor, VisitorMut,
     WalkOutcome,
 };
 use crate::{
@@ -1363,6 +1363,67 @@ fn a_walk_value_exposes_headers_without_decoding_container_leaves() {
     let mut stream = BinStream::mount(io::Cursor::new(bytes)).unwrap();
     assert_eq!(stream.walk(&mut headers).unwrap(), WalkOutcome::Completed);
     assert_eq!(headers.0, 4);
+}
+
+#[test]
+fn a_child_carries_its_bytes_and_decodes_only_when_asked() {
+    let object = BinObject::builder(OBJECT, C1)
+        .property(
+            F_STRINGS,
+            values::Container::new(
+                Kind::String,
+                vec![
+                    values::String::from("child-marker").into(),
+                    values::String::from("sound").into(),
+                ],
+            )
+            .unwrap(),
+        )
+        .build();
+    let bin = Bin::new([object], std::iter::empty::<&str>());
+    let mut bytes = io::Cursor::new(Vec::new());
+    bin.to_writer(&mut bytes).unwrap();
+    let mut bytes = bytes.into_inner();
+    let at = bytes
+        .windows(12)
+        .position(|w| w == b"child-marker")
+        .unwrap();
+    bytes[at] = 0xff;
+
+    struct Items(usize);
+    impl<'a> Visitor<'a, ViewValue<'a>> for Items {
+        type Error = Error;
+
+        fn enter_property(
+            &mut self,
+            _field: BinHash,
+            value: ViewValue<'a>,
+            _node: &Node<'_, 'a, ViewValue<'a>>,
+        ) -> Result<Visit, Error> {
+            // Iterating reaches the item past the malformed one: no item is decoded on the way.
+            let items: Vec<_> = value.children()?.collect::<Result<_, Error>>()?;
+            assert_eq!(items.len(), 2);
+
+            let (segment, broken) = items[0];
+            assert!(matches!(segment, Child::Index(0)));
+            assert_eq!(broken.kind(), Kind::String);
+            assert!(matches!(broken.leaf(), Err(Error::Utf8Error(_))));
+
+            let (segment, sound) = items[1];
+            assert!(matches!(segment, Child::Index(1)));
+            assert_eq!(sound.leaf()?, Some(Leaf::String("sound")));
+
+            self.0 += 1;
+            Ok(Visit::Skip)
+        }
+    }
+
+    let mut items = Items(0);
+    BinStream::mount(io::Cursor::new(bytes))
+        .unwrap()
+        .walk(&mut items)
+        .unwrap();
+    assert_eq!(items.0, 1);
 }
 
 #[test]

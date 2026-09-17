@@ -222,7 +222,7 @@ impl<'a> TreeValue<'a> for &'a PropertyValueEnum {
     type Children = ChildrenRef<'a>;
     /* ... */
 }
-/// A borrowed walk value. Property payloads are decoded only on request.
+/// A borrowed walk value: a kind and the bytes it is written in, decoded only on request.
 #[derive(Clone, Copy, Debug)]
 pub struct ViewValue<'a> { /* private */ }
 
@@ -277,10 +277,13 @@ under either.
 `Kind::is_primitive` plays no part in any of this (W1). `Leaf` is the one place the crate names the tags as the
 client does (W19): a visitor reads a texture path as `Leaf::File`, whatever `Kind` calls it.
 
-`ViewValue` retains a `PropertyView` for property callbacks. `kind()` reads only the
-property header. `leaf()` and `to_value()` decode the payload; `holds_node()`, `as_node()`
-and `children()` do not decode a property leaf. Child iterators decode values as they are
-requested. The adapter choice is [ADR-0017](../adr/0017-deferred-walk-values.md).
+`ViewValue` is a kind and the bytes the value is written in, whatever position it holds: a
+property, a container item, a map key or a map value. `kind()` reads nothing. `holds_node()`,
+`as_node()` and `children()` read headers and no payload. `leaf()` decodes that one value, and
+`to_value()` reads the whole subtree through the reader an owned read uses. A child iterator
+yields the bytes of each value and decodes none of them, so a malformed item is reached and
+fails only where it is read. The deferral is
+[ADR-0017](../adr/0017-deferred-walk-values.md).
 
 `ViewValue::value_view()` exposes the borrowed streaming enum without allocating. Container
 item kinds, map key and value kinds, counts and null class hashes are available through its
@@ -971,6 +974,8 @@ and over an `ObjectView` of the same bytes, through one generic visitor.
 - **Leaves and keys.** `leaf()` over both trees agrees for every leaf kind; `map_key()` agrees
   and round-trips through `MapKey::to_value`; two `F32` keys with the same bits are equal and
   `Hash` on them agrees.
+- **Deferral.** Over a view of a container holding a malformed string, every item is reached and
+  the item after the malformed one reads; only `leaf()` on the malformed item fails.
 - **Rendering.** Every row of [section 4.2](#s4.2), in all three forms; `NamedPath::named` plus
   `unnamed` equals the number of field steps plus hash-kind keys; `Unnameable::step` is the first
   unspellable step, not the last.
