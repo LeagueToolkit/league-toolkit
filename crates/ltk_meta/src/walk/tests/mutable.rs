@@ -11,9 +11,9 @@ struct Editor<F> {
 }
 
 enum At<'e, 't> {
-    EnterNode(&'e mut NodeMut<'t>),
-    EnterProperty(&'e mut PropertyMut<'t>),
-    ExitProperty(&'e mut PropertyMut<'t>),
+    EnterNode(&'e mut NodeRefMut<'t>),
+    EnterProperty(&'e mut PropertyRefMut<'t>),
+    ExitProperty(&'e mut PropertyRefMut<'t>),
 }
 
 impl<F: FnMut(At<'_, '_>)> Editor<F> {
@@ -29,19 +29,19 @@ impl<F: FnMut(At<'_, '_>)> Editor<F> {
 impl<F: FnMut(At<'_, '_>)> VisitorMut for Editor<F> {
     type Error = Error;
 
-    fn enter_node(&mut self, node: &mut NodeMut<'_>) -> Result<Visit, Error> {
+    fn enter_node(&mut self, node: &mut NodeRefMut<'_>) -> Result<Visit, Error> {
         (self.edit)(At::EnterNode(node));
         self.nodes
             .push((node.trail().to_string(), node.class_hash().0));
         Ok(Visit::Continue)
     }
 
-    fn enter_property(&mut self, property: &mut PropertyMut<'_>) -> Result<Visit, Error> {
+    fn enter_property(&mut self, property: &mut PropertyRefMut<'_>) -> Result<Visit, Error> {
         (self.edit)(At::EnterProperty(property));
         Ok(Visit::Continue)
     }
 
-    fn exit_property(&mut self, property: &mut PropertyMut<'_>) -> Result<Visit, Error> {
+    fn exit_property(&mut self, property: &mut PropertyRefMut<'_>) -> Result<Visit, Error> {
         (self.edit)(At::ExitProperty(property));
         self.exited.push(property.field().0);
         Ok(Visit::Continue)
@@ -191,7 +191,7 @@ struct CapacitiesMut(Vec<(usize, usize)>);
 impl VisitorMut for CapacitiesMut {
     type Error = Error;
 
-    fn enter_node(&mut self, node: &mut NodeMut<'_>) -> Result<Visit, Error> {
+    fn enter_node(&mut self, node: &mut NodeRefMut<'_>) -> Result<Visit, Error> {
         let trail = node.trail();
         self.0
             .push((trail.steps.capacity(), trail.classes.capacity()));
@@ -237,7 +237,7 @@ fn a_key_in_the_trail_reads_as_the_trees_own_key() {
     impl VisitorMut for Keys {
         type Error = Error;
 
-        fn enter_node(&mut self, node: &mut NodeMut<'_>) -> Result<Visit, Error> {
+        fn enter_node(&mut self, node: &mut NodeRefMut<'_>) -> Result<Visit, Error> {
             if let Some(TrailStep::Key(key)) = node.trail().steps().last() {
                 // The key stays readable while the node's own properties are edited.
                 node.properties_mut().clear();

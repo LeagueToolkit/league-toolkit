@@ -9,7 +9,7 @@ use std::{
 use indexmap::IndexMap;
 use ltk_hash::BinHash;
 
-use super::{Interrupt, OwnedNode, Resume, Trail, TrailStep, TreeValue as _, Visit, WalkOutcome};
+use super::{Interrupt, NodeRef, Resume, Trail, TrailStep, TreeValue as _, Visit, WalkOutcome};
 use crate::{property::values, Bin, BinObject, BinOverride, Error, PropertyValueEnum};
 
 /// What a mutable walk calls.
@@ -34,7 +34,7 @@ pub trait VisitorMut {
     /// # Errors
     ///
     /// The visitor's own. An error ends the walk at once, as an [`Visit::Abort`] does.
-    fn enter_node(&mut self, node: &mut NodeMut<'_>) -> Result<Visit, Self::Error> {
+    fn enter_node(&mut self, node: &mut NodeRefMut<'_>) -> Result<Visit, Self::Error> {
         Ok(Visit::Continue)
     }
 
@@ -44,7 +44,7 @@ pub trait VisitorMut {
     /// # Errors
     ///
     /// The visitor's own. An error ends the walk at once, as an [`Visit::Abort`] does.
-    fn exit_node(&mut self, node: &mut NodeMut<'_>) -> Result<Visit, Self::Error> {
+    fn exit_node(&mut self, node: &mut NodeRefMut<'_>) -> Result<Visit, Self::Error> {
         Ok(Visit::Continue)
     }
 
@@ -56,7 +56,7 @@ pub trait VisitorMut {
     /// # Errors
     ///
     /// The visitor's own. An error ends the walk at once, as an [`Visit::Abort`] does.
-    fn enter_property(&mut self, property: &mut PropertyMut<'_>) -> Result<Visit, Self::Error> {
+    fn enter_property(&mut self, property: &mut PropertyRefMut<'_>) -> Result<Visit, Self::Error> {
         Ok(Visit::Continue)
     }
 
@@ -67,7 +67,7 @@ pub trait VisitorMut {
     /// # Errors
     ///
     /// The visitor's own. An error ends the walk at once, as an [`Visit::Abort`] does.
-    fn exit_property(&mut self, property: &mut PropertyMut<'_>) -> Result<Visit, Self::Error> {
+    fn exit_property(&mut self, property: &mut PropertyRefMut<'_>) -> Result<Visit, Self::Error> {
         Ok(Visit::Continue)
     }
 }
@@ -77,19 +77,19 @@ pub trait VisitorMut {
 impl<W: VisitorMut + ?Sized> VisitorMut for &mut W {
     type Error = W::Error;
 
-    fn enter_node(&mut self, node: &mut NodeMut<'_>) -> Result<Visit, Self::Error> {
+    fn enter_node(&mut self, node: &mut NodeRefMut<'_>) -> Result<Visit, Self::Error> {
         (**self).enter_node(node)
     }
 
-    fn exit_node(&mut self, node: &mut NodeMut<'_>) -> Result<Visit, Self::Error> {
+    fn exit_node(&mut self, node: &mut NodeRefMut<'_>) -> Result<Visit, Self::Error> {
         (**self).exit_node(node)
     }
 
-    fn enter_property(&mut self, property: &mut PropertyMut<'_>) -> Result<Visit, Self::Error> {
+    fn enter_property(&mut self, property: &mut PropertyRefMut<'_>) -> Result<Visit, Self::Error> {
         (**self).enter_property(property)
     }
 
-    fn exit_property(&mut self, property: &mut PropertyMut<'_>) -> Result<Visit, Self::Error> {
+    fn exit_property(&mut self, property: &mut PropertyRefMut<'_>) -> Result<Visit, Self::Error> {
         (**self).exit_property(property)
     }
 }
@@ -98,14 +98,14 @@ impl<W: VisitorMut + ?Sized> VisitorMut for &mut W {
 ///
 /// The class hash is read-only. A node inside a container, optional or map keeps the kind its
 /// holder declares.
-pub struct NodeMut<'t> {
+pub struct NodeRefMut<'t> {
     object_hash: BinHash,
     class_hash: BinHash,
     properties: &'t mut IndexMap<BinHash, PropertyValueEnum>,
     trail: &'t Trail<&'t PropertyValueEnum>,
 }
 
-impl<'t> NodeMut<'t> {
+impl<'t> NodeRefMut<'t> {
     /// The path hash of the object this node is in, or is.
     #[must_use]
     pub fn object_hash(&self) -> BinHash {
@@ -133,8 +133,8 @@ impl<'t> NodeMut<'t> {
     /// The node read-only, as the read-only walk sees it: lookup by field, and
     /// [`TreeNode::to_struct`](super::TreeNode::to_struct).
     #[must_use]
-    pub fn inner(&self) -> OwnedNode<'_> {
-        OwnedNode::new(self.class_hash, self.properties)
+    pub fn inner(&self) -> NodeRef<'_> {
+        NodeRef::new(self.class_hash, self.properties)
     }
 
     /// The node's properties, in property order.
@@ -150,9 +150,9 @@ impl<'t> NodeMut<'t> {
     }
 }
 
-impl fmt::Debug for NodeMut<'_> {
+impl fmt::Debug for NodeRefMut<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("NodeMut")
+        f.debug_struct("NodeRefMut")
             .field("object_hash", &self.object_hash)
             .field("class_hash", &self.class_hash)
             .field("property_count", &self.properties.len())
@@ -164,7 +164,7 @@ impl fmt::Debug for NodeMut<'_> {
 /// One property of a mutable walk: where it is, and its value.
 ///
 /// A property of a node carries no kind pin: the value can be replaced by a value of any kind.
-pub struct PropertyMut<'t> {
+pub struct PropertyRefMut<'t> {
     object_hash: BinHash,
     node_class_hash: BinHash,
     field: BinHash,
@@ -172,7 +172,7 @@ pub struct PropertyMut<'t> {
     trail: &'t Trail<&'t PropertyValueEnum>,
 }
 
-impl<'t> PropertyMut<'t> {
+impl<'t> PropertyRefMut<'t> {
     /// The path hash of the object the property is in.
     #[must_use]
     pub fn object_hash(&self) -> BinHash {
@@ -211,9 +211,9 @@ impl<'t> PropertyMut<'t> {
     }
 }
 
-impl fmt::Debug for PropertyMut<'_> {
+impl fmt::Debug for PropertyRefMut<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("PropertyMut")
+        f.debug_struct("PropertyRefMut")
             .field("object_hash", &self.object_hash)
             .field("node_class_hash", &self.node_class_hash)
             .field("field", &self.field)
@@ -263,8 +263,8 @@ impl<'w> WalkerMut<'w> {
         &'t self,
         class_hash: BinHash,
         properties: &'t mut IndexMap<BinHash, PropertyValueEnum>,
-    ) -> NodeMut<'t> {
-        NodeMut {
+    ) -> NodeRefMut<'t> {
+        NodeRefMut {
             object_hash: self.object_hash,
             class_hash,
             properties,
@@ -277,8 +277,8 @@ impl<'w> WalkerMut<'w> {
         node_class_hash: BinHash,
         field: BinHash,
         value: &'t mut PropertyValueEnum,
-    ) -> PropertyMut<'t> {
-        PropertyMut {
+    ) -> PropertyRefMut<'t> {
+        PropertyRefMut {
             object_hash: self.object_hash,
             node_class_hash,
             field,

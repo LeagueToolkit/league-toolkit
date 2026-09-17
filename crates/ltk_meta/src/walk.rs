@@ -18,7 +18,7 @@
 //!
 //! [`BinObject::walk_mut`], [`Bin::walk_mut`] and [`BinOverride::walk_mut`] run the same
 //! traversal over the owned tree through `&mut`. A [`VisitorMut`] edits a node's property map
-//! from [`NodeMut`] and a property's value from [`PropertyMut`], under the same [`Trail`].
+//! from [`NodeRefMut`] and a property's value from [`PropertyRefMut`], under the same [`Trail`].
 //!
 //! ```
 //! use ltk_hash::BinHash;
@@ -67,8 +67,8 @@ mod view;
 #[cfg(test)]
 mod tests;
 
-pub use mutable::{NodeMut, PropertyMut, VisitorMut};
-pub use owned::{OwnedChildren, OwnedNode, OwnedProperties};
+pub use mutable::{NodeRefMut, PropertyRefMut, VisitorMut};
+pub use owned::{ChildrenRef, NodeRef, PropertiesRef};
 pub use tree::{Child, Leaf, TreeKind, TreeNode, TreeValue};
 pub use view::{ViewChildren, ViewProperties, ViewValue};
 
@@ -571,7 +571,7 @@ impl BinObject {
     where
         W: Visitor<'a, &'a PropertyValueEnum>,
     {
-        Walker::new().walk_object(self.path_hash, OwnedNode::from(self), visitor)
+        Walker::new().walk_object(self.path_hash, NodeRef::from(self), visitor)
     }
 }
 
@@ -589,7 +589,7 @@ impl Bin {
         walk_all(
             self.objects
                 .values()
-                .map(|object| (object.path_hash, OwnedNode::from(object))),
+                .map(|object| (object.path_hash, NodeRef::from(object))),
             visitor,
         )
     }
@@ -610,7 +610,7 @@ impl BinOverride {
         walk_all(
             self.objects
                 .values()
-                .map(|object| (object.path_hash, OwnedNode::from(object))),
+                .map(|object| (object.path_hash, NodeRef::from(object))),
             visitor,
         )
     }

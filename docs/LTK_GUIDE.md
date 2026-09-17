@@ -486,7 +486,7 @@ the delta does not name is copied byte for byte, and only the edited ones are en
 use ltk_hash::{BinHash, Hash as _};
 use ltk_meta::{
     property::values,
-    walk::{PropertyMut, Visit, VisitorMut},
+    walk::{PropertyRefMut, Visit, VisitorMut},
     BinDelta, BinStream, Error, PropertyValueEnum,
 };
 
@@ -501,7 +501,7 @@ struct Rehash {
 impl VisitorMut for Rehash {
     type Error = Error;
 
-    fn enter_property(&mut self, property: &mut PropertyMut<'_>) -> Result<Visit, Error> {
+    fn enter_property(&mut self, property: &mut PropertyRefMut<'_>) -> Result<Visit, Error> {
         if property.field() != NAME {
             return Ok(Visit::Continue);
         }

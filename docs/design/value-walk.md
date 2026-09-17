@@ -218,8 +218,8 @@ impl Leaf<'_> {
 }
 
 impl<'a> TreeValue<'a> for &'a PropertyValueEnum {
-    type Node = OwnedNode<'a>;
-    type Children = OwnedChildren<'a>;
+    type Node = NodeRef<'a>;
+    type Children = ChildrenRef<'a>;
     /* ... */
 }
 /// A borrowed walk value. Property payloads are decoded only on request.
@@ -245,16 +245,16 @@ impl<'a> TreeValue<'a> for ViewValue<'a> {
 /// The owned tree's node: a class hash and a borrowed property map. `BinObject` and
 /// `values::Struct` both view as one, through `From`.
 #[derive(Clone, Copy, Debug)]
-pub struct OwnedNode<'a> { /* class_hash, &'a IndexMap<BinHash, PropertyValueEnum> */ }
-impl<'a> OwnedNode<'a> {
+pub struct NodeRef<'a> { /* class_hash, &'a IndexMap<BinHash, PropertyValueEnum> */ }
+impl<'a> NodeRef<'a> {
     pub fn new(class_hash: BinHash, properties: &'a IndexMap<BinHash, PropertyValueEnum>) -> Self;
 }
-impl<'a> From<&'a BinObject> for OwnedNode<'a> {}
-impl<'a> From<&'a values::Struct> for OwnedNode<'a> {}
+impl<'a> From<&'a BinObject> for NodeRef<'a> {}
+impl<'a> From<&'a values::Struct> for NodeRef<'a> {}
 
-impl<'a> TreeNode<'a> for OwnedNode<'a> {
+impl<'a> TreeNode<'a> for NodeRef<'a> {
     type Value = &'a PropertyValueEnum;
-    type Properties = OwnedProperties<'a>;
+    type Properties = PropertiesRef<'a>;
     /* ... */
 }
 impl<'a> TreeNode<'a> for StructView<'a> {
@@ -265,8 +265,8 @@ impl<'a> TreeNode<'a> for StructView<'a> {
 
 /// The iterators behind the associated types. Each is `FusedIterator`; the owned pair is
 /// `ExactSizeIterator` too.
-pub struct OwnedProperties<'a> { /* ... */ }
-pub struct OwnedChildren<'a> { /* ... */ }
+pub struct PropertiesRef<'a> { /* ... */ }
+pub struct ChildrenRef<'a> { /* ... */ }
 pub struct ViewProperties<'a> { /* ... */ }
 pub struct ViewChildren<'a> { /* ... */ }
 ```
@@ -813,20 +813,20 @@ pub trait VisitorMut {
 
     /// Before any of the node's properties. The walk walks the property map this callback
     /// leaves behind.
-    fn enter_node(&mut self, node: &mut NodeMut<'_>) -> Result<Visit, Self::Error> {
+    fn enter_node(&mut self, node: &mut NodeRefMut<'_>) -> Result<Visit, Self::Error> {
         Ok(Visit::Continue)
     }
     /// Once per node entered, as `Visitor::exit_node`.
-    fn exit_node(&mut self, node: &mut NodeMut<'_>) -> Result<Visit, Self::Error> {
+    fn exit_node(&mut self, node: &mut NodeRefMut<'_>) -> Result<Visit, Self::Error> {
         Ok(Visit::Continue)
     }
     /// For every property, in property order, leaves included. `holds_node` is asked of the value
     /// this callback leaves behind.
-    fn enter_property(&mut self, property: &mut PropertyMut<'_>) -> Result<Visit, Self::Error> {
+    fn enter_property(&mut self, property: &mut PropertyRefMut<'_>) -> Result<Visit, Self::Error> {
         Ok(Visit::Continue)
     }
     /// Once per property that holds a node and was entered, as `Visitor::exit_property`.
-    fn exit_property(&mut self, property: &mut PropertyMut<'_>) -> Result<Visit, Self::Error> {
+    fn exit_property(&mut self, property: &mut PropertyRefMut<'_>) -> Result<Visit, Self::Error> {
         Ok(Visit::Continue)
     }
 }
@@ -835,9 +835,9 @@ pub trait VisitorMut {
 impl<W: VisitorMut + ?Sized> VisitorMut for &mut W {}
 
 /// One node of a mutable walk: where it is, and its property map.
-pub struct NodeMut<'t> { /* object hash, class hash, &'t mut IndexMap, &'t Trail */ }
+pub struct NodeRefMut<'t> { /* object hash, class hash, &'t mut IndexMap, &'t Trail */ }
 
-impl<'t> NodeMut<'t> {
+impl<'t> NodeRefMut<'t> {
     /// The path hash of the object this node is in, or is.
     pub fn object_hash(&self) -> BinHash;
     /// The class hash this node carries. Never 0 below the root.
@@ -847,7 +847,7 @@ impl<'t> NodeMut<'t> {
     /// Whether this node is the object itself.
     pub fn is_root(&self) -> bool;
     /// The node read-only, as the read-only walk sees it.
-    pub fn inner(&self) -> OwnedNode<'_>;
+    pub fn inner(&self) -> NodeRef<'_>;
     /// The node's properties.
     pub fn properties(&self) -> &IndexMap<BinHash, PropertyValueEnum>;
     /// The node's properties, to insert, remove, reorder or edit.
@@ -855,9 +855,9 @@ impl<'t> NodeMut<'t> {
 }
 
 /// One property of a mutable walk: where it is, and its value.
-pub struct PropertyMut<'t> { /* object hash, node class, field, &'t mut value, &'t Trail */ }
+pub struct PropertyRefMut<'t> { /* object hash, node class, field, &'t mut value, &'t Trail */ }
 
-impl<'t> PropertyMut<'t> {
+impl<'t> PropertyRefMut<'t> {
     /// The path hash of the object the property is in.
     pub fn object_hash(&self) -> BinHash;
     /// The class hash of the node the property is on. Never 0 below the root.
@@ -897,12 +897,12 @@ the last callback left:
   `enter_property` leaves it, and rule 3 descends that value. A value replaced by a leaf is a
   leaf: no descent and no `exit_property`.
 - `exit_property` edits or replaces the value after its nodes.
-- A callback reaches a node inside a container, optional or map through `NodeMut` alone, never
-  as a value, and `NodeMut` sets no class hash. Every kind pin holds by construction. An edit
+- A callback reaches a node inside a container, optional or map through `NodeRefMut` alone, never
+  as a value, and `NodeRefMut` sets no class hash. Every kind pin holds by construction. An edit
   below a pin from a property callback goes through `PropertyValueEnum::as_mut` or `ValueSlot`,
   which hold it.
 - A property callback reaches no other property of its node. A visitor that reads a sibling reads
-  it from `NodeMut::properties` in `enter_node`.
+  it from `NodeRefMut::properties` in `enter_node`.
 
 A key in the trail is the tree's own key, borrowed for the length of the callback that sees it. No
 callback reaches a map key through `&mut`: a map's keys are never a node and never a property
@@ -912,7 +912,7 @@ value.
 there:
 
 ```rust
-fn enter_property(&mut self, property: &mut PropertyMut<'_>) -> Result<Visit, Error> {
+fn enter_property(&mut self, property: &mut PropertyRefMut<'_>) -> Result<Visit, Error> {
     if property.node_class_hash() != SKIN_MESH || property.field() != SUBMESH {
         return Ok(Visit::Continue);
     }
@@ -1029,5 +1029,6 @@ rules append.
 | W22 | `Leaf` is `#[non_exhaustive]`; `Visit`, `WalkOutcome`, `Child`, `TrailStep` and `Step` are exhaustive. | Marking every new public enum, or none. | The leaf kinds are the game's to extend, and `WadChunkLink` was added once; a consumer's wildcard arm is the price of a minor release carrying the next one. The other enums are this crate's own, and a consumer matching a new `Visit` answer or step kind is told by the compiler. | [section 3](#s3) |
 | W23 | The mutable walk runs over the owned tree only. A view has no mutable walk. | A mutable walk over `ViewValue`. | An edit to a buffered object's bytes keeps its size only for a fixed-width leaf; a string edit moves every size field above it. The editable object is the one `read()` returns. | [section 5.3](#s5.3); `bin-streaming.md` [section 10.4](bin-streaming.md#s10.4) |
 | W24 | `VisitorMut` shares `Visit`, `WalkOutcome`, the traversal of [section 5.1](#s5.1) and `Trail<&PropertyValueEnum>` with the read-only walk. The walker extends a map key's borrow in one `unsafe` block, and a callback sees a key only for its own length. | A trail type of the mutable walk's own; resolving addresses collected by the read-only walk. | The address a check records and the address a repair matches on are one rendering of one type, and descent over a map allocates nothing. | [section 5.3](#s5.3); ADR-0015 |
-| W25 | A node callback edits the node's property map, a property callback edits or replaces the property's value, `NodeMut` sets no class hash, and no callback reaches an item of a container, optional or map as a value. | A `&mut PropertyValueEnum` for every value the walk crosses, with pins checked after the walk. | A property carries no kind pin and an item does. A pin checked after the walk reports a broken tree; a pin no callback can reach holds. | [section 5.3](#s5.3) |
+| W25 | A node callback edits the node's property map, a property callback edits or replaces the property's value, `NodeRefMut` sets no class hash, and no callback reaches an item of a container, optional or map as a value. | A `&mut PropertyValueEnum` for every value the walk crosses, with pins checked after the walk. | A property carries no kind pin and an item does. A pin checked after the walk reports a broken tree; a pin no callback can reach holds. | [section 5.3](#s5.3) |
 | W26 | The mutable walk iterates the property map `enter_node` leaves and descends the value `enter_property` leaves. | Walking a snapshot taken before the callback. | A retagged value is the value the file holds after the repair, and its nodes are the ones a verification walk visits. | [section 5.3](#s5.3) |
+| W27 | A handle that borrows the owned tree ends in `Ref`, and one that borrows it mutably ends in `RefMut`: `NodeRef`, `PropertiesRef` and `ChildrenRef` under the read-only walk, `NodeRefMut` and `PropertyRefMut` under the mutable walk. The view's types keep the `View` prefix. | `OwnedNode`, `OwnedProperties`, `OwnedChildren`, `NodeMut` and `PropertyMut`. | Each of these types borrows the tree and owns none of it. `std::cell::Ref` and `RefMut` name a shared and a unique borrow the same way. | [section 3](#s3), [section 5.3](#s5.3) |

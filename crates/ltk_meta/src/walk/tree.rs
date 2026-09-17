@@ -104,7 +104,7 @@ pub trait TreeValue<'a>: Copy + sealed::Sealed {
 
 /// A node the walk can visit: a class and properties.
 ///
-/// Sealed: implemented for the owned tree's node, [`OwnedNode`](super::OwnedNode), and for
+/// Sealed: implemented for the owned tree's node, [`NodeRef`](super::NodeRef), and for
 /// [`StructView<'a>`]. An object's root is a `StructView` over the same bytes.
 ///
 /// [`StructView<'a>`]: crate::stream::StructView

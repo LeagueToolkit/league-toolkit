@@ -8,7 +8,8 @@ use ltk_hash::BinHash;
 use ltk_primitives::Color;
 
 use super::{
-    Leaf, Node, NodeMut, PropertyMut, TreeNode, TreeValue, Visit, Visitor, VisitorMut, WalkOutcome,
+    Leaf, Node, NodeRefMut, PropertyRefMut, TreeNode, TreeValue, Visit, Visitor, VisitorMut,
+    WalkOutcome,
 };
 use crate::{
     property::values,
@@ -361,7 +362,7 @@ impl<'a, V: TreeValue<'a>> Visitor<'a, V> for Recorder {
 impl VisitorMut for Recorder {
     type Error = Error;
 
-    fn enter_node(&mut self, node: &mut NodeMut<'_>) -> Result<Visit, Error> {
+    fn enter_node(&mut self, node: &mut NodeRefMut<'_>) -> Result<Visit, Error> {
         self.record(Event::EnterNode {
             object: node.object_hash().0,
             class: node.class_hash().0,
@@ -370,14 +371,14 @@ impl VisitorMut for Recorder {
         })
     }
 
-    fn exit_node(&mut self, node: &mut NodeMut<'_>) -> Result<Visit, Error> {
+    fn exit_node(&mut self, node: &mut NodeRefMut<'_>) -> Result<Visit, Error> {
         self.record(Event::ExitNode {
             class: node.class_hash().0,
             trail: node.trail().to_string(),
         })
     }
 
-    fn enter_property(&mut self, property: &mut PropertyMut<'_>) -> Result<Visit, Error> {
+    fn enter_property(&mut self, property: &mut PropertyRefMut<'_>) -> Result<Visit, Error> {
         self.record(Event::EnterProperty {
             field: property.field().0,
             trail: property.trail().to_string(),
@@ -385,7 +386,7 @@ impl VisitorMut for Recorder {
         })
     }
 
-    fn exit_property(&mut self, property: &mut PropertyMut<'_>) -> Result<Visit, Error> {
+    fn exit_property(&mut self, property: &mut PropertyRefMut<'_>) -> Result<Visit, Error> {
         self.record(Event::ExitProperty {
             field: property.field().0,
             trail: property.trail().to_string(),

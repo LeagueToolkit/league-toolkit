@@ -27,7 +27,7 @@ use ltk_hash::BinHash;
 use ltk_meta::{
     path::{PatchError, ResolveErrorKind, ValueShape},
     traits::PropertyExt as _,
-    walk::{Node, NodeMut, TreeValue, Visit, Visitor, VisitorMut},
+    walk::{Node, NodeRefMut, TreeValue, Visit, Visitor, VisitorMut},
     Bin, BinDelta, BinKind, BinObject, BinOverride, BinStream, Error, PropertyValueEnum,
 };
 use ltk_wad::Wad;
@@ -545,7 +545,7 @@ impl<'a, V: TreeValue<'a>> Visitor<'a, V> for Visits {
 impl VisitorMut for Visits {
     type Error = Error;
 
-    fn enter_node(&mut self, node: &mut NodeMut<'_>) -> Result<Visit, Error> {
+    fn enter_node(&mut self, node: &mut NodeRefMut<'_>) -> Result<Visit, Error> {
         self.0.push((
             *node.object_hash(),
             *node.class_hash(),
