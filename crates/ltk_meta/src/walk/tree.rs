@@ -1,4 +1,4 @@
-//! The tree the walk sees: two sealed traits, a child step, and a decoded leaf.
+//! The tree the walk sees: two sealed traits, a child segment, and a decoded leaf.
 
 use std::fmt;
 
@@ -46,20 +46,20 @@ impl TreeKind for Kind {
 
 /// A value the walk can cross.
 ///
-/// Sealed: implemented for `&'a PropertyValueEnum<M>` and for [`ViewValue<'a, M>`], and by
+/// Sealed: implemented for `&'a PropertyValueEnum<M>` and for [`RawValue<'a, M>`], and by
 /// nothing else. A visitor written against this trait runs over either tree.
 ///
-/// [`ViewValue<'a, M>`]: super::ViewValue
+/// [`RawValue<'a, M>`]: super::RawValue
 pub trait TreeValue<'a>: Copy + sealed::Sealed {
     /// The node type this tree's `Struct` and `Embedded` values are.
     type Node: TreeNode<'a, Value = Self>;
-    /// The values inside a container, optional or map, each with the child step reaching it.
-    type Children: Iterator<Item = Result<(Child<Self>, Self), Error>>;
+    /// The values inside a container, optional or map, each with the child segment reaching it.
+    type Children: Iterator<Item = Result<(ChildSegment<Self>, Self), Error>>;
 
     /// The kind this value is.
     fn kind(&self) -> Kind;
 
-    /// Whether entering this value can reach a node.
+    /// Whether this value is a node or can contain one.
     ///
     /// True for a `Struct` or `Embedded` whose class hash is not 0, and for a container,
     /// optional or map whose item kind [`TreeKind::is_node`]. An empty optional or container
@@ -68,7 +68,7 @@ pub trait TreeValue<'a>: Copy + sealed::Sealed {
     /// # Errors
     ///
     /// Over a view, a header that does not decode. The owned tree never fails.
-    fn holds_node(&self) -> Result<bool, Error>;
+    fn can_contain_node(&self) -> Result<bool, Error>;
 
     /// This value as a node, if it is a `Struct` or `Embedded` with a class hash that is not 0.
     ///
@@ -77,7 +77,7 @@ pub trait TreeValue<'a>: Copy + sealed::Sealed {
     /// Over a view, a header that does not decode. The owned tree never fails.
     fn as_node(&self) -> Result<Option<Self::Node>, Error>;
 
-    /// The values inside this one, with the step reaching each. Empty for a leaf and for a
+    /// The values inside this one, with the segment reaching each. Empty for a leaf and for a
     /// node. A node's contents are its properties.
     ///
     /// # Errors
@@ -90,7 +90,7 @@ pub trait TreeValue<'a>: Copy + sealed::Sealed {
     /// # Errors
     ///
     /// Over a view, a leaf that does not decode. The owned tree never fails.
-    fn leaf(&self) -> Result<Option<Leaf<'a>>, Error>;
+    fn as_leaf(&self) -> Result<Option<Leaf<'a>>, Error>;
 
     /// The whole value, owned. Allocates. A visitor reaches for it for a subtree, not for a
     /// leaf.
@@ -141,9 +141,9 @@ pub trait TreeNode<'a>: Copy + sealed::Sealed {
     fn to_struct(&self) -> Result<values::Struct, Error>;
 }
 
-/// The step from a container, optional or map to one value inside it.
+/// The segment from a container, optional or map to one value inside it.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Child<V> {
+pub enum ChildSegment<V> {
     /// A container element by position, or the value of a present optional, which is 0.
     Index(usize),
     /// A map entry, by its key value.

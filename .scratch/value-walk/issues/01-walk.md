@@ -30,21 +30,21 @@ pub trait TreeKind: Copy + sealed::Sealed {
 impl TreeKind for Kind {}
 
 /// A value the walk can cross. Sealed: implemented for `&'a PropertyValueEnum<M>` and for
-/// `ViewValue<'a, M>`, and by nothing else.
+/// `RawValue<'a, M>`, and by nothing else.
 pub trait TreeValue<'a>: Copy + sealed::Sealed {
     type Node: TreeNode<'a, Value = Self>;
-    type Children: Iterator<Item = Result<(Child<Self>, Self), Error>>;
+    type Children: Iterator<Item = Result<(ChildSegment<Self>, Self), Error>>;
 
     fn kind(&self) -> Kind;
     /// Whether entering this value can reach a node: a `Struct` or `Embedded` whose class hash
     /// is not 0, or a container, optional or map whose item kind [`TreeKind::is_node`].
-    fn holds_node(&self) -> Result<bool, Error>;
+    fn can_contain_node(&self) -> Result<bool, Error>;
     /// This value as a node, if it is a `Struct` or `Embedded` with a class hash that is not 0.
     fn as_node(&self) -> Result<Option<Self::Node>, Error>;
-    /// The values inside this one, with the step reaching each. Empty for a leaf and a node.
+    /// The values inside this one, with the segment reaching each. Empty for a leaf and a node.
     fn children(&self) -> Result<Self::Children, Error>;
     /// This value decoded, if it is a leaf kind.
-    fn leaf(&self) -> Result<Option<Leaf<'a>>, Error>;
+    fn as_leaf(&self) -> Result<Option<Leaf<'a>>, Error>;
     /// This value as a map key; `InvalidKeyType` for a kind no map can be keyed by.
     fn map_key(&self) -> Result<MapKey, Error>;
     /// The whole value, owned. Allocates.
@@ -65,9 +65,9 @@ pub trait TreeNode<'a>: Copy + sealed::Sealed {
     fn to_struct(&self) -> Result<values::Struct, Error>;
 }
 
-/// The step from a container, optional or map to one value inside it.
+/// The segment from a container, optional or map to one value inside it.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Child<V> {
+pub enum ChildSegment<V> {
     Index(usize),
     Key(V),
 }
@@ -97,9 +97,9 @@ pub struct NodeRef<'a, M = NoMeta> { /* ... */ }
 impl<'a, M> TreeValue<'a> for &'a PropertyValueEnum<M> { type Node = NodeRef<'a, M>; /* ... */ }
 /// A borrowed walk value: a kind and the bytes it is written in, decoded only on request.
 #[derive(Clone, Copy, Debug)]
-pub struct ViewValue<'a, M = NoMeta> { /* private */ }
+pub struct RawValue<'a, M = NoMeta> { /* private */ }
 
-impl<'a, M> ViewValue<'a, M> {
+impl<'a, M> RawValue<'a, M> {
     /// The borrowed streaming view. Leaf payloads decode on request.
     /// Complex values expose headers without decoding their contents.
     ///
@@ -109,9 +109,9 @@ impl<'a, M> ViewValue<'a, M> {
     pub fn value_view(&self) -> Result<ValueView<'a, M>, Error>;
 }
 
-impl<'a, M: Default> TreeValue<'a> for ViewValue<'a, M> { type Node = StructView<'a, M>; /* ... */ }
+impl<'a, M: Default> TreeValue<'a> for RawValue<'a, M> { type Node = StructView<'a, M>; /* ... */ }
 impl<'a, M> TreeNode<'a> for NodeRef<'a, M> { type Value = &'a PropertyValueEnum<M>; /* ... */ }
-impl<'a, M: Default> TreeNode<'a> for StructView<'a, M> { type Value = ViewValue<'a, M>; /* ... */ }
+impl<'a, M: Default> TreeNode<'a> for StructView<'a, M> { type Value = RawValue<'a, M>; /* ... */ }
 
 /// What a callback answers. `ltk_ritobin::cst::visitor::Visit`'s shape (W21).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -142,8 +142,8 @@ pub trait Visitor<'a, V: TreeValue<'a>> {
     /// Once per node entered - after its properties, after a `Skip`, while unwinding for a
     /// `Stop`. Never after an `Abort`.
     fn exit_node(&mut self, node: &Node<'_, 'a, V>) -> Result<Visit, Self::Error> { Ok(Visit::Continue) }
-    /// For every property, in file order, leaves included. Only a value that `holds_node` is
-    /// descended on `Continue`.
+    /// For every property, in file order, leaves included. Only a value `can_contain_node`
+    /// answers true for is descended on `Continue`.
     fn enter_property(&mut self, field: BinHash, value: V, node: &Node<'_, 'a, V>)
         -> Result<Visit, Self::Error> { Ok(Visit::Continue) }
     /// Once per property that holds a node and was entered. Not called for a leaf. Never
@@ -219,18 +219,18 @@ impl<'a, M: Default> ObjectView<'a, M> {
     /// Walks this object over its buffered bytes: nothing is materialised, a header is
     /// decoded where the walk descends, and a leaf is decoded only when the visitor asks.
     pub fn walk<W>(&self, visitor: &mut W) -> Result<WalkOutcome, W::Error>
-    where W: Visitor<'a, ViewValue<'a, M>>;
+    where W: Visitor<'a, RawValue<'a, M>>;
 }
 impl<R: io::Read + io::Seek, M: Default> ObjectStream<'_, R, M> {
     /// `view()?` then `walk`.
     pub fn walk<E, W>(&mut self, visitor: &mut W) -> Result<WalkOutcome, E>
-    where E: From<Error>, W: for<'a> Visitor<'a, ViewValue<'a, M>, Error = E>;
+    where E: From<Error>, W: for<'a> Visitor<'a, RawValue<'a, M>, Error = E>;
 }
 impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
     /// Walks every object in file order, one buffered object at a time. Holds one object's
     /// bytes at any moment and nothing of the tree.
     pub fn walk<E, W>(&mut self, visitor: &mut W) -> Result<WalkOutcome, E>
-    where E: From<Error>, W: for<'a> Visitor<'a, ViewValue<'a, M>, Error = E>;
+    where E: From<Error>, W: for<'a> Visitor<'a, RawValue<'a, M>, Error = E>;
 }
 ```
 
@@ -240,7 +240,7 @@ impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
 it reads; a pass that decoded every object to visit it would pay for everything. One visitor,
 generic over the value type, runs over `BinStream::walk` in the pass and over `BinObject::walk`
 when a repair verifies its own edit in memory. `Leaf` and `MapKey` carry the client's tag names
-(W19) and the visitor never names `PropertyValueEnum`, `M` or `ViewValue`.
+(W19) and the visitor never names `PropertyValueEnum`, `M` or `RawValue`.
 
 **W21: the visitor is `ltk_ritobin`'s CST visitor shape.** Symmetric enter and exit callbacks,
 a `Visit` answer, a `WalkOutcome`; two nested pairs here because a property, unlike a token, has
@@ -254,7 +254,7 @@ value is one consumer's policy. The exit callbacks are on the trait so that fan-
 
 **Traversal** is `value-walk.md` [section 5.1](https://github.com/LeagueToolkit/league-toolkit/blob/main/docs/design/value-walk.md#s5.1): pre-order, file order, each node once. The tree is
 shown every property through `enter_property`, leaves included, and descends only a value
-that `holds_node` (W7); over a view a leaf or a container of leaves is skipped by declared size
+`can_contain_node` answers true for (W7); over a view a leaf or a container of leaves is skipped by declared size
 with nothing decoded. A `Struct` or `Embedded` with class 0 is the client's null pointer and is not a node
 (W2). An optional's value is `Index(0)`, as the path grammar addresses it (D9).
 
@@ -283,7 +283,7 @@ depend on it and can land first behind those methods.
       `Aborted`; a visitor error ends the walk like an `Abort` and is returned
 - [ ] `to_struct` on a root and on a nested node equals the eager parse of the same bytes, over
       both trees
-- [ ] `leaf()` and `map_key()` agree between the two trees for every leaf kind and every key
+- [ ] `as_leaf()` and `map_key()` agree between the two trees for every leaf kind and every key
       kind `Kind::is_valid_map_key` admits
 - [ ] `Trail::classes()` has one entry per field step at every node, equal to the class of the
       node that field was read on, and `to_value_path()?.fields()` yields the same pairs
@@ -299,4 +299,4 @@ depend on it and can land first behind those methods.
 
 - [ ] An invalid UTF-8 property reaches its callback without decoding; skipping it succeeds and requesting its leaf returns `Error::Utf8Error`
 
-- [ ] `ViewValue::value_view()` exposes container declarations without decoding their contents and reports malformed leaf payloads on request
+- [ ] `RawValue::value_view()` exposes container declarations without decoding their contents and reports malformed leaf payloads on request

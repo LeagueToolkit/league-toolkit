@@ -53,8 +53,8 @@ pub trait VisitorMut<M = NoMeta> {
 
     /// Called for every property of a node, in property order, leaves included.
     ///
-    /// The walk asks [`TreeValue::holds_node`](super::TreeValue::holds_node) of the value this
-    /// callback leaves behind, and descends that value on [`Visit::Continue`].
+    /// The walk asks [`TreeValue::can_contain_node`](super::TreeValue::can_contain_node) of the
+    /// value this callback leaves behind, and descends that value on [`Visit::Continue`].
     ///
     /// # Errors
     ///
@@ -339,7 +339,7 @@ impl<'w, M: 'w> WalkerMut<'w, M> {
     ) -> Result<ControlFlow<Interrupt>, W::Error> {
         for (&field, value) in properties.iter_mut() {
             let visit = visitor.enter_property(&mut self.property(class_hash, field, value))?;
-            if !(&*value).holds_node()? {
+            if !(&*value).can_contain_node()? {
                 match visit {
                     Visit::Abort => return Ok(Break(Interrupt::Abort)),
                     Visit::Stop => return Ok(Break(Interrupt::Unwind)),

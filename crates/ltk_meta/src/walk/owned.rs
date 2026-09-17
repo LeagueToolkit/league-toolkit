@@ -6,7 +6,7 @@ use indexmap::IndexMap;
 use ltk_hash::BinHash;
 
 use super::{
-    tree::{sealed::Sealed, Child, Leaf, TreeKind as _, TreeNode, TreeValue},
+    tree::{sealed::Sealed, ChildSegment, Leaf, TreeKind as _, TreeNode, TreeValue},
     Error,
 };
 use crate::{
@@ -136,16 +136,22 @@ enum ChildrenRefInner<'a, M> {
 }
 
 impl<'a, M> Iterator for ChildrenRef<'a, M> {
-    type Item = Result<(Child<&'a PropertyValueEnum<M>>, &'a PropertyValueEnum<M>), Error>;
+    type Item = Result<
+        (
+            ChildSegment<&'a PropertyValueEnum<M>>,
+            &'a PropertyValueEnum<M>,
+        ),
+        Error,
+    >;
 
     fn next(&mut self) -> Option<Self::Item> {
         match &mut self.inner {
             ChildrenRefInner::Items(items) => items
                 .next()
-                .map(|(index, value)| Ok((Child::Index(index), value))),
+                .map(|(index, value)| Ok((ChildSegment::Index(index), value))),
             ChildrenRefInner::Entries(entries) => entries
                 .next()
-                .map(|(key, value)| Ok((Child::Key(key), value))),
+                .map(|(key, value)| Ok((ChildSegment::Key(key), value))),
         }
     }
 
@@ -168,7 +174,7 @@ impl<'a, M> TreeValue<'a> for &'a PropertyValueEnum<M> {
         PropertyValueEnum::kind(self)
     }
 
-    fn holds_node(&self) -> Result<bool, Error> {
+    fn can_contain_node(&self) -> Result<bool, Error> {
         Ok(match self {
             PropertyValueEnum::Struct(s) => *s.class_hash != 0,
             PropertyValueEnum::Embedded(e) => *e.0.class_hash != 0,
@@ -209,7 +215,7 @@ impl<'a, M> TreeValue<'a> for &'a PropertyValueEnum<M> {
         Ok(ChildrenRef { inner })
     }
 
-    fn leaf(&self) -> Result<Option<Leaf<'a>>, Error> {
+    fn as_leaf(&self) -> Result<Option<Leaf<'a>>, Error> {
         use PropertyValueEnum as P;
         Ok(Some(match *self {
             P::None(_) => Leaf::None,

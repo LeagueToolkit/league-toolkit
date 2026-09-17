@@ -241,7 +241,7 @@ fn a_key_in_the_trail_reads_as_the_trees_own_key() {
             if let Some(TrailStep::Key(key)) = node.trail().steps().last() {
                 // The key stays readable while the node's own properties are edited.
                 node.properties_mut().clear();
-                self.0.push(format!("{:?}", key.leaf()?));
+                self.0.push(format!("{:?}", key.as_leaf()?));
             }
             Ok(Visit::Continue)
         }

@@ -8,14 +8,14 @@ use ltk_hash::BinHash;
 use ltk_primitives::Color;
 
 use super::{
-    Child, Leaf, Node, NodeRefMut, PropertyRefMut, TreeNode, TreeValue, Visit, Visitor, VisitorMut,
-    WalkOutcome,
+    ChildSegment, Leaf, Node, NodeRefMut, PropertyRefMut, TreeNode, TreeValue, Visit, Visitor,
+    VisitorMut, WalkOutcome,
 };
 use crate::{
     concrete::{self, values, Bin, BinObject},
     property::values::{Embedded, UnorderedContainer},
     property::Kind,
-    walk::ViewValue,
+    walk::RawValue,
     BinOverride, Error, PropertyValueEnum,
 };
 
@@ -266,7 +266,7 @@ enum Event {
     EnterProperty {
         field: u32,
         trail: String,
-        holds_node: bool,
+        can_contain_node: bool,
     },
     ExitProperty {
         field: u32,
@@ -343,7 +343,7 @@ impl<'a, V: TreeValue<'a>> Visitor<'a, V> for Recorder {
         self.record(Event::EnterProperty {
             field: field.0,
             trail: node.trail().to_string(),
-            holds_node: value.holds_node()?,
+            can_contain_node: value.can_contain_node()?,
         })
     }
 
@@ -383,7 +383,7 @@ impl VisitorMut for Recorder {
         self.record(Event::EnterProperty {
             field: property.field().0,
             trail: property.trail().to_string(),
-            holds_node: property.value().holds_node()?,
+            can_contain_node: property.value().can_contain_node()?,
         })
     }
 
@@ -434,7 +434,7 @@ fn walk_recorders(
 fn walk_both<W>(bin: &Bin, make: impl Fn() -> W) -> [(W, Result<WalkOutcome, Error>); 2]
 where
     W: for<'a> Visitor<'a, &'a PropertyValueEnum, Error = Error>
-        + for<'a> Visitor<'a, ViewValue<'a>, Error = Error>,
+        + for<'a> Visitor<'a, RawValue<'a>, Error = Error>,
 {
     let mut owned = make();
     let owned_outcome = bin.walk(&mut owned);
@@ -542,7 +542,7 @@ fn exits_pair_with_entries_and_a_leaf_has_none() {
             Event::EnterProperty {
                 field,
                 trail,
-                holds_node: true,
+                can_contain_node: true,
             } => Some((*field, trail.clone())),
             _ => None,
         })
@@ -569,7 +569,8 @@ fn exits_pair_with_entries_and_a_leaf_has_none() {
         match event {
             Event::EnterNode { .. } => open.push(event),
             Event::EnterProperty {
-                holds_node: true, ..
+                can_contain_node: true,
+                ..
             } => open.push(event),
             Event::EnterProperty { .. } => {}
             Event::ExitNode { class, trail } => {
@@ -831,7 +832,8 @@ impl<'a, V: TreeValue<'a>> Visitor<'a, V> for Materialiser {
         node: &Node<'_, 'a, V>,
     ) -> Result<Visit, Error> {
         if node.is_root() {
-            self.leaves.push((field.0, value.leaf()?.map(owned_leaf)));
+            self.leaves
+                .push((field.0, value.as_leaf()?.map(owned_leaf)));
             self.values.push((field.0, value.to_value()?));
         }
         Ok(Visit::Continue)
@@ -1245,13 +1247,13 @@ fn property_strings_are_decoded_only_when_requested() {
         ) -> Result<Visit, Error> {
             self.fields.push(field);
             if value.kind() == Kind::String {
-                assert!(!value.holds_node()?);
+                assert!(!value.can_contain_node()?);
                 assert!(value.as_node()?.is_none());
                 assert!(value.children()?.next().is_none());
                 let sibling = node.inner().property(field)?.unwrap();
                 assert_eq!(sibling.kind(), Kind::String);
                 if self.decode {
-                    value.leaf()?;
+                    value.as_leaf()?;
                 }
                 return Ok(self.action);
             }
@@ -1323,14 +1325,14 @@ fn a_walk_value_exposes_headers_without_decoding_container_leaves() {
     bytes[at] = 0xff;
 
     struct Headers(usize);
-    impl<'a> Visitor<'a, ViewValue<'a>> for Headers {
+    impl<'a> Visitor<'a, RawValue<'a>> for Headers {
         type Error = Error;
 
         fn enter_property(
             &mut self,
             field: BinHash,
-            value: ViewValue<'a>,
-            _node: &Node<'_, 'a, ViewValue<'a>>,
+            value: RawValue<'a>,
+            _node: &Node<'_, 'a, RawValue<'a>>,
         ) -> Result<Visit, Error> {
             match (field.0, value.value_view()?) {
                 (F_STRINGS, ValueView::Container(items)) => {
@@ -1392,27 +1394,27 @@ fn a_child_carries_its_bytes_and_decodes_only_when_asked() {
     bytes[at] = 0xff;
 
     struct Items(usize);
-    impl<'a> Visitor<'a, ViewValue<'a>> for Items {
+    impl<'a> Visitor<'a, RawValue<'a>> for Items {
         type Error = Error;
 
         fn enter_property(
             &mut self,
             _field: BinHash,
-            value: ViewValue<'a>,
-            _node: &Node<'_, 'a, ViewValue<'a>>,
+            value: RawValue<'a>,
+            _node: &Node<'_, 'a, RawValue<'a>>,
         ) -> Result<Visit, Error> {
             // Iterating reaches the item past the malformed one: no item is decoded on the way.
             let items: Vec<_> = value.children()?.collect::<Result<_, Error>>()?;
             assert_eq!(items.len(), 2);
 
             let (segment, broken) = items[0];
-            assert!(matches!(segment, Child::Index(0)));
+            assert!(matches!(segment, ChildSegment::Index(0)));
             assert_eq!(broken.kind(), Kind::String);
-            assert!(matches!(broken.leaf(), Err(Error::Utf8Error(_))));
+            assert!(matches!(broken.as_leaf(), Err(Error::Utf8Error(_))));
 
             let (segment, sound) = items[1];
-            assert!(matches!(segment, Child::Index(1)));
-            assert_eq!(sound.leaf()?, Some(Leaf::String("sound")));
+            assert!(matches!(segment, ChildSegment::Index(1)));
+            assert_eq!(sound.as_leaf()?, Some(Leaf::String("sound")));
 
             self.0 += 1;
             Ok(Visit::Skip)
@@ -1446,14 +1448,14 @@ fn a_walk_value_exposes_decoded_children_and_leaf_errors() {
     bytes[at] = 0xff;
 
     struct Inspect(usize);
-    impl<'a> Visitor<'a, ViewValue<'a>> for Inspect {
+    impl<'a> Visitor<'a, RawValue<'a>> for Inspect {
         type Error = Error;
 
         fn enter_property(
             &mut self,
             field: BinHash,
-            value: ViewValue<'a>,
-            _node: &Node<'_, 'a, ViewValue<'a>>,
+            value: RawValue<'a>,
+            _node: &Node<'_, 'a, RawValue<'a>>,
         ) -> Result<Visit, Error> {
             if field.0 == F_LEAF {
                 assert_eq!(value.kind(), Kind::String);
