@@ -348,6 +348,12 @@ impl<'a, M: Default> PropertyView<'a, M> {
     /// same [`ValueShape`] the resolver's type rule uses
     /// (`ptch-property-patches.md` section 9.3), filled by the rules
     /// of `ValueShape::of` (a pointer's class is not recorded).
+    ///
+    /// # Errors
+    ///
+    /// `InvalidNesting` or `InvalidKeyType` for a header the value model has no
+    /// value for, `InvalidPropertyTypePrimitive` for a kind byte that does not
+    /// decode, `IOError` for bytes that end inside the header.
     pub fn shape(&self) -> Result<ValueShape, Error>;
 
     /// For containers and maps, the element count from the same header bytes. `None`
@@ -639,9 +645,10 @@ The two paths and their trust model:
 
 That unification is what keeps `Bin::from_reader`'s behavior unchanged when it is rebuilt
 over the stream ([section 9](#s9)): the inline checks in the `ReadProperty` impls and the walk's
-check are the same check raising the same error. The homogeneity failures stay where they
-are, hard errors from the value model's checked constructors (`InvalidNesting`,
-`InvalidKeyType`, `MismatchedContainerTypes`).
+check are the same check raising the same error. The homogeneity failures divide by where the
+fact sits: a header the value model has no value for is the layout core's, raised where the
+header is read (`InvalidNesting`, `InvalidKeyType`); an item whose kind disagrees with the pin it
+is held under is the value model's (`MismatchedContainerTypes`).
 
 A consumer surveying broken or hand-crafted files catches the error per chunk - tooling
 built on the error, not state built into the core. After a mismatch the handle's
@@ -723,10 +730,15 @@ than about a position, which is the same sort of fact as `is_primitive`, `subtyp
 
 **Size checking happens in the walk, once.** The `ReadProperty` impls used to verify sizes inline -
 `Container::from_reader` measuring its own body and raising `Error::InvalidSize`. That check is the
-layout core's walk now, raising the same error from one place ([section 7](#s7)). The homogeneity
-checks - `InvalidNesting`, `InvalidKeyType`, `MismatchedContainerTypes` - stay in the value model,
-because they are model invariants rather than stream policy, and the views surface them from the
-same core.
+layout core's walk now, raising the same error from one place ([section 7](#s7)).
+
+**The header rule happens in the core, once.** A container, an optional and a map each declare
+the kind of what they hold, and a map declares its key kind as well. `cur.item_kind()` and
+`cur.key_kind()` read those bytes and refuse a header the value model has no value for:
+`InvalidNesting` for a container, optional or map declared as an item kind, `InvalidKeyType` for
+a key kind no map is keyed by. The walk, the shape peek and both renderers read a header through
+them. One header, one error, wherever it is met. `MismatchedContainerTypes` stays in the value
+model's constructors, which guard a value built by hand.
 
 **One decode path needs a reader bridge.** `ReadProperty`'s signature is public and its breaking
 window is closed, so it still takes an `io::Read + io::Seek`. Only the layout core knows how far a
@@ -918,6 +930,11 @@ fixed-width primitives' direct reader codecs - are pinned to each other by a uni
 cannot drift unnoticed ([section 9](#s9)), and a file written in legacy numbering reads identically
 through the stream and the eager path.
 
+A header the value model has no value for is pinned at both levels ([section 9](#s9)): over a
+hand-patched container item kind and map key kind, the walk and the shape peek each raise
+`InvalidNesting` and `InvalidKeyType`; over a file carrying such an object, `ObjectStream::view`
+and `Bin::from_reader` raise the same variant.
+
 Unit tests in `crates/ltk_meta/src/stream/delta/` pin [section 10.3](#s10.3) over synthetic bins:
 
 - An empty delta writes the same current-format bytes as the eager writer from versions 1, 2 and 3.
@@ -968,6 +985,7 @@ rules append.
 | S23 | `BinToc::largest` answers the largest declared object size before any body is decoded. | Leaving the consumer to fold over `entries()`. | It is the number a consumer bounds a streamed read by, and naming it says that the TOC is where it comes from. | [section 4](#s4) |
 | S24 | A `PTCH` stream's object cursors yield embedded objects only; `patches()` alone reads records. | One cursor interleaving objects and records. | The two are different content: objects are what the game loads, records are edits to a base it does not hold. A consumer walking content wants the first and never the second. | [section 5](#s5) |
 | S25 | `StructView` and `ViewValue` implement the walk's `TreeNode` and `TreeValue`; `BinStream::walk` sweeps a file through a visitor with nothing materialised. | A walk over the owned tree with `read()` per object. | The views exist so a consumer pays for what it reads; a pass that decoded every object to visit it would pay for everything. | `value-walk.md` [section 3](value-walk.md#s3), [section 5](value-walk.md#s5); ADR-0014 |
+| S26 | A container, optional or map header is read by `cur.item_kind()` and `cur.key_kind()` in the layout core, which refuse a kind the value model has no value for: `InvalidNesting` and `InvalidKeyType`. The walk, the shape peek and both renderers read a header through them. | The same two checks written in each renderer, with the walk and the shape peek reading a header without them. | A header a renderer refuses and a walk accepts leaves `shape()` describing a value nothing can build. One reader of a header is one answer for it. | [section 9](#s9) |
 
 ## <a id="appendix-a"></a>Appendix A. Corpus measurements
 
