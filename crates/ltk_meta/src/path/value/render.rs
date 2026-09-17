@@ -223,8 +223,8 @@ impl ValuePath {
                     }
                     Some(name.is_some())
                 }
-                ValueSegment::Index(index) => {
-                    push_fmt(&mut named.text, format_args!("[{index}]"));
+                ValueSegment::Index(_) => {
+                    push_fmt(&mut named.text, format_args!("{segment}"));
                     None
                 }
                 ValueSegment::Key(MapKey::Hash(hash)) => {
@@ -236,11 +236,8 @@ impl ValuePath {
                     push_fmt(&mut named.text, format_args!("{{{}}}", KeyText(key)));
                     Some(text.is_some())
                 }
-                ValueSegment::Key(key) => {
-                    push_fmt(
-                        &mut named.text,
-                        format_args!("{{{}}}", KeyText(key.as_leaf())),
-                    );
+                ValueSegment::Key(_) => {
+                    push_fmt(&mut named.text, format_args!("{segment}"));
                     None
                 }
             };

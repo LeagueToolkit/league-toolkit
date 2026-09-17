@@ -142,20 +142,10 @@ impl Hash for ValuePath {
 impl fmt::Display for ValuePath {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for (i, segment) in self.segments.iter().enumerate() {
-            match segment {
-                ValueSegment::Field(field) => {
-                    if i > 0 {
-                        f.write_str(".")?;
-                    }
-                    write!(f, "{field:08x}")?;
-                }
-                ValueSegment::Index(index) => write!(f, "[{index}]")?,
-                ValueSegment::Key(key) => {
-                    f.write_str("{")?;
-                    key.as_leaf().write_key(f)?;
-                    f.write_str("}")?;
-                }
+            if i > 0 && matches!(segment, ValueSegment::Field(_)) {
+                f.write_str(".")?;
             }
+            write!(f, "{segment}")?;
         }
         Ok(())
     }
@@ -238,6 +228,29 @@ pub enum ValueSegment {
     Key(MapKey),
 }
 
+/// The segment in the hash form: a field as eight lowercase hex digits, `[i]` for an index,
+/// `{key}` for a map entry. A path writes `.` before a field that follows another segment.
+///
+/// # Examples
+///
+/// ```
+/// use ltk_hash::BinHash;
+/// use ltk_meta::path::{MapKey, ValueSegment};
+///
+/// assert_eq!(ValueSegment::Field(BinHash(0x1e6b_a0c4)).to_string(), "1e6ba0c4");
+/// assert_eq!(ValueSegment::Index(3).to_string(), "[3]");
+/// assert_eq!(ValueSegment::Key(MapKey::U32(12)).to_string(), "{12}");
+/// ```
+impl fmt::Display for ValueSegment {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Field(field) => write!(f, "{field:08x}"),
+            Self::Index(index) => write!(f, "[{index}]"),
+            Self::Key(key) => write!(f, "{{{key}}}"),
+        }
+    }
+}
+
 /// A map key, owned and free of metadata: every kind [`Kind::is_valid_map_key`] admits.
 ///
 /// Floats are held as their bit patterns. The key is `Eq` and `Hash`, and two keys are equal
@@ -283,6 +296,25 @@ pub enum MapKey {
     Hash(BinHash),
     /// [`Kind::WadChunkLink`](crate::PropertyKind::WadChunkLink).
     File(WadHash),
+}
+
+/// The key as the text inside a `{key}` segment of the hash form: an integer in decimal, a float in
+/// its shortest round-trip form, a string as a JSON string, a hash as lowercase zero-padded hex, a
+/// vector, colour or matrix as its components in parentheses, and `None` as nothing.
+///
+/// # Examples
+///
+/// ```
+/// use ltk_hash::BinHash;
+/// use ltk_meta::path::MapKey;
+///
+/// assert_eq!(MapKey::String("weapon".into()).to_string(), r#""weapon""#);
+/// assert_eq!(MapKey::Hash(BinHash(0x1e6b_a0c4)).to_string(), "1e6ba0c4");
+/// ```
+impl fmt::Display for MapKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.as_leaf().write_key(f)
+    }
 }
 
 impl MapKey {

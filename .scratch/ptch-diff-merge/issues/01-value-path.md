@@ -46,6 +46,9 @@ pub enum ValueSegment {
     /// A map entry, by its key.
     Key(MapKey),
 }
+/// The segment in the hash form: `1e6ba0c4`, `[3]`, `{"weapon"}`. A path writes `.` before a
+/// field that follows another segment.
+impl fmt::Display for ValueSegment {}
 
 /// A map key, owned and metadata-free: every kind `Kind::is_valid_map_key` admits.
 ///
@@ -80,6 +83,8 @@ impl MapKey {
     pub fn to_value(&self) -> PropertyValueEnum;
 }
 impl<M> TryFrom<&PropertyValueEnum<M>> for MapKey { type Error = Error; /* InvalidKeyType */ }
+/// The text inside a `{key}` segment of the hash form: `"weapon"`, `1e6ba0c4`, `(1, 2)`.
+impl fmt::Display for MapKey {}
 
 impl ValuePath {
     pub fn new() -> Self;
@@ -204,7 +209,7 @@ impl<'a, V: TreeValue<'a>> Trail<V> {
 }
 impl<'t, 'a, V: TreeValue<'a>> Node<'t, 'a, V> {
     /// The node's address, copied out of the trail.
-    pub fn value_path(&self) -> Result<ValuePath, Error>;
+    pub fn to_value_path(&self) -> Result<ValuePath, Error>;
 }
 ```
 
@@ -269,5 +274,7 @@ Blocked by #225 (the trail and the tree traits the address is copied from)
       `ltk_ritobin::hashes::HashMapProvider`
 - [ ] A name that does not hash back to its field is not used; a `NaN` or infinite `F32` key has no
       client path; segments that spell no property path are `UnnameableKind::Path`
-- [ ] `Trail::to_value_path` and `Node::value_path` render as the trail does at every node, over the
+- [ ] `MapKey` and `ValueSegment` display as the hash form writes them, and `ValuePath`'s hash form
+      is its segments' displays with `.` before every field but the first segment
+- [ ] `Trail::to_value_path` and `Node::to_value_path` render as the trail does at every node, over the
       owned tree and the view alike, and `map_key` agrees between the two trees
