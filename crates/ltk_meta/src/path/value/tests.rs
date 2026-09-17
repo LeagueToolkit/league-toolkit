@@ -37,7 +37,7 @@ fn the_hash_form_writes_fields_as_hex_and_subscripts_in_brackets() {
 }
 
 #[test]
-fn two_paths_with_the_same_steps_are_equal_whatever_their_classes() {
+fn two_paths_with_the_same_segments_are_equal_whatever_their_classes() {
     let mut known = ValuePath::new();
     known.push_field(BinHash(1), BinHash(0xC1A5_0001));
     let unknown: ValuePath = [ValueSegment::Field(BinHash(1))].into_iter().collect();
@@ -218,7 +218,7 @@ impl FieldNames for Table {
 /// Every row of `value-walk.md` section 4.2: the hash form, the named form, and the client path
 /// or the kind that has none.
 #[test]
-fn every_step_renders_in_all_three_forms() {
+fn every_segment_renders_in_all_three_forms() {
     let position = format!("{:08x}", BinHash::hash_str(POSITION));
     let bits = |v: &[f32]| v.iter().copied().map(FloatBits::new).collect::<Vec<_>>();
     // (segment after `Position`, hash form, named form, client path or the key kind with none)
@@ -306,6 +306,33 @@ fn every_step_renders_in_all_three_forms() {
             Err(Kind::Color),
         ),
         (
+            Some(ValueSegment::Key(MapKey::Matrix44(
+                bits(&[
+                    1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0,
+                    15.0, 16.0,
+                ])
+                .try_into()
+                .unwrap(),
+            ))),
+            format!("{position}{{(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16)}}"),
+            "Position{(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16)}".into(),
+            Err(Kind::Matrix44),
+        ),
+        (
+            Some(ValueSegment::Key(MapKey::F32(FloatBits::new(f32::NAN)))),
+            format!("{position}{{NaN}}"),
+            "Position{NaN}".into(),
+            Err(Kind::F32),
+        ),
+        (
+            Some(ValueSegment::Key(MapKey::F32(FloatBits::new(
+                f32::INFINITY,
+            )))),
+            format!("{position}{{inf}}"),
+            "Position{inf}".into(),
+            Err(Kind::F32),
+        ),
+        (
             Some(ValueSegment::Key(MapKey::None)),
             format!("{position}{{}}"),
             "Position{}".into(),
@@ -343,7 +370,7 @@ fn a_float_key_with_no_json_literal_has_no_client_path() {
 }
 
 #[test]
-fn the_first_unnameable_step_is_reported_not_the_last() {
+fn the_first_unnameable_segment_is_reported_not_the_last() {
     let unknown = BinHash(0x0bad_0001);
     let path: ValuePath = [
         ValueSegment::Field(BinHash::hash_str(POSITION)),
@@ -457,4 +484,52 @@ fn every_name_table_shape_answers_by_its_key() {
 
     let dynamic: &dyn FieldNames = &by_class;
     assert_eq!(on_class.to_property_path(dynamic).unwrap().as_str(), "Size");
+}
+
+#[test]
+fn popping_a_field_drops_its_class_and_popping_a_subscript_keeps_the_rest() {
+    let mut path = ValuePath::new();
+    path.push_field(BinHash(1), BinHash(0xC1A5_0001));
+    path.push_index(0);
+    path.push_field(BinHash(2), BinHash(0xC1A5_0002));
+
+    assert_eq!(path.pop(), Some(ValueSegment::Field(BinHash(2))));
+    assert_eq!(
+        path.fields().collect::<Vec<_>>(),
+        [(BinHash(1), Some(BinHash(0xC1A5_0001)))]
+    );
+    path.push_field(BinHash(3), BinHash(0));
+    assert_eq!(
+        path.fields().collect::<Vec<_>>(),
+        [(BinHash(1), Some(BinHash(0xC1A5_0001))), (BinHash(3), None)]
+    );
+
+    assert_eq!(path.pop(), Some(ValueSegment::Field(BinHash(3))));
+    assert_eq!(path.pop(), Some(ValueSegment::Index(0)));
+    assert_eq!(path.pop(), Some(ValueSegment::Field(BinHash(1))));
+    assert_eq!(path.pop(), None);
+    assert_eq!(path.fields().count(), 0);
+}
+
+#[test]
+fn an_index_past_u32_or_a_path_past_the_length_limit_is_no_property_path() {
+    let size = BinHash::hash_str("Size");
+    let far: ValuePath = [
+        ValueSegment::Field(size),
+        ValueSegment::Index(usize::try_from(u64::from(u32::MAX) + 1).unwrap()),
+    ]
+    .into_iter()
+    .collect();
+    let error = far.to_property_path(&names()).unwrap_err();
+    assert_eq!(error.segment, 1);
+    assert!(matches!(error.kind, UnnameableKind::Path(_)));
+
+    let name = "a".repeat(crate::path::PropertyPath::MAX_LEN + 1);
+    let field = BinHash::hash_str(&name);
+    let long: ValuePath = [ValueSegment::Field(field)].into_iter().collect();
+    let error = long
+        .to_property_path(&HashMap::from([(field, name)]))
+        .unwrap_err();
+    assert_eq!(error.segment, 0);
+    assert!(matches!(error.kind, UnnameableKind::Path(_)));
 }
