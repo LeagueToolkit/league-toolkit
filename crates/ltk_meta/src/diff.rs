@@ -1,13 +1,16 @@
 //! The difference between two bins as a patch: [`Bin::diff`].
 
-use std::fmt;
+use std::{
+    collections::{HashMap, HashSet},
+    fmt,
+};
 
 use indexmap::IndexMap;
 use ltk_hash::BinHash;
 
 use crate::{
-    merge::key_index,
-    path::{FieldNames, MapKey, PropertyPath, Unnameable, ValuePath, ValueShape},
+    merge::{combines, key_index, map_keys},
+    path::{FieldNames, MapKey, PropertyPath, Unnameable, UnnameableKind, ValuePath, ValueShape},
     property::values,
     walk::{Trail, TrailSegment},
     Bin, BinObject, BinOverride, PropertyPatch, PropertyValueEnum,
@@ -36,7 +39,7 @@ pub struct DiffOptions {
 /// A place the record language could not carry what the diff found there.
 ///
 /// The record that covers the position is at an ancestor of it, or the whole object went into
-/// [`BinOverride::objects`]. That record carries the base merged with the edit, so the patch
+/// [`BinOverride::objects`]. That record carries the base merged with the edit. The patch
 /// applied to the base it was made from equals [`Bin::merge`]. Applied to another base, it
 /// overwrites whatever that base holds anywhere inside the record's value.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -172,6 +175,8 @@ impl<M: Clone + PartialEq> Bin<M> {
         self.diff_with(edited, names, &DiffOptions::default())
     }
 
+    /// The patch that turns this bin into `edited`, under `options`.
+    ///
     /// See [`Bin::diff`] and [`DiffOptions`].
     pub fn diff_with(
         &self,
@@ -293,7 +298,7 @@ impl<'e, M: Clone + PartialEq> Differ<'_, 'e, M> {
                 None => self.record(records, || value.clone()),
             };
             self.trail.pop();
-            escalate = lowest(escalate, found.err());
+            escalate = shallowest(escalate, found.err());
         }
         escalate.map_or(Ok(()), Err)
     }
@@ -314,7 +319,7 @@ impl<'e, M: Clone + PartialEq> Differ<'_, 'e, M> {
         let escalate = match (base, edited) {
             (V::Struct(b), V::Struct(e))
             | (V::Embedded(values::Embedded(b)), V::Embedded(values::Embedded(e)))
-                if b.class_hash == e.class_hash && *b.class_hash != 0 =>
+                if combines(b, e) =>
             {
                 self.properties(&b.properties, &e.properties, e.class_hash, records)
                     .err()
@@ -351,8 +356,11 @@ impl<'e, M: Clone + PartialEq> Differ<'_, 'e, M> {
         self.record(records, || merged(base, edited))
     }
 
-    /// Diffs two maps of the same kinds entry by entry. `None` when a key does not convert to a
-    /// [`MapKey`].
+    /// Diffs two maps of the same kinds entry by entry. `None` when an entry breaks its map's
+    /// kinds or has a key that does not convert to a [`MapKey`].
+    ///
+    /// A key the edit repeats is diffed against the base's entry with its earlier occurrences
+    /// merged over it, as [`Bin::merge`] applies them in order.
     fn map(
         &mut self,
         base: &values::Map<M>,
@@ -360,33 +368,61 @@ impl<'e, M: Clone + PartialEq> Differ<'_, 'e, M> {
         records: &mut Vec<Pending<M>>,
     ) -> Option<Result<(), Escalate>> {
         let index = key_index(base)?;
-        let keys = edited
-            .entries()
-            .iter()
-            .map(|(key, _)| MapKey::try_from(key).ok())
-            .collect::<Option<Vec<_>>>()?;
+        let keys = map_keys(edited)?;
+        let mut occurrences: HashMap<&MapKey, usize> = HashMap::new();
+        for key in &keys {
+            *occurrences.entry(key).or_default() += 1;
+        }
 
         let mut escalate = None;
-        let mut inserted = 0;
-        for ((key, value), map_key) in edited.entries().iter().zip(keys) {
-            let Some(at) = index.get(&map_key) else {
-                inserted += 1;
+        let mut inserted = HashSet::new();
+        // The base's entries a repeated key has written, as the merge leaves them.
+        let mut written: HashMap<usize, PropertyValueEnum<M>> = HashMap::new();
+        for ((key, value), map_key) in edited.entries().iter().zip(&keys) {
+            let Some(at) = index.get(map_key).copied() else {
+                inserted.insert(map_key);
                 continue;
             };
+            let existing = written.get(&at).unwrap_or(&base.entries()[at].1);
             self.trail.push(TrailSegment::Key(key));
-            let found = self.value(&base.entries()[*at].1, value, records);
+            let found = if existing == value {
+                Ok(())
+            } else if shadowed(base, at) {
+                self.shadowed_key(map_key)
+            } else {
+                self.value(existing, value, records)
+            };
             self.trail.pop();
-            escalate = lowest(escalate, found.err());
+            escalate = shallowest(escalate, found.err());
+            if occurrences[map_key] > 1 {
+                let next = merged(existing, value);
+                written.insert(at, next);
+            }
         }
-        if inserted > 0 {
+        if !inserted.is_empty() {
             self.lift(|object_hash, at| Lift::MapInsert {
                 object_hash,
                 at,
-                keys: inserted,
+                keys: inserted.len(),
             });
-            escalate = lowest(escalate, Some(self.trail.len()));
+            escalate = shallowest(escalate, Some(self.trail.len()));
         }
         Some(escalate.map_or(Ok(()), Err))
+    }
+
+    /// A [`Lift::Unnameable`] at an entry whose key literal resolves to an earlier entry,
+    /// escalating to the map.
+    fn shadowed_key(&mut self, key: &MapKey) -> Result<(), Escalate> {
+        let segment = self.trail.len() - 1;
+        self.lift(|object_hash, at| Lift::Unnameable {
+            object_hash,
+            at,
+            cause: Unnameable {
+                segment,
+                kind: UnnameableKind::Key(key.kind()),
+            },
+        });
+        Err(segment)
     }
 
     /// A value that differs and does not combine: a record of the edit's value where the type rule
@@ -430,6 +466,21 @@ impl<'e, M: Clone + PartialEq> Differ<'_, 'e, M> {
     }
 }
 
+/// Whether the `{key}` literal of entry `at` resolves to an earlier entry of `map`.
+///
+/// The resolver matches a float key with `==`, and a key matches by its bits here. `0.0` and
+/// `-0.0` are the two keys that are equal under `==` with different bits: the later of the two
+/// is shadowed. A `NaN` key has no literal at all.
+fn shadowed<M>(map: &values::Map<M>, at: usize) -> bool {
+    let PropertyValueEnum::F32(key) = &map.entries()[at].0 else {
+        return false;
+    };
+    key.value == 0.0
+        && map.entries()[..at].iter().any(|(earlier, _)| {
+            matches!(earlier, PropertyValueEnum::F32(e) if e.value == 0.0 && e.value.to_bits() != key.value.to_bits())
+        })
+}
+
 /// `base` with `edited` merged over it.
 fn merged<M: Clone + PartialEq>(
     base: &PropertyValueEnum<M>,
@@ -441,7 +492,7 @@ fn merged<M: Clone + PartialEq>(
 }
 
 /// The shallower of two escalations.
-fn lowest(a: Option<Escalate>, b: Option<Escalate>) -> Option<Escalate> {
+fn shallowest(a: Option<Escalate>, b: Option<Escalate>) -> Option<Escalate> {
     match (a, b) {
         (Some(a), Some(b)) => Some(a.min(b)),
         (a, b) => a.or(b),

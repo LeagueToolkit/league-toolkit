@@ -496,3 +496,108 @@ proptest! {
         }
     }
 }
+
+fn float_keyed(entries: &[(f32, i32)]) -> PropertyValueEnum {
+    values::Map::new(
+        ltk_meta::property::Kind::F32,
+        ltk_meta::property::Kind::I32,
+        entries
+            .iter()
+            .map(|(key, value)| (values::F32::new(*key).into(), int(*value)))
+            .collect(),
+    )
+    .unwrap()
+    .into()
+}
+
+#[test]
+fn a_repeated_key_in_the_edit_diffs_as_the_merge_applies_it() {
+    let base = one(vec![
+        ("Lookup", lookup(&[(1, 1)])),
+        ("Grown", lookup(&[(1, 1)])),
+    ]);
+    let edited = one(vec![
+        ("Lookup", lookup(&[(1, 2), (1, 1)])),
+        ("Grown", lookup(&[(2, 2), (2, 3)])),
+    ]);
+
+    let (patch, report) = base.diff(&edited, &names(&["Lookup", "Grown"]));
+
+    let mut merged = base.clone();
+    let merge_report = merged.merge(&edited);
+    let inserted: usize = report
+        .lifted
+        .iter()
+        .map(|lift| match lift {
+            ltk_meta::Lift::MapInsert { keys, .. } => *keys,
+            _ => 0,
+        })
+        .sum();
+    assert_eq!(inserted, merge_report.keys_inserted);
+    assert_applies_as_merge(&base, &edited, patch);
+}
+
+#[test]
+fn a_float_key_the_resolver_cannot_tell_apart_lifts_its_map() {
+    // `{-0}` resolves to the first key equal to it under `==`, which is `0.0`.
+    let base = one(vec![("Floats", float_keyed(&[(0.0, 1), (-0.0, 2)]))]);
+    let edited = one(vec![("Floats", float_keyed(&[(-0.0, 20)]))]);
+
+    let (patch, report) = base.diff(&edited, &names(&["Floats"]));
+
+    assert_eq!(
+        patch.patches,
+        [record("Floats", float_keyed(&[(0.0, 1), (-0.0, 20)]))]
+    );
+    assert!(matches!(
+        report.lifted[..],
+        [ltk_meta::Lift::Unnameable { .. }]
+    ));
+    assert_applies_as_merge(&base, &edited, patch);
+}
+
+#[test]
+fn a_nan_leaf_is_recorded_and_a_change_of_sign_is_not() {
+    let base = one(vec![
+        ("Nan", values::F32::new(f32::NAN).into()),
+        ("Zero", values::F32::new(0.0).into()),
+    ]);
+    let edited = one(vec![
+        ("Nan", values::F32::new(f32::NAN).into()),
+        ("Zero", values::F32::new(-0.0).into()),
+    ]);
+
+    let (patch, _) = base.diff(&edited, &names(&["Nan", "Zero"]));
+
+    assert_eq!(patch.patches.len(), 1);
+    assert_eq!(patch.patches[0].path.as_str(), "Nan");
+}
+
+#[test]
+fn siblings_under_one_unnamed_field_each_lift_at_their_own_position() {
+    let base = one(vec![(
+        "Secret",
+        node(INNER, vec![("A", int(1)), ("B", int(1))]),
+    )]);
+    let edited = one(vec![(
+        "Secret",
+        node(INNER, vec![("A", int(2)), ("B", int(2))]),
+    )]);
+
+    let (patch, report) = base.diff(&edited, &names(&["A", "B"]));
+
+    assert_eq!(report.objects, [BinHash(OBJECT)]);
+    let lifted: Vec<_> = report
+        .lifted
+        .iter()
+        .map(|lift| match lift {
+            ltk_meta::Lift::Unnameable { at, cause, .. } => (at.clone(), cause.segment),
+            other => panic!("{other}"),
+        })
+        .collect();
+    assert_eq!(
+        lifted,
+        [(at(&["Secret", "A"]), 0), (at(&["Secret", "B"]), 0)]
+    );
+    assert_applies_as_merge(&base, &edited, patch);
+}

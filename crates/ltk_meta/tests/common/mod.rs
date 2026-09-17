@@ -1,9 +1,10 @@
 //! Generated bin pairs for the merge and diff property tests.
 //!
-//! Every field name carries a family of kinds, so the same field on two generated objects holds
-//! the same shape most of the time and a different one some of the time. Object hashes, classes,
-//! keys and leaf values come from small sets, so two bins meet on many objects, nodes and keys.
-//! No float is `NaN`: a `NaN` leaf never equals itself.
+//! Every field name carries a family of kinds: the same field on two generated objects holds the
+//! same shape most of the time and a different one some of the time. Object hashes, classes, keys
+//! and leaf values come from small sets, and two bins meet on many objects, nodes and keys. No
+//! float is `NaN`, and no map repeats a key: a `NaN` leaf never equals itself, and a repeated key
+//! merges twice.
 
 use std::collections::{HashMap, HashSet};
 
