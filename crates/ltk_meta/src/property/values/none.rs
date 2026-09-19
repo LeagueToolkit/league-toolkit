@@ -1,57 +1,30 @@
 use crate::{
-    property::{Kind, NoMeta},
+    property::Kind,
     traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty},
 };
 
-#[cfg_attr(
-    feature = "serde",
-    derive(serde::Serialize, serde::Deserialize),
-    serde(bound = "for <'dee> M: serde::Serialize + serde::Deserialize<'dee>")
-)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
-pub struct None<M = NoMeta> {
-    pub meta: M,
-}
-impl<M> PropertyValueExt for None<M> {
+pub struct None;
+
+impl PropertyValueExt for None {
     const KIND: Kind = Kind::None;
 }
-impl<M> PropertyExt for None<M> {
+impl PropertyExt for None {
     fn size_no_header(&self) -> usize {
         0
     }
-
-    type Meta = M;
-    fn meta(&self) -> &Self::Meta {
-        &self.meta
-    }
-    fn meta_mut(&mut self) -> &mut Self::Meta {
-        &mut self.meta
-    }
 }
 
-impl<M> None<M> {
-    #[inline(always)]
-    #[must_use]
-    pub fn new(meta: M) -> Self {
-        Self { meta }
-    }
-
-    #[inline(always)]
-    #[must_use]
-    pub fn no_meta(self) -> None<NoMeta> {
-        None { meta: NoMeta }
-    }
-}
-
-impl<M: Default> ReadProperty for None<M> {
+impl ReadProperty for None {
     fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
         _reader: &mut R,
         _legacy: bool,
     ) -> Result<Self, crate::Error> {
-        Ok(Self { meta: M::default() })
+        Ok(Self)
     }
 }
-impl<M> WriteProperty for None<M> {
+impl WriteProperty for None {
     fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
         &self,
         _writer: &mut R,

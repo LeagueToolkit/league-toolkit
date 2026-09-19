@@ -40,18 +40,12 @@ const CHUNK: usize = 64 * 1024;
 ///
 /// [`Error::InvalidSize`] if the declared size disagrees with what the property counts
 /// consumed, or whatever [`read_value`] raises for one of the properties.
-pub(crate) fn read_object<M: Default>(
-    cur: &mut Cursor<'_>,
-    class_hash: BinHash,
-) -> Result<BinObject<M>, Error> {
+pub(crate) fn read_object(cur: &mut Cursor<'_>, class_hash: BinHash) -> Result<BinObject, Error> {
     cur.sized_region(|cur| read_object_body(cur, class_hash))
 }
 
 /// Decodes an object's body, for a caller that has already read its `u32 size` field.
-fn read_object_body<M: Default>(
-    cur: &mut Cursor<'_>,
-    class_hash: BinHash,
-) -> Result<BinObject<M>, Error> {
+fn read_object_body(cur: &mut Cursor<'_>, class_hash: BinHash) -> Result<BinObject, Error> {
     let path_hash = cur.bin_hash()?;
     let count = cur.u16()?;
     Ok(BinObject {
@@ -66,10 +60,10 @@ fn read_object_body<M: Default>(
 /// # Errors
 ///
 /// See [`read_value`].
-pub(crate) fn read_properties<M: Default>(
+pub(crate) fn read_properties(
     cur: &mut Cursor<'_>,
     count: u16,
-) -> Result<IndexMap<BinHash, PropertyValueEnum<M>>, Error> {
+) -> Result<IndexMap<BinHash, PropertyValueEnum>, Error> {
     let mut properties = IndexMap::with_capacity(count as usize);
     for _ in 0..count {
         let name_hash = cur.bin_hash()?;
@@ -88,10 +82,7 @@ pub(crate) fn read_properties<M: Default>(
 /// refuses, [`Error::InvalidPropertyTypePrimitive`] for a kind byte that does not decode,
 /// [`Error::Utf8Error`] for a string that is not UTF-8, or [`Error::IOError`] at the end of
 /// the slice.
-pub(crate) fn read_value<M: Default>(
-    cur: &mut Cursor<'_>,
-    kind: Kind,
-) -> Result<PropertyValueEnum<M>, Error> {
+pub(crate) fn read_value(cur: &mut Cursor<'_>, kind: Kind) -> Result<PropertyValueEnum, Error> {
     use Kind as K;
     Ok(match kind {
         K::None => values::None::default().into(),
@@ -130,7 +121,7 @@ pub(crate) fn read_value<M: Default>(
 ///
 /// [`Error::Utf8Error`] if the bytes are not UTF-8, or [`Error::IOError`] at the end of the
 /// slice.
-pub(crate) fn read_string<M: Default>(cur: &mut Cursor<'_>) -> Result<values::String<M>, Error> {
+pub(crate) fn read_string(cur: &mut Cursor<'_>) -> Result<values::String, Error> {
     Ok(values::String::new(cur.str_u16()?.to_owned()))
 }
 
@@ -139,9 +130,7 @@ pub(crate) fn read_string<M: Default>(cur: &mut Cursor<'_>) -> Result<values::St
 /// # Errors
 ///
 /// See [`read_value`].
-pub(crate) fn read_container<M: Default>(
-    cur: &mut Cursor<'_>,
-) -> Result<values::Container<M>, Error> {
+pub(crate) fn read_container(cur: &mut Cursor<'_>) -> Result<values::Container, Error> {
     // Checked before the body is walked, not after: a nested item kind would make every byte
     // that follows mean something else.
     let item_kind = cur.kind()?;
@@ -166,7 +155,7 @@ pub(crate) fn read_container<M: Default>(
 /// # Errors
 ///
 /// See [`read_value`].
-pub(crate) fn read_map<M: Default>(cur: &mut Cursor<'_>) -> Result<values::Map<M>, Error> {
+pub(crate) fn read_map(cur: &mut Cursor<'_>) -> Result<values::Map, Error> {
     let key_kind = cur.kind()?;
     if !key_kind.is_valid_map_key() {
         return Err(Error::InvalidKeyType(key_kind));
@@ -195,9 +184,7 @@ pub(crate) fn read_map<M: Default>(cur: &mut Cursor<'_>) -> Result<values::Map<M
 /// # Errors
 ///
 /// See [`read_value`].
-pub(crate) fn read_optional<M: Default>(
-    cur: &mut Cursor<'_>,
-) -> Result<values::Optional<M>, Error> {
+pub(crate) fn read_optional(cur: &mut Cursor<'_>) -> Result<values::Optional, Error> {
     let item_kind = cur.kind()?;
     if item_kind.is_container() {
         return Err(Error::InvalidNesting(item_kind));
@@ -218,7 +205,7 @@ pub(crate) fn read_optional<M: Default>(
 /// # Errors
 ///
 /// See [`read_value`].
-pub(crate) fn read_struct<M: Default>(cur: &mut Cursor<'_>) -> Result<values::Struct<M>, Error> {
+pub(crate) fn read_struct(cur: &mut Cursor<'_>) -> Result<values::Struct, Error> {
     let class_hash = cur.bin_hash()?;
     if *class_hash == 0 {
         return Ok(values::Struct {
@@ -232,7 +219,6 @@ pub(crate) fn read_struct<M: Default>(cur: &mut Cursor<'_>) -> Result<values::St
         Ok(values::Struct {
             class_hash,
             properties: read_properties(cur, count)?,
-            meta: M::default(),
         })
     })
 }
@@ -246,11 +232,11 @@ pub(crate) fn read_struct<M: Default>(cur: &mut Cursor<'_>) -> Result<values::St
 /// [`Error::InvalidSize`] if the object's properties end before the declared size does, which
 /// is also how a truncated source usually surfaces; [`Error::IOError`] if the counts run past
 /// what the source had; otherwise see [`read_object`].
-pub(crate) fn read_object_from<M: Default, R: io::Read + io::Seek + ?Sized>(
+pub(crate) fn read_object_from<R: io::Read + io::Seek + ?Sized>(
     reader: &mut R,
     class_hash: BinHash,
     numbering: Numbering,
-) -> Result<BinObject<M>, Error> {
+) -> Result<BinObject, Error> {
     let declared = reader.read_u32::<LE>()? as usize;
 
     let mut body = Vec::new();
@@ -277,11 +263,11 @@ pub(crate) fn read_object_from<M: Default, R: io::Read + io::Seek + ?Sized>(
 /// # Errors
 ///
 /// See [`read_value`]. [`Error::IOError`] if the source runs out before the value does.
-pub(crate) fn read_value_from<M: Default, R: io::Read + io::Seek + ?Sized>(
+pub(crate) fn read_value_from<R: io::Read + io::Seek + ?Sized>(
     reader: &mut R,
     kind: Kind,
     numbering: Numbering,
-) -> Result<PropertyValueEnum<M>, Error> {
+) -> Result<PropertyValueEnum, Error> {
     read_from(reader, kind, numbering, |cur| read_value(cur, kind))
 }
 

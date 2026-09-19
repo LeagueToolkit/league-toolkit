@@ -10,7 +10,6 @@ expression: "&patch_bin.patches[..3]"
       kind: Vector2,
       value: Vector2(
         value: Vec2(0.0, 1.0),
-        meta: NoMeta,
       ),
     ),
   ),
@@ -26,32 +25,27 @@ expression: "&patch_bin.patches[..3]"
             kind: Vector2,
             value: Vector2(
               value: Vec2(32.0, 32.0),
-              meta: NoMeta,
             ),
           ),
           BinHash(2471448074): PropertyValueEnum(
             kind: Vector2,
             value: Vector2(
               value: Vec2(368.0, 1168.0),
-              meta: NoMeta,
             ),
           ),
           BinHash(2711301737): PropertyValueEnum(
             kind: U16,
             value: U16(
               value: 1200,
-              meta: NoMeta,
             ),
           ),
           BinHash(4133780694): PropertyValueEnum(
             kind: U16,
             value: U16(
               value: 1600,
-              meta: NoMeta,
             ),
           ),
         },
-        meta: NoMeta,
       )),
     ),
   ),
@@ -62,7 +56,6 @@ expression: "&patch_bin.patches[..3]"
       kind: Bool,
       value: Bool(
         value: true,
-        meta: NoMeta,
       ),
     ),
   ),

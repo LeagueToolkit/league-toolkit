@@ -5,14 +5,14 @@
 //! `Elements[3].Position` is one [`ContainerView::get`] and two [`StructView::property`] calls,
 //! and no sibling of anything on that path is ever looked at.
 
-use std::{fmt, marker::PhantomData};
+use std::fmt;
 
 use glam::{Mat4, Vec2, Vec3, Vec4};
 use ltk_hash::{BinHash, WadHash};
 use ltk_primitives::Color;
 
 use crate::{
-    property::{Kind, NoMeta},
+    property::Kind,
     stream::{
         layout::Cursor,
         view::{copy_views, find_property, Properties, PropertyView},
@@ -25,7 +25,7 @@ use crate::{
 /// Read with [`PropertyView::value_view`], or from a sub-view's iterator. The owned mirror is
 /// [`PropertyValueEnum`](crate::PropertyValueEnum), one call away through
 /// [`PropertyView::value`].
-pub enum ValueView<'a, M = NoMeta> {
+pub enum ValueView<'a> {
     /// [`Kind::None`]: no bytes at all.
     None,
     /// [`Kind::Bool`].
@@ -69,20 +69,20 @@ pub enum ValueView<'a, M = NoMeta> {
     /// [`Kind::BitBool`].
     BitBool(bool),
     /// [`Kind::Container`].
-    Container(ContainerView<'a, M>),
+    Container(ContainerView<'a>),
     /// [`Kind::UnorderedContainer`].
-    UnorderedContainer(ContainerView<'a, M>),
+    UnorderedContainer(ContainerView<'a>),
     /// [`Kind::Optional`].
-    Optional(OptionalView<'a, M>),
+    Optional(OptionalView<'a>),
     /// [`Kind::Map`].
-    Map(MapView<'a, M>),
+    Map(MapView<'a>),
     /// [`Kind::Struct`] — a pointer, whose class hash is `0` when it is null.
-    Struct(StructView<'a, M>),
+    Struct(StructView<'a>),
     /// [`Kind::Embedded`].
-    Embedded(StructView<'a, M>),
+    Embedded(StructView<'a>),
 }
 
-impl<'a, M> ValueView<'a, M> {
+impl<'a> ValueView<'a> {
     /// Reads one value of `kind`, advancing `cur` past exactly that value.
     ///
     /// # Errors
@@ -159,7 +159,7 @@ impl<'a, M> ValueView<'a, M> {
     }
 }
 
-impl<M> fmt::Debug for ValueView<'_, M> {
+impl fmt::Debug for ValueView<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         macro_rules! leaf {
             ($name:literal, $value:expr) => {
@@ -199,15 +199,14 @@ impl<M> fmt::Debug for ValueView<'_, M> {
 }
 
 /// A [`Kind::Container`] or [`Kind::UnorderedContainer`], viewed in place.
-pub struct ContainerView<'a, M = NoMeta> {
+pub struct ContainerView<'a> {
     item_kind: Kind,
     len: u32,
     /// Positioned at the first item.
     items: Cursor<'a>,
-    meta: PhantomData<fn() -> M>,
 }
 
-impl<'a, M> ContainerView<'a, M> {
+impl<'a> ContainerView<'a> {
     fn read(cur: &mut Cursor<'a>) -> Result<Self, Error> {
         let item_kind = cur.kind()?;
         if item_kind.is_container() {
@@ -222,7 +221,6 @@ impl<'a, M> ContainerView<'a, M> {
             item_kind,
             len,
             items,
-            meta: PhantomData,
         })
     }
 
@@ -245,12 +243,11 @@ impl<'a, M> ContainerView<'a, M> {
     }
 
     /// The items, in order.
-    pub fn iter(&self) -> ContainerItems<'a, M> {
+    pub fn iter(&self) -> ContainerItems<'a> {
         ContainerItems {
             cur: self.items,
             remaining: self.len,
             item_kind: self.item_kind,
-            meta: PhantomData,
         }
     }
 
@@ -265,7 +262,7 @@ impl<'a, M> ContainerView<'a, M> {
     /// [`Error::InvalidNesting`] or [`Error::InvalidKeyType`] for a value the model refuses,
     /// [`Error::Utf8Error`] for a string that is not UTF-8, or [`Error::IOError`] if the
     /// container's bytes end early.
-    pub fn get(&self, index: u32) -> Result<Option<ValueView<'a, M>>, Error> {
+    pub fn get(&self, index: u32) -> Result<Option<ValueView<'a>>, Error> {
         if index >= self.len {
             return Ok(None);
         }
@@ -287,16 +284,16 @@ impl<'a, M> ContainerView<'a, M> {
     }
 }
 
-impl<'a, M> IntoIterator for &ContainerView<'a, M> {
-    type Item = Result<ValueView<'a, M>, Error>;
-    type IntoIter = ContainerItems<'a, M>;
+impl<'a> IntoIterator for &ContainerView<'a> {
+    type Item = Result<ValueView<'a>, Error>;
+    type IntoIter = ContainerItems<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
     }
 }
 
-impl<M> fmt::Debug for ContainerView<'_, M> {
+impl fmt::Debug for ContainerView<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ContainerView")
             .field("item_kind", &self.item_kind)
@@ -307,15 +304,14 @@ impl<M> fmt::Debug for ContainerView<'_, M> {
 
 /// Iterator over the items of a [`ContainerView`].
 #[must_use = "iterators are lazy and do nothing unless consumed"]
-pub struct ContainerItems<'a, M = NoMeta> {
+pub struct ContainerItems<'a> {
     cur: Cursor<'a>,
     remaining: u32,
     item_kind: Kind,
-    meta: PhantomData<fn() -> M>,
 }
 
-impl<'a, M> Iterator for ContainerItems<'a, M> {
-    type Item = Result<ValueView<'a, M>, Error>;
+impl<'a> Iterator for ContainerItems<'a> {
+    type Item = Result<ValueView<'a>, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.remaining == 0 {
@@ -337,20 +333,19 @@ impl<'a, M> Iterator for ContainerItems<'a, M> {
     }
 }
 
-impl<M> std::iter::FusedIterator for ContainerItems<'_, M> {}
+impl std::iter::FusedIterator for ContainerItems<'_> {}
 
-impl<M> Clone for ContainerItems<'_, M> {
+impl Clone for ContainerItems<'_> {
     fn clone(&self) -> Self {
         Self {
             cur: self.cur,
             remaining: self.remaining,
             item_kind: self.item_kind,
-            meta: PhantomData,
         }
     }
 }
 
-impl<M> fmt::Debug for ContainerItems<'_, M> {
+impl fmt::Debug for ContainerItems<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ContainerItems")
             .field("item_kind", &self.item_kind)
@@ -360,16 +355,15 @@ impl<M> fmt::Debug for ContainerItems<'_, M> {
 }
 
 /// A [`Kind::Map`], viewed in place.
-pub struct MapView<'a, M = NoMeta> {
+pub struct MapView<'a> {
     key_kind: Kind,
     value_kind: Kind,
     len: u32,
     /// Positioned at the first entry.
     entries: Cursor<'a>,
-    meta: PhantomData<fn() -> M>,
 }
 
-impl<'a, M> MapView<'a, M> {
+impl<'a> MapView<'a> {
     fn read(cur: &mut Cursor<'a>) -> Result<Self, Error> {
         let key_kind = cur.kind()?;
         if !key_kind.is_valid_map_key() {
@@ -389,7 +383,6 @@ impl<'a, M> MapView<'a, M> {
             value_kind,
             len,
             entries,
-            meta: PhantomData,
         })
     }
 
@@ -418,27 +411,26 @@ impl<'a, M> MapView<'a, M> {
     }
 
     /// The entries, in file order.
-    pub fn iter(&self) -> MapEntries<'a, M> {
+    pub fn iter(&self) -> MapEntries<'a> {
         MapEntries {
             cur: self.entries,
             remaining: self.len,
             key_kind: self.key_kind,
             value_kind: self.value_kind,
-            meta: PhantomData,
         }
     }
 }
 
-impl<'a, M> IntoIterator for &MapView<'a, M> {
-    type Item = Result<(ValueView<'a, M>, ValueView<'a, M>), Error>;
-    type IntoIter = MapEntries<'a, M>;
+impl<'a> IntoIterator for &MapView<'a> {
+    type Item = Result<(ValueView<'a>, ValueView<'a>), Error>;
+    type IntoIter = MapEntries<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
     }
 }
 
-impl<M> fmt::Debug for MapView<'_, M> {
+impl fmt::Debug for MapView<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("MapView")
             .field("key_kind", &self.key_kind)
@@ -450,24 +442,23 @@ impl<M> fmt::Debug for MapView<'_, M> {
 
 /// Iterator over the entries of a [`MapView`].
 #[must_use = "iterators are lazy and do nothing unless consumed"]
-pub struct MapEntries<'a, M = NoMeta> {
+pub struct MapEntries<'a> {
     cur: Cursor<'a>,
     remaining: u32,
     key_kind: Kind,
     value_kind: Kind,
-    meta: PhantomData<fn() -> M>,
 }
 
-impl<'a, M> MapEntries<'a, M> {
-    fn read_entry(&mut self) -> Result<(ValueView<'a, M>, ValueView<'a, M>), Error> {
+impl<'a> MapEntries<'a> {
+    fn read_entry(&mut self) -> Result<(ValueView<'a>, ValueView<'a>), Error> {
         let key = ValueView::read(&mut self.cur, self.key_kind)?;
         let value = ValueView::read(&mut self.cur, self.value_kind)?;
         Ok((key, value))
     }
 }
 
-impl<'a, M> Iterator for MapEntries<'a, M> {
-    type Item = Result<(ValueView<'a, M>, ValueView<'a, M>), Error>;
+impl<'a> Iterator for MapEntries<'a> {
+    type Item = Result<(ValueView<'a>, ValueView<'a>), Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.remaining == 0 {
@@ -489,21 +480,20 @@ impl<'a, M> Iterator for MapEntries<'a, M> {
     }
 }
 
-impl<M> std::iter::FusedIterator for MapEntries<'_, M> {}
+impl std::iter::FusedIterator for MapEntries<'_> {}
 
-impl<M> Clone for MapEntries<'_, M> {
+impl Clone for MapEntries<'_> {
     fn clone(&self) -> Self {
         Self {
             cur: self.cur,
             remaining: self.remaining,
             key_kind: self.key_kind,
             value_kind: self.value_kind,
-            meta: PhantomData,
         }
     }
 }
 
-impl<M> fmt::Debug for MapEntries<'_, M> {
+impl fmt::Debug for MapEntries<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("MapEntries")
             .field("key_kind", &self.key_kind)
@@ -514,14 +504,13 @@ impl<M> fmt::Debug for MapEntries<'_, M> {
 }
 
 /// A [`Kind::Optional`], viewed in place.
-pub struct OptionalView<'a, M = NoMeta> {
+pub struct OptionalView<'a> {
     item_kind: Kind,
     /// Positioned at the value, when there is one.
     value: Option<Cursor<'a>>,
-    meta: PhantomData<fn() -> M>,
 }
 
-impl<'a, M> OptionalView<'a, M> {
+impl<'a> OptionalView<'a> {
     fn read(cur: &mut Cursor<'a>) -> Result<Self, Error> {
         let item_kind = cur.kind()?;
         if item_kind.is_container() {
@@ -533,11 +522,7 @@ impl<'a, M> OptionalView<'a, M> {
             false => None,
         };
 
-        Ok(Self {
-            item_kind,
-            value,
-            meta: PhantomData,
-        })
+        Ok(Self { item_kind, value })
     }
 
     /// The kind of the item, present or not — the wire declares it either way.
@@ -563,7 +548,7 @@ impl<'a, M> OptionalView<'a, M> {
     /// # Errors
     ///
     /// The same as [`ContainerView::get`], for the one item this holds.
-    pub fn get(&self) -> Result<Option<ValueView<'a, M>>, Error> {
+    pub fn get(&self) -> Result<Option<ValueView<'a>>, Error> {
         match self.value {
             Some(mut value) => ValueView::read(&mut value, self.item_kind).map(Some),
             None => Ok(None),
@@ -571,7 +556,7 @@ impl<'a, M> OptionalView<'a, M> {
     }
 }
 
-impl<M> fmt::Debug for OptionalView<'_, M> {
+impl fmt::Debug for OptionalView<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("OptionalView")
             .field("item_kind", &self.item_kind)
@@ -584,15 +569,14 @@ impl<M> fmt::Debug for OptionalView<'_, M> {
 ///
 /// A pointer with a class hash of `0` is null: it has no size field and no body, so
 /// [`StructView::property_count`] is `0` and the iterator is empty.
-pub struct StructView<'a, M = NoMeta> {
+pub struct StructView<'a> {
     class_hash: BinHash,
     property_count: u16,
     /// Positioned at the first property.
     properties: Cursor<'a>,
-    meta: PhantomData<fn() -> M>,
 }
 
-impl<'a, M> StructView<'a, M> {
+impl<'a> StructView<'a> {
     fn read(cur: &mut Cursor<'a>) -> Result<Self, Error> {
         let class_hash = cur.bin_hash()?;
         if *class_hash == 0 {
@@ -600,7 +584,6 @@ impl<'a, M> StructView<'a, M> {
                 class_hash,
                 property_count: 0,
                 properties: Cursor::new(&[], cur.numbering()),
-                meta: PhantomData,
             });
         }
 
@@ -612,7 +595,6 @@ impl<'a, M> StructView<'a, M> {
             class_hash,
             property_count,
             properties,
-            meta: PhantomData,
         })
     }
 
@@ -629,7 +611,7 @@ impl<'a, M> StructView<'a, M> {
     }
 
     /// The properties, in file order.
-    pub fn properties(&self) -> Properties<'a, M> {
+    pub fn properties(&self) -> Properties<'a> {
         Properties::new(self.properties, self.property_count)
     }
 
@@ -641,12 +623,12 @@ impl<'a, M> StructView<'a, M> {
     pub fn property(
         &self,
         name_hash: impl Into<BinHash>,
-    ) -> Result<Option<PropertyView<'a, M>>, Error> {
+    ) -> Result<Option<PropertyView<'a>>, Error> {
         find_property(self.properties(), name_hash.into())
     }
 }
 
-impl<M> fmt::Debug for StructView<'_, M> {
+impl fmt::Debug for StructView<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("StructView")
             .field("class_hash", &self.class_hash)

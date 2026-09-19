@@ -25,11 +25,9 @@ for (path_hash, object) in &tree.objects {
 
 ### Creating a bin file programmatically
 
-The [`concrete`] module pins the metadata parameter to [`NoMeta`], so nothing
-generic needs spelling:
 
 ```
-use ltk_meta::concrete::{values, Bin, BinObject};
+use ltk_meta::{property::values, Bin, BinObject};
 
 // Using the builder pattern
 let tree = Bin::builder()
@@ -49,7 +47,6 @@ let tree = Bin::new(
 );
 ```
 
-[`NoMeta`]: crate::property::NoMeta
 
 ### Streaming a bin file
 
@@ -59,7 +56,7 @@ mounts an archive and reads only what is asked for:
 
 ```no_run
 use std::fs::File;
-use ltk_meta::concrete::BinStream;
+use ltk_meta::BinStream;
 
 let mut stream = BinStream::mount(File::open("data.bin")?)?;
 println!("version {}, {} objects", stream.version(), stream.class_hashes().len());
@@ -76,7 +73,7 @@ iteration and descent to any depth cost no I/O and materialize nothing:
 
 ```no_run
 use std::fs::File;
-use ltk_meta::{concrete::BinStream, ValueView};
+use ltk_meta::{BinStream, ValueView};
 
 let mut stream = BinStream::mount(File::open("data.bin")?)?;
 let mut objects = stream.objects();
@@ -207,7 +204,6 @@ match BinKind::identify_from_reader(&mut file)? {
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 */
-pub mod concrete;
 pub mod path;
 pub mod property;
 pub use property::{Kind as PropertyKind, PropertyValueEnum, ValueSlot};

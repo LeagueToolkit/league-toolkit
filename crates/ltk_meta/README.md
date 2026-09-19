@@ -18,7 +18,6 @@ Two kinds of file share the `.bin` extension and this crate reads both:
 | `Numbering` | Which property-kind numbering a file is being read under, and whether the legacy latch has flipped |
 | `property::values`, `PropertyValueEnum`, `PropertyKind` | One typed value struct per wire kind (`I32`, `String`, `Vector3`, `Container`, `Map`, `Struct`, `Embedded`, `Optional`, …) and the enum over them |
 | `ValueSlot` | A mutable handle on one value, carrying the kind its holder pins it to - what `resolve_mut` hands back |
-| `concrete` | The value model with the metadata parameter pinned - start here - plus the three streaming names Rust cannot infer without it: `BinStream`, `LruObjectCache`, `NoCache` |
 | `path::PropertyPath` | Property addressing (`Position.Anchors.Anchor`, `Elements[3]`, `Lookup{"weapon"}`), with `Bin::resolve`, `resolve_mut` and `Bin::patch` |
 | `path::ValueShape` | What a value is - kind, item kind, map key kind, embed class - as the resolver's type rule and the streaming header peek both speak it |
 | `BinOverride`, `ApplyReport` | PTCH files: read, build, `check` against / `apply` onto a base `Bin` |
@@ -53,7 +52,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```rust
 use std::fs::File;
-use ltk_meta::concrete::BinStream;
+use ltk_meta::BinStream;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut stream = BinStream::mount(File::open("data.bin")?)?;
@@ -83,7 +82,7 @@ Descending buffers the object's declared byte range once and views it in place. 
 
 ```rust
 use std::fs::File;
-use ltk_meta::{concrete::BinStream, ValueView};
+use ltk_meta::{BinStream, ValueView};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut stream = BinStream::mount(File::open("data.bin")?)?;
@@ -120,7 +119,7 @@ A complex value declares its shape in the few header bytes ahead of its body, so
 
 ```rust
 use std::fs::File;
-use ltk_meta::{concrete::BinStream, PropertyKind};
+use ltk_meta::{BinStream, PropertyKind};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut stream = BinStream::mount(File::open("data.bin")?)?;
@@ -152,7 +151,7 @@ Bins written before `WadChunkLink` existed number the complex kinds one lower. A
 
 ```rust
 use std::fs::File;
-use ltk_meta::{concrete::BinStream, Numbering};
+use ltk_meta::{BinStream, Numbering};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut stream = BinStream::mount(File::open("data.bin")?)?;
@@ -177,7 +176,7 @@ A view carries the numbering it was built under, so one handed out before the fl
 
 ```rust
 use std::fs::File;
-use ltk_meta::concrete::BinStream;
+use ltk_meta::BinStream;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut stream = BinStream::mount(File::open("data.bin")?)?;
@@ -193,10 +192,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Creating one programmatically
 
-The `concrete` module pins the metadata parameter, which is what you want unless you are attaching per-node metadata of your own:
+Build a tree with the builder, or the simple constructor:
 
 ```rust
-use ltk_meta::concrete::{values, Bin, BinObject};
+use ltk_meta::{property::values, Bin, BinObject};
 
 fn main() {
     let bin = Bin::builder()
@@ -216,7 +215,7 @@ fn main() {
 Complex values are validated at construction - container items must share one kind, map keys must be a kind that can key a map - so `Map::new` and friends return `Result`:
 
 ```rust
-use ltk_meta::{concrete::values, PropertyKind};
+use ltk_meta::{property::values, PropertyKind};
 
 fn main() -> Result<(), ltk_meta::Error> {
     let list = values::Container::from(vec![values::I32::new(1), values::I32::new(2)]);

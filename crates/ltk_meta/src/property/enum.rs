@@ -1,11 +1,11 @@
 use crate::{
-    property::{Kind, NoMeta},
+    property::Kind,
     traits::{PropertyExt, WriteProperty as _},
     Error,
 };
 use std::io;
 
-use super::values::{self, *};
+use super::values;
 
 macro_rules! variants {
     ($macro:ident $(, $args:tt)* ) => {
@@ -43,18 +43,17 @@ macro_rules! create_enum {
     ([$( $variant:ident, )*]) => {
         #[cfg_attr(
             feature = "serde",
-            derive(serde::Serialize, serde::Deserialize),
-            serde(bound = "for <'dee> M: serde::Serialize + serde::Deserialize<'dee>")
+            derive(serde::Serialize, serde::Deserialize)
         )]
         #[cfg_attr(feature = "serde", serde(tag = "kind", content = "value"))]
         #[derive(Clone, Debug, PartialEq)]
         /// The value of a property inside a [`crate::BinObject`]. Holds the type of the value, and the value itself.
-        pub enum PropertyValueEnum<M = NoMeta> {
-            $( $variant (self::$variant<M>), )*
+        pub enum PropertyValueEnum {
+            $( $variant (values::$variant), )*
         }
 
 
-        impl<M: Default> PropertyValueEnum<M> {
+        impl PropertyValueEnum {
             /// Reads one value of `kind`, leaving `reader` immediately past it.
             ///
             /// Decoded through the same layout core the stream reads with, so this and a
@@ -80,7 +79,7 @@ macro_rules! create_enum {
                 )
             }
         }
-        impl<M: Clone> PropertyValueEnum<M> {
+        impl PropertyValueEnum {
             pub fn to_writer<W: io::Write + io::Seek + ?Sized>(
                 &self,
                 writer: &mut W,
@@ -91,7 +90,7 @@ macro_rules! create_enum {
                 Ok(())
             }
         }
-        impl<M> PropertyValueEnum<M> {
+        impl PropertyValueEnum {
             #[inline(always)]
             #[must_use]
             pub fn kind(&self) -> Kind {
@@ -100,29 +99,9 @@ macro_rules! create_enum {
                 }
             }
 
-            #[inline(always)]
-            #[must_use]
-            pub fn no_meta(self) -> PropertyValueEnum<NoMeta> {
-                 match self {
-                     $(Self::$variant(i) => PropertyValueEnum::$variant(i.no_meta()),)*
-                 }
-            }
-
         }
 
-        impl<M> PropertyExt for PropertyValueEnum<M> {
-            type Meta = M;
-            fn meta(&self) -> &Self::Meta {
-                 match self {
-                     $(Self::$variant(i) => i.meta(),)*
-                 }
-            }
-            fn meta_mut(&mut self) -> &mut Self::Meta {
-                 match self {
-                     $(Self::$variant(i) => i.meta_mut(),)*
-                 }
-            }
-
+        impl PropertyExt for PropertyValueEnum {
             fn size(&self, include_header: bool) -> usize {
                  match self {
                      $(Self::$variant(i) => i.size(include_header),)*
@@ -136,23 +115,23 @@ macro_rules! create_enum {
         }
 
         $(
-            impl<M> From<values::$variant<M>> for PropertyValueEnum<M> {
-                fn from(other: values::$variant<M>) -> Self {
+            impl From<values::$variant> for PropertyValueEnum {
+                fn from(other: values::$variant) -> Self {
                     Self::$variant(other)
                 }
             }
         )*
 
         $(
-            impl<M> FromValue<M> for values::$variant<M> {
-                fn from_value(value: &PropertyValueEnum<M>) -> Option<&Self> {
+            impl FromValue for values::$variant {
+                fn from_value(value: &PropertyValueEnum) -> Option<&Self> {
                     match value {
                         PropertyValueEnum::$variant(inner) => Some(inner),
                         _ => None,
                     }
                 }
 
-                fn from_value_mut(value: &mut PropertyValueEnum<M>) -> Option<&mut Self> {
+                fn from_value_mut(value: &mut PropertyValueEnum) -> Option<&mut Self> {
                     match value {
                         PropertyValueEnum::$variant(inner) => Some(inner),
                         _ => None,
@@ -168,11 +147,11 @@ macro_rules! create_enum {
         /// makes it safe to hand out for a value whose kind something else has already declared -
         /// see [`ValueSlot`](crate::ValueSlot).
         #[derive(Debug, PartialEq)]
-        pub enum ValueMut<'a, M = NoMeta> {
-            $( $variant (&'a mut self::$variant<M>), )*
+        pub enum ValueMut<'a> {
+            $( $variant (&'a mut values::$variant), )*
         }
 
-        impl<M> ValueMut<'_, M> {
+        impl ValueMut<'_> {
             /// The kind of the borrowed value.
             #[inline(always)]
             #[must_use]
@@ -183,7 +162,7 @@ macro_rules! create_enum {
             }
         }
 
-        impl<M> PropertyValueEnum<M> {
+        impl PropertyValueEnum {
             /// A mutable borrow of the value that cannot change its kind.
             ///
             /// # Examples
@@ -198,7 +177,7 @@ macro_rules! create_enum {
             /// assert_eq!(value, values::I32::new(42).into());
             /// ```
             #[inline(always)]
-            pub fn as_mut(&mut self) -> ValueMut<'_, M> {
+            pub fn as_mut(&mut self) -> ValueMut<'_> {
                 match self {
                     $(Self::$variant(inner) => ValueMut::$variant(inner),)*
                 }
@@ -214,14 +193,14 @@ variants!(create_enum);
 /// Implemented for every type in [`values`]. It exists so [`PropertyValueEnum::get`] and
 /// [`ValueSlot::get_mut`](crate::ValueSlot::get_mut) can reach one concrete value type without a
 /// `match`; to handle every kind at once, match on [`PropertyValueEnum::as_mut`] instead.
-pub trait FromValue<M>: Sized {
+pub trait FromValue: Sized {
     /// The value as `Self`, if that is its kind.
-    fn from_value(value: &PropertyValueEnum<M>) -> Option<&Self>;
+    fn from_value(value: &PropertyValueEnum) -> Option<&Self>;
     /// See [`FromValue::from_value`].
-    fn from_value_mut(value: &mut PropertyValueEnum<M>) -> Option<&mut Self>;
+    fn from_value_mut(value: &mut PropertyValueEnum) -> Option<&mut Self>;
 }
 
-impl<M> PropertyValueEnum<M> {
+impl PropertyValueEnum {
     /// This value as `T`, if that is its kind.
     ///
     /// # Examples
@@ -236,14 +215,14 @@ impl<M> PropertyValueEnum<M> {
     /// ```
     #[inline(always)]
     #[must_use]
-    pub fn get<T: FromValue<M>>(&self) -> Option<&T> {
+    pub fn get<T: FromValue>(&self) -> Option<&T> {
         T::from_value(self)
     }
 
     /// See [`PropertyValueEnum::get`].
     #[inline(always)]
     #[must_use]
-    pub fn get_mut<T: FromValue<M>>(&mut self) -> Option<&mut T> {
+    pub fn get_mut<T: FromValue>(&mut self) -> Option<&mut T> {
         T::from_value_mut(self)
     }
 }

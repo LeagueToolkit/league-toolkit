@@ -7,7 +7,7 @@ use insta::assert_ron_snapshot;
 use ltk_hash::{BinHash, Hash as _};
 use ltk_meta::{
     path::{PatchError, PropertyPath, ResolveErrorKind, ValueShape},
-    property::{values, Kind, NoMeta},
+    property::{values, Kind},
     Bin, BinObject, BinOverride, PropertyValueEnum,
 };
 
@@ -27,7 +27,7 @@ fn hash(name: &str) -> BinHash {
     BinHash::hash_str(name)
 }
 
-/// Takes the value by value so `M` is pinned to [`NoMeta`] at the call site.
+/// The shape of a value.
 fn shape(value: PropertyValueEnum) -> ValueShape {
     ValueShape::of(&value)
 }
@@ -48,13 +48,12 @@ fn pointer(
     values::Struct {
         class_hash: class.into(),
         properties: properties(entries),
-        meta: NoMeta,
     }
 }
 
 /// A tree with one value of every shape section 8.2 of the design has a rule for.
 fn tree() -> Bin {
-    let mut object = BinObject::<NoMeta>::new(OBJECT, 0x1000);
+    let mut object = BinObject::new(OBJECT, 0x1000);
     object.properties = properties([
         ("Enabled", values::Bool::new(true).into()),
         (
@@ -503,7 +502,7 @@ fn applies_deletions_objects_and_records_in_order() {
     let patch_bin = BinOverride::builder()
         .delete(0x0002_u32)
         .object(
-            BinObject::<NoMeta>::builder(0x0003_u32, 0x1000)
+            BinObject::builder(0x0003_u32, 0x1000)
                 .property(hash("Enabled"), values::Bool::new(false))
                 .build(),
         )

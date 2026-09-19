@@ -13,8 +13,6 @@ mod tests;
 
 use indexmap::IndexMap;
 
-use crate::property::NoMeta;
-
 /// The complete contents of a League of Legends property bin file.
 ///
 /// It contains a collection of objects, each identified
@@ -25,29 +23,25 @@ use crate::property::NoMeta;
 /// Use [`Bin::new`] for simple cases or [`Bin::builder`] for more control:
 ///
 /// ```
-/// use ltk_meta::{Bin, BinObject, property::NoMeta};
+/// use ltk_meta::{Bin, BinObject};
 ///
 /// // Simple construction
-/// let tree = Bin::<NoMeta>::new([], std::iter::empty::<&str>());
+/// let tree = Bin::new([], std::iter::empty::<&str>());
 ///
 /// // Builder pattern
-/// let tree = Bin::<NoMeta>::builder()
+/// let tree = Bin::builder()
 ///     .dependency("base.bin")
 ///     .build();
 /// ```
-#[cfg_attr(
-    feature = "serde",
-    derive(serde::Serialize, serde::Deserialize),
-    serde(bound = "for <'dee> M: serde::Serialize + serde::Deserialize<'dee>")
-)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
-pub struct Bin<M = NoMeta> {
+pub struct Bin {
     /// The bin file version. When reading, this reflects the source file version.
     /// When writing, version 3 is always used regardless of this value.
     pub version: u32,
 
     /// The objects in this bin tree, keyed by their path hash.
-    pub objects: IndexMap<BinHash, BinObject<M>>,
+    pub objects: IndexMap<BinHash, BinObject>,
 
     /// List of other property bins this file depends on.
     ///
@@ -66,7 +60,7 @@ impl Default for Bin {
     }
 }
 
-impl<M> Bin<M> {
+impl Bin {
     /// Creates a new `Bin` with the given objects and dependencies.
     ///
     /// The version is set to 3.
@@ -74,22 +68,22 @@ impl<M> Bin<M> {
     /// # Examples
     ///
     /// ```
-    /// use ltk_meta::{Bin, BinObject, property::NoMeta};
+    /// use ltk_meta::{Bin, BinObject};
     ///
-    /// let tree = Bin::<NoMeta>::new(
+    /// let tree = Bin::new(
     ///     [BinObject::new(0x1234, 0x5678)],
     ///     ["dependency.bin"],
     /// );
     /// ```
     pub fn new(
-        objects: impl IntoIterator<Item = BinObject<M>>,
+        objects: impl IntoIterator<Item = BinObject>,
         dependencies: impl IntoIterator<Item = impl Into<String>>,
     ) -> Self {
         Self {
             version: 3,
             objects: objects
                 .into_iter()
-                .map(|o: BinObject<M>| (o.path_hash, o))
+                .map(|o: BinObject| (o.path_hash, o))
                 .collect(),
             dependencies: dependencies.into_iter().map(Into::into).collect(),
         }
@@ -100,18 +94,15 @@ impl<M> Bin<M> {
     /// # Examples
     ///
     /// ```
-    /// use ltk_meta::{Bin, BinObject, property::NoMeta};
+    /// use ltk_meta::{Bin, BinObject};
     ///
-    /// let tree = Bin::<NoMeta>::builder()
+    /// let tree = Bin::builder()
     ///     .dependency("common.bin")
     ///     .object(BinObject::new(0x1234, 0x5678))
     ///     .build();
     /// ```
-    pub fn builder() -> builder::Builder<M>
-    where
-        M: Default,
-    {
-        builder::Builder::<M>::new()
+    pub fn builder() -> builder::Builder {
+        builder::Builder::new()
     }
 
     /// Returns the number of objects in the tree.
@@ -128,13 +119,13 @@ impl<M> Bin<M> {
 
     /// Returns a reference to the object with the given path hash, if it exists.
     #[inline]
-    pub fn get_object(&self, path_hash: BinHash) -> Option<&BinObject<M>> {
+    pub fn get_object(&self, path_hash: BinHash) -> Option<&BinObject> {
         self.objects.get(&path_hash)
     }
 
     /// Returns a mutable reference to the object with the given path hash, if it exists.
     #[inline]
-    pub fn get_object_mut(&mut self, path_hash: BinHash) -> Option<&mut BinObject<M>> {
+    pub fn get_object_mut(&mut self, path_hash: BinHash) -> Option<&mut BinObject> {
         self.objects.get_mut(&path_hash)
     }
 
@@ -148,12 +139,12 @@ impl<M> Bin<M> {
     ///
     /// If an object with the same path hash already exists, it is replaced
     /// and the old object is returned.
-    pub fn add_object(&mut self, object: BinObject<M>) -> Option<BinObject<M>> {
+    pub fn add_object(&mut self, object: BinObject) -> Option<BinObject> {
         self.objects.insert(object.path_hash, object)
     }
 
     /// Removes and returns the object with the given path hash, if it exists.
-    pub fn remove_object(&mut self, path_hash: impl Into<BinHash>) -> Option<BinObject<M>> {
+    pub fn remove_object(&mut self, path_hash: impl Into<BinHash>) -> Option<BinObject> {
         self.objects.shift_remove(&path_hash.into())
     }
 
@@ -164,38 +155,38 @@ impl<M> Bin<M> {
 
     /// Returns an iterator over the objects in the tree.
     #[inline]
-    pub fn iter(&self) -> impl Iterator<Item = (&BinHash, &BinObject<M>)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&BinHash, &BinObject)> {
         self.objects.iter()
     }
 
     /// Returns a mutable iterator over the objects in the tree.
     #[inline]
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&BinHash, &mut BinObject<M>)> {
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&BinHash, &mut BinObject)> {
         self.objects.iter_mut()
     }
 }
 
-impl<'a, M> IntoIterator for &'a Bin<M> {
-    type Item = (&'a BinHash, &'a BinObject<M>);
-    type IntoIter = indexmap::map::Iter<'a, BinHash, BinObject<M>>;
+impl<'a> IntoIterator for &'a Bin {
+    type Item = (&'a BinHash, &'a BinObject);
+    type IntoIter = indexmap::map::Iter<'a, BinHash, BinObject>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.objects.iter()
     }
 }
 
-impl<'a, M> IntoIterator for &'a mut Bin<M> {
-    type Item = (&'a BinHash, &'a mut BinObject<M>);
-    type IntoIter = indexmap::map::IterMut<'a, BinHash, BinObject<M>>;
+impl<'a> IntoIterator for &'a mut Bin {
+    type Item = (&'a BinHash, &'a mut BinObject);
+    type IntoIter = indexmap::map::IterMut<'a, BinHash, BinObject>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.objects.iter_mut()
     }
 }
 
-impl<M> IntoIterator for Bin<M> {
-    type Item = (BinHash, BinObject<M>);
-    type IntoIter = indexmap::map::IntoIter<BinHash, BinObject<M>>;
+impl IntoIterator for Bin {
+    type Item = (BinHash, BinObject);
+    type IntoIter = indexmap::map::IntoIter<BinHash, BinObject>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.objects.into_iter()

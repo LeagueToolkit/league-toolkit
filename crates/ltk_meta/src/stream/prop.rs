@@ -1,7 +1,6 @@
 use std::{
     fmt,
     io::{self, Seek as _},
-    marker::PhantomData,
     sync::Arc,
 };
 
@@ -11,7 +10,6 @@ use ltk_hash::{BinHash, ReadBytesExt as _};
 use ltk_io_ext::ReaderExt as _;
 
 use crate::{
-    property::NoMeta,
     stream::{
         layout::{Cursor, Numbering},
         owned, BatchObjects, BinToc, Entries, NoCache, ObjectCache, ObjectEntry, ObjectStream,
@@ -26,14 +24,11 @@ use crate::{
 /// short hops stay inside the buffer). Hand it the bare [`File`](std::fs::File); pre-wrapping
 /// in a `BufReader` only double-buffers.
 ///
-/// `M` is the same property-meta parameter the eager types carry; the
-/// [`concrete`](crate::concrete) alias pins it to [`NoMeta`] at the mount call.
-///
 /// # Examples
 ///
 /// ```no_run
 /// use std::fs::File;
-/// use ltk_meta::concrete::BinStream;
+/// use ltk_meta::BinStream;
 ///
 /// let mut stream = BinStream::mount(File::open("data.bin")?)?;
 /// println!("version {}, {} objects", stream.version(), stream.class_hashes().len());
@@ -43,7 +38,7 @@ use crate::{
 /// }
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-pub struct BinStream<R: io::Read + io::Seek, M = NoMeta> {
+pub struct BinStream<R: io::Read + io::Seek> {
     reader: io::BufReader<R>,
     version: u32,
     dependencies: Vec<String>,
@@ -57,11 +52,10 @@ pub struct BinStream<R: io::Read + io::Seek, M = NoMeta> {
     /// The kind-numbering latch. Mounting starts in the current numbering, and the first
     /// object whose kind bytes only make sense in the old one flips it for good.
     numbering: Numbering,
-    cache: Box<dyn ObjectCache<M> + Send>,
-    meta: PhantomData<fn() -> M>,
+    cache: Box<dyn ObjectCache + Send>,
 }
 
-impl<R: io::Read + io::Seek + fmt::Debug, M> fmt::Debug for BinStream<R, M> {
+impl<R: io::Read + io::Seek + fmt::Debug> fmt::Debug for BinStream<R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("BinStream")
             .field("reader", &self.reader)
@@ -74,7 +68,7 @@ impl<R: io::Read + io::Seek + fmt::Debug, M> fmt::Debug for BinStream<R, M> {
     }
 }
 
-impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
+impl<R: io::Read + io::Seek> BinStream<R> {
     /// Mounts a `PROP` stream, reading the header, dependencies and class-hash table.
     ///
     /// Reads sequentially to the start of the object bodies and stops; nothing past the
@@ -134,7 +128,6 @@ impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
             buffer: Vec::new(),
             numbering: Numbering::Current,
             cache: Box::new(NoCache),
-            meta: PhantomData,
         })
     }
 
@@ -178,14 +171,14 @@ impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
     /// Every call starts a fresh sweep from the top; cursors hold no state between calls.
     /// Objects not descended into are skipped by their size field, and rows the
     /// [`BinStream::toc`] already holds are served without touching the reader.
-    pub fn objects(&mut self) -> Objects<'_, R, M> {
+    pub fn objects(&mut self) -> Objects<'_, R> {
         Objects::new(self)
     }
 
     /// A `std` iterator of plain [`ObjectEntry`] descriptors, for harvesting and filtering.
     ///
     /// Equivalent to [`BinStream::objects`] without ever descending; restarts the same way.
-    pub fn entries(&mut self) -> Entries<'_, R, M> {
+    pub fn entries(&mut self) -> Entries<'_, R> {
         Entries::new(self)
     }
 
@@ -217,7 +210,7 @@ impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
     pub fn object(
         &mut self,
         path_hash: impl Into<BinHash>,
-    ) -> Result<Option<ObjectStream<'_, R, M>>, Error> {
+    ) -> Result<Option<ObjectStream<'_, R>>, Error> {
         let path_hash = path_hash.into();
         self.toc()?;
         match self.toc.entry(path_hash) {
@@ -242,7 +235,7 @@ impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
     ///
     /// ```no_run
     /// use std::fs::File;
-    /// use ltk_meta::concrete::BinStream;
+    /// use ltk_meta::BinStream;
     ///
     /// let mut stream = BinStream::mount(File::open("data.bin")?)?;
     /// let mut batch = stream.objects_batch([0x1111_1111_u32, 0x2222_2222]);
@@ -256,7 +249,7 @@ impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
     pub fn objects_batch(
         &mut self,
         hashes: impl IntoIterator<Item = impl Into<BinHash>>,
-    ) -> BatchObjects<'_, R, M> {
+    ) -> BatchObjects<'_, R> {
         BatchObjects::new(self, hashes)
     }
 
@@ -277,7 +270,7 @@ impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
     pub fn cached_object(
         &mut self,
         path_hash: impl Into<BinHash>,
-    ) -> Result<Option<Arc<BinObject<M>>>, Error> {
+    ) -> Result<Option<Arc<BinObject>>, Error> {
         let path_hash = path_hash.into();
         if let Some(hit) = self.cache.get(path_hash) {
             return Ok(Some(hit));
@@ -296,7 +289,7 @@ impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
     /// Installs a cache provider, dropping whatever the previous one held.
     ///
     /// The default is [`NoCache`].
-    pub fn set_cache(&mut self, cache: Box<dyn ObjectCache<M> + Send>) {
+    pub fn set_cache(&mut self, cache: Box<dyn ObjectCache + Send>) {
         self.cache = cache;
     }
 
@@ -314,7 +307,7 @@ impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
     /// counts consumed, whatever the value model raises for a container it refuses
     /// ([`Error::InvalidNesting`], [`Error::InvalidKeyType`],
     /// [`Error::MismatchedContainerTypes`]), or an I/O error from the source.
-    pub fn into_bin(mut self) -> Result<Bin<M>, Error> {
+    pub fn into_bin(mut self) -> Result<Bin, Error> {
         let objects = self.drain_objects()?;
         Ok(Bin {
             version: self.version,
@@ -334,7 +327,7 @@ impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
     /// A latch onto the legacy numbering part-way through invalidates everything read so far,
     /// so the drain starts over — which reproduces the eager reader's whole-table retry. The
     /// latch only ever flips once, so the restart happens at most once.
-    fn drain_objects(&mut self) -> Result<IndexMap<BinHash, BinObject<M>>, Error> {
+    fn drain_objects(&mut self) -> Result<IndexMap<BinHash, BinObject>, Error> {
         let mut objects = IndexMap::with_capacity(self.class_hashes.len());
 
         let mut index = 0;
@@ -392,7 +385,7 @@ impl<R: io::Read + io::Seek, M: Default> BinStream<R, M> {
     ///
     /// No separate walk: the decode is count-driven over the same sized regions, so it raises
     /// everything the walk would and the eager path crosses each object's bytes once.
-    pub(crate) fn read_object(&mut self, entry: ObjectEntry) -> Result<BinObject<M>, Error> {
+    pub(crate) fn read_object(&mut self, entry: ObjectEntry) -> Result<BinObject, Error> {
         self.load_object(entry)?;
         self.settle(entry.path_hash, |mut cur| {
             owned::read_object(&mut cur, entry.class_hash)

@@ -1,73 +1,36 @@
 use crate::{
-    property::{Kind, NoMeta},
+    property::Kind,
     stream::{layout::Numbering, owned},
     traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty},
 };
 use byteorder::LE;
 use ltk_io_ext::WriterExt;
 
-#[cfg_attr(
-    feature = "serde",
-    derive(serde::Serialize, serde::Deserialize),
-    serde(bound = "for <'dee> M: serde::Serialize + serde::Deserialize<'dee>")
-)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
-pub struct String<M = NoMeta> {
+pub struct String {
     pub value: std::string::String,
-    pub meta: M,
 }
 
-impl<M> String<M> {
+impl String {
     #[inline(always)]
     #[must_use]
-    pub fn new(value: std::string::String) -> Self
-    where
-        M: Default,
-    {
-        Self::new_with_meta(value, M::default())
-    }
-
-    #[inline(always)]
-    #[must_use]
-    pub fn new_with_meta(value: std::string::String, meta: M) -> Self {
-        Self { value, meta }
-    }
-
-    #[inline(always)]
-    #[must_use]
-    pub fn with_meta<T>(self, meta: T) -> String<T> {
-        String {
-            value: self.value,
-            meta,
-        }
-    }
-
-    #[inline(always)]
-    #[must_use]
-    pub fn no_meta(self) -> String<NoMeta> {
-        self.with_meta(NoMeta)
+    pub fn new(value: std::string::String) -> Self {
+        Self { value }
     }
 }
 
-impl<M> PropertyValueExt for String<M> {
+impl PropertyValueExt for String {
     const KIND: Kind = Kind::String;
 }
 
-impl<M> PropertyExt for String<M> {
+impl PropertyExt for String {
     fn size_no_header(&self) -> usize {
         self.value.len() + 2
     }
-
-    type Meta = M;
-    fn meta(&self) -> &Self::Meta {
-        &self.meta
-    }
-    fn meta_mut(&mut self) -> &mut Self::Meta {
-        &mut self.meta
-    }
 }
 
-impl<M: Default> ReadProperty for String<M> {
+impl ReadProperty for String {
     fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         legacy: bool,
@@ -81,7 +44,7 @@ impl<M: Default> ReadProperty for String<M> {
     }
 }
 
-impl<M> WriteProperty for String<M> {
+impl WriteProperty for String {
     fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
         &self,
         writer: &mut R,
@@ -91,23 +54,23 @@ impl<M> WriteProperty for String<M> {
     }
 }
 
-impl<S: Into<std::string::String>, M: Default> From<S> for String<M> {
+impl<S: Into<std::string::String>> From<S> for String {
     fn from(value: S) -> Self {
         Self::new(value.into())
     }
 }
-impl<M> AsRef<std::string::String> for String<M> {
+impl AsRef<std::string::String> for String {
     fn as_ref(&self) -> &std::string::String {
         &self.value
     }
 }
-impl<M> AsRef<str> for String<M> {
+impl AsRef<str> for String {
     fn as_ref(&self) -> &str {
         self.value.as_str()
     }
 }
 
-impl<M> std::ops::Deref for String<M> {
+impl std::ops::Deref for String {
     type Target = std::string::String;
 
     fn deref(&self) -> &Self::Target {

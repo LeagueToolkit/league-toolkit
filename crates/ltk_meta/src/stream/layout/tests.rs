@@ -2,7 +2,7 @@ use glam::{Mat4, Vec2, Vec3, Vec4};
 use ltk_primitives::Color;
 
 use crate::{
-    concrete::values,
+    property::values,
     property::values::{Embedded, UnorderedContainer},
     stream::layout::{Cursor, Numbering},
     traits::PropertyExt as _,
@@ -31,7 +31,6 @@ fn one_of_each() -> Vec<PropertyValueEnum> {
         ]
         .into_iter()
         .collect(),
-        meta: Default::default(),
     };
 
     vec![
@@ -153,7 +152,7 @@ fn shapes_come_from_the_header_bytes() {
 /// codecs any more, so this is what keeps the two from drifting apart unnoticed.
 #[test]
 fn cursor_codecs_agree_with_the_reader_codecs() {
-    use crate::{property::NoMeta, stream::owned, traits::ReadProperty};
+    use crate::{stream::owned, traits::ReadProperty};
 
     macro_rules! same_leaf {
         ($($owned:expr),* $(,)?) => {$({
@@ -168,7 +167,7 @@ fn cursor_codecs_agree_with_the_reader_codecs() {
             .expect("the reader codec reads");
             assert_eq!(owned, via_reader, "the reader codec disagrees with the writer");
 
-            let via_cursor = owned::read_value::<NoMeta>(&mut cursor(&bytes), value.kind())
+            let via_cursor = owned::read_value(&mut cursor(&bytes), value.kind())
                 .expect("the cursor codec reads");
             assert_eq!(value, via_cursor, "the two leaf codecs disagree");
         })*};
@@ -200,7 +199,7 @@ fn cursor_codecs_agree_with_the_reader_codecs() {
 
 #[test]
 fn an_object_walks_to_its_declared_size() {
-    let object = crate::concrete::BinObject::builder(0x1111u32, 0x2222u32)
+    let object = crate::BinObject::builder(0x1111u32, 0x2222u32)
         .property(0x0001u32, values::I32::new(42))
         .property(0x0002u32, values::String::from("hello"))
         .build();

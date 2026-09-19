@@ -13,18 +13,18 @@ use std::{num::NonZeroUsize, sync::Arc};
 use indexmap::IndexMap;
 use ltk_hash::BinHash;
 
-use crate::{property::NoMeta, BinObject};
+use crate::BinObject;
 
 /// A lookup cache for parsed objects. The provider owns its eviction policy.
 ///
-/// [`Arc<BinObject<M>>`](Arc) is the currency: a hit is an `Arc` clone, so callers keep values
+/// [`Arc<BinObject>`](Arc) is the currency: a hit is an `Arc` clone, so callers keep values
 /// as long as they like, eviction never invalidates anything, and the values cross threads.
-pub trait ObjectCache<M = NoMeta> {
+pub trait ObjectCache {
     /// The cached object for `key`, if the provider holds one.
-    fn get(&mut self, key: BinHash) -> Option<Arc<BinObject<M>>>;
+    fn get(&mut self, key: BinHash) -> Option<Arc<BinObject>>;
 
     /// Offers `value` to the provider, which may keep it or drop it.
-    fn put(&mut self, key: BinHash, value: Arc<BinObject<M>>);
+    fn put(&mut self, key: BinHash, value: Arc<BinObject>);
 
     /// Drops everything the provider holds.
     fn clear(&mut self);
@@ -39,12 +39,12 @@ pub trait ObjectCache<M = NoMeta> {
 #[derive(Debug, Default, Clone, Copy)]
 pub struct NoCache;
 
-impl<M> ObjectCache<M> for NoCache {
-    fn get(&mut self, _key: BinHash) -> Option<Arc<BinObject<M>>> {
+impl ObjectCache for NoCache {
+    fn get(&mut self, _key: BinHash) -> Option<Arc<BinObject>> {
         None
     }
 
-    fn put(&mut self, _key: BinHash, _value: Arc<BinObject<M>>) {}
+    fn put(&mut self, _key: BinHash, _value: Arc<BinObject>) {}
 
     fn clear(&mut self) {}
 }
@@ -59,7 +59,7 @@ impl<M> ObjectCache<M> for NoCache {
 ///
 /// ```no_run
 /// use std::{fs::File, num::NonZeroUsize};
-/// use ltk_meta::{concrete::BinStream, stream::LruObjectCache};
+/// use ltk_meta::{BinStream, stream::LruObjectCache};
 ///
 /// let mut stream = BinStream::mount(File::open("data.bin")?)?;
 /// stream.set_cache(Box::new(LruObjectCache::new(NonZeroUsize::new(64).unwrap())));
@@ -70,13 +70,13 @@ impl<M> ObjectCache<M> for NoCache {
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 #[derive(Debug)]
-pub struct LruObjectCache<M = NoMeta> {
+pub struct LruObjectCache {
     capacity: NonZeroUsize,
     /// Least recently used first.
-    entries: IndexMap<BinHash, Arc<BinObject<M>>>,
+    entries: IndexMap<BinHash, Arc<BinObject>>,
 }
 
-impl<M> LruObjectCache<M> {
+impl LruObjectCache {
     /// An empty cache that holds at most `capacity` objects.
     #[must_use]
     pub fn new(capacity: NonZeroUsize) -> Self {
@@ -105,15 +105,15 @@ impl<M> LruObjectCache<M> {
     }
 }
 
-impl<M> ObjectCache<M> for LruObjectCache<M> {
-    fn get(&mut self, key: BinHash) -> Option<Arc<BinObject<M>>> {
+impl ObjectCache for LruObjectCache {
+    fn get(&mut self, key: BinHash) -> Option<Arc<BinObject>> {
         let index = self.entries.get_index_of(&key)?;
         let (_, value) = self.entries.shift_remove_index(index)?;
         self.entries.insert(key, Arc::clone(&value));
         Some(value)
     }
 
-    fn put(&mut self, key: BinHash, value: Arc<BinObject<M>>) {
+    fn put(&mut self, key: BinHash, value: Arc<BinObject>) {
         self.entries.shift_remove(&key);
         if self.entries.len() >= self.capacity.get() {
             self.entries.shift_remove_index(0);
@@ -129,10 +129,9 @@ impl<M> ObjectCache<M> for LruObjectCache<M> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::concrete;
 
-    fn object(path_hash: u32) -> Arc<concrete::BinObject> {
-        Arc::new(concrete::BinObject::new(path_hash, 0xAAAAu32))
+    fn object(path_hash: u32) -> Arc<BinObject> {
+        Arc::new(BinObject::new(path_hash, 0xAAAAu32))
     }
 
     fn capacity(n: usize) -> NonZeroUsize {
@@ -143,7 +142,7 @@ mod tests {
     fn no_cache_never_holds_anything() {
         let mut cache = NoCache;
         cache.put(0x1u32.into(), object(0x1));
-        assert!(ObjectCache::<NoMeta>::get(&mut cache, 0x1u32.into()).is_none());
+        assert!(ObjectCache::get(&mut cache, 0x1u32.into()).is_none());
     }
 
     #[test]

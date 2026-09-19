@@ -103,7 +103,7 @@ fn missing_object(object_hash: BinHash) -> PatchError {
     ResolveError::new(0, ResolveErrorKind::MissingObject(object_hash)).into()
 }
 
-impl<M> BinOverride<M> {
+impl BinOverride {
     /// Lays this patch over `base`, in the order the client does.
     ///
     /// 1. Every hash in [`BinOverride::deleted`] is dropped from the base.
@@ -119,7 +119,7 @@ impl<M> BinOverride<M> {
     ///
     /// This consumes the patch: its objects and values move into `base` and nothing is cloned.
     /// To lay one patch over several bases, clone it.
-    pub fn apply(self, base: &mut Bin<M>) -> ApplyReport {
+    pub fn apply(self, base: &mut Bin) -> ApplyReport {
         let Self {
             deleted,
             objects,
@@ -182,7 +182,7 @@ impl<M> BinOverride<M> {
     /// stands. `apply` runs them in order, so a record that only fits because an earlier record in
     /// the same patch replaced a pointer or an embed above it is judged here against the value
     /// that earlier record would have overwritten.
-    pub fn check(&self, base: &Bin<M>) -> ApplyReport {
+    pub fn check(&self, base: &Bin) -> ApplyReport {
         let mut report = ApplyReport::default();
 
         for object_hash in &self.deleted {
@@ -225,11 +225,7 @@ impl<M> BinOverride<M> {
     }
 
     /// The object a record would find in the table [`BinOverride::apply`] builds.
-    fn merged_object<'a>(
-        &'a self,
-        base: &'a Bin<M>,
-        object_hash: BinHash,
-    ) -> Option<&'a BinObject<M>> {
+    fn merged_object<'a>(&'a self, base: &'a Bin, object_hash: BinHash) -> Option<&'a BinObject> {
         if self.deleted.contains(&object_hash) {
             return None;
         }

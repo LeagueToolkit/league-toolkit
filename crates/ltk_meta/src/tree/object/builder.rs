@@ -1,19 +1,19 @@
 use indexmap::IndexMap;
 use ltk_hash::BinHash;
 
-use crate::{property::NoMeta, BinObject, PropertyValueEnum};
+use crate::{BinObject, PropertyValueEnum};
 
 /// A builder for constructing [`BinObject`] instances.
 ///
 /// See: [`BinObject::builder`]
 #[derive(Debug, Clone)]
-pub struct Builder<M = NoMeta> {
+pub struct Builder {
     path_hash: BinHash,
     class_hash: BinHash,
-    properties: IndexMap<BinHash, PropertyValueEnum<M>>,
+    properties: IndexMap<BinHash, PropertyValueEnum>,
 }
 
-impl<M> Builder<M> {
+impl Builder {
     /// See: [`BinObject::builder`]
     pub fn new(path_hash: impl Into<BinHash>, class_hash: impl Into<BinHash>) -> Self {
         Self {
@@ -37,7 +37,7 @@ impl<M> Builder<M> {
     pub fn property(
         mut self,
         name_hash: impl Into<BinHash>,
-        value: impl Into<PropertyValueEnum<M>>,
+        value: impl Into<PropertyValueEnum>,
     ) -> Self {
         self.properties.insert(name_hash.into(), value.into());
         self
@@ -46,14 +46,14 @@ impl<M> Builder<M> {
     /// Adds multiple properties from an iterator of name hashes & [`PropertyValueEnum`]s.
     pub fn properties(
         mut self,
-        props: impl IntoIterator<Item = (BinHash, PropertyValueEnum<M>)>,
+        props: impl IntoIterator<Item = (BinHash, PropertyValueEnum)>,
     ) -> Self {
         self.properties.extend(props);
         self
     }
 
     /// Builds the final [`BinObject`].
-    pub fn build(self) -> BinObject<M> {
+    pub fn build(self) -> BinObject {
         BinObject {
             path_hash: self.path_hash,
             class_hash: self.class_hash,

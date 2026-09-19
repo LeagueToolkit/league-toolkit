@@ -11,36 +11,33 @@ use ltk_hash::BinHash;
 use ltk_primitives::Color;
 
 use crate::{
-    concrete,
-    concrete::values,
     path::ValueShape,
+    property::values,
     property::values::{Embedded, UnorderedContainer},
     stream::{layout::Numbering, LruObjectCache, ValueView},
     traits::PropertyExt as _,
-    Bin, BinKind, BinObject, Error, PropertyKind, PropertyValueEnum,
+    Bin, BinKind, BinObject, BinStream, Error, PropertyKind, PropertyValueEnum,
 };
-
-type BinStream<R> = concrete::BinStream<R>;
 
 /// A three-object bin with a dependency and a spread of property kinds, as bytes.
 fn sample_bin() -> (Bin, Vec<u8>) {
     let bin = Bin::builder()
         .dependency("common.bin")
         .object(
-            concrete::BinObject::builder(0x1111_0001u32, 0xAAAA_0001u32)
+            BinObject::builder(0x1111_0001u32, 0xAAAA_0001u32)
                 .property(0x0001u32, values::I32::new(42))
                 .property(0x0002u32, values::String::from("hello"))
                 .build(),
         )
         .object(
-            concrete::BinObject::builder(0x1111_0002u32, 0xAAAA_0002u32)
+            BinObject::builder(0x1111_0002u32, 0xAAAA_0002u32)
                 .property(
                     0x0003u32,
                     values::Container::from(vec![values::F32::new(1.5), values::F32::new(2.5)]),
                 )
                 .build(),
         )
-        .object(concrete::BinObject::builder(0x1111_0003u32, 0xAAAA_0003u32).build())
+        .object(BinObject::builder(0x1111_0003u32, 0xAAAA_0003u32).build())
         .build();
 
     let mut cursor = io::Cursor::new(Vec::new());
@@ -59,7 +56,6 @@ fn every_kind() -> Vec<(BinHash, PropertyValueEnum)> {
             properties: [(POSITION, values::Vector2::new(Vec2::new(x, -x)).into())]
                 .into_iter()
                 .collect(),
-            meta: Default::default(),
         })
     };
 

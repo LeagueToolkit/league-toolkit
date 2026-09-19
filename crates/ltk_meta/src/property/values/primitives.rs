@@ -1,5 +1,5 @@
 use crate::{
-    property::{Kind, NoMeta},
+    property::Kind,
     traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty},
 };
 use ltk_hash::{BinHash, ReadBytesExt as _, WadHash, WriteBytesExt as _};
@@ -19,70 +19,41 @@ macro_rules! impl_prim {
         #[derive(Clone, Debug, PartialEq, Default, $($derive),*)]
         #[cfg_attr(
             feature = "serde",
-            derive(serde::Serialize, serde::Deserialize),
-            serde(bound = "for <'dee> M: serde::Serialize + serde::Deserialize<'dee>")
+            derive(serde::Serialize, serde::Deserialize)
         )]
-        pub struct $name<M = NoMeta>{
+        pub struct $name {
             pub value: $rust,
-            pub meta: M
         }
 
-        impl<M> $name<M> {
+        impl $name {
             #[inline(always)]
             #[must_use]
-            pub fn new(value: $new_arg) -> Self where M: Default {
-                Self::new_with_meta(value.into(), M::default())
-            }
-
-            #[inline(always)]
-            #[must_use]
-            pub fn new_with_meta(value: $new_arg, meta: M) -> Self {
-                Self { value: value.into(), meta }
-            }
-
-            #[inline(always)]
-            #[must_use]
-            pub fn with_meta<T>(self, meta: T) -> $name<T> {
-                $name { value: self.value, meta }
-            }
-
-            #[inline(always)]
-            #[must_use]
-            pub fn no_meta(self) -> $name<NoMeta> {
-                self.with_meta(NoMeta)
+            pub fn new(value: $new_arg) -> Self {
+                Self { value: value.into() }
             }
         }
 
-        impl<M> PropertyExt for $name<M> {
+        impl PropertyExt for $name {
             fn size_no_header(&self) -> usize {
                 core::mem::size_of::<$rust>()
             }
-
-            type Meta = M;
-            fn meta(&self) -> &Self::Meta {
-                &self.meta
-            }
-            fn meta_mut(&mut self) -> &mut Self::Meta {
-                &mut self.meta
-            }
         }
 
-        impl<M> PropertyValueExt for $name<M> {
+        impl PropertyValueExt for $name {
             const KIND: Kind = Kind::$name;
         }
 
-        impl<M: Default> ReadProperty for $name<M> {
+        impl ReadProperty for $name {
             fn from_reader<R: std::io::Read + ?Sized>(
                 reader: &mut R,
                 _legacy: bool,
             ) -> Result<Self, crate::Error> {
                 Ok(Self {
                     value: paste::paste!(reader.[<read_ $method>]::<$($endian,)*>()?),
-                    meta: M::default()
                 })
             }
         }
-        impl<M> WriteProperty for $name<M> {
+        impl WriteProperty for $name {
             fn to_writer<W: std::io::Write + std::io::Seek + ?Sized>(
                 &self,
                 writer: &mut W,
@@ -92,19 +63,19 @@ macro_rules! impl_prim {
             }
         }
 
-        impl<S: Into<$rust>, M: Default> From<S> for $name<M> {
+        impl<S: Into<$rust>> From<S> for $name {
             fn from(value: S) -> Self {
                 Self::new(value.into())
             }
         }
 
-        impl<M> AsRef<$rust> for $name<M> {
+        impl AsRef<$rust> for $name {
             fn as_ref(&self) -> &$rust {
                 &self.value
             }
         }
 
-        impl<M> std::ops::Deref for $name<M> {
+        impl std::ops::Deref for $name {
             type Target = $rust;
 
             fn deref(&self) -> &Self::Target {

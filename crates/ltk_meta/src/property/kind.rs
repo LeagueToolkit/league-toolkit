@@ -204,15 +204,15 @@ impl Kind {
     }
 
     #[inline(always)]
-    pub fn read<R: io::Read + std::io::Seek + ?Sized, M: Default>(
+    pub fn read<R: io::Read + std::io::Seek + ?Sized>(
         self,
         reader: &mut R,
         legacy: bool,
-    ) -> Result<PropertyValueEnum<M>, super::Error> {
+    ) -> Result<PropertyValueEnum, super::Error> {
         PropertyValueEnum::from_reader(reader, self, legacy)
     }
 
-    pub fn default_value<M: Default>(self) -> PropertyValueEnum<M> {
+    pub fn default_value(self) -> PropertyValueEnum {
         match self {
             Self::None => PropertyValueEnum::None(Default::default()),
             Self::Bool => PropertyValueEnum::Bool(Default::default()),

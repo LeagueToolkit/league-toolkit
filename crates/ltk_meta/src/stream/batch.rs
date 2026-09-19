@@ -5,7 +5,6 @@ use std::{collections::HashSet, io};
 use ltk_hash::BinHash;
 
 use crate::{
-    property::NoMeta,
     stream::{BinStream, ObjectEntry, ObjectStream},
     Error,
 };
@@ -17,8 +16,8 @@ use crate::{
 /// at a time.
 #[must_use = "cursors are lazy and read nothing until advanced"]
 #[derive(Debug)]
-pub struct BatchObjects<'a, R: io::Read + io::Seek, M = NoMeta> {
-    stream: &'a mut BinStream<R, M>,
+pub struct BatchObjects<'a, R: io::Read + io::Seek> {
+    stream: &'a mut BinStream<R>,
     /// The request, deduplicated, in the order it was given — the order [`Self::missing`]
     /// reports in.
     requested: Vec<BinHash>,
@@ -32,9 +31,9 @@ pub struct BatchObjects<'a, R: io::Read + io::Seek, M = NoMeta> {
     at: usize,
 }
 
-impl<'a, R: io::Read + io::Seek, M: Default> BatchObjects<'a, R, M> {
+impl<'a, R: io::Read + io::Seek> BatchObjects<'a, R> {
     pub(crate) fn new(
-        stream: &'a mut BinStream<R, M>,
+        stream: &'a mut BinStream<R>,
         hashes: impl IntoIterator<Item = impl Into<BinHash>>,
     ) -> Self {
         let mut requested = Vec::new();
@@ -87,7 +86,7 @@ impl<'a, R: io::Read + io::Seek, M: Default> BatchObjects<'a, R, M> {
         clippy::should_implement_trait,
         reason = "a lending cursor: the yielded item borrows the reader, which `Iterator` cannot express"
     )]
-    pub fn next(&mut self) -> Result<Option<ObjectStream<'_, R, M>>, Error> {
+    pub fn next(&mut self) -> Result<Option<ObjectStream<'_, R>>, Error> {
         match self.next_entry()? {
             Some(entry) => Ok(Some(ObjectStream::new(self.stream, entry))),
             None => Ok(None),

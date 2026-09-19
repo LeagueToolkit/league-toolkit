@@ -1,7 +1,7 @@
 use std::{hash::Hash, io};
 
 use crate::{
-    property::{Kind, NoMeta},
+    property::Kind,
     stream::{layout::Numbering, owned},
     traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty, WriterExt},
     Error, PropertyValueEnum, ValueSlot,
@@ -29,35 +29,15 @@ impl Hash for PropertyValueEnum {
     }
 }
 
-#[cfg_attr(
-    feature = "serde",
-    derive(serde::Serialize, serde::Deserialize),
-    serde(bound = "for <'dee> M: serde::Serialize + serde::Deserialize<'dee>")
-)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, PartialEq, Debug, Default)]
-pub struct Map<M = NoMeta> {
+pub struct Map {
     key_kind: Kind,
     value_kind: Kind,
-    entries: Vec<(PropertyValueEnum<M>, PropertyValueEnum<M>)>,
-    pub meta: M,
+    entries: Vec<(PropertyValueEnum, PropertyValueEnum)>,
 }
 
-impl<M> Map<M> {
-    #[inline(always)]
-    #[must_use]
-    pub fn no_meta(self) -> Map<NoMeta> {
-        Map {
-            key_kind: self.key_kind,
-            value_kind: self.value_kind,
-            entries: self
-                .entries
-                .into_iter()
-                .map(|(k, v)| (k.no_meta(), v.no_meta()))
-                .collect(),
-            meta: NoMeta,
-        }
-    }
-
+impl Map {
     #[inline(always)]
     #[must_use]
     pub fn key_kind(&self) -> Kind {
@@ -72,7 +52,7 @@ impl<M> Map<M> {
 
     #[inline(always)]
     #[must_use]
-    pub fn entries(&self) -> &[(PropertyValueEnum<M>, PropertyValueEnum<M>)] {
+    pub fn entries(&self) -> &[(PropertyValueEnum, PropertyValueEnum)] {
         &self.entries
     }
 
@@ -84,7 +64,7 @@ impl<M> Map<M> {
     /// map behind its own back. Add entries with [`Map::push`].
     #[inline(always)]
     #[must_use]
-    pub fn slot(&mut self, index: usize) -> Option<ValueSlot<'_, M>> {
+    pub fn slot(&mut self, index: usize) -> Option<ValueSlot<'_>> {
         let value_kind = self.value_kind;
         let (_, value) = self.entries.get_mut(index)?;
         Some(ValueSlot::pinned(value_kind, value))
@@ -92,16 +72,12 @@ impl<M> Map<M> {
 
     #[inline(always)]
     #[must_use]
-    pub fn into_entries(self) -> Vec<(PropertyValueEnum<M>, PropertyValueEnum<M>)> {
+    pub fn into_entries(self) -> Vec<(PropertyValueEnum, PropertyValueEnum)> {
         self.entries
     }
 
     #[inline(always)]
-    pub fn push(
-        &mut self,
-        key: PropertyValueEnum<M>,
-        value: PropertyValueEnum<M>,
-    ) -> Result<(), Error> {
+    pub fn push(&mut self, key: PropertyValueEnum, value: PropertyValueEnum) -> Result<(), Error> {
         if self.key_kind != key.kind() {
             return Err(Error::MismatchedContainerTypes {
                 expected: self.key_kind,
@@ -117,9 +93,7 @@ impl<M> Map<M> {
         self.entries.push((key, value));
         Ok(())
     }
-}
 
-impl<M: Default> Map<M> {
     /// An empty map keyed by `key_kind`, holding `value_kind`.
     ///
     /// # Errors
@@ -144,7 +118,7 @@ impl<M: Default> Map<M> {
     pub fn new(
         key_kind: Kind,
         value_kind: Kind,
-        entries: Vec<(PropertyValueEnum<M>, PropertyValueEnum<M>)>,
+        entries: Vec<(PropertyValueEnum, PropertyValueEnum)>,
     ) -> Result<Self, Error> {
         if !key_kind.is_valid_map_key() {
             return Err(Error::InvalidKeyType(key_kind));
@@ -170,15 +144,14 @@ impl<M: Default> Map<M> {
             key_kind,
             value_kind,
             entries,
-            meta: M::default(),
         })
     }
 }
 
-impl<M> PropertyValueExt for Map<M> {
+impl PropertyValueExt for Map {
     const KIND: Kind = Kind::Map;
 }
-impl<M> PropertyExt for Map<M> {
+impl PropertyExt for Map {
     fn size_no_header(&self) -> usize {
         1 + 1
             + 4
@@ -189,17 +162,9 @@ impl<M> PropertyExt for Map<M> {
                 .map(|(k, v)| k.size_no_header() + v.size_no_header())
                 .sum::<usize>()
     }
-
-    type Meta = M;
-    fn meta(&self) -> &Self::Meta {
-        &self.meta
-    }
-    fn meta_mut(&mut self) -> &mut Self::Meta {
-        &mut self.meta
-    }
 }
 
-impl<M: Default> ReadProperty for Map<M> {
+impl ReadProperty for Map {
     fn from_reader<R: io::Read + io::Seek + ?Sized>(
         reader: &mut R,
         legacy: bool,
@@ -212,7 +177,7 @@ impl<M: Default> ReadProperty for Map<M> {
         )
     }
 }
-impl<M: Clone> WriteProperty for Map<M> {
+impl WriteProperty for Map {
     fn to_writer<R: io::Write + io::Seek + ?Sized>(
         &self,
         writer: &mut R,
@@ -250,7 +215,7 @@ impl<M: Clone> WriteProperty for Map<M> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::property::{values, NoMeta};
+    use crate::property::values;
 
     /// The constructors reject exactly what [`Map::from_reader`] rejects, so a map that builds
     /// here is one this crate can read back.
@@ -263,11 +228,11 @@ mod tests {
             Kind::Map,
         ] {
             assert!(matches!(
-                Map::<NoMeta>::empty(kind, Kind::I32),
+                Map::empty(kind, Kind::I32),
                 Err(Error::InvalidKeyType(k)) if k == kind
             ));
             assert!(matches!(
-                Map::<NoMeta>::empty(Kind::U32, kind),
+                Map::empty(Kind::U32, kind),
                 Err(Error::InvalidNesting(k)) if k == kind
             ));
         }
@@ -281,19 +246,19 @@ mod tests {
             Kind::ObjectLink,
         ] {
             assert!(matches!(
-                Map::<NoMeta>::empty(kind, Kind::I32),
+                Map::empty(kind, Kind::I32),
                 Err(Error::InvalidKeyType(k)) if k == kind
             ));
-            assert!(Map::<NoMeta>::empty(Kind::Hash, kind).is_ok());
+            assert!(Map::empty(Kind::Hash, kind).is_ok());
         }
 
-        assert!(Map::<NoMeta>::empty(Kind::WadChunkLink, Kind::I32).is_ok());
+        assert!(Map::empty(Kind::WadChunkLink, Kind::I32).is_ok());
     }
 
     #[test]
     fn rejects_an_entry_that_does_not_match_its_kinds() {
         assert!(matches!(
-            Map::<NoMeta>::new(
+            Map::new(
                 Kind::U32,
                 Kind::String,
                 vec![(values::I32::new(1).into(), values::String::from("a").into())],
@@ -304,7 +269,7 @@ mod tests {
             })
         ));
 
-        let mut map = Map::<NoMeta>::empty(Kind::U32, Kind::String).unwrap();
+        let mut map = Map::empty(Kind::U32, Kind::String).unwrap();
         assert!(map
             .push(values::U32::new(1).into(), values::I32::new(2).into())
             .is_err());

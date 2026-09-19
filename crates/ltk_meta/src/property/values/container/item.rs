@@ -31,8 +31,8 @@ mod sealed {
 macro_rules! impl_container_item {
     ($($variant:ident,)*) => {
         $(
-            impl<M> sealed::Sealed for values::$variant<M> {}
-            impl<M> ContainerItem for values::$variant<M> {}
+            impl sealed::Sealed for values::$variant {}
+            impl ContainerItem for values::$variant {}
         )*
     };
 }

@@ -1,44 +1,26 @@
 use crate::{
-    property::{Kind, NoMeta},
+    property::Kind,
     stream::{layout::Numbering, owned},
     traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty},
 };
 
 use super::Container;
 
-#[cfg_attr(
-    feature = "serde",
-    derive(serde::Serialize, serde::Deserialize),
-    serde(bound = "for <'dee> M: serde::Serialize + serde::Deserialize<'dee>")
-)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, PartialEq, Debug, Default)]
-pub struct UnorderedContainer<M = NoMeta>(pub Container<M>);
+pub struct UnorderedContainer(pub Container);
 
-impl<M> UnorderedContainer<M> {
-    pub fn no_meta(self) -> UnorderedContainer<NoMeta> {
-        UnorderedContainer(self.0.no_meta())
-    }
-}
-
-impl<M> PropertyValueExt for UnorderedContainer<M> {
+impl PropertyValueExt for UnorderedContainer {
     const KIND: Kind = Kind::UnorderedContainer;
 }
 
-impl<M> PropertyExt for UnorderedContainer<M> {
+impl PropertyExt for UnorderedContainer {
     fn size_no_header(&self) -> usize {
         self.0.size_no_header()
     }
-
-    type Meta = M;
-    fn meta(&self) -> &Self::Meta {
-        self.0.meta()
-    }
-    fn meta_mut(&mut self) -> &mut Self::Meta {
-        self.0.meta_mut()
-    }
 }
 
-impl<M: Default> ReadProperty for UnorderedContainer<M> {
+impl ReadProperty for UnorderedContainer {
     fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         legacy: bool,
@@ -52,7 +34,7 @@ impl<M: Default> ReadProperty for UnorderedContainer<M> {
     }
 }
 
-impl<M: Clone> WriteProperty for UnorderedContainer<M> {
+impl WriteProperty for UnorderedContainer {
     fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
         &self,
         writer: &mut R,
@@ -62,20 +44,20 @@ impl<M: Clone> WriteProperty for UnorderedContainer<M> {
     }
 }
 
-impl<S: Into<Container<M>>, M: Default> From<S> for UnorderedContainer<M> {
+impl<S: Into<Container>> From<S> for UnorderedContainer {
     fn from(value: S) -> Self {
         Self(value.into())
     }
 }
 
-impl<M> AsRef<Container<M>> for UnorderedContainer<M> {
-    fn as_ref(&self) -> &Container<M> {
+impl AsRef<Container> for UnorderedContainer {
+    fn as_ref(&self) -> &Container {
         &self.0
     }
 }
 
-impl<M> std::ops::Deref for UnorderedContainer<M> {
-    type Target = Container<M>;
+impl std::ops::Deref for UnorderedContainer {
+    type Target = Container;
 
     fn deref(&self) -> &Self::Target {
         &self.0

@@ -36,9 +36,9 @@ impl Bin {
 /// Shared by [`Bin`] and [`BinOverride`](crate::BinOverride), which hold the same object table.
 /// Returns the objects and whether they had to be read with the legacy property kind numbering,
 /// which the caller needs to keep reading the rest of the file the same way.
-pub(crate) fn read_objects<M: Default, R: io::Read + io::Seek + ?Sized>(
+pub(crate) fn read_objects<R: io::Read + io::Seek + ?Sized>(
     reader: &mut R,
-) -> Result<(IndexMap<BinHash, BinObject<M>>, bool), Error> {
+) -> Result<(IndexMap<BinHash, BinObject>, bool), Error> {
     let count = reader.read_u32::<LE>()? as usize;
     let mut classes = Vec::with_capacity(count);
     for _ in 0..count {
@@ -59,10 +59,10 @@ pub(crate) fn read_objects<M: Default, R: io::Read + io::Seek + ?Sized>(
     }
 }
 
-fn try_read_objects<M: Default, R: io::Read + io::Seek + ?Sized>(
+fn try_read_objects<R: io::Read + io::Seek + ?Sized>(
     reader: &mut R,
     classes: &[BinHash],
-    objects: &mut IndexMap<BinHash, BinObject<M>>,
+    objects: &mut IndexMap<BinHash, BinObject>,
     legacy: bool,
 ) -> Result<(), Error> {
     objects.clear();

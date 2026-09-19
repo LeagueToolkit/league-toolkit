@@ -1,5 +1,5 @@
 use crate::{
-    property::{FromValue, Kind, NoMeta, ValueMut},
+    property::{FromValue, Kind, ValueMut},
     Error, PropertyValueEnum,
 };
 
@@ -35,14 +35,14 @@ use crate::{
 /// # Ok::<(), ltk_meta::Error>(())
 /// ```
 #[derive(Debug, PartialEq)]
-pub struct ValueSlot<'a, M = NoMeta> {
+pub struct ValueSlot<'a> {
     pinned: Option<Kind>,
-    value: &'a mut PropertyValueEnum<M>,
+    value: &'a mut PropertyValueEnum,
 }
 
-impl<'a, M> ValueSlot<'a, M> {
+impl<'a> ValueSlot<'a> {
     /// A slot whose holder declared `kind` and accepts nothing else.
-    pub(crate) fn pinned(kind: Kind, value: &'a mut PropertyValueEnum<M>) -> Self {
+    pub(crate) fn pinned(kind: Kind, value: &'a mut PropertyValueEnum) -> Self {
         Self {
             pinned: Some(kind),
             value,
@@ -50,7 +50,7 @@ impl<'a, M> ValueSlot<'a, M> {
     }
 
     /// A slot whose holder accepts a value of any kind.
-    pub(crate) fn free(value: &'a mut PropertyValueEnum<M>) -> Self {
+    pub(crate) fn free(value: &'a mut PropertyValueEnum) -> Self {
         Self {
             pinned: None,
             value,
@@ -58,7 +58,7 @@ impl<'a, M> ValueSlot<'a, M> {
     }
 
     /// The borrow itself, for walking further down inside the crate.
-    pub(crate) fn into_inner(self) -> &'a mut PropertyValueEnum<M> {
+    pub(crate) fn into_inner(self) -> &'a mut PropertyValueEnum {
         self.value
     }
 
@@ -79,7 +79,7 @@ impl<'a, M> ValueSlot<'a, M> {
     /// The value in the slot.
     #[inline(always)]
     #[must_use]
-    pub fn get(&self) -> &PropertyValueEnum<M> {
+    pub fn get(&self) -> &PropertyValueEnum {
         self.value
     }
 
@@ -87,14 +87,14 @@ impl<'a, M> ValueSlot<'a, M> {
     ///
     /// See [`PropertyValueEnum::as_mut`].
     #[inline(always)]
-    pub fn as_mut(&mut self) -> ValueMut<'_, M> {
+    pub fn as_mut(&mut self) -> ValueMut<'_> {
         self.value.as_mut()
     }
 
     /// See [`ValueSlot::as_mut`]. This reaches one concrete value type without a `match`.
     #[inline(always)]
     #[must_use]
-    pub fn get_mut<T: FromValue<M>>(&mut self) -> Option<&mut T> {
+    pub fn get_mut<T: FromValue>(&mut self) -> Option<&mut T> {
         self.value.get_mut()
     }
 
@@ -103,7 +103,7 @@ impl<'a, M> ValueSlot<'a, M> {
     /// # Errors
     ///
     /// [`Error::MismatchedContainerTypes`] when the holder pins a kind and `value` is not it.
-    pub fn set(&mut self, value: PropertyValueEnum<M>) -> Result<PropertyValueEnum<M>, Error> {
+    pub fn set(&mut self, value: PropertyValueEnum) -> Result<PropertyValueEnum, Error> {
         if let Some(pinned) = self.pinned {
             if value.kind() != pinned {
                 return Err(Error::MismatchedContainerTypes {

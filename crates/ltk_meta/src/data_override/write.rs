@@ -11,7 +11,7 @@ use crate::{
     BinKind,
 };
 
-impl<M: Clone> BinOverride<M> {
+impl BinOverride {
     /// Writes this patch to a writer.
     ///
     /// The output always uses `PTCH` version 1 around `PROP` version 3 with no dependencies,

@@ -19,10 +19,6 @@ pub trait PropertyExt {
             }
     }
     fn size_no_header(&self) -> usize;
-
-    type Meta;
-    fn meta(&self) -> &Self::Meta;
-    fn meta_mut(&mut self) -> &mut Self::Meta;
 }
 
 pub trait PropertyValueExt {
@@ -54,10 +50,7 @@ pub trait ReaderExt: io::Read {
         Kind::unpack(self.read_u8()?, legacy)
     }
 
-    fn read_property<M: Default>(
-        &mut self,
-        legacy: bool,
-    ) -> Result<(BinHash, PropertyValueEnum<M>), crate::Error>
+    fn read_property(&mut self, legacy: bool) -> Result<(BinHash, PropertyValueEnum), crate::Error>
     where
         Self: io::Seek,
     {
@@ -88,13 +81,12 @@ pub trait WriterExt: io::Write {
         self.write_u8(kind.into())
     }
 
-    fn write_property<M>(
+    fn write_property(
         &mut self,
         name_hash: BinHash,
-        value: &PropertyValueEnum<M>,
+        value: &PropertyValueEnum,
     ) -> Result<(), io::Error>
     where
-        M: Clone,
         Self: io::Seek,
     {
         self.write_bin_hash::<LE>(name_hash)?;

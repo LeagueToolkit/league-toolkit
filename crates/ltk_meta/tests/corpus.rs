@@ -24,10 +24,9 @@ use std::{
 
 use ltk_hash::BinHash;
 use ltk_meta::{
-    concrete::BinStream,
     path::{PatchError, ResolveErrorKind, ValueShape},
     traits::PropertyExt as _,
-    Bin, BinKind, BinObject, BinOverride,
+    Bin, BinKind, BinObject, BinOverride, BinStream,
 };
 use ltk_wad::Wad;
 

@@ -54,7 +54,7 @@ pub struct ValueShape {
 impl ValueShape {
     /// The shape of `value`.
     #[must_use]
-    pub fn of<M>(value: &PropertyValueEnum<M>) -> Self {
+    pub fn of(value: &PropertyValueEnum) -> Self {
         use PropertyValueEnum as V;
 
         let (item_kind, key_kind, class) = match value {
@@ -212,17 +212,17 @@ enum Slot {
 const MISSING: &str = "a Slot only ever names a slot that exists";
 
 /// The properties of an object, a pointer's target or an embed: what a `.name` piece looks in.
-type Properties<M> = IndexMap<BinHash, PropertyValueEnum<M>>;
+type Properties = IndexMap<BinHash, PropertyValueEnum>;
 
 /// Where the last segment of a path lands: the properties it is looked up in, the segment itself
 /// and its position, for the error if it does not resolve.
-type Landing<'a, 'p, M> = (&'a Properties<M>, Segment<'p>, usize);
+type Landing<'a, 'p> = (&'a Properties, Segment<'p>, usize);
 
 /// See [`Landing`].
-type LandingMut<'a, 'p, M> = (&'a mut Properties<M>, Segment<'p>, usize);
+type LandingMut<'a, 'p> = (&'a mut Properties, Segment<'p>, usize);
 
 /// Whether the next `.name` piece can be applied to this value.
-fn descend_check<M>(value: &PropertyValueEnum<M>) -> Result<(), ResolveErrorKind> {
+fn descend_check(value: &PropertyValueEnum) -> Result<(), ResolveErrorKind> {
     use PropertyValueEnum as V;
     match value {
         V::Struct(pointer) if *pointer.class_hash == 0 => Err(ResolveErrorKind::NullPointer),
@@ -232,7 +232,7 @@ fn descend_check<M>(value: &PropertyValueEnum<M>) -> Result<(), ResolveErrorKind
 }
 
 /// The properties a `.name` piece looks a name up in. `None` exactly when [`descend_check`] fails.
-fn properties_of<M>(value: &PropertyValueEnum<M>) -> Option<&Properties<M>> {
+fn properties_of(value: &PropertyValueEnum) -> Option<&Properties> {
     use PropertyValueEnum as V;
     match value {
         V::Struct(pointer) if *pointer.class_hash == 0 => None,
@@ -242,7 +242,7 @@ fn properties_of<M>(value: &PropertyValueEnum<M>) -> Option<&Properties<M>> {
 }
 
 /// See [`properties_of`].
-fn properties_of_mut<M>(value: &mut PropertyValueEnum<M>) -> Option<&mut Properties<M>> {
+fn properties_of_mut(value: &mut PropertyValueEnum) -> Option<&mut Properties> {
     use PropertyValueEnum as V;
     match value {
         V::Struct(pointer) if *pointer.class_hash == 0 => None,
@@ -251,8 +251,8 @@ fn properties_of_mut<M>(value: &mut PropertyValueEnum<M>) -> Option<&mut Propert
     }
 }
 
-fn slot_for<M>(
-    value: &PropertyValueEnum<M>,
+fn slot_for(
+    value: &PropertyValueEnum,
     subscript: &Subscript<'_>,
 ) -> Result<Slot, ResolveErrorKind> {
     use PropertyValueEnum as V;
@@ -288,7 +288,7 @@ fn slot_for<M>(
     }
 }
 
-fn take<M>(value: &PropertyValueEnum<M>, slot: Slot) -> &PropertyValueEnum<M> {
+fn take(value: &PropertyValueEnum, slot: Slot) -> &PropertyValueEnum {
     use PropertyValueEnum as V;
     match (value, slot) {
         (V::Container(list), Slot::Item(index))
@@ -301,7 +301,7 @@ fn take<M>(value: &PropertyValueEnum<M>, slot: Slot) -> &PropertyValueEnum<M> {
     }
 }
 
-fn take_mut<M>(value: &mut PropertyValueEnum<M>, slot: Slot) -> ValueSlot<'_, M> {
+fn take_mut(value: &mut PropertyValueEnum, slot: Slot) -> ValueSlot<'_> {
     use PropertyValueEnum as V;
     match (value, slot) {
         (V::Container(list), Slot::Item(index))
@@ -361,7 +361,7 @@ macro_rules! match_key {
 }
 
 /// Whether a map key equals the value [`key_as`] produced, ignoring metadata.
-fn key_eq<M>(key: &PropertyValueEnum<M>, wanted: &PropertyValueEnum) -> bool {
+fn key_eq(key: &PropertyValueEnum, wanted: &PropertyValueEnum) -> bool {
     match_key!(
         key,
         wanted,
@@ -385,11 +385,11 @@ fn key_eq<M>(key: &PropertyValueEnum<M>, wanted: &PropertyValueEnum) -> bool {
 }
 
 /// Looks `segment` up and applies its subscript.
-fn step<'a, M>(
-    properties: &'a Properties<M>,
+fn step<'a>(
+    properties: &'a Properties,
     segment: &Segment<'_>,
     index: usize,
-) -> Result<&'a PropertyValueEnum<M>, ResolveError> {
+) -> Result<&'a PropertyValueEnum, ResolveError> {
     let name_hash = segment.name_hash();
     let value = properties
         .get(&name_hash)
@@ -405,11 +405,11 @@ fn step<'a, M>(
 }
 
 /// See [`step`].
-fn step_mut<'a, M>(
-    properties: &'a mut Properties<M>,
+fn step_mut<'a>(
+    properties: &'a mut Properties,
     segment: &Segment<'_>,
     index: usize,
-) -> Result<ValueSlot<'a, M>, ResolveError> {
+) -> Result<ValueSlot<'a>, ResolveError> {
     let name_hash = segment.name_hash();
     let value = properties
         .get_mut(&name_hash)
@@ -428,10 +428,10 @@ fn step_mut<'a, M>(
 ///
 /// Splitting the walk here is what lets `patch` treat an absent leaf differently from an absent
 /// step on the way down.
-fn locate<'a, 'p, M>(
-    properties: &'a Properties<M>,
+fn locate<'a, 'p>(
+    properties: &'a Properties,
     path: &'p PropertyPath,
-) -> Result<Landing<'a, 'p, M>, ResolveError> {
+) -> Result<Landing<'a, 'p>, ResolveError> {
     let mut properties = properties;
     let mut segments = path.segments().enumerate().peekable();
 
@@ -450,10 +450,10 @@ fn locate<'a, 'p, M>(
 }
 
 /// See [`locate`].
-fn locate_mut<'a, 'p, M>(
-    properties: &'a mut Properties<M>,
+fn locate_mut<'a, 'p>(
+    properties: &'a mut Properties,
     path: &'p PropertyPath,
-) -> Result<LandingMut<'a, 'p, M>, ResolveError> {
+) -> Result<LandingMut<'a, 'p>, ResolveError> {
     let mut properties = properties;
     let mut segments = path.segments().enumerate().peekable();
 
@@ -471,27 +471,27 @@ fn locate_mut<'a, 'p, M>(
     }
 }
 
-pub(crate) fn walk<'a, M>(
-    properties: &'a Properties<M>,
+pub(crate) fn walk<'a>(
+    properties: &'a Properties,
     path: &PropertyPath,
-) -> Result<&'a PropertyValueEnum<M>, ResolveError> {
+) -> Result<&'a PropertyValueEnum, ResolveError> {
     let (properties, segment, index) = locate(properties, path)?;
     step(properties, &segment, index)
 }
 
-pub(crate) fn walk_mut<'a, M>(
-    properties: &'a mut Properties<M>,
+pub(crate) fn walk_mut<'a>(
+    properties: &'a mut Properties,
     path: &PropertyPath,
-) -> Result<ValueSlot<'a, M>, ResolveError> {
+) -> Result<ValueSlot<'a>, ResolveError> {
     let (properties, segment, index) = locate_mut(properties, path)?;
     step_mut(properties, &segment, index)
 }
 
-pub(crate) fn patch_in<M>(
-    properties: &mut Properties<M>,
+pub(crate) fn patch_in(
+    properties: &mut Properties,
     path: &PropertyPath,
-    value: PropertyValueEnum<M>,
-) -> Result<Option<PropertyValueEnum<M>>, PatchError> {
+    value: PropertyValueEnum,
+) -> Result<Option<PropertyValueEnum>, PatchError> {
     let (properties, segment, index) = locate_mut(properties, path)?;
     let name_hash = segment.name_hash();
 
@@ -524,8 +524,8 @@ pub(crate) fn patch_in<M>(
 }
 
 /// Whether [`patch_in`] would apply, and whether it would insert, without touching anything.
-pub(crate) fn probe<M>(
-    properties: &Properties<M>,
+pub(crate) fn probe(
+    properties: &Properties,
     path: &PropertyPath,
     found: ValueShape,
 ) -> Result<bool, PatchError> {
@@ -556,7 +556,7 @@ pub(crate) fn probe<M>(
     }
 }
 
-impl<M> BinObject<M> {
+impl BinObject {
     /// The value at `path` inside this object.
     ///
     /// # Errors
@@ -568,7 +568,7 @@ impl<M> BinObject<M> {
     /// ```
     /// use ltk_meta::{
     ///     path::PropertyPath,
-    ///     property::{values, NoMeta},
+    ///     property::values,
     ///     BinObject,
     /// };
     ///
@@ -576,7 +576,7 @@ impl<M> BinObject<M> {
     /// // A name selects a property by the hash of its lowercased text.
     /// let elements = path.segments().next().unwrap().name_hash();
     ///
-    /// let object = BinObject::<NoMeta>::builder(0x1234, 0x5678)
+    /// let object = BinObject::builder(0x1234, 0x5678)
     ///     .property(
     ///         elements,
     ///         values::Container::from(vec![values::I32::new(10), values::I32::new(20)]),
@@ -586,7 +586,7 @@ impl<M> BinObject<M> {
     /// assert_eq!(object.resolve(&path)?, &values::I32::new(20).into());
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    pub fn resolve(&self, path: &PropertyPath) -> Result<&PropertyValueEnum<M>, ResolveError> {
+    pub fn resolve(&self, path: &PropertyPath) -> Result<&PropertyValueEnum, ResolveError> {
         walk(&self.properties, path)
     }
 
@@ -598,7 +598,7 @@ impl<M> BinObject<M> {
     /// # Errors
     ///
     /// The same as [`BinObject::resolve`].
-    pub fn resolve_mut(&mut self, path: &PropertyPath) -> Result<ValueSlot<'_, M>, ResolveError> {
+    pub fn resolve_mut(&mut self, path: &PropertyPath) -> Result<ValueSlot<'_>, ResolveError> {
         walk_mut(&mut self.properties, path)
     }
 
@@ -619,8 +619,8 @@ impl<M> BinObject<M> {
     pub fn patch(
         &mut self,
         path: &PropertyPath,
-        value: PropertyValueEnum<M>,
-    ) -> Result<Option<PropertyValueEnum<M>>, PatchError> {
+        value: PropertyValueEnum,
+    ) -> Result<Option<PropertyValueEnum>, PatchError> {
         patch_in(&mut self.properties, path, value)
     }
 
@@ -628,20 +628,20 @@ impl<M> BinObject<M> {
     pub(crate) fn probe(
         &self,
         path: &PropertyPath,
-        value: &PropertyValueEnum<M>,
+        value: &PropertyValueEnum,
     ) -> Result<bool, PatchError> {
         probe(&self.properties, path, ValueShape::of(value))
     }
 }
 
-impl<M> values::Struct<M> {
+impl values::Struct {
     /// The value at `path` inside this pointer's target.
     ///
     /// # Errors
     ///
     /// [`ResolveErrorKind::NullPointer`] at segment 0 if the class hash is 0, otherwise the same
     /// as [`BinObject::resolve`].
-    pub fn resolve(&self, path: &PropertyPath) -> Result<&PropertyValueEnum<M>, ResolveError> {
+    pub fn resolve(&self, path: &PropertyPath) -> Result<&PropertyValueEnum, ResolveError> {
         self.null_check()?;
         walk(&self.properties, path)
     }
@@ -651,7 +651,7 @@ impl<M> values::Struct<M> {
     /// # Errors
     ///
     /// The same as [`values::Struct::resolve`].
-    pub fn resolve_mut(&mut self, path: &PropertyPath) -> Result<ValueSlot<'_, M>, ResolveError> {
+    pub fn resolve_mut(&mut self, path: &PropertyPath) -> Result<ValueSlot<'_>, ResolveError> {
         self.null_check()?;
         walk_mut(&mut self.properties, path)
     }
@@ -664,8 +664,8 @@ impl<M> values::Struct<M> {
     pub fn patch(
         &mut self,
         path: &PropertyPath,
-        value: PropertyValueEnum<M>,
-    ) -> Result<Option<PropertyValueEnum<M>>, PatchError> {
+        value: PropertyValueEnum,
+    ) -> Result<Option<PropertyValueEnum>, PatchError> {
         self.null_check()?;
         patch_in(&mut self.properties, path, value)
     }
@@ -678,14 +678,14 @@ impl<M> values::Struct<M> {
     }
 }
 
-impl<M> values::Embedded<M> {
+impl values::Embedded {
     /// The value at `path` inside this embed. See [`BinObject::resolve`].
     ///
     /// # Errors
     ///
     /// The same as [`BinObject::resolve`]. An embed is inline, so unlike a pointer it is never
     /// null and a class hash of 0 is not special here.
-    pub fn resolve(&self, path: &PropertyPath) -> Result<&PropertyValueEnum<M>, ResolveError> {
+    pub fn resolve(&self, path: &PropertyPath) -> Result<&PropertyValueEnum, ResolveError> {
         walk(&self.0.properties, path)
     }
 
@@ -694,7 +694,7 @@ impl<M> values::Embedded<M> {
     /// # Errors
     ///
     /// The same as [`values::Embedded::resolve`].
-    pub fn resolve_mut(&mut self, path: &PropertyPath) -> Result<ValueSlot<'_, M>, ResolveError> {
+    pub fn resolve_mut(&mut self, path: &PropertyPath) -> Result<ValueSlot<'_>, ResolveError> {
         walk_mut(&mut self.0.properties, path)
     }
 
@@ -706,13 +706,13 @@ impl<M> values::Embedded<M> {
     pub fn patch(
         &mut self,
         path: &PropertyPath,
-        value: PropertyValueEnum<M>,
-    ) -> Result<Option<PropertyValueEnum<M>>, PatchError> {
+        value: PropertyValueEnum,
+    ) -> Result<Option<PropertyValueEnum>, PatchError> {
         patch_in(&mut self.0.properties, path, value)
     }
 }
 
-impl<M> PropertyValueEnum<M> {
+impl PropertyValueEnum {
     /// The value at `path` relative to this one.
     ///
     /// The first segment applies to this value, so it has to be a pointer or an embed for a path
@@ -722,7 +722,7 @@ impl<M> PropertyValueEnum<M> {
     ///
     /// [`ResolveErrorKind::CannotDescend`] or [`ResolveErrorKind::NullPointer`] at segment 0 if
     /// this value cannot be descended into, otherwise the same as [`BinObject::resolve`].
-    pub fn resolve(&self, path: &PropertyPath) -> Result<&PropertyValueEnum<M>, ResolveError> {
+    pub fn resolve(&self, path: &PropertyPath) -> Result<&PropertyValueEnum, ResolveError> {
         descend_check(self).map_err(|kind| ResolveError::new(0, kind))?;
         walk(
             properties_of(self).expect("descend_check accepted this value"),
@@ -735,7 +735,7 @@ impl<M> PropertyValueEnum<M> {
     /// # Errors
     ///
     /// The same as [`PropertyValueEnum::resolve`].
-    pub fn resolve_mut(&mut self, path: &PropertyPath) -> Result<ValueSlot<'_, M>, ResolveError> {
+    pub fn resolve_mut(&mut self, path: &PropertyPath) -> Result<ValueSlot<'_>, ResolveError> {
         descend_check(self).map_err(|kind| ResolveError::new(0, kind))?;
         walk_mut(
             properties_of_mut(self).expect("descend_check accepted this value"),
@@ -744,7 +744,7 @@ impl<M> PropertyValueEnum<M> {
     }
 }
 
-impl<M> Bin<M> {
+impl Bin {
     /// The value at `path` inside object `object_hash`.
     ///
     /// # Errors
@@ -755,7 +755,7 @@ impl<M> Bin<M> {
         &self,
         object_hash: impl Into<BinHash>,
         path: &PropertyPath,
-    ) -> Result<&PropertyValueEnum<M>, ResolveError> {
+    ) -> Result<&PropertyValueEnum, ResolveError> {
         self.object(object_hash)?.resolve(path)
     }
 
@@ -768,7 +768,7 @@ impl<M> Bin<M> {
         &mut self,
         object_hash: impl Into<BinHash>,
         path: &PropertyPath,
-    ) -> Result<ValueSlot<'_, M>, ResolveError> {
+    ) -> Result<ValueSlot<'_>, ResolveError> {
         let object_hash = object_hash.into();
         self.objects
             .get_mut(&object_hash)
@@ -787,8 +787,8 @@ impl<M> Bin<M> {
         &mut self,
         object_hash: impl Into<BinHash>,
         path: &PropertyPath,
-        value: PropertyValueEnum<M>,
-    ) -> Result<Option<PropertyValueEnum<M>>, PatchError> {
+        value: PropertyValueEnum,
+    ) -> Result<Option<PropertyValueEnum>, PatchError> {
         let object_hash = object_hash.into();
         let object = self
             .objects
@@ -798,7 +798,7 @@ impl<M> Bin<M> {
         object.patch(path, value)
     }
 
-    fn object(&self, object_hash: impl Into<BinHash>) -> Result<&BinObject<M>, ResolveError> {
+    fn object(&self, object_hash: impl Into<BinHash>) -> Result<&BinObject, ResolveError> {
         let object_hash = object_hash.into();
         self.objects
             .get(&object_hash)

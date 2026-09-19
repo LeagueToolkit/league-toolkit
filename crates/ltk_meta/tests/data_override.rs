@@ -6,7 +6,7 @@ use indexmap::IndexMap;
 use insta::assert_ron_snapshot;
 use ltk_meta::{
     path::PropertyPath,
-    property::{values, Kind, NoMeta},
+    property::{values, Kind},
     Bin, BinFile, BinKind, BinObject, BinOverride, Error, PropertyPatch, PropertyValueEnum,
 };
 
@@ -37,7 +37,7 @@ fn sample_patch_bin() -> BinOverride {
         .delete(0xdead_beef_u32)
         .deletions([0x1234_u32, 0x5678])
         .object(
-            BinObject::<NoMeta>::builder(0x1111_2222_u32, 0x3333_4444)
+            BinObject::builder(0x1111_2222_u32, 0x3333_4444)
                 .property(0xaaaa_u32, values::String::from("hello"))
                 .build(),
         )
@@ -81,7 +81,6 @@ fn sample_patch_bin() -> BinOverride {
             values::Embedded(values::Struct {
                 class_hash: 0x4eb9_ba4f.into(),
                 properties: properties.clone(),
-                meta: Default::default(),
             }),
         )
         .patch(PropertyPatch::new(
@@ -90,7 +89,6 @@ fn sample_patch_bin() -> BinOverride {
             values::Struct {
                 class_hash: 0x1234_5678.into(),
                 properties,
-                meta: Default::default(),
             },
         ))
         .build()
@@ -304,12 +302,12 @@ fn writes_the_shape_the_client_expects() {
     assert_eq!(&bytes[28..32], 0_u32.to_le_bytes());
     assert_eq!(bytes.len(), 32);
 
-    assert!(BinOverride::<NoMeta>::default().is_empty());
+    assert!(BinOverride::default().is_empty());
 }
 
 #[test]
 fn serializes_paths_as_strings() {
-    let patch = PropertyPatch::<NoMeta>::new(0x1234_u32, path("A.B[1]"), values::Bool::new(true));
+    let patch = PropertyPatch::new(0x1234_u32, path("A.B[1]"), values::Bool::new(true));
     let text = serde_json::to_string(&patch.path).unwrap();
 
     assert_eq!(text, r#""A.B[1]""#);
