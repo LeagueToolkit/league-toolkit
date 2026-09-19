@@ -1,10 +1,14 @@
 use ltk_meta::{
-    property::values, traits::PropertyExt as _, Bin, BinObject, Error as MetaError, PropertyKind,
-    PropertyValueEnum,
+    property::values, traits::PropertyExt as _, Bin, BinFile, BinObject, BinOverride,
+    Error as MetaError, PropertyKind, PropertyPatch, PropertyValueEnum,
 };
 
 use crate::{
-    ast::{diagnostics::DiagnosticWithSpan, Ast, Object, RootEntry, Value},
+    ast::{
+        diagnostics::{Diagnostic, DiagnosticWithSpan},
+        node::root::FileKind,
+        Ast, Object, RootEntry, RootPatch, Value,
+    },
     parse::Span,
     Spanned,
 };
@@ -27,18 +31,56 @@ impl PartialBin {
 }
 
 impl Ast {
+    fn bin_objects(&self) -> impl Iterator<Item = BinObject> + '_ {
+        self.root_entries().map(|RootEntry { path_hash, object }| {
+            let struct_val = object.to_bin_value().no_meta();
+            BinObject {
+                path_hash: path_hash.value,
+                class_hash: struct_val.class_hash,
+                properties: struct_val.properties,
+            }
+        })
+    }
+
+    /// Lowers the tree to the kind of bin its `type` root names.
+    ///
+    /// A `PTCH` file lowers to a [`BinOverride`]; any other file lowers to a [`Bin`], as
+    /// [`Self::to_bin`] does.
+    pub fn to_bin_file(&self) -> BinFile {
+        match self.roots.file_type().map(|root| root.value) {
+            Some(FileKind::Patch) => BinFile::Override(self.to_bin_override()),
+            _ => BinFile::Prop(self.prop_bin()),
+        }
+    }
+
+    /// Lowers the tree to a [`BinOverride`]: its `deleted`, `entries` and `patches` roots.
+    ///
+    /// Only well-formed records reach the patch. The tree's diagnostics name every record left out.
+    pub fn to_bin_override(&self) -> BinOverride {
+        let deleted = self
+            .roots
+            .deleted()
+            .map(|root| root.value.as_slice())
+            .unwrap_or_default();
+        let patches = self
+            .roots
+            .patches()
+            .map(|root| root.value.as_slice())
+            .unwrap_or_default();
+        BinOverride::builder()
+            .deletions(deleted.iter().copied())
+            .objects(self.bin_objects())
+            .patches(patches.iter().filter_map(RootPatch::to_property_patch))
+            .build()
+    }
+
     pub fn to_bin(&self, _text: &str) -> Bin {
-        let objects = self
-            .root_entries()
-            .map(|RootEntry { path_hash, object }| {
-                let struct_val = object.to_bin_value().no_meta();
-                BinObject {
-                    path_hash: path_hash.value,
-                    class_hash: struct_val.class_hash,
-                    properties: struct_val.properties,
-                }
-            })
-            .collect::<Vec<_>>();
+        self.prop_bin()
+    }
+
+    /// Lowers the tree to a [`Bin`]: its `entries` and `linked` roots.
+    fn prop_bin(&self) -> Bin {
+        let objects = self.bin_objects().collect::<Vec<_>>();
 
         let dependencies: Vec<String> = self
             .roots
@@ -50,12 +92,40 @@ impl Ast {
         Bin::new(objects, dependencies)
     }
 
-    pub fn into_partial_bin(self, text: &str) -> PartialBin {
+    /// Lowers the tree to a best-effort [`Bin`], along with its diagnostics.
+    ///
+    /// A `PTCH` file is diagnosed as [`Diagnostic::UnexpectedFileKind`]: a patch is not a
+    /// `PROP` bin, and its records have no place in one. [`Self::to_bin_file`] lowers it.
+    pub fn into_partial_bin(mut self, text: &str) -> PartialBin {
+        if let Some(file_type) = self.roots.file_type() {
+            if file_type.value == FileKind::Patch {
+                let span = file_type.original(&self.roots).value_span();
+                self.diagnostics.push(
+                    Diagnostic::UnexpectedFileKind {
+                        span,
+                        expected: FileKind::Prop,
+                        found: FileKind::Patch,
+                    }
+                    .unwrap(),
+                );
+            }
+        }
         let bin = self.to_bin(text);
         PartialBin {
             bin,
             diagnostics: self.diagnostics,
         }
+    }
+}
+
+impl RootPatch {
+    /// Lowers the record to a [`PropertyPatch`], or `None` when its value has no bin value.
+    pub(crate) fn to_property_patch(&self) -> Option<PropertyPatch> {
+        Some(PropertyPatch::new(
+            self.object_hash.value,
+            self.path.value.clone(),
+            self.value.to_bin_value()?.no_meta(),
+        ))
     }
 }
 

@@ -1,9 +1,10 @@
 use std::{fmt::Display, num::IntErrorKind};
 
-use ltk_meta::PropertyKind;
+use ltk_hash::{BinHash, Hash as _};
+use ltk_meta::{path::PropertyPathError, PropertyKind};
 
 use crate::{
-    ast::node::root::RootKind,
+    ast::node::root::{FileKind, RootKind},
     cst,
     parse::{Span, TokenKind},
     ItemShape, RitoType, Spanned,
@@ -96,6 +97,42 @@ impl Display for ListLike {
             ListLike::Mat44 => PropertyKind::Matrix44,
         })
         .fmt(f)
+    }
+}
+
+/// A field of a `patch` embed, one record of a `PTCH` file's `patches` root.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PatchField {
+    /// `path: string`, the property the record patches.
+    Path,
+    /// `value`, the value the record writes.
+    Value,
+}
+
+impl PatchField {
+    /// Both fields, in the order a `patch` embed writes them.
+    pub const ALL: [Self; 2] = [Self::Path, Self::Value];
+
+    /// The field's name in a `patch` embed.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Path => "path",
+            Self::Value => "value",
+        }
+    }
+
+    /// The field whose name hashes to `name`, compared as bin field names are: FNV-1a of the
+    /// ASCII-lowercased name.
+    pub fn named(name: BinHash) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|field| BinHash::hash_str(field.as_str()) == name)
+    }
+}
+
+impl Display for PatchField {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
     }
 }
 
@@ -208,6 +245,60 @@ pub enum Diagnostic {
         type_span: Span,
         got: RitoTypeOrVirtual,
         expected: RitoType,
+    },
+    /// A root only a `PTCH` file has, in a file of another kind.
+    PatchOnlyRoot {
+        /// span of the root's name
+        span: Span,
+        root_kind: RootKind,
+    },
+    /// A `PTCH` file whose `linked` root is not empty. The client cannot load a patch that
+    /// links other bins.
+    PatchLinked {
+        /// span of the `linked` root's value
+        span: Span,
+    },
+    /// A `PTCH` file whose `version` root is not 3, the only version of `PTCH` text.
+    UnsupportedPatchVersion {
+        /// span of the `version` root's value
+        span: Span,
+        version: u32,
+    },
+    /// A `patches` record whose embed class is not `patch`.
+    UnexpectedPatchClass {
+        /// span of the class name
+        span: Span,
+    },
+    /// A `patch` embed without one of its fields. The record is left out of the patch.
+    MissingPatchField {
+        /// span of the `patch` class name
+        span: Span,
+        field: PatchField,
+    },
+    /// A second `path` or `value` field in one `patch` embed. The first one is used.
+    DuplicatePatchField {
+        /// span of the second field's name
+        span: Span,
+        field: PatchField,
+    },
+    /// A field of a `patch` embed other than `path` and `value`.
+    UnexpectedPatchField {
+        /// span of the whole field
+        span: Span,
+    },
+    /// A record `path` that is not a valid property path. The record is left out of the patch.
+    InvalidPropertyPath {
+        /// span of the path's string literal
+        span: Span,
+        error: PropertyPathError,
+    },
+    /// A file built as a kind its `type` root does not name, such as a `PTCH` file handed to
+    /// [`crate::Cst::build_bin`].
+    UnexpectedFileKind {
+        /// span of the `type` root's value
+        span: Span,
+        expected: FileKind,
+        found: FileKind,
     },
 
     ShadowedEntry {
@@ -340,6 +431,32 @@ impl Display for Diagnostic {
                 expected,
                 ..
             } => write!(f, "Root entry '{root_kind}' must be {expected}, got {got}"),
+            PatchOnlyRoot { root_kind, .. } => {
+                write!(f, "Root entry '{root_kind}' only belongs in a PTCH file")
+            }
+            PatchLinked { .. } => {
+                f.write_str("A PTCH file cannot link other bins - 'linked' must be empty")
+            }
+            UnsupportedPatchVersion { version, .. } => {
+                write!(
+                    f,
+                    "Unsupported PTCH version {version} - the only version is 3"
+                )
+            }
+            UnexpectedPatchClass { .. } => f.write_str(
+                "Patch records are written 'patch { path: string = .., value: type = .. }'",
+            ),
+            MissingPatchField { field, .. } => write!(f, "Patch record is missing '{field}'"),
+            DuplicatePatchField { field, .. } => {
+                write!(f, "Patch record already has a '{field}'")
+            }
+            UnexpectedPatchField { .. } => {
+                f.write_str("Patch records only have the fields 'path' and 'value'")
+            }
+            InvalidPropertyPath { error, .. } => write!(f, "Invalid property path - {error}"),
+            UnexpectedFileKind {
+                expected, found, ..
+            } => write!(f, "Expected a {expected} file, found a {found} file"),
             MissingEntryValue {
                 key_span: _,
                 expected,
@@ -405,6 +522,15 @@ impl Diagnostic {
             | TooManyItems { span, .. }
             | InvalidNesting { span, .. }
             | InvalidMapKey { span, .. }
+            | PatchOnlyRoot { span, .. }
+            | PatchLinked { span }
+            | UnsupportedPatchVersion { span, .. }
+            | UnexpectedPatchClass { span }
+            | MissingPatchField { span, .. }
+            | DuplicatePatchField { span, .. }
+            | UnexpectedPatchField { span }
+            | InvalidPropertyPath { span, .. }
+            | UnexpectedFileKind { span, .. }
             | InvalidRootEntryType { key_span: span, .. } => Some(span),
         }
     }

@@ -12,7 +12,7 @@ mod to_bin;
 mod tests;
 
 pub use crate::Spanned;
-pub use node::{Object, Property, RootEntry, Value};
+pub use node::{Object, Property, RootEntry, RootPatch, Value};
 pub use to_bin::PartialBin;
 
 use crate::{

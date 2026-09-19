@@ -3,6 +3,7 @@ mod object;
 mod property;
 mod refs;
 mod root_object;
+mod root_patch;
 
 pub mod root;
 pub mod roots;
@@ -13,6 +14,7 @@ pub use object::*;
 pub use property::*;
 pub use refs::*;
 pub use root_object::*;
+pub use root_patch::*;
 pub use value::*;
 
 use crate::ast::hash::HashedLiteral;
