@@ -77,7 +77,8 @@ impl Value {
                 span,
             } => Self::String(Spanned::new(
                 *span,
-                text[Span::new(span.start + 1, span.end - 1)].into(),
+                crate::escaping::unescape(&text[Span::new(span.start + 1, span.end - 1)])
+                    .map_err(|e| e.into_diagnostic(*span))?,
             )),
 
             Token {
