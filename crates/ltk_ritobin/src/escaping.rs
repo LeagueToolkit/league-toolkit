@@ -156,3 +156,52 @@ fn read_hex(bytes: &[u8], i: &mut usize, n: usize) -> Option<u32> {
     }
     Some(value)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn escapes() {
+        assert_eq!(escape("t\ta\nb\rc\\d\"e"), r#"t\ta\nb\rc\\d\"e"#);
+        assert_eq!(escape("\u{08}\u{0C}"), r"\b\f");
+        assert_eq!(escape("\u{07}\u{01}\u{1f}"), r"\x07\x01\x1f");
+        assert_eq!(escape("'\u{7f}\u{e9}\u{1f600}"), "'\u{7f}\u{e9}\u{1f600}");
+    }
+
+    #[test]
+    fn escape_unescape_round_trips() {
+        for s in [
+            "plain text",
+            "t\ta\nb\rc\\d\"e'f\u{07}g\u{08}h\u{0C}i",
+            "all controls: \u{00}\u{01}\u{1e}\u{1f}",
+            "unicode é 😀 \u{7f}",
+        ] {
+            assert_eq!(
+                unescape(&escape(s)).unwrap(),
+                s,
+                "round-trip failed for {s:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn unescape_utf16_surrogates() {
+        assert_eq!(unescape(r"\uD83D\uDE00").unwrap(), "\u{1f600}");
+        assert_eq!(unescape(r"\u0041\u00e9").unwrap(), "A\u{e9}");
+
+        use InvalidEscapeReason::*;
+        assert!(matches!(
+            unescape(r"\uDC00").unwrap_err().reason,
+            LoneSurrogate(0xDC00)
+        ));
+        assert!(matches!(
+            unescape(r"\uD800x").unwrap_err().reason,
+            LoneSurrogate(0xD800)
+        ));
+        assert!(matches!(
+            unescape(r"\uD800\uZZZZ").unwrap_err().reason,
+            BadUnicode
+        ));
+    }
+}
