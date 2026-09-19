@@ -1,9 +1,6 @@
 use glam::{Vec3, Vec4};
 use ltk_hash::BinHash;
-use ltk_meta::{
-    property::{values, NoMeta},
-    Bin, BinObject, ObjectBuilder, PropertyKind, PropertyValueEnum,
-};
+use ltk_meta::{property::values, Bin, BinObject, ObjectBuilder, PropertyKind, PropertyValueEnum};
 
 use crate::{
     ast::{
@@ -46,7 +43,7 @@ fn assert<F: Fn(ObjectBuilder) -> ObjectBuilder>(input: &str, is: F) {
     );
     let bin = ast.to_bin(&input);
 
-    let obj = (is)(BinObject::<NoMeta>::builder(0xDEADBEEF, 0x1234123)).build();
+    let obj = (is)(BinObject::builder(0xDEADBEEF, 0x1234123)).build();
     pretty_assertions::assert_eq!(bin, Bin::builder().object(obj).build());
 }
 
@@ -847,7 +844,7 @@ fn a_rejected_map_key_still_drops_the_pair() {
         ast.to_bin(&input),
         Bin::builder()
             .object(
-                BinObject::<NoMeta>::builder(0xDEADBEEF, 0x1234123)
+                BinObject::builder(0xDEADBEEF, 0x1234123)
                     .property(
                         0x1,
                         values::Map::new(PropertyKind::U32, PropertyKind::U32, vec![]).unwrap()

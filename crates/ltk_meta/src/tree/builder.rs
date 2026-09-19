@@ -6,26 +6,23 @@ use crate::Bin;
 /// # Examples
 ///
 /// ```
-/// use ltk_meta::{Bin, BinObject, property::NoMeta};
+/// use ltk_meta::{Bin, BinObject};
 ///
-/// let tree = Bin::<NoMeta>::builder()
+/// let tree = Bin::builder()
 ///     .dependency("base.bin")
 ///     .dependencies(["extra1.bin", "extra2.bin"])
 ///     .object(BinObject::new(0x1234, 0x5678))
 ///     .build();
 /// ```
 #[derive(Debug, Default, Clone)]
-pub struct Builder<M> {
-    objects: Vec<BinObject<M>>,
+pub struct Builder {
+    objects: Vec<BinObject>,
     dependencies: Vec<String>,
 }
 
-impl<M> Builder<M> {
+impl Builder {
     /// See: [`Bin::builder`]
-    pub fn new() -> Self
-    where
-        M: Default,
-    {
+    pub fn new() -> Self {
         Self::default()
     }
 
@@ -42,13 +39,13 @@ impl<M> Builder<M> {
     }
 
     /// Adds a single object.
-    pub fn object(mut self, obj: BinObject<M>) -> Self {
+    pub fn object(mut self, obj: BinObject) -> Self {
         self.objects.push(obj);
         self
     }
 
     /// Adds multiple objects.
-    pub fn objects(mut self, objs: impl IntoIterator<Item = BinObject<M>>) -> Self {
+    pub fn objects(mut self, objs: impl IntoIterator<Item = BinObject>) -> Self {
         self.objects.extend(objs);
         self
     }
@@ -56,7 +53,7 @@ impl<M> Builder<M> {
     /// Build the final [`Bin`].
     ///
     /// The resulting tree will have version 3, which is always used when writing.
-    pub fn build(self) -> Bin<M> {
+    pub fn build(self) -> Bin {
         Bin {
             version: 3,
             objects: self.objects.into_iter().map(|o| (o.path_hash, o)).collect(),

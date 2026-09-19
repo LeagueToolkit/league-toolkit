@@ -12,7 +12,7 @@ use ltk_io_ext::WriterExt as _;
 /// dependencies and data overrides.
 pub const WRITE_VERSION: u32 = 3;
 
-impl<M: Clone> Bin<M> {
+impl Bin {
     /// Write this bin to a writer.
     ///
     /// The output will always use version 3 format, regardless of the

@@ -1,45 +1,26 @@
 use crate::{
-    property::{Kind, NoMeta},
+    property::Kind,
     stream::{layout::Numbering, owned},
     traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty},
 };
 
 use super::Struct;
 
-#[cfg_attr(
-    feature = "serde",
-    derive(serde::Serialize, serde::Deserialize),
-    serde(bound = "for <'dee> M: serde::Serialize + serde::Deserialize<'dee>")
-)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, PartialEq, Debug, Default)]
-pub struct Embedded<M = NoMeta>(pub Struct<M>);
+pub struct Embedded(pub Struct);
 
-impl<M> Embedded<M> {
-    #[inline(always)]
-    #[must_use]
-    pub fn no_meta(self) -> Embedded<NoMeta> {
-        Embedded(self.0.no_meta())
-    }
-}
-
-impl<M> PropertyValueExt for Embedded<M> {
+impl PropertyValueExt for Embedded {
     const KIND: Kind = Kind::Embedded;
 }
 
-impl<M> PropertyExt for Embedded<M> {
+impl PropertyExt for Embedded {
     fn size_no_header(&self) -> usize {
         self.0.size_no_header()
     }
-    type Meta = M;
-    fn meta(&self) -> &Self::Meta {
-        self.0.meta()
-    }
-    fn meta_mut(&mut self) -> &mut Self::Meta {
-        self.0.meta_mut()
-    }
 }
 
-impl<M: Default> ReadProperty for Embedded<M> {
+impl ReadProperty for Embedded {
     fn from_reader<R: std::io::Read + std::io::Seek + ?Sized>(
         reader: &mut R,
         legacy: bool,
@@ -52,12 +33,12 @@ impl<M: Default> ReadProperty for Embedded<M> {
         )
     }
 }
-impl<M: Clone> WriteProperty for Embedded<M> {
+impl WriteProperty for Embedded {
     fn to_writer<R: std::io::Write + std::io::Seek + ?Sized>(
         &self,
         writer: &mut R,
         legacy: bool,
     ) -> Result<(), std::io::Error> {
-        Struct::<M>::to_writer(&self.0, writer, legacy)
+        Struct::to_writer(&self.0, writer, legacy)
     }
 }

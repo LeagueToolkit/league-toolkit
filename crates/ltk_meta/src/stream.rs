@@ -19,7 +19,7 @@
 //!
 //! ```no_run
 //! use std::fs::File;
-//! use ltk_meta::concrete::BinStream;
+//! use ltk_meta::BinStream;
 //!
 //! let mut stream = BinStream::mount(File::open("data.bin")?)?;
 //!

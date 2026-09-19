@@ -7,22 +7,20 @@
 //! read-only consumer never pays the 96 bytes a materialized [`PropertyValueEnum`] node costs.
 //!
 //! The views are plain shared references: hold as many properties at once as you like, compare
-//! them, go back to an earlier one. `M` rides along as a phantom parameter purely so the owned
-//! escape hatches ([`PropertyView::value`]) infer without a turbofish; the borrowed data itself
-//! carries no metadata.
+//! them, go back to an earlier one. The borrowed data itself carries no metadata.
 
 mod value;
 pub use value::{
     ContainerItems, ContainerView, MapEntries, MapView, OptionalView, StructView, ValueView,
 };
 
-use std::{fmt, marker::PhantomData};
+use std::fmt;
 
 use ltk_hash::BinHash;
 
 use crate::{
     path::ValueShape,
-    property::{Kind, NoMeta},
+    property::Kind,
     stream::{
         layout::{Cursor, Numbering},
         owned, ObjectEntry,
@@ -44,7 +42,7 @@ const OBJECT_HEADER: usize = 4 + 4 + 2;
 ///
 /// ```no_run
 /// use std::fs::File;
-/// use ltk_meta::{concrete::BinStream, stream::ValueView};
+/// use ltk_meta::{BinStream, stream::ValueView};
 ///
 /// let mut stream = BinStream::mount(File::open("data.bin")?)?;
 /// let mut objects = stream.objects();
@@ -59,17 +57,16 @@ const OBJECT_HEADER: usize = 4 + 4 + 2;
 /// }
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-pub struct ObjectView<'a, M = NoMeta> {
+pub struct ObjectView<'a> {
     path_hash: BinHash,
     class_hash: BinHash,
     raw: &'a [u8],
     /// Positioned at the first property.
     properties: Cursor<'a>,
     property_count: u16,
-    meta: PhantomData<fn() -> M>,
 }
 
-impl<'a, M> ObjectView<'a, M> {
+impl<'a> ObjectView<'a> {
     /// Views the object `cur` reads: its whole declared byte range, size field included,
     /// positioned at the start of it.
     pub(crate) fn new(entry: ObjectEntry, mut cur: Cursor<'a>) -> Result<Self, Error> {
@@ -85,7 +82,6 @@ impl<'a, M> ObjectView<'a, M> {
             raw,
             properties: cur,
             property_count,
-            meta: PhantomData,
         })
     }
 
@@ -120,7 +116,7 @@ impl<'a, M> ObjectView<'a, M> {
     /// The properties, in file order.
     ///
     /// Items are `Result` because a property header's kind byte can fail to decode.
-    pub fn properties(&self) -> Properties<'a, M> {
+    pub fn properties(&self) -> Properties<'a> {
         Properties::new(self.properties, self.property_count)
     }
 
@@ -137,7 +133,7 @@ impl<'a, M> ObjectView<'a, M> {
     pub fn property(
         &self,
         name_hash: impl Into<BinHash>,
-    ) -> Result<Option<PropertyView<'a, M>>, Error> {
+    ) -> Result<Option<PropertyView<'a>>, Error> {
         find_property(self.properties(), name_hash.into())
     }
 
@@ -151,7 +147,7 @@ impl<'a, M> ObjectView<'a, M> {
     }
 }
 
-impl<M> fmt::Debug for ObjectView<'_, M> {
+impl fmt::Debug for ObjectView<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ObjectView")
             .field("path_hash", &self.path_hash)
@@ -164,15 +160,14 @@ impl<M> fmt::Debug for ObjectView<'_, M> {
 }
 
 /// One property: the header is decoded, the value is untouched.
-pub struct PropertyView<'a, M = NoMeta> {
+pub struct PropertyView<'a> {
     name_hash: BinHash,
     kind: Kind,
     /// The value's own bytes, positioned at the start of them.
     value: Cursor<'a>,
-    meta: PhantomData<fn() -> M>,
 }
 
-impl<'a, M> PropertyView<'a, M> {
+impl<'a> PropertyView<'a> {
     /// The property's name hash.
     #[must_use]
     pub fn name_hash(&self) -> BinHash {
@@ -239,12 +234,12 @@ impl<'a, M> PropertyView<'a, M> {
     /// # Errors
     ///
     /// See [`ValueView`].
-    pub fn value_view(&self) -> Result<ValueView<'a, M>, Error> {
+    pub fn value_view(&self) -> Result<ValueView<'a>, Error> {
         ValueView::read(&mut { self.value }, self.kind)
     }
 }
 
-impl<M: Default> PropertyView<'_, M> {
+impl PropertyView<'_> {
     /// Decodes the value — the whole subtree — into the owned representation.
     ///
     /// # Errors
@@ -252,12 +247,12 @@ impl<M: Default> PropertyView<'_, M> {
     /// The same as the eager reader raises for the same bytes: [`Error::InvalidSize`],
     /// [`Error::InvalidNesting`], [`Error::InvalidKeyType`],
     /// [`Error::MismatchedContainerTypes`], [`Error::Utf8Error`].
-    pub fn value(&self) -> Result<PropertyValueEnum<M>, Error> {
+    pub fn value(&self) -> Result<PropertyValueEnum, Error> {
         owned::read_value(&mut { self.value }, self.kind)
     }
 }
 
-impl<M> fmt::Debug for PropertyView<'_, M> {
+impl fmt::Debug for PropertyView<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("PropertyView")
             .field("name_hash", &self.name_hash)
@@ -269,25 +264,23 @@ impl<M> fmt::Debug for PropertyView<'_, M> {
 
 /// Iterator over the properties of an [`ObjectView`] or a [`StructView`], in file order.
 #[must_use = "iterators are lazy and do nothing unless consumed"]
-pub struct Properties<'a, M = NoMeta> {
+pub struct Properties<'a> {
     cur: Cursor<'a>,
     remaining: u16,
-    meta: PhantomData<fn() -> M>,
 }
 
-impl<'a, M> Properties<'a, M> {
+impl<'a> Properties<'a> {
     /// Reads `count` properties from where `cur` is positioned.
     pub(crate) fn new(cur: Cursor<'a>, count: u16) -> Self {
         Self {
             cur,
             remaining: count,
-            meta: PhantomData,
         }
     }
 }
 
-impl<'a, M> Iterator for Properties<'a, M> {
-    type Item = Result<PropertyView<'a, M>, Error>;
+impl<'a> Iterator for Properties<'a> {
+    type Item = Result<PropertyView<'a>, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.remaining == 0 {
@@ -311,19 +304,18 @@ impl<'a, M> Iterator for Properties<'a, M> {
     }
 }
 
-impl<M> std::iter::FusedIterator for Properties<'_, M> {}
+impl std::iter::FusedIterator for Properties<'_> {}
 
-impl<M> Clone for Properties<'_, M> {
+impl Clone for Properties<'_> {
     fn clone(&self) -> Self {
         Self {
             cur: self.cur,
             remaining: self.remaining,
-            meta: PhantomData,
         }
     }
 }
 
-impl<M> fmt::Debug for Properties<'_, M> {
+impl fmt::Debug for Properties<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Properties")
             .field("remaining", &self.remaining)
@@ -332,7 +324,7 @@ impl<M> fmt::Debug for Properties<'_, M> {
 }
 
 /// Reads one `name_hash`/`kind`/`value` triple, advancing past the value.
-fn read_property<'a, M>(cur: &mut Cursor<'a>) -> Result<PropertyView<'a, M>, Error> {
+fn read_property<'a>(cur: &mut Cursor<'a>) -> Result<PropertyView<'a>, Error> {
     let name_hash = cur.bin_hash()?;
     let kind = cur.kind()?;
     let value = cur.take_value(kind)?;
@@ -341,15 +333,14 @@ fn read_property<'a, M>(cur: &mut Cursor<'a>) -> Result<PropertyView<'a, M>, Err
         name_hash,
         kind,
         value: Cursor::new(value, cur.numbering()),
-        meta: PhantomData,
     })
 }
 
 /// The first property of `properties` with the given name hash.
-pub(crate) fn find_property<'a, M>(
-    properties: Properties<'a, M>,
+pub(crate) fn find_property<'a>(
+    properties: Properties<'a>,
     name_hash: BinHash,
-) -> Result<Option<PropertyView<'a, M>>, Error> {
+) -> Result<Option<PropertyView<'a>>, Error> {
     for property in properties {
         let property = property?;
         if property.name_hash == name_hash {
@@ -361,14 +352,13 @@ pub(crate) fn find_property<'a, M>(
 
 macro_rules! copy_views {
     ($($view:ident),* $(,)?) => { $(
-        // By hand rather than derived: `M` is a phantom here, so a derived `Copy` would demand
-        // `M: Copy` for a field that holds nothing.
-        impl<M> Clone for $view<'_, M> {
+        // A shared view over borrowed bytes; every field is `Copy`, so `Clone` is a bit-copy.
+        impl Clone for $view<'_> {
             fn clone(&self) -> Self {
                 *self
             }
         }
-        impl<M> Copy for $view<'_, M> {}
+        impl Copy for $view<'_> {}
     )* };
 }
 pub(crate) use copy_views;

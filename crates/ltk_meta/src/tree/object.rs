@@ -10,7 +10,6 @@ use indexmap::IndexMap;
 use ltk_io_ext::{measure, window_at};
 
 use crate::{
-    property::NoMeta,
     stream::{layout::Numbering, owned},
     traits::WriterExt as _,
 };
@@ -30,24 +29,20 @@ use byteorder::{WriteBytesExt as _, LE};
 ///
 /// ```
 /// use ltk_meta::BinObject;
-/// use ltk_meta::property::{values, NoMeta};
+/// use ltk_meta::property::values;
 ///
 /// // Simple construction
-/// let obj = BinObject::<NoMeta>::new(0x1234, 0x5678);
+/// let obj = BinObject::new(0x1234, 0x5678);
 ///
 /// // Builder pattern with properties
-/// let obj = BinObject::<NoMeta>::builder(0x1234, 0x5678)
+/// let obj = BinObject::builder(0x1234, 0x5678)
 ///     .property(0xAAAA, values::I32::new(42))
 ///     .property(0xBBBB, values::String::from("hello"))
 ///     .build();
 /// ```
-#[cfg_attr(
-    feature = "serde",
-    derive(serde::Serialize, serde::Deserialize),
-    serde(bound = "for <'dee> M: serde::Serialize + serde::Deserialize<'dee>")
-)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Default)]
-pub struct BinObject<M = NoMeta> {
+pub struct BinObject {
     /// The unique path hash identifying this object.
     pub path_hash: BinHash,
 
@@ -55,10 +50,10 @@ pub struct BinObject<M = NoMeta> {
     pub class_hash: BinHash,
 
     /// The properties of this object, keyed by their name hash.
-    pub properties: IndexMap<BinHash, PropertyValueEnum<M>>,
+    pub properties: IndexMap<BinHash, PropertyValueEnum>,
 }
 
-impl<M> BinObject<M> {
+impl BinObject {
     /// Creates a new `BinObject` with the given path and class hashes.
     ///
     /// The object starts with no properties.
@@ -66,9 +61,9 @@ impl<M> BinObject<M> {
     /// # Examples
     ///
     /// ```
-    /// use ltk_meta::{property::NoMeta, BinObject};
+    /// use ltk_meta::BinObject;
     ///
-    /// let obj = BinObject::<NoMeta>::new(0x12345678, 0xABCDEF00);
+    /// let obj = BinObject::new(0x12345678, 0xABCDEF00);
     /// assert!(obj.properties.is_empty());
     /// ```
     pub fn new(path_hash: impl Into<BinHash>, class_hash: impl Into<BinHash>) -> Self {
@@ -85,9 +80,9 @@ impl<M> BinObject<M> {
     ///
     /// ```
     /// use ltk_meta::BinObject;
-    /// use ltk_meta::property::{values, NoMeta};
+    /// use ltk_meta::property::values;
     ///
-    /// let obj = BinObject::<NoMeta>::builder(0x12345678, 0xABCDEF00)
+    /// let obj = BinObject::builder(0x12345678, 0xABCDEF00)
     ///     .property(0x1111, values::I32::new(42))
     ///     .property(0x2222, values::String::from("hello"))
     ///     .property(0x3333, values::Bool::new(true))
@@ -98,8 +93,8 @@ impl<M> BinObject<M> {
     pub fn builder(
         path_hash: impl Into<BinHash>,
         class_hash: impl Into<BinHash>,
-    ) -> builder::Builder<M> {
-        builder::Builder::<M>::new(path_hash, class_hash)
+    ) -> builder::Builder {
+        builder::Builder::new(path_hash, class_hash)
     }
 
     /// Reads a BinObject from a reader.
@@ -118,10 +113,7 @@ impl<M> BinObject<M> {
         reader: &mut R,
         class_hash: BinHash,
         legacy: bool,
-    ) -> Result<Self, Error>
-    where
-        M: Default,
-    {
+    ) -> Result<Self, Error> {
         // The object's size field bounds its bytes, so they are taken in one read and decoded
         // through the layout core - the same code path the stream's `read()` and `into_bin()`
         // take for the same object.
@@ -133,10 +125,7 @@ impl<M> BinObject<M> {
     /// # Arguments
     ///
     /// * `writer` - A writer that implements io::Write and io::Seek.
-    pub fn to_writer<W: io::Write + io::Seek + ?Sized>(&self, writer: &mut W) -> io::Result<()>
-    where
-        M: Clone,
-    {
+    pub fn to_writer<W: io::Write + io::Seek + ?Sized>(&self, writer: &mut W) -> io::Result<()> {
         let size_pos = writer.stream_position()?;
         writer.write_u32::<LE>(0)?;
 
@@ -170,14 +159,14 @@ impl<M> BinObject<M> {
     /// Returns a reference to the property with the given name hash, if it exists.
     #[must_use]
     #[inline(always)]
-    pub fn get_property(&self, name_hash: BinHash) -> Option<&PropertyValueEnum<M>> {
+    pub fn get_property(&self, name_hash: BinHash) -> Option<&PropertyValueEnum> {
         self.properties.get(&name_hash)
     }
 
     /// Returns a mutable reference to the property with the given name hash, if it exists.
     #[must_use]
     #[inline(always)]
-    pub fn get_property_mut(&mut self, name_hash: BinHash) -> Option<&mut PropertyValueEnum<M>> {
+    pub fn get_property_mut(&mut self, name_hash: BinHash) -> Option<&mut PropertyValueEnum> {
         self.properties.get_mut(&name_hash)
     }
 
@@ -196,50 +185,50 @@ impl<M> BinObject<M> {
     pub fn insert(
         &mut self,
         name_hash: BinHash,
-        value: impl Into<PropertyValueEnum<M>>,
-    ) -> Option<PropertyValueEnum<M>> {
+        value: impl Into<PropertyValueEnum>,
+    ) -> Option<PropertyValueEnum> {
         self.properties.insert(name_hash, value.into())
     }
 
     /// Removes and returns the property with the given name hash, if it exists.
-    pub fn remove_property(&mut self, name_hash: BinHash) -> Option<PropertyValueEnum<M>> {
+    pub fn remove_property(&mut self, name_hash: BinHash) -> Option<PropertyValueEnum> {
         self.properties.shift_remove(&name_hash)
     }
 
     /// Returns an iterator over the properties in this object.
     #[inline]
-    pub fn iter(&self) -> impl Iterator<Item = (&BinHash, &PropertyValueEnum<M>)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&BinHash, &PropertyValueEnum)> {
         self.properties.iter()
     }
 
     /// Returns a mutable iterator over the properties in this object.
     #[inline]
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&BinHash, &mut PropertyValueEnum<M>)> {
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&BinHash, &mut PropertyValueEnum)> {
         self.properties.iter_mut()
     }
 }
 
-impl<'a, M> IntoIterator for &'a BinObject<M> {
-    type Item = (&'a BinHash, &'a PropertyValueEnum<M>);
-    type IntoIter = indexmap::map::Iter<'a, BinHash, PropertyValueEnum<M>>;
+impl<'a> IntoIterator for &'a BinObject {
+    type Item = (&'a BinHash, &'a PropertyValueEnum);
+    type IntoIter = indexmap::map::Iter<'a, BinHash, PropertyValueEnum>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.properties.iter()
     }
 }
 
-impl<'a, M> IntoIterator for &'a mut BinObject<M> {
-    type Item = (&'a BinHash, &'a mut PropertyValueEnum<M>);
-    type IntoIter = indexmap::map::IterMut<'a, BinHash, PropertyValueEnum<M>>;
+impl<'a> IntoIterator for &'a mut BinObject {
+    type Item = (&'a BinHash, &'a mut PropertyValueEnum);
+    type IntoIter = indexmap::map::IterMut<'a, BinHash, PropertyValueEnum>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.properties.iter_mut()
     }
 }
 
-impl<M> IntoIterator for BinObject<M> {
-    type Item = (BinHash, PropertyValueEnum<M>);
-    type IntoIter = indexmap::map::IntoIter<BinHash, PropertyValueEnum<M>>;
+impl IntoIterator for BinObject {
+    type Item = (BinHash, PropertyValueEnum);
+    type IntoIter = indexmap::map::IntoIter<BinHash, PropertyValueEnum>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.properties.into_iter()

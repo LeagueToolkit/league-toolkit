@@ -3,7 +3,6 @@ use std::{io, ops::Range};
 use ltk_hash::BinHash;
 
 use crate::{
-    property::NoMeta,
     stream::{BinStream, ObjectEntry, ObjectView},
     BinObject, Error,
 };
@@ -15,13 +14,13 @@ use crate::{
 /// use [`Entries`].
 #[must_use = "cursors are lazy and read nothing until advanced"]
 #[derive(Debug)]
-pub struct Objects<'a, R: io::Read + io::Seek, M = NoMeta> {
-    stream: &'a mut BinStream<R, M>,
+pub struct Objects<'a, R: io::Read + io::Seek> {
+    stream: &'a mut BinStream<R>,
     index: usize,
 }
 
-impl<'a, R: io::Read + io::Seek, M: Default> Objects<'a, R, M> {
-    pub(crate) fn new(stream: &'a mut BinStream<R, M>) -> Self {
+impl<'a, R: io::Read + io::Seek> Objects<'a, R> {
+    pub(crate) fn new(stream: &'a mut BinStream<R>) -> Self {
         Self { stream, index: 0 }
     }
 
@@ -38,7 +37,7 @@ impl<'a, R: io::Read + io::Seek, M: Default> Objects<'a, R, M> {
         clippy::should_implement_trait,
         reason = "a lending cursor: the yielded item borrows the reader, which `Iterator` cannot express"
     )]
-    pub fn next(&mut self) -> Result<Option<ObjectStream<'_, R, M>>, Error> {
+    pub fn next(&mut self) -> Result<Option<ObjectStream<'_, R>>, Error> {
         if self.index == self.stream.class_hashes().len() {
             return Ok(None);
         }
@@ -62,19 +61,19 @@ impl<'a, R: io::Read + io::Seek, M: Default> Objects<'a, R, M> {
 /// `std` iterator of plain [`ObjectEntry`] descriptors — [`Objects`] without descent.
 #[must_use = "iterators are lazy and do nothing unless consumed"]
 #[derive(Debug)]
-pub struct Entries<'a, R: io::Read + io::Seek, M = NoMeta> {
-    objects: Objects<'a, R, M>,
+pub struct Entries<'a, R: io::Read + io::Seek> {
+    objects: Objects<'a, R>,
 }
 
-impl<'a, R: io::Read + io::Seek, M: Default> Entries<'a, R, M> {
-    pub(crate) fn new(stream: &'a mut BinStream<R, M>) -> Self {
+impl<'a, R: io::Read + io::Seek> Entries<'a, R> {
+    pub(crate) fn new(stream: &'a mut BinStream<R>) -> Self {
         Self {
             objects: Objects::new(stream),
         }
     }
 }
 
-impl<R: io::Read + io::Seek, M: Default> Iterator for Entries<'_, R, M> {
+impl<R: io::Read + io::Seek> Iterator for Entries<'_, R> {
     type Item = Result<ObjectEntry, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -92,14 +91,14 @@ impl<R: io::Read + io::Seek, M: Default> Iterator for Entries<'_, R, M> {
 /// here except [`ObjectStream::property_count`] is served from the already-harvested
 /// [`ObjectEntry`] without touching the reader.
 #[derive(Debug)]
-pub struct ObjectStream<'a, R: io::Read + io::Seek, M = NoMeta> {
-    stream: &'a mut BinStream<R, M>,
+pub struct ObjectStream<'a, R: io::Read + io::Seek> {
+    stream: &'a mut BinStream<R>,
     entry: ObjectEntry,
     property_count: Option<u16>,
 }
 
-impl<'a, R: io::Read + io::Seek, M: Default> ObjectStream<'a, R, M> {
-    pub(crate) fn new(stream: &'a mut BinStream<R, M>, entry: ObjectEntry) -> Self {
+impl<'a, R: io::Read + io::Seek> ObjectStream<'a, R> {
+    pub(crate) fn new(stream: &'a mut BinStream<R>, entry: ObjectEntry) -> Self {
         Self {
             stream,
             entry,
@@ -158,7 +157,7 @@ impl<'a, R: io::Read + io::Seek, M: Default> ObjectStream<'a, R, M> {
     /// [`Error::InvalidSize`] if the object's declared size disagrees with what its property
     /// counts consume, [`Error::InvalidPropertyTypePrimitive`] if a kind byte decodes under
     /// neither numbering, or an I/O error from the source.
-    pub fn view(&mut self) -> Result<ObjectView<'_, M>, Error> {
+    pub fn view(&mut self) -> Result<ObjectView<'_>, Error> {
         let entry = self.entry;
         ObjectView::new(entry, self.stream.view_object(entry)?)
     }
@@ -176,7 +175,7 @@ impl<'a, R: io::Read + io::Seek, M: Default> ObjectStream<'a, R, M> {
     /// The same as [`ObjectStream::view`], plus whatever the value model raises for a container
     /// it refuses: [`Error::InvalidNesting`], [`Error::InvalidKeyType`],
     /// [`Error::MismatchedContainerTypes`].
-    pub fn read(&mut self) -> Result<BinObject<M>, Error> {
+    pub fn read(&mut self) -> Result<BinObject, Error> {
         self.stream.read_object(self.entry)
     }
 }

@@ -1,21 +1,15 @@
 //! The streaming surface, imported the way a consumer is meant to import it.
 //!
-//! Two paths appear in this file and no more: `ltk_meta::concrete` for the constructors Rust
-//! cannot infer - `mount` and `LruObjectCache::new` are expression position, where the
-//! `M = NoMeta` default never applies - and the crate root for everything else. The path
-//! `ltk_meta::stream` must not appear here at all: needing it is the two-import-site spread the
-//! root re-exports removed, and this file is what catches it coming back.
-//!
-//! The handle is mounted with no turbofish and no annotation, which is the other half of the
-//! assertion: `R` and `M` are inferred once and carry through every cursor and view it hands out.
+//! One path appears in this file and no more: the crate root. `ltk_meta::stream` must not appear
+//! here at all - needing it is the two-import-site spread the root re-exports removed, and this
+//! file is what catches it coming back.
 
 use std::{io::Cursor, num::NonZeroUsize, sync::Arc};
 
 use ltk_meta::{
-    concrete::{BinStream, LruObjectCache, NoCache},
-    BatchObjects, BinToc, ContainerItems, ContainerView, Entries, Error, MapEntries, MapView,
-    Numbering, ObjectCache, ObjectEntry, ObjectStream, ObjectView, Objects, OptionalView,
-    Properties, PropertyView, StructView, ValueView,
+    BatchObjects, BinStream, BinToc, ContainerItems, ContainerView, Entries, Error, LruObjectCache,
+    MapEntries, MapView, NoCache, Numbering, ObjectCache, ObjectEntry, ObjectStream, ObjectView,
+    Objects, OptionalView, Properties, PropertyView, StructView, ValueView,
 };
 
 /// Path hash of the fixture's only object.
@@ -28,10 +22,6 @@ const EMITTERS: u32 = 0x868e_b76a;
 const EMITTER_CLASS: u32 = 0x09cd_e442;
 
 /// A consumer that keeps its cache policy rather than handing it straight over.
-///
-/// The field is the strict case: `set_cache` lets an argument infer `M`, but a field has no
-/// inference to lean on, so `ObjectCache`'s own `M = NoMeta` default is what keeps this to one
-/// import instead of three.
 struct CacheHolder {
     policy: Box<dyn ObjectCache + Send>,
 }
@@ -49,7 +39,7 @@ struct Tally {
 /// Descends one value to the bottom, counting what it meets.
 ///
 /// The four sub-views a `ValueView` opens into are named in the helpers' parameter lists rather
-/// than behind a turbofish, which is what proves the root re-exports carry `M = NoMeta` with them.
+/// than behind a turbofish, which is what proves the root re-exports carry them.
 fn walk_value(value: ValueView<'_>, tally: &mut Tally) -> Result<(), Error> {
     match value {
         ValueView::String(_) => tally.strings += 1,
@@ -122,7 +112,7 @@ fn walk_optional(view: OptionalView<'_>, tally: &mut Tally) -> Result<(), Error>
 }
 
 #[test]
-fn a_streaming_walk_needs_only_the_root_and_concrete() -> Result<(), Error> {
+fn a_streaming_walk_needs_only_the_crate_root() -> Result<(), Error> {
     let mut stream = BinStream::mount(Cursor::new(include_bytes!("bins/leona_small.bin")))?;
 
     assert_eq!(stream.version(), 3);
@@ -163,13 +153,10 @@ fn a_streaming_walk_needs_only_the_root_and_concrete() -> Result<(), Error> {
 }
 
 #[test]
-fn the_cache_policies_are_named_from_concrete() -> Result<(), Error> {
+fn the_cache_policies_are_named_from_the_crate_root() -> Result<(), Error> {
     let mut stream = BinStream::mount(Cursor::new(include_bytes!("bins/leona_small.bin")))?;
 
-    // `new` is expression position, so the capacity comes through the `concrete` alias - and the
-    // annotation says the alias and the root re-export are one type.
-    let lru: ltk_meta::LruObjectCache =
-        LruObjectCache::new(NonZeroUsize::new(4).expect("4 is not zero"));
+    let lru: LruObjectCache = LruObjectCache::new(NonZeroUsize::new(4).expect("4 is not zero"));
     stream.set_cache(Box::new(lru));
 
     let parsed = stream
@@ -183,8 +170,6 @@ fn the_cache_policies_are_named_from_concrete() -> Result<(), Error> {
     assert!(Arc::ptr_eq(&parsed, &hit), "the LRU served the second call");
 
     // `NoCache` keeps nothing, so the next call parses a fresh object rather than hitting.
-    // Named in expression position straight from `concrete`, which is why it is re-exported
-    // there rather than aliased.
     let holder = CacheHolder {
         policy: Box::new(NoCache),
     };
@@ -200,8 +185,7 @@ fn the_cache_policies_are_named_from_concrete() -> Result<(), Error> {
 
 /// Every remaining streaming name, spelled at the crate root in type position.
 ///
-/// The bindings are annotated on purpose here: a name the root stops exporting, or one whose
-/// metadata default stops applying through the re-export, fails to compile.
+/// The bindings are annotated on purpose here: a name the root stops exporting fails to compile.
 #[test]
 fn every_streaming_name_is_spelled_at_the_crate_root() -> Result<(), Error> {
     let mut stream = BinStream::mount(Cursor::new(include_bytes!("bins/leona_small.bin")))?;

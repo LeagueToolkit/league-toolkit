@@ -1,7 +1,7 @@
 use std::io;
 
 use crate::{
-    property::{Kind, NoMeta},
+    property::Kind,
     stream::{layout::Numbering, owned},
     traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty, WriterExt},
     Error, PropertyValueEnum, ValueSlot,
@@ -20,19 +20,14 @@ pub use item::ContainerItem;
 ///
 /// The format has no nested containers, so a container, option or map cannot be an item. The
 /// checked constructors reject those kinds, and [`ContainerItem`] excludes them at compile time.
-#[cfg_attr(
-    feature = "serde",
-    derive(serde::Serialize, serde::Deserialize),
-    serde(bound = "for <'dee> M: serde::Serialize + serde::Deserialize<'dee>")
-)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
-pub struct Container<M = NoMeta> {
+pub struct Container {
     item_kind: Kind,
-    items: Vec<PropertyValueEnum<M>>,
-    pub meta: M,
+    items: Vec<PropertyValueEnum>,
 }
 
-impl<M: Default> Container<M> {
+impl Container {
     /// An empty container holding items of `item_kind`.
     ///
     /// # Errors
@@ -48,7 +43,7 @@ impl<M: Default> Container<M> {
     ///
     /// [`Error::InvalidNesting`] if `item_kind` is itself a container kind, or
     /// [`Error::MismatchedContainerTypes`] if an item is not `item_kind`.
-    pub fn new(item_kind: Kind, items: Vec<PropertyValueEnum<M>>) -> Result<Self, Error> {
+    pub fn new(item_kind: Kind, items: Vec<PropertyValueEnum>) -> Result<Self, Error> {
         if item_kind.is_container() {
             return Err(Error::InvalidNesting(item_kind));
         }
@@ -61,15 +56,9 @@ impl<M: Default> Container<M> {
             }
         }
 
-        Ok(Self {
-            item_kind,
-            items,
-            meta: M::default(),
-        })
+        Ok(Self { item_kind, items })
     }
-}
 
-impl<M> Container<M> {
     /// The kind every item in this container has.
     #[inline(always)]
     #[must_use]
@@ -80,14 +69,14 @@ impl<M> Container<M> {
     /// The items, in order.
     #[inline(always)]
     #[must_use]
-    pub fn items(&self) -> &[PropertyValueEnum<M>] {
+    pub fn items(&self) -> &[PropertyValueEnum] {
         &self.items
     }
 
     /// The item at `index`, if there is one.
     #[inline(always)]
     #[must_use]
-    pub fn get(&self, index: usize) -> Option<&PropertyValueEnum<M>> {
+    pub fn get(&self, index: usize) -> Option<&PropertyValueEnum> {
         self.items.get(index)
     }
 
@@ -99,7 +88,7 @@ impl<M> Container<M> {
     /// replace.
     #[inline(always)]
     #[must_use]
-    pub fn slot(&mut self, index: usize) -> Option<ValueSlot<'_, M>> {
+    pub fn slot(&mut self, index: usize) -> Option<ValueSlot<'_>> {
         let item_kind = self.item_kind;
         Some(ValueSlot::pinned(item_kind, self.items.get_mut(index)?))
     }
@@ -123,7 +112,7 @@ impl<M> Container<M> {
     /// # Errors
     ///
     /// [`Error::MismatchedContainerTypes`] if `value` is not [`Container::item_kind`].
-    pub fn push(&mut self, value: PropertyValueEnum<M>) -> Result<(), Error> {
+    pub fn push(&mut self, value: PropertyValueEnum) -> Result<(), Error> {
         if value.kind() != self.item_kind {
             return Err(Error::MismatchedContainerTypes {
                 expected: self.item_kind,
@@ -138,48 +127,36 @@ impl<M> Container<M> {
     /// The items, in order, by value.
     #[inline(always)]
     #[must_use]
-    pub fn into_items(self) -> Vec<PropertyValueEnum<M>> {
+    pub fn into_items(self) -> Vec<PropertyValueEnum> {
         self.items
-    }
-
-    #[inline(always)]
-    #[must_use]
-    pub fn no_meta(self) -> Container<NoMeta> {
-        Container {
-            item_kind: self.item_kind,
-            items: self.items.into_iter().map(|i| i.no_meta()).collect(),
-            meta: NoMeta,
-        }
     }
 }
 
-impl<M: Default> Default for Container<M> {
+impl Default for Container {
     fn default() -> Self {
         Self {
             item_kind: Kind::None,
             items: Vec::new(),
-            meta: M::default(),
         }
     }
 }
 
-impl<M: Default, T: ContainerItem + Into<PropertyValueEnum<M>>> From<Vec<T>> for Container<M> {
+impl<T: ContainerItem + Into<PropertyValueEnum>> From<Vec<T>> for Container {
     fn from(items: Vec<T>) -> Self {
         items.into_iter().collect()
     }
 }
 
-impl<M: Default, T: ContainerItem + Into<PropertyValueEnum<M>>> FromIterator<T> for Container<M> {
+impl<T: ContainerItem + Into<PropertyValueEnum>> FromIterator<T> for Container {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
         Self {
             item_kind: T::KIND,
             items: iter.into_iter().map(Into::into).collect(),
-            meta: M::default(),
         }
     }
 }
 
-impl<M: Default> TryFrom<Vec<PropertyValueEnum<M>>> for Container<M> {
+impl TryFrom<Vec<PropertyValueEnum>> for Container {
     type Error = Error;
 
     /// The item kind comes from the first item, so an empty vector has none to take.
@@ -188,31 +165,23 @@ impl<M: Default> TryFrom<Vec<PropertyValueEnum<M>>> for Container<M> {
     ///
     /// [`Error::EmptyContainer`] if `items` is empty, otherwise whatever [`Container::new`]
     /// returns.
-    fn try_from(items: Vec<PropertyValueEnum<M>>) -> Result<Self, Self::Error> {
+    fn try_from(items: Vec<PropertyValueEnum>) -> Result<Self, Self::Error> {
         let item_kind = items.first().ok_or(Error::EmptyContainer)?.kind();
         Self::new(item_kind, items)
     }
 }
 
-impl<M> PropertyExt for Container<M> {
+impl PropertyExt for Container {
     fn size_no_header(&self) -> usize {
         9 + self.items.iter().map(|i| i.size_no_header()).sum::<usize>()
     }
-
-    type Meta = M;
-    fn meta(&self) -> &Self::Meta {
-        &self.meta
-    }
-    fn meta_mut(&mut self) -> &mut Self::Meta {
-        &mut self.meta
-    }
 }
 
-impl<M> PropertyValueExt for Container<M> {
+impl PropertyValueExt for Container {
     const KIND: Kind = Kind::Container;
 }
 
-impl<M: Default> ReadProperty for Container<M> {
+impl ReadProperty for Container {
     fn from_reader<R: io::Read + io::Seek + ?Sized>(
         reader: &mut R,
         legacy: bool,
@@ -226,7 +195,7 @@ impl<M: Default> ReadProperty for Container<M> {
     }
 }
 
-impl<M: Clone> WriteProperty for Container<M> {
+impl WriteProperty for Container {
     // TODO: legacy writing
     fn to_writer<R: io::Write + io::Seek + ?Sized>(
         &self,
@@ -262,7 +231,7 @@ mod tests {
 
     #[test]
     fn takes_its_item_kind_from_the_type() {
-        let list = Container::<NoMeta>::from(vec![values::I32::new(1), values::I32::new(2)]);
+        let list = Container::from(vec![values::I32::new(1), values::I32::new(2)]);
         assert_eq!(list.item_kind(), Kind::I32);
         assert_eq!(list.len(), 2);
 
@@ -287,14 +256,14 @@ mod tests {
     #[test]
     fn rejects_an_item_that_is_not_its_item_kind() {
         assert!(matches!(
-            Container::<NoMeta>::new(Kind::I32, vec![values::String::from("no").into()]),
+            Container::new(Kind::I32, vec![values::String::from("no").into()]),
             Err(Error::MismatchedContainerTypes {
                 expected: Kind::I32,
                 got: Kind::String
             })
         ));
 
-        let mut list = Container::<NoMeta>::empty(Kind::I32).unwrap();
+        let mut list = Container::empty(Kind::I32).unwrap();
         assert!(matches!(
             list.push(values::String::from("no").into()),
             Err(Error::MismatchedContainerTypes {
@@ -316,7 +285,7 @@ mod tests {
             Kind::Map,
         ] {
             assert!(matches!(
-                Container::<NoMeta>::empty(kind),
+                Container::empty(kind),
                 Err(Error::InvalidNesting(k)) if k == kind
             ));
         }
@@ -324,7 +293,7 @@ mod tests {
 
     #[test]
     fn borrows_its_items() {
-        let list = Container::<NoMeta>::from(vec![values::I32::new(1), values::I32::new(2)]);
+        let list = Container::from(vec![values::I32::new(1), values::I32::new(2)]);
 
         assert_eq!(list.get(0), Some(&values::I32::new(1).into()));
         assert_eq!(list.get(2), None);
@@ -337,7 +306,7 @@ mod tests {
     fn pins_its_item_kind_to_the_slots_it_hands_out() {
         use crate::property::ValueMut;
 
-        let mut list = Container::<NoMeta>::from(vec![values::I32::new(1), values::I32::new(2)]);
+        let mut list = Container::from(vec![values::I32::new(1), values::I32::new(2)]);
         assert!(list.slot(2).is_none());
 
         let mut slot = list.slot(1).unwrap();

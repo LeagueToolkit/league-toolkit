@@ -9,7 +9,7 @@ use byteorder::{ReadBytesExt as _, LE};
 use indexmap::IndexMap;
 use ltk_hash::BinHash;
 
-use crate::{property::NoMeta, Bin, BinObject, BinOverride, Error};
+use crate::{Bin, BinObject, BinOverride, Error};
 
 /// The two kinds of bin file, told apart by their magic.
 ///
@@ -142,17 +142,13 @@ impl fmt::Display for BinKind {
 /// }
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-#[cfg_attr(
-    feature = "serde",
-    derive(serde::Serialize, serde::Deserialize),
-    serde(bound = "for <'dee> M: serde::Serialize + serde::Deserialize<'dee>")
-)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
-pub enum BinFile<M = NoMeta> {
+pub enum BinFile {
     /// A `PROP` bin.
-    Prop(Bin<M>),
+    Prop(Bin),
     /// A `PTCH` bin.
-    Override(BinOverride<M>),
+    Override(BinOverride),
 }
 
 impl BinFile {
@@ -169,7 +165,7 @@ impl BinFile {
     }
 }
 
-impl<M> BinFile<M> {
+impl BinFile {
     /// The kind of file this is.
     #[must_use]
     #[inline]
@@ -197,7 +193,7 @@ impl<M> BinFile<M> {
     /// The `PROP` bin, if this is one.
     #[must_use]
     #[inline]
-    pub fn as_prop(&self) -> Option<&Bin<M>> {
+    pub fn as_prop(&self) -> Option<&Bin> {
         match self {
             Self::Prop(bin) => Some(bin),
             Self::Override(_) => None,
@@ -207,7 +203,7 @@ impl<M> BinFile<M> {
     /// See [`BinFile::as_prop`].
     #[must_use]
     #[inline]
-    pub fn as_prop_mut(&mut self) -> Option<&mut Bin<M>> {
+    pub fn as_prop_mut(&mut self) -> Option<&mut Bin> {
         match self {
             Self::Prop(bin) => Some(bin),
             Self::Override(_) => None,
@@ -217,7 +213,7 @@ impl<M> BinFile<M> {
     /// See [`BinFile::as_prop`].
     #[must_use]
     #[inline]
-    pub fn into_prop(self) -> Option<Bin<M>> {
+    pub fn into_prop(self) -> Option<Bin> {
         match self {
             Self::Prop(bin) => Some(bin),
             Self::Override(_) => None,
@@ -227,7 +223,7 @@ impl<M> BinFile<M> {
     /// The `PTCH` bin, if this is one.
     #[must_use]
     #[inline]
-    pub fn as_override(&self) -> Option<&BinOverride<M>> {
+    pub fn as_override(&self) -> Option<&BinOverride> {
         match self {
             Self::Override(patch_bin) => Some(patch_bin),
             Self::Prop(_) => None,
@@ -237,7 +233,7 @@ impl<M> BinFile<M> {
     /// See [`BinFile::as_override`].
     #[must_use]
     #[inline]
-    pub fn as_override_mut(&mut self) -> Option<&mut BinOverride<M>> {
+    pub fn as_override_mut(&mut self) -> Option<&mut BinOverride> {
         match self {
             Self::Override(patch_bin) => Some(patch_bin),
             Self::Prop(_) => None,
@@ -247,7 +243,7 @@ impl<M> BinFile<M> {
     /// See [`BinFile::as_override`].
     #[must_use]
     #[inline]
-    pub fn into_override(self) -> Option<BinOverride<M>> {
+    pub fn into_override(self) -> Option<BinOverride> {
         match self {
             Self::Override(patch_bin) => Some(patch_bin),
             Self::Prop(_) => None,
@@ -259,7 +255,7 @@ impl<M> BinFile<M> {
     /// For a `PTCH` these are the objects it adds, not the ones it patches.
     #[must_use]
     #[inline]
-    pub fn objects(&self) -> &IndexMap<BinHash, BinObject<M>> {
+    pub fn objects(&self) -> &IndexMap<BinHash, BinObject> {
         match self {
             Self::Prop(bin) => &bin.objects,
             Self::Override(patch_bin) => &patch_bin.objects,
@@ -269,7 +265,7 @@ impl<M> BinFile<M> {
     /// See [`BinFile::objects`].
     #[must_use]
     #[inline]
-    pub fn objects_mut(&mut self) -> &mut IndexMap<BinHash, BinObject<M>> {
+    pub fn objects_mut(&mut self) -> &mut IndexMap<BinHash, BinObject> {
         match self {
             Self::Prop(bin) => &mut bin.objects,
             Self::Override(patch_bin) => &mut patch_bin.objects,
@@ -277,7 +273,7 @@ impl<M> BinFile<M> {
     }
 }
 
-impl<M: Clone> BinFile<M> {
+impl BinFile {
     /// Writes this file back out in its own format.
     ///
     /// # Arguments
@@ -291,14 +287,14 @@ impl<M: Clone> BinFile<M> {
     }
 }
 
-impl<M> From<Bin<M>> for BinFile<M> {
-    fn from(value: Bin<M>) -> Self {
+impl From<Bin> for BinFile {
+    fn from(value: Bin) -> Self {
         Self::Prop(value)
     }
 }
 
-impl<M> From<BinOverride<M>> for BinFile<M> {
-    fn from(value: BinOverride<M>) -> Self {
+impl From<BinOverride> for BinFile {
+    fn from(value: BinOverride) -> Self {
         Self::Override(value)
     }
 }

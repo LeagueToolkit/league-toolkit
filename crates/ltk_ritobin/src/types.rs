@@ -1,6 +1,6 @@
 //! Type name mappings for ritobin format.
 
-use ltk_meta::{property::values, traits::PropertyExt, PropertyKind, PropertyValueEnum};
+use ltk_meta::{property::values, PropertyKind, PropertyValueEnum};
 use std::fmt::Display;
 
 /// Extension trait for mapping ritobin type names to/from [`PropertyKind`]'s
@@ -277,8 +277,8 @@ impl RitoType {
         })
     }
 
-    pub fn make_default<M: Default>(&self, span: M) -> PropertyValueEnum<M> {
-        let mut value = match self.base {
+    pub fn make_default<M: Default>(&self) -> PropertyValueEnum {
+        match self.base {
             PropertyKind::Map => PropertyValueEnum::Map(
                 values::Map::empty(self.subtype(0), self.subtype(1)).unwrap_or_default(),
             ),
@@ -295,9 +295,7 @@ impl RitoType {
             ),
 
             _ => self.base.default_value(),
-        };
-        *value.meta_mut() = span;
-        value
+        }
     }
 }
 
@@ -324,7 +322,7 @@ impl Display for ItemShape {
 pub trait PropertyValueExt {
     fn rito_type(&self) -> RitoType;
 }
-impl<M> PropertyValueExt for PropertyValueEnum<M> {
+impl PropertyValueExt for PropertyValueEnum {
     fn rito_type(&self) -> RitoType {
         let base = self.kind();
         let subtypes = match self {

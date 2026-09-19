@@ -1,4 +1,4 @@
-use ltk_meta::{property::values, PropertyKind};
+use ltk_meta::PropertyKind;
 
 use crate::{
     ast::{
@@ -131,15 +131,15 @@ impl<'a> Builder<'a> {
         let value = match kind {
             PropertyKind::Vector2 => {
                 let [x, y] = items.read_floats::<2>(ListLike::Vec2)?;
-                Value::Vector2(values::Vector2::new_with_meta([x, y].into(), span))
+                Value::Vector2(Spanned::new(span, [x, y].into()))
             }
             PropertyKind::Vector3 => {
                 let [x, y, z] = items.read_floats::<3>(ListLike::Vec3)?;
-                Value::Vector3(values::Vector3::new_with_meta([x, y, z].into(), span))
+                Value::Vector3(Spanned::new(span, [x, y, z].into()))
             }
             PropertyKind::Vector4 => {
                 let [x, y, z, w] = items.read_floats::<4>(ListLike::Vec4)?;
-                Value::Vector4(values::Vector4::new_with_meta([x, y, z, w].into(), span))
+                Value::Vector4(Spanned::new(span, [x, y, z, w].into()))
             }
             PropertyKind::Color => {
                 let [r, g, b, a] = items.read_u8s::<4>(ListLike::Color)?;
@@ -157,7 +157,7 @@ impl<'a> Builder<'a> {
                     w_axis.into(),
                 )
                 .transpose();
-                Value::Matrix44(values::Matrix44::new_with_meta(mat, span))
+                Value::Matrix44(Spanned::new(span, mat))
             }
             _ => unreachable!("resolve_listlike called with a non-listlike kind"),
         };

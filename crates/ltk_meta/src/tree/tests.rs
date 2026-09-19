@@ -7,10 +7,7 @@ use indexmap::IndexMap;
 use ltk_hash::BinHash;
 use ltk_primitives::Color;
 
-use crate::{
-    property::{values, NoMeta},
-    traits::WriterExt,
-};
+use crate::{property::values, traits::WriterExt};
 use crate::{
     property::{Kind, PropertyValueEnum},
     traits::ReaderExt,
@@ -355,7 +352,6 @@ fn test_container_with_structs_roundtrip() {
         PropertyValueEnum::Container(values::Container::from(vec![values::Struct {
             class_hash: 0xBBBB.into(),
             properties,
-            meta: NoMeta,
         }])),
     );
     let result = roundtrip_property(&prop);
@@ -423,7 +419,6 @@ fn test_optional_some_struct_roundtrip() {
         PropertyValueEnum::Optional(values::Optional::from(values::Struct {
             class_hash: 0xCCCC.into(),
             properties,
-            meta: NoMeta,
         })),
     );
     let result = roundtrip_property(&prop);
@@ -478,7 +473,6 @@ fn test_map_hash_to_struct_roundtrip() {
         PropertyValueEnum::Struct(values::Struct {
             class_hash: 0xBEEF.into(),
             properties: struct_props,
-            meta: NoMeta,
         }),
     )];
 
@@ -501,7 +495,6 @@ fn test_struct_empty_roundtrip() {
         PropertyValueEnum::Struct(values::Struct {
             class_hash: 0.into(),
             properties: IndexMap::new(),
-            meta: NoMeta,
         }),
     );
     let result = roundtrip_property(&prop);
@@ -526,7 +519,6 @@ fn test_struct_with_properties_roundtrip() {
         PropertyValueEnum::Struct(values::Struct {
             class_hash: 0xABCD.into(),
             properties,
-            meta: NoMeta,
         }),
     );
     let result = roundtrip_property(&prop);
@@ -544,7 +536,6 @@ fn test_struct_nested_roundtrip() {
         PropertyValueEnum::Struct(values::Struct {
             class_hash: 0x1111.into(),
             properties: inner_props,
-            meta: NoMeta,
         }),
     );
 
@@ -553,7 +544,6 @@ fn test_struct_nested_roundtrip() {
         PropertyValueEnum::Struct(values::Struct {
             class_hash: 0x2222.into(),
             properties: outer_props,
-            meta: NoMeta,
         }),
     );
     let result = roundtrip_property(&prop);
@@ -577,7 +567,6 @@ fn test_embedded_roundtrip() {
         PropertyValueEnum::Embedded(values::Embedded(values::Struct {
             class_hash: 0xEEEE.into(),
             properties,
-            meta: NoMeta,
         })),
     );
     let result = roundtrip_property(&prop);
@@ -590,7 +579,7 @@ fn test_embedded_roundtrip() {
 
 #[test]
 fn test_bin_tree_object_empty_roundtrip() {
-    let obj = Object::<NoMeta> {
+    let obj = Object {
         path_hash: 0x1234.into(),
         class_hash: 0x5678.into(),
         properties: Default::default(),
@@ -614,7 +603,7 @@ fn test_bin_tree_object_with_properties_roundtrip() {
         PropertyValueEnum::String(values::String::from("object property")),
     );
 
-    let obj = Object::<NoMeta> {
+    let obj = Object {
         path_hash: 0x1234.into(),
         class_hash: 0x5678.into(),
         properties,
@@ -655,7 +644,7 @@ fn test_bin_tree_with_objects_roundtrip() {
     let mut properties = IndexMap::new();
     properties.insert(0xAAAA.into(), PropertyValueEnum::I32(values::I32::new(42)));
 
-    let obj = Object::<NoMeta> {
+    let obj = Object {
         path_hash: 0x1234.into(),
         class_hash: 0x5678.into(),
         properties,
@@ -782,7 +771,6 @@ fn test_deeply_nested_struct() {
         PropertyValueEnum::Struct(values::Struct {
             class_hash: 0xAAAA.into(),
             properties: deepest_props,
-            meta: NoMeta,
         }),
     );
 
@@ -792,7 +780,6 @@ fn test_deeply_nested_struct() {
         PropertyValueEnum::Struct(values::Struct {
             class_hash: 0xBBBB.into(),
             properties: level2_props,
-            meta: NoMeta,
         }),
     );
 
@@ -801,7 +788,6 @@ fn test_deeply_nested_struct() {
         PropertyValueEnum::Struct(values::Struct {
             class_hash: 0xCCCC.into(),
             properties: level1_props,
-            meta: NoMeta,
         }),
     );
     let result = roundtrip_property(&prop);
@@ -820,12 +806,10 @@ fn test_container_with_embedded_roundtrip() {
                 PropertyValueEnum::Embedded(values::Embedded(values::Struct {
                     class_hash: 0xAAAA.into(),
                     properties: embedded_props.clone(),
-                    meta: NoMeta,
                 })),
                 PropertyValueEnum::Embedded(values::Embedded(values::Struct {
                     class_hash: 0xBBBB.into(),
                     properties: embedded_props,
-                    meta: NoMeta,
                 })),
             ])
             .unwrap(),
@@ -895,24 +879,4 @@ fn test_all_primitive_kinds_in_container() {
         let result = roundtrip_property(&prop);
         assert_eq!(prop, result, "Failed for kind {:?}", kind);
     }
-}
-
-/// [`Object::builder`] carries the metadata type through, the way [`Bin::builder`] does.
-///
-/// It used to return `Builder<NoMeta>` whatever `M` was, which made `Object::builder(..)`
-/// uninferrable and made an explicit `Object::<M>::builder(..)` silently produce the wrong type.
-#[test]
-fn object_builder_propagates_its_meta_type() {
-    use crate::traits::PropertyExt;
-
-    let spanned: Object<u32> = Object::builder(0x1234, 0x5678)
-        .property(0x1111, values::I32::new_with_meta(1, 7u32))
-        .build();
-
-    let property = spanned.properties.get(&BinHash::from(0x1111u32)).unwrap();
-    assert_eq!(*property.meta(), 7u32);
-
-    // The turbofished form still means what it says.
-    let plain: Object<NoMeta> = Object::<NoMeta>::builder(0x1234, 0x5678).build();
-    assert!(plain.is_empty());
 }

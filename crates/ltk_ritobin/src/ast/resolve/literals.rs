@@ -1,7 +1,7 @@
 use std::{borrow::Cow, str::FromStr};
 
 use ltk_hash::{BinHash, WadHash};
-use ltk_meta::{property::values, PropertyKind};
+use ltk_meta::PropertyKind;
 
 use crate::{
     ast::{
@@ -119,36 +119,36 @@ impl Value {
 
                 match kind_hint {
                     K::U8 => parse_int::<u8>(&txt, kind_hint, *span, |v, s| {
-                        Self::U8(values::U8::new_with_meta(v, s))
+                        Self::U8(Spanned::new(s, v))
                     })?,
                     K::U16 => parse_int::<u16>(&txt, kind_hint, *span, |v, s| {
-                        Self::U16(values::U16::new_with_meta(v, s))
+                        Self::U16(Spanned::new(s, v))
                     })?,
                     K::U32 => parse_int::<u32>(&txt, kind_hint, *span, |v, s| {
-                        Self::U32(values::U32::new_with_meta(v, s))
+                        Self::U32(Spanned::new(s, v))
                     })?,
                     K::U64 => parse_int::<u64>(&txt, kind_hint, *span, |v, s| {
-                        Self::U64(values::U64::new_with_meta(v, s))
+                        Self::U64(Spanned::new(s, v))
                     })?,
                     K::I8 => parse_int::<i8>(&txt, kind_hint, *span, |v, s| {
-                        Self::I8(values::I8::new_with_meta(v, s))
+                        Self::I8(Spanned::new(s, v))
                     })?,
                     K::I16 => parse_int::<i16>(&txt, kind_hint, *span, |v, s| {
-                        Self::I16(values::I16::new_with_meta(v, s))
+                        Self::I16(Spanned::new(s, v))
                     })?,
                     K::I32 => parse_int::<i32>(&txt, kind_hint, *span, |v, s| {
-                        Self::I32(values::I32::new_with_meta(v, s))
+                        Self::I32(Spanned::new(s, v))
                     })?,
                     K::I64 => parse_int::<i64>(&txt, kind_hint, *span, |v, s| {
-                        Self::I64(values::I64::new_with_meta(v, s))
+                        Self::I64(Spanned::new(s, v))
                     })?,
-                    K::F32 => Self::F32(values::F32::new_with_meta(
+                    K::F32 => Self::F32(Spanned::new(
+                        *span,
                         txt.parse().map_err(|_| Diagnostic::ParseNumericError {
                             expected: kind_hint,
                             error: None,
                             span: *span,
                         })?,
-                        *span,
                     )),
                     _ => {
                         return Err(TypeMismatch {

@@ -125,6 +125,15 @@ impl<T> Spanned<T> {
     }
 }
 
+impl<T: Default> Spanned<T> {
+    pub fn spanned_default(span: Span) -> Self {
+        Self {
+            span,
+            value: T::default(),
+        }
+    }
+}
+
 impl<T> DerefMut for Spanned<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.value

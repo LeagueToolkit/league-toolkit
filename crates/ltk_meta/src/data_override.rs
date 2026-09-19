@@ -9,11 +9,7 @@ mod write;
 use indexmap::IndexMap;
 use ltk_hash::BinHash;
 
-use crate::{
-    path::PropertyPath,
-    property::{Kind, NoMeta},
-    BinObject, PropertyValueEnum,
-};
+use crate::{path::PropertyPath, property::Kind, BinObject, PropertyValueEnum};
 
 /// The contents of a `PTCH` bin file: a patch applied over exactly one base [`Bin`](crate::Bin).
 ///
@@ -31,9 +27,9 @@ use crate::{
 /// # Examples
 ///
 /// ```
-/// use ltk_meta::{path::PropertyPath, property::{values, NoMeta}, BinOverride};
+/// use ltk_meta::{path::PropertyPath, property::values, BinOverride};
 ///
-/// let patch_bin = BinOverride::<NoMeta>::builder()
+/// let patch_bin = BinOverride::builder()
 ///     .set(
 ///         0x4a47c414_u32,
 ///         PropertyPath::new("Position.Anchors.Anchor")?,
@@ -44,13 +40,9 @@ use crate::{
 /// assert_eq!(patch_bin.patches.len(), 1);
 /// # Ok::<(), ltk_meta::path::PropertyPathError>(())
 /// ```
-#[cfg_attr(
-    feature = "serde",
-    derive(serde::Serialize, serde::Deserialize),
-    serde(bound = "for <'dee> M: serde::Serialize + serde::Deserialize<'dee>")
-)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
-pub struct BinOverride<M = NoMeta> {
+pub struct BinOverride {
     /// The path hashes of the objects this patch removes.
     ///
     /// The client tests every object it reads against this set, so an object is dropped whether it
@@ -58,10 +50,10 @@ pub struct BinOverride<M = NoMeta> {
     pub deleted: Vec<BinHash>,
 
     /// The objects this patch adds, keyed by their path hash.
-    pub objects: IndexMap<BinHash, BinObject<M>>,
+    pub objects: IndexMap<BinHash, BinObject>,
 
     /// The property patches, in file order.
-    pub patches: Vec<PropertyPatch<M>>,
+    pub patches: Vec<PropertyPatch>,
 }
 
 impl Default for BinOverride {
@@ -70,7 +62,7 @@ impl Default for BinOverride {
     }
 }
 
-impl<M> BinOverride<M> {
+impl BinOverride {
     /// Creates an empty patch.
     #[must_use]
     pub fn new() -> Self {
@@ -86,15 +78,15 @@ impl<M> BinOverride<M> {
     /// # Examples
     ///
     /// ```
-    /// use ltk_meta::{property::NoMeta, BinObject, BinOverride};
+    /// use ltk_meta::{BinObject, BinOverride};
     ///
-    /// let patch_bin = BinOverride::<NoMeta>::builder()
+    /// let patch_bin = BinOverride::builder()
     ///     .delete(0xdeadbeef_u32)
     ///     .object(BinObject::new(0x1234, 0x5678))
     ///     .build();
     /// ```
     #[must_use]
-    pub fn builder() -> Builder<M> {
+    pub fn builder() -> Builder {
         Builder::new()
     }
 
@@ -114,13 +106,9 @@ impl<M> BinOverride<M> {
 /// [`path`]: Self::path
 /// [`object_hash`]: Self::object_hash
 /// [`value`]: Self::value
-#[cfg_attr(
-    feature = "serde",
-    derive(serde::Serialize, serde::Deserialize),
-    serde(bound = "for <'dee> M: serde::Serialize + serde::Deserialize<'dee>")
-)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
-pub struct PropertyPatch<M = NoMeta> {
+pub struct PropertyPatch {
     /// The path hash of the object this record patches.
     pub object_hash: BinHash,
 
@@ -128,18 +116,18 @@ pub struct PropertyPatch<M = NoMeta> {
     pub path: PropertyPath,
 
     /// The value to write.
-    pub value: PropertyValueEnum<M>,
+    pub value: PropertyValueEnum,
 }
 
-impl<M> PropertyPatch<M> {
+impl PropertyPatch {
     /// Creates a patch record.
     ///
     /// # Examples
     ///
     /// ```
-    /// use ltk_meta::{path::PropertyPath, property::{values, NoMeta}, PropertyPatch};
+    /// use ltk_meta::{path::PropertyPath, property::values, PropertyPatch};
     ///
-    /// let patch = PropertyPatch::<NoMeta>::new(
+    /// let patch = PropertyPatch::new(
     ///     0xa4edcb0d_u32,
     ///     PropertyPath::new("FlipX")?,
     ///     values::Bool::new(true),
@@ -150,7 +138,7 @@ impl<M> PropertyPatch<M> {
     pub fn new(
         object_hash: impl Into<BinHash>,
         path: PropertyPath,
-        value: impl Into<PropertyValueEnum<M>>,
+        value: impl Into<PropertyValueEnum>,
     ) -> Self {
         Self {
             object_hash: object_hash.into(),
@@ -172,9 +160,9 @@ impl<M> PropertyPatch<M> {
 /// # Examples
 ///
 /// ```
-/// use ltk_meta::{path::PropertyPath, property::{values, NoMeta}, BinObject, BinOverride};
+/// use ltk_meta::{path::PropertyPath, property::values, BinObject, BinOverride};
 ///
-/// let patch_bin = BinOverride::<NoMeta>::builder()
+/// let patch_bin = BinOverride::builder()
 ///     .delete(0xdeadbeef_u32)
 ///     .object(BinObject::new(0x1234, 0x5678))
 ///     .set(0xa4edcb0d_u32, PropertyPath::new("FlipX")?, values::Bool::new(true))
@@ -182,13 +170,13 @@ impl<M> PropertyPatch<M> {
 /// # Ok::<(), ltk_meta::path::PropertyPathError>(())
 /// ```
 #[derive(Debug, Clone)]
-pub struct Builder<M = NoMeta> {
+pub struct Builder {
     deleted: Vec<BinHash>,
-    objects: Vec<BinObject<M>>,
-    patches: Vec<PropertyPatch<M>>,
+    objects: Vec<BinObject>,
+    patches: Vec<PropertyPatch>,
 }
 
-impl<M> Default for Builder<M> {
+impl Default for Builder {
     fn default() -> Self {
         Self {
             deleted: Vec::new(),
@@ -198,7 +186,7 @@ impl<M> Default for Builder<M> {
     }
 }
 
-impl<M> Builder<M> {
+impl Builder {
     /// See: [`BinOverride::builder`]
     #[must_use]
     pub fn new() -> Self {
@@ -221,14 +209,14 @@ impl<M> Builder<M> {
 
     /// Adds a whole object to the patch.
     #[must_use]
-    pub fn object(mut self, object: BinObject<M>) -> Self {
+    pub fn object(mut self, object: BinObject) -> Self {
         self.objects.push(object);
         self
     }
 
     /// Adds multiple whole objects to the patch.
     #[must_use]
-    pub fn objects(mut self, objects: impl IntoIterator<Item = BinObject<M>>) -> Self {
+    pub fn objects(mut self, objects: impl IntoIterator<Item = BinObject>) -> Self {
         self.objects.extend(objects);
         self
     }
@@ -239,28 +227,28 @@ impl<M> Builder<M> {
         self,
         object_hash: impl Into<BinHash>,
         path: PropertyPath,
-        value: impl Into<PropertyValueEnum<M>>,
+        value: impl Into<PropertyValueEnum>,
     ) -> Self {
         self.patch(PropertyPatch::new(object_hash, path, value))
     }
 
     /// Adds a patch record.
     #[must_use]
-    pub fn patch(mut self, patch: PropertyPatch<M>) -> Self {
+    pub fn patch(mut self, patch: PropertyPatch) -> Self {
         self.patches.push(patch);
         self
     }
 
     /// Adds multiple patch records.
     #[must_use]
-    pub fn patches(mut self, patches: impl IntoIterator<Item = PropertyPatch<M>>) -> Self {
+    pub fn patches(mut self, patches: impl IntoIterator<Item = PropertyPatch>) -> Self {
         self.patches.extend(patches);
         self
     }
 
     /// Builds the final [`BinOverride`].
     #[must_use]
-    pub fn build(self) -> BinOverride<M> {
+    pub fn build(self) -> BinOverride {
         BinOverride {
             deleted: self.deleted,
             objects: self
