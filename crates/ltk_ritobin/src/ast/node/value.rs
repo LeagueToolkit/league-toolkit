@@ -1,7 +1,8 @@
 use std::fmt::Display;
 
+use glam::{Mat4, Vec2, Vec3, Vec4};
 use ltk_hash::{BinHash, WadHash};
-use ltk_meta::{property::values, traits::PropertyExt as _, PropertyKind, PropertyValueEnum};
+use ltk_meta::PropertyKind;
 use ltk_primitives::Color;
 
 mod coerce;
@@ -24,19 +25,19 @@ pub enum Value {
     None(Span),
     Bool(Spanned<bool>),
     BitBool(Spanned<bool>),
-    I8(values::I8<Span>),
-    U8(values::U8<Span>),
-    I16(values::I16<Span>),
-    U16(values::U16<Span>),
-    I32(values::I32<Span>),
-    U32(values::U32<Span>),
-    I64(values::I64<Span>),
-    U64(values::U64<Span>),
-    F32(values::F32<Span>),
-    Vector2(values::Vector2<Span>),
-    Vector3(values::Vector3<Span>),
-    Vector4(values::Vector4<Span>),
-    Matrix44(values::Matrix44<Span>),
+    I8(Spanned<i8>),
+    U8(Spanned<u8>),
+    I16(Spanned<i16>),
+    U16(Spanned<u16>),
+    I32(Spanned<i32>),
+    U32(Spanned<u32>),
+    I64(Spanned<i64>),
+    U64(Spanned<u64>),
+    F32(Spanned<f32>),
+    Vector2(Spanned<Vec2>),
+    Vector3(Spanned<Vec3>),
+    Vector4(Spanned<Vec4>),
+    Matrix44(Spanned<Mat4>),
     Color(Spanned<Color<u8>>),
     String(Spanned<String>), // TODO: intern this string when no escapes needed
     Hash(HashedLiteral<BinHash>),
@@ -183,48 +184,25 @@ impl Value {
             K::Hash => Value::Hash(HashedLiteral::default().with_span(span)),
             K::WadChunkLink => Value::WadChunkLink(HashedLiteral::default().with_span(span)),
             K::ObjectLink => Value::ObjectLink(HashedLiteral::default().with_span(span)),
-
-            other => Value::try_from({
-                let mut v = other.default_value::<Span>();
-                *v.meta_mut() = span;
-                v
-            }).unwrap(/* Safety: all arms that error in try_from should be handled by previous arms in this match. */),
+            K::None => Value::None(span),
+            K::BitBool => Value::BitBool(Spanned::spanned_default(span)),
+            K::Bool => Value::Bool(Spanned::spanned_default(span)),
+            K::I8 => Value::I8(Spanned::spanned_default(span)),
+            K::U8 => Value::U8(Spanned::spanned_default(span)),
+            K::I16 => Value::I16(Spanned::spanned_default(span)),
+            K::U16 => Value::U16(Spanned::spanned_default(span)),
+            K::I32 => Value::I32(Spanned::spanned_default(span)),
+            K::U32 => Value::U32(Spanned::spanned_default(span)),
+            K::I64 => Value::I64(Spanned::spanned_default(span)),
+            K::U64 => Value::U64(Spanned::spanned_default(span)),
+            K::F32 => Value::F32(Spanned::spanned_default(span)),
+            K::Vector2 => Value::Vector2(Spanned::spanned_default(span)),
+            K::Vector3 => Value::Vector3(Spanned::spanned_default(span)),
+            K::Vector4 => Value::Vector4(Spanned::spanned_default(span)),
+            K::Matrix44 => Value::Matrix44(Spanned::spanned_default(span)),
+            K::Color => Value::Color(Spanned::spanned_default(span)),
+            K::String => Value::String(Spanned::spanned_default(span)),
         }
-    }
-}
-
-impl TryFrom<PropertyValueEnum<Span>> for Value {
-    type Error = ();
-    fn try_from(value: PropertyValueEnum<Span>) -> Result<Self, Self::Error> {
-        Ok(match value {
-            PropertyValueEnum::None(values::None { meta }) => Value::None(meta),
-            PropertyValueEnum::Bool(values::Bool { value, meta }) => {
-                Value::Bool(Spanned::new(meta, value))
-            }
-            PropertyValueEnum::BitBool(values::BitBool { value, meta }) => {
-                Value::BitBool(Spanned::new(meta, value))
-            }
-            PropertyValueEnum::I8(v) => Value::I8(v),
-            PropertyValueEnum::U8(v) => Value::U8(v),
-            PropertyValueEnum::I16(v) => Value::I16(v),
-            PropertyValueEnum::U16(v) => Value::U16(v),
-            PropertyValueEnum::I32(v) => Value::I32(v),
-            PropertyValueEnum::U32(v) => Value::U32(v),
-            PropertyValueEnum::I64(v) => Value::I64(v),
-            PropertyValueEnum::U64(v) => Value::U64(v),
-            PropertyValueEnum::F32(v) => Value::F32(v),
-            PropertyValueEnum::Vector2(v) => Value::Vector2(v),
-            PropertyValueEnum::Vector3(v) => Value::Vector3(v),
-            PropertyValueEnum::Vector4(v) => Value::Vector4(v),
-            PropertyValueEnum::Matrix44(v) => Value::Matrix44(v),
-            PropertyValueEnum::Color(values::Color { value, meta }) => {
-                Value::Color(Spanned::new(meta, value))
-            }
-            PropertyValueEnum::String(values::String { meta, value }) => {
-                Value::String(Spanned::new(meta, value))
-            }
-            _ => return Err(()),
-        })
     }
 }
 
@@ -272,19 +250,19 @@ impl Value {
             Value::None(v) => *v,
             Value::Bool(v) => v.span,
             Value::BitBool(v) => v.span,
-            Value::I8(v) => v.meta,
-            Value::U8(v) => v.meta,
-            Value::I16(v) => v.meta,
-            Value::U16(v) => v.meta,
-            Value::I32(v) => v.meta,
-            Value::U32(v) => v.meta,
-            Value::I64(v) => v.meta,
-            Value::U64(v) => v.meta,
-            Value::F32(v) => v.meta,
-            Value::Vector2(v) => v.meta,
-            Value::Vector3(v) => v.meta,
-            Value::Vector4(v) => v.meta,
-            Value::Matrix44(v) => v.meta,
+            Value::I8(v) => v.span,
+            Value::U8(v) => v.span,
+            Value::I16(v) => v.span,
+            Value::U16(v) => v.span,
+            Value::I32(v) => v.span,
+            Value::U32(v) => v.span,
+            Value::I64(v) => v.span,
+            Value::U64(v) => v.span,
+            Value::F32(v) => v.span,
+            Value::Vector2(v) => v.span,
+            Value::Vector3(v) => v.span,
+            Value::Vector4(v) => v.span,
+            Value::Matrix44(v) => v.span,
             Value::Color(v) => v.span,
             Value::String(v) => v.span,
             Value::Hash(v) => v.span(),
@@ -329,11 +307,5 @@ impl Value {
     }
     pub fn bitbool(span: Span, value: bool) -> Self {
         Self::BitBool(Spanned::new(span, value))
-    }
-}
-
-impl From<values::String<Span>> for Value {
-    fn from(values::String { value, meta }: values::String<Span>) -> Self {
-        Self::String(Spanned::new(meta, value))
     }
 }

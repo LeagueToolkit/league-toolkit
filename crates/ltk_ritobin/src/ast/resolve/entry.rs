@@ -1,4 +1,4 @@
-use ltk_meta::{property::values, PropertyKind};
+use ltk_meta::PropertyKind;
 
 use crate::{
     ast::{
@@ -58,9 +58,9 @@ impl<'a> Builder<'a> {
                         .unwrap(),
                     );
                 }
-                Value::from(values::String::new_with_meta(
-                    self.text[Span::new(span.start + 1, span.end - 1)].into(),
+                Value::String(Spanned::new(
                     *span,
+                    self.text[Span::new(span.start + 1, span.end - 1)].into(),
                 ))
             }
             Some(Token {
