@@ -5,6 +5,7 @@ use ltk_meta::PropertyKind;
 use crate::{
     ast::node::root::RootKind,
     cst,
+    escaping::InvalidEscapeReason,
     parse::{Span, TokenKind},
     ItemShape, RitoType, Spanned,
 };
@@ -106,6 +107,14 @@ impl Display for ListLike {
 #[non_exhaustive]
 pub enum Diagnostic {
     CustomSpan(&'static str, Span),
+
+    InvalidEscape {
+        /// Span of the offending string literal
+        span: Span,
+        /// index of the invalid `\`, relative to `span.start`
+        offset: u32,
+        reason: InvalidEscapeReason,
+    },
 
     UnexpectedTree {
         tree: cst::Kind,
@@ -256,6 +265,7 @@ impl Display for Diagnostic {
         match self {
             CustomSpan(msg, _) => f.write_str(msg),
 
+            Self::InvalidEscape { .. } => write!(f, "Invalid escape character"),
             UnexpectedTree {
                 tree,
                 expected: Some(expected),
@@ -383,6 +393,10 @@ impl Diagnostic {
             | ShadowedRoot { .. }
             | ResolveLiteral
             | MissingRootEntry { .. } => None,
+            InvalidEscape { span, offset, .. } => Some(Span::new(
+                span.start + offset,
+                (span.start + offset + 1).min(span.end),
+            )),
             UnknownType(span)
             | UnknownRoot { span }
             | UnexpectedTree { span, .. }

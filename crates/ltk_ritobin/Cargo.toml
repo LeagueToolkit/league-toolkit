@@ -40,6 +40,7 @@ nom_locate = "4.2"
 thiserror = { workspace = true }
 miette = { workspace = true }
 indexmap = { workspace = true }
+itertools = { workspace = true }
 
 smallvec = "1"
 
