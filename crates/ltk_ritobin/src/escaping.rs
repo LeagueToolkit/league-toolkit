@@ -121,6 +121,32 @@ pub(crate) fn unescape(input: &str) -> Result<String, InvalidEscape> {
     Ok(out)
 }
 
+pub(crate) fn escape(input: &str) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+
+    let mut out = String::with_capacity(input.len());
+    for c in input.chars() {
+        match c {
+            '\t' => out.push_str("\\t"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\u{08}' => out.push_str("\\b"),
+            '\u{0C}' => out.push_str("\\f"),
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            c if (c as u32) < 0x20 => {
+                let b = c as u32;
+                out.push('\\');
+                out.push('x');
+                out.push(HEX[((b >> 4) & 0xF) as usize] as char);
+                out.push(HEX[(b & 0xF) as usize] as char);
+            }
+            c => out.push(c),
+        }
+    }
+    out
+}
+
 fn read_hex(bytes: &[u8], i: &mut usize, n: usize) -> Option<u32> {
     let mut value = 0;
     for _ in 0..n {
