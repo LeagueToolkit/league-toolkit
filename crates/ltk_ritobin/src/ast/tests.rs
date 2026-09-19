@@ -13,7 +13,7 @@ use crate::{
     Cst, ItemShape, RitoType,
 };
 
-fn wrap(input: &str) -> String {
+pub(super) fn wrap(input: &str) -> String {
     format!(
         r#"
 #PROP_text
@@ -28,7 +28,7 @@ entries: map[hash,embed] = {{
     )
 }
 
-fn assert<F: Fn(ObjectBuilder) -> ObjectBuilder>(input: &str, is: F) {
+pub(super) fn assert<F: Fn(ObjectBuilder) -> ObjectBuilder>(input: &str, is: F) {
     let input = wrap(input);
 
     let cst = Cst::parse(&input);
@@ -53,7 +53,7 @@ fn assert<F: Fn(ObjectBuilder) -> ObjectBuilder>(input: &str, is: F) {
 /// Builds a full object body (see [`wrap`]) from `input` and returns the
 /// typecheck diagnostics without asserting they're empty - for exercising
 /// error paths.
-fn build_errs(input: &str) -> Vec<DiagnosticWithSpan> {
+pub(super) fn build_errs(input: &str) -> Vec<DiagnosticWithSpan> {
     let input = wrap(input);
     let cst = Cst::parse(&input);
 
@@ -874,4 +874,52 @@ entries: map[hash,embed] = {
     let cst = Cst::parse(input);
     let errs = cst.build_ast(input).diagnostics;
     assert!(errs.is_empty(), "{errs:#?}");
+}
+
+pub mod string_escapes {
+    //! String literals escapes
+    //! Reference: https://github.com/moonshadow565/ritobin/blob/d4b8764939d141c1db3ffd186d49bf60fd889b87/ritobin_lib/src/ritobin/bin_strconv.cpp#L149-L188
+
+    use super::*;
+
+    #[test]
+    fn simple() {
+        assert(r#"0x1: string = "t\ta\nb\rc\\d\"e\'f\ag\bh\fi""#, |obj| {
+            obj.property(
+                0x1,
+                values::String::from("t\ta\nb\rc\\d\"e'f\u{7}g\u{8}h\u{c}i"),
+            )
+        });
+    }
+
+    #[test]
+    fn unicode() {
+        assert(r#"0x1: string = "\u0041\u00e9\uD83D\uDE00""#, |obj| {
+            obj.property(0x1, values::String::from("A\u{e9}\u{1f600}"))
+        });
+    }
+    #[test]
+    fn unicode_hex() {
+        assert(r#"0x1: string = "\x41\x42\xe9""#, |obj| {
+            obj.property(0x1, values::String::from("AB\u{e9}"))
+        });
+    }
+
+    #[test]
+    fn in_map_key() {
+        assert(r#"0x1: map[string,u32] = { "a\tb" = 1 }"#, |obj| {
+            obj.property(
+                0x1,
+                values::Map::new(
+                    PropertyKind::String,
+                    PropertyKind::U32,
+                    vec![(
+                        values::String::from("a\tb").into(),
+                        values::U32::from(1u32).into(),
+                    )],
+                )
+                .unwrap(),
+            )
+        });
+    }
 }

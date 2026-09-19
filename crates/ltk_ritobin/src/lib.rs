@@ -87,6 +87,7 @@ use ltk_meta::Bin;
 
 pub mod ast;
 pub mod cst;
+pub mod escaping;
 pub mod hashes;
 pub mod parse;
 pub mod print;

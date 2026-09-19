@@ -5,6 +5,7 @@ use ltk_meta::PropertyKind;
 use crate::{
     ast::node::root::RootKind,
     cst,
+    escaping::InvalidEscapeReason,
     parse::{Span, TokenKind},
     ItemShape, RitoType, Spanned,
 };
@@ -106,6 +107,14 @@ impl Display for ListLike {
 #[non_exhaustive]
 pub enum Diagnostic {
     CustomSpan(&'static str, Span),
+
+    InvalidEscape {
+        /// Span of the offending string literal
+        span: Span,
+        /// index of the invalid `\`, relative to `span.start`
+        offset: u32,
+        reason: InvalidEscapeReason,
+    },
 
     UnexpectedTree {
         tree: cst::Kind,
@@ -256,6 +265,7 @@ impl Display for Diagnostic {
         match self {
             CustomSpan(msg, _) => f.write_str(msg),
 
+            Self::InvalidEscape { .. } => write!(f, "Invalid escape character"),
             UnexpectedTree {
                 tree,
                 expected: Some(expected),
@@ -373,7 +383,7 @@ impl Display for Diagnostic {
 }
 
 impl Diagnostic {
-    pub fn span(&self) -> Option<&Span> {
+    pub fn span(&self) -> Option<Span> {
         use Diagnostic::*;
         match self {
             MissingTree(_)
@@ -383,6 +393,10 @@ impl Diagnostic {
             | ShadowedRoot { .. }
             | ResolveLiteral
             | MissingRootEntry { .. } => None,
+            InvalidEscape { span, offset, .. } => Some(Span::new(
+                span.start + offset,
+                (span.start + offset + 1).min(span.end),
+            )),
             UnknownType(span)
             | UnknownRoot { span }
             | UnexpectedTree { span, .. }
@@ -405,20 +419,20 @@ impl Diagnostic {
             | TooManyItems { span, .. }
             | InvalidNesting { span, .. }
             | InvalidMapKey { span, .. }
-            | InvalidRootEntryType { key_span: span, .. } => Some(span),
+            | InvalidRootEntryType { key_span: span, .. } => Some(*span),
         }
     }
 
     pub fn default_span(self, span: Span) -> DiagnosticWithSpan {
         DiagnosticWithSpan {
-            span: self.span().copied().unwrap_or(span),
+            span: self.span().unwrap_or(span),
             diagnostic: self,
         }
     }
 
     pub fn unwrap(self) -> DiagnosticWithSpan {
         DiagnosticWithSpan {
-            span: self.span().copied().unwrap(),
+            span: self.span().unwrap(),
             diagnostic: self,
         }
     }
@@ -448,7 +462,7 @@ impl MaybeSpanDiag {
 impl From<Diagnostic> for MaybeSpanDiag {
     fn from(diagnostic: Diagnostic) -> Self {
         Self {
-            span: diagnostic.span().copied(),
+            span: diagnostic.span(),
             diagnostic,
         }
     }
