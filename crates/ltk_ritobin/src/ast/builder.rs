@@ -3,6 +3,7 @@ use crate::{
     cst::Cst,
 };
 
+mod patch;
 mod root_entry;
 pub use root_entry::*;
 

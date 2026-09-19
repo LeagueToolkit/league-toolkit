@@ -4,9 +4,13 @@ use std::{
 };
 
 use ltk_hash::{BinHash, WadHash};
-use ltk_meta::{property::values, Bin, BinObject, PropertyKind, PropertyValueEnum};
+use ltk_meta::{
+    path::PropertyPath, property::values, Bin, BinObject, BinOverride, PropertyKind, PropertyPatch,
+    PropertyValueEnum,
+};
 
 use crate::{
+    ast::node::root::FileKind,
     cst::{Child, ChildRange, Cst, ErrorRange, Kind, Node, NodeId, TokenId},
     parse::{Error, Span, Token, TokenKind as Tok},
     HashProvider, PropertyValueExt as _, RitoType, RitobinName as _,
@@ -42,9 +46,22 @@ impl<H: HashProvider> Builder<H> {
 
     pub fn build(mut self, bin: &Bin) -> (Cst, String) {
         self.bin_to_cst(bin);
+        self.finish()
+    }
+
+    /// Builds the tree of a `PTCH` file, and the text buffer its spans point into.
+    ///
+    /// The `patches` root holds one `patch` embed per record, in record order. The `deleted` root
+    /// follows it, and is left out when the patch deletes nothing.
+    pub fn build_override(mut self, patch: &BinOverride) -> (Cst, String) {
+        self.override_to_cst(patch);
+        self.finish()
+    }
+
+    fn finish(self) -> (Cst, String) {
         (
             Cst {
-                nodes: self.nodes.to_vec(),
+                nodes: self.nodes,
                 children: self.children,
                 tokens: self.tokens,
                 errors: self.errors,
@@ -404,52 +421,149 @@ impl<H: HashProvider> Builder<H> {
         self.entry_tree(key, Some(kind), value)
     }
 
-    fn bin_to_cst(&mut self, bin: &Bin) {
-        let root = Node {
+    /// Pushes the `File` node. It is node 0, the node [`Cst::root`] reads.
+    fn file_node(&mut self) {
+        self.nodes.push(Node {
             kind: Kind::File,
             span: Span::default(),
             children: ChildRange::empty(),
             errors: ErrorRange::empty(),
-        };
-        self.nodes.push(root);
+        });
+    }
 
+    /// Sets the children of the `File` node [`Self::file_node`] pushed.
+    fn set_file_roots(&mut self, roots: impl IntoIterator<Item = Child>) {
+        let roots = self.children(roots);
+        if let Some(file) = self.nodes.first_mut() {
+            file.children = roots;
+        }
+    }
+
+    /// The `#PROP_text` comment, then the `type` and `version` roots.
+    fn header_to_cst(&mut self, file_kind: FileKind) -> [Child; 3] {
         let comment = self.spanned_token(Tok::Comment, "#PROP_text");
         let comment = self.tree(Kind::Comment, vec![comment]);
 
-        let type_entry = self.string("\"PROP\"");
+        let type_entry = self.string(format!("\"{file_kind}\""));
         let type_entry = self.entry("type", RitoType::simple(PropertyKind::String), type_entry);
 
         let version = self.number("3");
         let version = self.entry("version", RitoType::simple(PropertyKind::U32), version);
 
-        let linked = bin
-            .dependencies
+        [comment, type_entry, version]
+    }
+
+    /// A root holding a list of `items`, each wrapped as a list item.
+    fn list_root(&mut self, key: &str, item_kind: PropertyKind, items: Vec<Child>) -> Child {
+        let items = items
+            .into_iter()
+            .map(|item| self.tree(Kind::ListItem, [item]))
+            .collect();
+        let items = self.block(items);
+        self.entry(key, RitoType::container(item_kind), items)
+    }
+
+    fn linked_to_cst(&mut self, dependencies: &[String]) -> Child {
+        let linked = dependencies
             .iter()
             .map(|dep| {
                 let lit = self.string(format!("\"{dep}\""));
-                let lit = self.tree(Kind::Literal, [lit]);
-                self.tree(Kind::ListItem, [lit])
+                self.tree(Kind::Literal, [lit])
             })
             .collect();
+        self.list_root("linked", PropertyKind::String, linked)
+    }
 
-        let linked = self.block(linked);
-        let linked = self.entry("linked", RitoType::container(PropertyKind::String), linked);
-
-        let entries = bin
-            .objects
-            .values()
+    fn entries_to_cst<'o>(&mut self, objects: impl IntoIterator<Item = &'o BinObject>) -> Child {
+        let entries = objects
+            .into_iter()
             .map(|obj| self.bin_object_to_cst(obj))
             .collect();
 
         let entries = self.block(entries);
-        let entries = self.entry(
+        self.entry(
             "entries",
             RitoType::map(PropertyKind::Hash, PropertyKind::Embedded),
             entries,
+        )
+    }
+
+    fn bin_to_cst(&mut self, bin: &Bin) {
+        self.file_node();
+        let [comment, type_entry, version] = self.header_to_cst(FileKind::Prop);
+        let linked = self.linked_to_cst(&bin.dependencies);
+        let entries = self.entries_to_cst(bin.objects.values());
+
+        self.set_file_roots([comment, type_entry, version, linked, entries]);
+    }
+
+    fn override_to_cst(&mut self, patch: &BinOverride) {
+        self.file_node();
+        let [comment, type_entry, version] = self.header_to_cst(FileKind::Patch);
+        let linked = self.linked_to_cst(&[]);
+        let entries = self.entries_to_cst(patch.objects.values());
+
+        let records = patch
+            .patches
+            .iter()
+            .map(|record| self.patch_to_cst(record))
+            .collect();
+        let records = self.block(records);
+        let records = self.entry(
+            "patches",
+            RitoType::map(PropertyKind::Hash, PropertyKind::Embedded),
+            records,
         );
 
-        self.nodes.get_mut(0).unwrap().children =
-            self.children([comment, type_entry, version, linked, entries]);
+        let mut roots = vec![comment, type_entry, version, linked, entries, records];
+        if !patch.deleted.is_empty() {
+            let deleted = patch
+                .deleted
+                .iter()
+                .map(|hash| self.hash_entry_lit(*hash))
+                .collect();
+            roots.push(self.list_root("deleted", PropertyKind::Hash, deleted));
+        }
+
+        self.set_file_roots(roots);
+    }
+
+    /// One record as `object = patch { path: string = .., value: type = .. }`.
+    fn patch_to_cst(&mut self, record: &PropertyPatch) -> Child {
+        let object = self.hash_entry_lit(record.object_hash);
+
+        let path = self.path_literal(&record.path);
+        let path = self.named_field("path", RitoType::simple(PropertyKind::String), path);
+
+        let value = self.value_to_cst(&record.value);
+        let value = self.named_field("value", record.value.rito_type(), value);
+
+        let class_name = self.spanned_token(Tok::Name, "patch");
+        let body = self.class(class_name, vec![path, value]);
+        self.entry_tree(object, None, body)
+    }
+
+    /// A `name: type = value` field, with `name` written as is rather than looked up as a hash.
+    fn named_field(&mut self, name: &str, rito_type: RitoType, value: Child) -> Child {
+        let key = self.spanned_token(Tok::Name, name);
+        let key = self.tree(Kind::EntryKey, [key]);
+        let rito_type = self.rito_type(rito_type);
+        self.entry_tree(key, Some(rito_type), value)
+    }
+
+    /// A record path as a string literal.
+    ///
+    /// ritobin text has no escapes: a string runs to the next quote of the kind that opened it.
+    /// A path holding a `"`, such as one with a `{"key"}` subscript, is written in single quotes.
+    fn path_literal(&mut self, path: &PropertyPath) -> Child {
+        let path = path.as_str();
+        let quote = if path.contains('"') && !path.contains('\'') {
+            '\''
+        } else {
+            '"'
+        };
+        let lit = self.string(format!("{quote}{path}{quote}"));
+        self.tree(Kind::Literal, [lit])
     }
 }
 

@@ -77,8 +77,40 @@
 //! best-effort `Bin` with any diagnostics, so type errors don't prevent you from getting a
 //! `Bin` back. This matters for editor use cases: between keystrokes a buffer is almost always
 //! temporarily invalid, and tooling still needs to render it, navigate it, and report problems
-//! with precise spans. Use [`ast::PartialBin::finish`] where you instead want a `Result` that
+//! with precise spans. Use [`ast::PartialBin::into_result`] where you instead want a `Result` that
 //! only succeeds on a clean build.
+//!
+//! # Patch files
+//!
+//! A file whose `type` root is `"PTCH"` describes a patch bin. Its `patches` root holds one
+//! `patch` embed per record, and its optional `deleted` root lists the objects it deletes.
+//! [`Cst::build`] builds either kind of file as a [`ltk_meta::BinFile`], and [`Print`] is
+//! implemented for [`ltk_meta::BinOverride`] and [`ltk_meta::BinFile`]:
+//!
+//! ```rust
+//! use ltk_meta::BinFile;
+//! use ltk_ritobin::Cst;
+//!
+//! let text = r#"
+//! #PROP_text
+//! type: string = "PTCH"
+//! version: u32 = 3
+//! linked: list[string] = {}
+//! entries: map[hash,embed] = {}
+//! patches: map[hash,embed] = {
+//!     0x4a47c414 = patch {
+//!         path: string = "Position.Anchors.Anchor"
+//!         value: vec2 = { 0, 1 }
+//!     }
+//! }
+//! "#;
+//!
+//! let (file, diagnostics) = Cst::parse(text).build(text);
+//! assert!(diagnostics.is_empty());
+//!
+//! let BinFile::Override(patch) = file else { unreachable!() };
+//! assert_eq!(patch.patches.len(), 1);
+//! ```
 
 use std::ops::{Deref, DerefMut};
 

@@ -7,9 +7,9 @@ pub enum PrintError {
 
 use std::fmt::{self};
 
-use ltk_meta::Bin;
+use ltk_meta::{Bin, BinFile, BinOverride};
 
-use crate::hashes::HashProvider;
+use crate::{cst, hashes::HashProvider};
 
 pub mod command;
 pub mod visitor;
@@ -56,6 +56,32 @@ impl Print for Bin {
         config: PrintConfig<H>,
     ) -> Result<usize, PrintError> {
         BinPrinter::new().with_config(config).print(self, writer)
+    }
+}
+
+impl Print for BinOverride {
+    fn print_to_writer_with_config<W: fmt::Write, H: HashProvider + Clone>(
+        &self,
+        writer: &mut W,
+        config: PrintConfig<H>,
+    ) -> Result<usize, PrintError> {
+        let (cst, buf) = cst::builder::Builder::new()
+            .with_hashes(config.hashes)
+            .build_override(self);
+        CstPrinter::new(&buf, writer, Default::default()).print(&cst)
+    }
+}
+
+impl Print for BinFile {
+    fn print_to_writer_with_config<W: fmt::Write, H: HashProvider + Clone>(
+        &self,
+        writer: &mut W,
+        config: PrintConfig<H>,
+    ) -> Result<usize, PrintError> {
+        match self {
+            BinFile::Prop(bin) => bin.print_to_writer_with_config(writer, config),
+            BinFile::Override(patch) => patch.print_to_writer_with_config(writer, config),
+        }
     }
 }
 
