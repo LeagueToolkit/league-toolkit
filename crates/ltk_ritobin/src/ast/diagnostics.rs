@@ -373,7 +373,7 @@ impl Display for Diagnostic {
 }
 
 impl Diagnostic {
-    pub fn span(&self) -> Option<&Span> {
+    pub fn span(&self) -> Option<Span> {
         use Diagnostic::*;
         match self {
             MissingTree(_)
@@ -405,20 +405,20 @@ impl Diagnostic {
             | TooManyItems { span, .. }
             | InvalidNesting { span, .. }
             | InvalidMapKey { span, .. }
-            | InvalidRootEntryType { key_span: span, .. } => Some(span),
+            | InvalidRootEntryType { key_span: span, .. } => Some(*span),
         }
     }
 
     pub fn default_span(self, span: Span) -> DiagnosticWithSpan {
         DiagnosticWithSpan {
-            span: self.span().copied().unwrap_or(span),
+            span: self.span().unwrap_or(span),
             diagnostic: self,
         }
     }
 
     pub fn unwrap(self) -> DiagnosticWithSpan {
         DiagnosticWithSpan {
-            span: self.span().copied().unwrap(),
+            span: self.span().unwrap(),
             diagnostic: self,
         }
     }
@@ -448,7 +448,7 @@ impl MaybeSpanDiag {
 impl From<Diagnostic> for MaybeSpanDiag {
     fn from(diagnostic: Diagnostic) -> Self {
         Self {
-            span: diagnostic.span().copied(),
+            span: diagnostic.span(),
             diagnostic,
         }
     }
