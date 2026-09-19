@@ -42,8 +42,4 @@ insta = { workspace = true }
 serde_json = { workspace = true }
 
 ltk_meta = { path = ".", features = ["serde"] }
-
-# For the `corpus` test only, which reads bins straight out of an installed client.
-# Unversioned: cargo strips it from the published manifest, and release-plz publishes
-# ltk_meta without waiting on ltk_wad.
 ltk_wad = { path = "../ltk_wad" }
