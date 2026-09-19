@@ -42,6 +42,4 @@ insta = { workspace = true }
 serde_json = { workspace = true }
 
 ltk_meta = { path = ".", features = ["serde"] }
-
-# For the `corpus` test only, which reads bins straight out of an installed client.
-ltk_wad = { version = "0.5.5", path = "../ltk_wad" }
+ltk_wad = { path = "../ltk_wad" }
