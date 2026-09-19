@@ -274,8 +274,7 @@ impl<H: HashProvider> Builder<H> {
                 self.block(items)
             }
             PropertyValueEnum::String(s) => {
-                let s = self.string(&**s);
-                // TODO (alan): can I get away with this?
+                let s = self.string(crate::escaping::escape(s));
                 let quote = self.token(Tok::Quote);
                 self.tree(Kind::Literal, [quote, s, quote])
             }
