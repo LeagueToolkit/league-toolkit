@@ -2,7 +2,10 @@ use std::{fmt, str::FromStr};
 
 use crate::{ast::Value, rito, RitoType};
 
-/// One of the four entries every ritobin file has at its root, or [`Self::Unknown`].
+/// One of the entries a ritobin file has at its root, or [`Self::Unknown`].
+///
+/// Every file has `type`, `version`, `linked` and `entries`. A `PTCH` file adds `patches` and
+/// `deleted`, both optional.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum RootKind {
     #[default]
@@ -11,6 +14,10 @@ pub enum RootKind {
     Type,
     Linked,
     Entries,
+    /// The patch records of a `PTCH` file, `map[hash,embed]` of `patch` embeds.
+    Patches,
+    /// The object hashes a `PTCH` file deletes, `list[hash]`.
+    Deleted,
 }
 
 impl RootKind {
@@ -23,6 +30,8 @@ impl RootKind {
             Self::Version => "version",
             Self::Linked => "linked",
             Self::Entries => "entries",
+            Self::Patches => "patches",
+            Self::Deleted => "deleted",
             Self::Unknown => "unknown",
         }
     }
@@ -35,6 +44,8 @@ impl RootKind {
             RootKind::Type => rito!(String),
             RootKind::Linked => rito!(Container[String]),
             RootKind::Entries => rito!(Map[Hash, Embedded]),
+            RootKind::Patches => rito!(Map[Hash, Embedded]),
+            RootKind::Deleted => rito!(Container[Hash]),
         })
     }
 
@@ -63,6 +74,8 @@ impl FromStr for RootKind {
             "version" => Self::Version,
             "linked" => Self::Linked,
             "entries" => Self::Entries,
+            "patches" => Self::Patches,
+            "deleted" => Self::Deleted,
             _ => return Err(()),
         })
     }
