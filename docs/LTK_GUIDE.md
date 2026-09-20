@@ -409,6 +409,136 @@ if report.is_clean() {
 `crates/ltk_meta/tests/corpus.rs` runs all of this over an installed client; it is `#[ignore]`d
 unless `LTK_LOL_GAME_DIR` is set.
 
+**Walking a bin**: `ltk_meta::walk` is one read-only traversal over every node of an object,
+driven by a `Visitor` that is generic over the tree. The walk visits every node once, in
+pre-order and file order, and asks the visitor before it enters each property. The same
+`Census` runs over an owned `Bin` and over a `BinStream`, where the walk materializes nothing.
+The design is in `docs/design/value-walk.md`.
+
+```rust
+use ltk_hash::BinHash;
+use ltk_meta::{
+    walk::{Node, TreeValue, Visit, Visitor},
+    Error,
+};
+
+/// Counts nodes and records the address of every `Struct` of one class.
+#[derive(Default)]
+struct Census {
+    nodes: usize,
+    hits: Vec<(BinHash, String)>,
+}
+
+impl<'a, V: TreeValue<'a>> Visitor<'a, V> for Census {
+    type Error = Error;
+
+    fn enter_node(&mut self, node: &Node<'_, 'a, V>) -> Result<Visit, Error> {
+        self.nodes += 1;
+        if *node.class_hash() == 0x1e6b_a0c4 {
+            self.hits.push((node.object_hash(), node.trail().to_string()));
+        }
+        Ok(Visit::Continue)
+    }
+}
+
+let mut census = Census::default();
+bin.walk(&mut census)?;
+```
+
+**In parallel.** The walk over one object is sequential by contract: one visitor, pre-order, `Stop` and `Skip` as ordered decisions. Objects are independent of one another, and every view, node and trail type is `Send`. A sweep parallelizes across objects with one visitor instance per worker and a reduce at the end. Nothing in the crate schedules this. The split is the caller's.
+
+```rust
+let objects: Vec<_> = bin.objects.values().collect();
+let workers = std::thread::available_parallelism().map_or(1, |n| n.get());
+let per_worker = objects.len().div_ceil(workers).max(1);
+
+let counted = std::thread::scope(|scope| {
+    let workers: Vec<_> = objects
+        .chunks(per_worker)
+        .map(|chunk| {
+            scope.spawn(move || {
+                let mut census = Census::default();
+                for object in chunk {
+                    object.walk(&mut census)?;
+                }
+                Ok::<_, Error>(census)
+            })
+        })
+        .collect();
+
+    let mut all = Census::default();
+    for worker in workers {
+        let census = worker.join().expect("a worker panicked")?;
+        all.nodes += census.nodes;
+        all.hits.extend(census.hits);
+    }
+    Ok::<_, Error>(all)
+})?;
+```
+
+Across many files the same shape applies one level up: one task per file, each mounting its own `BinStream` and walking it sequentially. The per-object walk is microseconds. Decompression and I/O are where a sweep spends its time.
+
+**Editing and saving**: `walk::VisitorMut` runs the same traversal over an owned object through `&mut`: a node
+callback edits the node's properties, a property callback edits or replaces the value, and the
+trail is the read-only walk's. `BinDelta` holds whole-object edits against a mounted
+`BinStream`, and `BinStream::write_patched` writes the file with them applied: it copies every
+object the delta does not name byte for byte, and encodes only the edited ones.
+
+```rust
+use ltk_hash::{BinHash, Hash as _};
+use ltk_meta::{
+    property::values,
+    walk::{PropertyRefMut, Visit, VisitorMut},
+    BinDelta, BinStream, Error, PropertyValueEnum,
+};
+
+const NAME: BinHash = BinHash(0x0000_0002);
+
+/// Rewrites every `String` under one field as the hash of its text.
+#[derive(Default)]
+struct Rehash {
+    changed: usize,
+}
+
+impl VisitorMut for Rehash {
+    type Error = Error;
+
+    fn enter_property(&mut self, property: &mut PropertyRefMut<'_>) -> Result<Visit, Error> {
+        if property.field() != NAME {
+            return Ok(Visit::Continue);
+        }
+        let PropertyValueEnum::String(text) = property.value() else {
+            return Ok(Visit::Continue);
+        };
+        let hash = values::Hash::new(BinHash::hash_str(&text.value));
+        *property.value_mut() = hash.into();
+        self.changed += 1;
+        Ok(Visit::Continue)
+    }
+}
+
+let mut stream = BinStream::mount(std::fs::File::open("data.bin")?)?;
+let mut delta = BinDelta::new();
+
+let mut objects = stream.objects_batch([0x1111_0001u32]);
+while let Some(mut object) = objects.next()? {
+    let mut object = object.read()?;
+    let mut rehash = Rehash::default();
+    object.walk_mut(&mut rehash)?;
+    if rehash.changed > 0 {
+        delta.replace(object);
+    }
+}
+
+let mut out = Vec::new();
+stream.write_patched(&delta, &mut out)?;
+```
+
+A handle latched onto the legacy kind numbering refuses the delta. `into_bin()` and
+`Bin::to_writer` transcode the whole file instead. The design is in
+`value-walk.md` [section 5.3](design/value-walk.md#s5.3) and `bin-streaming.md`
+[section 10](design/bin-streaming.md#s10).
+
 **Path/Name Hashing**: Object paths and property names are stored as FNV-1a hashes. Use community hash databases or `ltk_hash::fnv1a::hash_lower()` to compute hashes.
 
 ---

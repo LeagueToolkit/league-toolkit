@@ -208,10 +208,7 @@ pub struct ContainerView<'a> {
 
 impl<'a> ContainerView<'a> {
     fn read(cur: &mut Cursor<'a>) -> Result<Self, Error> {
-        let item_kind = cur.kind()?;
-        if item_kind.is_container() {
-            return Err(Error::InvalidNesting(item_kind));
-        }
+        let item_kind = cur.item_kind()?;
 
         let size = cur.u32()? as usize;
         let mut items = Cursor::new(cur.take(size)?, cur.numbering());
@@ -240,6 +237,18 @@ impl<'a> ContainerView<'a> {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len == 0
+    }
+
+    /// The cursor at each item, in order, with nothing decoded.
+    ///
+    /// The iterator skips each item by its declared width or its counts, the same walk
+    /// [`ContainerItems`] runs, and reads no item.
+    pub(crate) fn cursors(&self) -> ItemCursors<'a> {
+        ItemCursors {
+            cur: self.items,
+            remaining: self.len,
+            item_kind: self.item_kind,
+        }
     }
 
     /// The items, in order.
@@ -301,6 +310,86 @@ impl fmt::Debug for ContainerView<'_> {
             .finish()
     }
 }
+
+/// Iterator over the cursor at each item of a [`ContainerView`], decoding none of them.
+#[must_use = "iterators are lazy and do nothing unless consumed"]
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ItemCursors<'a> {
+    cur: Cursor<'a>,
+    remaining: u32,
+    item_kind: Kind,
+}
+
+impl<'a> Iterator for ItemCursors<'a> {
+    type Item = Result<Cursor<'a>, Error>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.remaining == 0 {
+            return None;
+        }
+        self.remaining -= 1;
+
+        let at = self.cur;
+        Some(match self.cur.skip_value(self.item_kind) {
+            Ok(()) => Ok(at),
+            Err(error) => {
+                self.remaining = 0;
+                Err(error)
+            }
+        })
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.remaining as usize, Some(self.remaining as usize))
+    }
+}
+
+impl std::iter::FusedIterator for ItemCursors<'_> {}
+
+/// Iterator over the cursor at each key and value of a [`MapView`], decoding none of them.
+#[must_use = "iterators are lazy and do nothing unless consumed"]
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct EntryCursors<'a> {
+    cur: Cursor<'a>,
+    remaining: u32,
+    key_kind: Kind,
+    value_kind: Kind,
+}
+
+impl<'a> EntryCursors<'a> {
+    fn skip_entry(&mut self) -> Result<(Cursor<'a>, Cursor<'a>), Error> {
+        let key = self.cur;
+        self.cur.skip_value(self.key_kind)?;
+        let value = self.cur;
+        self.cur.skip_value(self.value_kind)?;
+        Ok((key, value))
+    }
+}
+
+impl<'a> Iterator for EntryCursors<'a> {
+    type Item = Result<(Cursor<'a>, Cursor<'a>), Error>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.remaining == 0 {
+            return None;
+        }
+        self.remaining -= 1;
+
+        Some(match self.skip_entry() {
+            Ok(entry) => Ok(entry),
+            Err(error) => {
+                self.remaining = 0;
+                Err(error)
+            }
+        })
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.remaining as usize, Some(self.remaining as usize))
+    }
+}
+
+impl std::iter::FusedIterator for EntryCursors<'_> {}
 
 /// Iterator over the items of a [`ContainerView`].
 #[must_use = "iterators are lazy and do nothing unless consumed"]
@@ -365,14 +454,8 @@ pub struct MapView<'a> {
 
 impl<'a> MapView<'a> {
     fn read(cur: &mut Cursor<'a>) -> Result<Self, Error> {
-        let key_kind = cur.kind()?;
-        if !key_kind.is_valid_map_key() {
-            return Err(Error::InvalidKeyType(key_kind));
-        }
-        let value_kind = cur.kind()?;
-        if value_kind.is_container() {
-            return Err(Error::InvalidNesting(value_kind));
-        }
+        let key_kind = cur.key_kind()?;
+        let value_kind = cur.item_kind()?;
 
         let size = cur.u32()? as usize;
         let mut entries = Cursor::new(cur.take(size)?, cur.numbering());
@@ -408,6 +491,16 @@ impl<'a> MapView<'a> {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len == 0
+    }
+
+    /// The cursor at each key and value, in file order, with nothing decoded.
+    pub(crate) fn cursors(&self) -> EntryCursors<'a> {
+        EntryCursors {
+            cur: self.entries,
+            remaining: self.len,
+            key_kind: self.key_kind,
+            value_kind: self.value_kind,
+        }
     }
 
     /// The entries, in file order.
@@ -512,10 +605,7 @@ pub struct OptionalView<'a> {
 
 impl<'a> OptionalView<'a> {
     fn read(cur: &mut Cursor<'a>) -> Result<Self, Error> {
-        let item_kind = cur.kind()?;
-        if item_kind.is_container() {
-            return Err(Error::InvalidNesting(item_kind));
-        }
+        let item_kind = cur.item_kind()?;
 
         let value = match cur.bool()? {
             true => Some(Cursor::new(cur.take_value(item_kind)?, cur.numbering())),
@@ -541,6 +631,11 @@ impl<'a> OptionalView<'a> {
     #[must_use]
     pub fn is_none(&self) -> bool {
         self.value.is_none()
+    }
+
+    /// The cursor at the contained value, if there is one. Decodes nothing.
+    pub(crate) fn cursor(&self) -> Option<Cursor<'a>> {
+        self.value
     }
 
     /// The contained value, if there is one.
@@ -596,6 +691,16 @@ impl<'a> StructView<'a> {
             property_count,
             properties,
         })
+    }
+
+    /// A view over `count` properties at `properties`, carrying `class_hash`. An object's
+    /// root as a struct.
+    pub(crate) fn from_parts(class_hash: BinHash, count: u16, properties: Cursor<'a>) -> Self {
+        Self {
+            class_hash,
+            property_count: count,
+            properties,
+        }
     }
 
     /// The class this is an instance of, or `0` for a null pointer.

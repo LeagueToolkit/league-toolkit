@@ -209,16 +209,20 @@ impl<'a> Cursor<'a> {
     ///
     /// # Errors
     ///
-    /// [`Error::InvalidPropertyTypePrimitive`] if a header kind byte does not decode, or
-    /// [`Error::IOError`] if the bytes end inside the header.
+    /// [`Error::InvalidPropertyTypePrimitive`] if a header kind byte does not decode,
+    /// [`Error::InvalidNesting`] or [`Error::InvalidKeyType`] for a header
+    /// [`Cursor::item_kind`] or [`Cursor::key_kind`] refuses, or [`Error::IOError`] if the
+    /// bytes end inside the header.
     pub fn value_shape(&self, kind: Kind) -> Result<ValueShape, Error> {
         use Kind as K;
         let mut ahead = *self;
         let (item_kind, key_kind, class) = match kind {
-            K::Container | K::UnorderedContainer | K::Optional => (Some(ahead.kind()?), None, None),
+            K::Container | K::UnorderedContainer | K::Optional => {
+                (Some(ahead.item_kind()?), None, None)
+            }
             K::Map => {
-                let key = ahead.kind()?;
-                let value = ahead.kind()?;
+                let key = ahead.key_kind()?;
+                let value = ahead.item_kind()?;
                 (Some(value), Some(key), None)
             }
             K::Embedded => (None, None, Some(ahead.bin_hash()?)),
@@ -233,6 +237,43 @@ impl<'a> Cursor<'a> {
         })
     }
 
+    /// The kind a container, optional or map declares for what it holds, advancing past it.
+    ///
+    /// The one place that applies the nesting rule: a container, an optional and a map hold one
+    /// value each of a kind that is none of those three. A header declaring one of them makes
+    /// every byte after it mean something else, and the value model has no such value to build.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidNesting`] for a container, optional or map item kind,
+    /// [`Error::InvalidPropertyTypePrimitive`] if the byte does not decode, or
+    /// [`Error::IOError`] at the end of the slice.
+    pub fn item_kind(&mut self) -> Result<Kind, Error> {
+        let kind = self.kind()?;
+        match kind.is_container() {
+            true => Err(Error::InvalidNesting(kind)),
+            false => Ok(kind),
+        }
+    }
+
+    /// The kind a map declares for its keys, advancing past it.
+    ///
+    /// The one place that applies the key rule: [`Kind::is_valid_map_key`] is what the client's
+    /// reader accepts as a key.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidKeyType`] for a kind no map is keyed by,
+    /// [`Error::InvalidPropertyTypePrimitive`] if the byte does not decode, or
+    /// [`Error::IOError`] at the end of the slice.
+    pub fn key_kind(&mut self) -> Result<Kind, Error> {
+        let kind = self.kind()?;
+        match kind.is_valid_map_key() {
+            true => Ok(kind),
+            false => Err(Error::InvalidKeyType(kind)),
+        }
+    }
+
     // ── walking a value by its counts ───────────────────────────────────────
 
     /// Walks one value of `kind` by its counts, verifying declared sizes along the way.
@@ -245,8 +286,10 @@ impl<'a> Cursor<'a> {
     /// # Errors
     ///
     /// [`Error::InvalidSize`] if a declared size disagrees with what the counts consumed,
-    /// [`Error::IOError`] if the walk runs past the end of the slice, or
-    /// [`Error::InvalidPropertyTypePrimitive`] if a kind byte does not decode.
+    /// [`Error::IOError`] if the walk runs past the end of the slice,
+    /// [`Error::InvalidPropertyTypePrimitive`] if a kind byte does not decode, or
+    /// [`Error::InvalidNesting`] and [`Error::InvalidKeyType`] for a header
+    /// [`Cursor::item_kind`] or [`Cursor::key_kind`] refuses.
     pub fn walk_value(&mut self, kind: Kind) -> Result<(), Error> {
         use Kind as K;
         if let Some(width) = kind.fixed_width() {
@@ -258,7 +301,7 @@ impl<'a> Cursor<'a> {
                 self.skip(len)
             }
             K::Container | K::UnorderedContainer => {
-                let item_kind = self.kind()?;
+                let item_kind = self.item_kind()?;
                 self.sized_region(|cur| {
                     let count = cur.u32()?;
                     for _ in 0..count {
@@ -268,8 +311,8 @@ impl<'a> Cursor<'a> {
                 })
             }
             K::Map => {
-                let key_kind = self.kind()?;
-                let value_kind = self.kind()?;
+                let key_kind = self.key_kind()?;
+                let value_kind = self.item_kind()?;
                 self.sized_region(|cur| {
                     let count = cur.u32()?;
                     for _ in 0..count {
@@ -289,7 +332,7 @@ impl<'a> Cursor<'a> {
                 })
             }
             K::Optional => {
-                let item_kind = self.kind()?;
+                let item_kind = self.item_kind()?;
                 match self.bool()? {
                     true => self.walk_value(item_kind),
                     false => Ok(()),

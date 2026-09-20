@@ -70,6 +70,17 @@ impl Map {
         Some(ValueSlot::pinned(value_kind, value))
     }
 
+    /// Every entry, its key shared and its value mutable, for walking further down inside the
+    /// crate.
+    ///
+    /// A whole-value replace through one of these skips the kind check [`Map::slot`] makes. A
+    /// caller edits inside a value and never replaces one.
+    pub(crate) fn entries_mut(
+        &mut self,
+    ) -> impl Iterator<Item = (&PropertyValueEnum, &mut PropertyValueEnum)> {
+        self.entries.iter_mut().map(|(key, value)| (&*key, value))
+    }
+
     #[inline(always)]
     #[must_use]
     pub fn into_entries(self) -> Vec<(PropertyValueEnum, PropertyValueEnum)> {

@@ -228,6 +228,67 @@ fn an_object_walks_to_its_declared_size() {
 }
 
 #[test]
+fn a_container_that_declares_a_container_item_is_refused_by_every_header_read() {
+    use crate::PropertyKind as K;
+
+    let list: PropertyValueEnum = values::Container::from(vec![values::I32::new(1)]).into();
+    let mut bytes = body(&list);
+    // The item kind is the first byte of a container's body.
+    bytes[0] = u8::from(K::Container);
+
+    let error = cursor(&bytes)
+        .walk_value(K::Container)
+        .expect_err("a container item kind is refused");
+    assert!(
+        matches!(error, Error::InvalidNesting(K::Container)),
+        "unexpected error: {error}"
+    );
+
+    let error = cursor(&bytes)
+        .value_shape(K::Container)
+        .expect_err("the shape peek reads the same header");
+    assert!(
+        matches!(error, Error::InvalidNesting(K::Container)),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn a_map_that_declares_a_key_kind_no_map_is_keyed_by_is_refused_by_every_header_read() {
+    use crate::PropertyKind as K;
+
+    let map: PropertyValueEnum = values::Map::new(
+        K::Hash,
+        K::I32,
+        vec![(
+            values::Hash::new(0x1111u32).into(),
+            values::I32::new(1).into(),
+        )],
+    )
+    .expect("the map builds")
+    .into();
+    let mut bytes = body(&map);
+    // The key kind is the first byte of a map's body, the value kind the second.
+    bytes[0] = u8::from(K::Struct);
+
+    let error = cursor(&bytes)
+        .walk_value(K::Map)
+        .expect_err("a key kind no map is keyed by is refused");
+    assert!(
+        matches!(error, Error::InvalidKeyType(K::Struct)),
+        "unexpected error: {error}"
+    );
+
+    let error = cursor(&bytes)
+        .value_shape(K::Map)
+        .expect_err("the shape peek reads the same header");
+    assert!(
+        matches!(error, Error::InvalidKeyType(K::Struct)),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
 fn a_lying_size_is_an_invalid_size_error() {
     let list: PropertyValueEnum =
         values::Container::from(vec![values::I32::new(1), values::I32::new(2)]).into();
