@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_mapgeo-v0.1.7...ltk_mapgeo-v0.2.0) - 2026-09-20
+
+### Added
+
+- *(ltk_mapgeo)* derive Clone on EnvironmentAsset
+
+### Fixed
+
+- *(ltk_mapgeo)* read transform column major
+
+### Other
+
+- *(ltk_mapgeo)* expect the unused version flag
+- *(ltk_mapgeo)* [**breaking**] name shader override sampler
+
 ## [0.1.7](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_mapgeo-v0.1.6...ltk_mapgeo-v0.1.7) - 2026-09-14
 
 ### Other
