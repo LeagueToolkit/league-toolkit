@@ -202,20 +202,20 @@ impl EnvironmentAsset {
             overrides.reserve(count);
             for _ in 0..count {
                 let sampler_index = reader.read_u32::<LE>()?;
-                let texture_path = reader.read_sized_string_u32::<LE>()?;
-                overrides.push(ShaderTextureOverride::new(sampler_index, texture_path));
+                let sampler_name = reader.read_sized_string_u32::<LE>()?;
+                overrides.push(ShaderTextureOverride::new(sampler_index, sampler_name));
             }
             return Ok(overrides);
         }
 
         if version.has_first_shader_override() {
-            let texture_path = reader.read_sized_string_u32::<LE>()?;
-            overrides.push(ShaderTextureOverride::new(0, texture_path));
+            let sampler_name = reader.read_sized_string_u32::<LE>()?;
+            overrides.push(ShaderTextureOverride::new(0, sampler_name));
         }
 
         if version.has_second_shader_override() {
-            let texture_path = reader.read_sized_string_u32::<LE>()?;
-            overrides.push(ShaderTextureOverride::new(1, texture_path));
+            let sampler_name = reader.read_sized_string_u32::<LE>()?;
+            overrides.push(ShaderTextureOverride::new(1, sampler_name));
         }
 
         Ok(overrides)
