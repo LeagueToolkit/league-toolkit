@@ -9,13 +9,13 @@
 
 ## Context and problem statement
 
-`ltk_meta` owns one read-only walk (ADR-0013). A repair edits the tree the walk reads. `ltk-manager`'s
-`bin_property_type::fix` holds a hand-written mutable recursion over the six recursive variants of
-`PropertyValueEnum`: `repair`, `repair_into`, `repair_map` and `repair_container`. It keeps a trail
-of its own that clones every map key it descends, and renders that trail through the same `Address`
-as its check. The check runs as a `Visitor` over `BinStream::walk` and verifies the repaired tree
-over `BinObject::walk`. The descent the crate owns for reading is written a second time in the
-consumer for writing.
+`ltk_meta` owns one read-only walk (ADR-0013). A repair edits the tree the walk reads.
+`ltk-manager`'s `bin_property_type::fix` holds a hand-written mutable recursion over the six
+recursive variants of `PropertyValueEnum`: `repair`, `repair_into`, `repair_map` and
+`repair_container`. It keeps a trail of its own that clones every map key it descends, and renders
+that trail through the same `Address` as its check. The check runs as a `Visitor` over
+`BinStream::walk` and verifies the repaired tree over `BinObject::walk`. The descent the crate
+owns for reading is written a second time in the consumer for writing.
 
 The address a repair matches on is the hash form of the read-only `Trail`. A second trail type with
 a second rendering is a second grammar to keep equal to the first.
@@ -57,7 +57,7 @@ read-only walk.** The surface and the rules are `docs/design/value-walk.md`
 
 A node callback edits the node's property map. A property callback edits or replaces the
 property's value. No callback reaches an item of a container, optional or map as a value, and
-`NodeMut` sets no class hash: every kind pin holds by construction. The walker extends a
+`NodeRefMut` sets no class hash: every kind pin holds by construction. The walker extends a
 map key's borrow in one `unsafe` block. The key is popped before the entry borrow it came from ends,
 no callback reaches a map key through `&mut`, and a callback sees a key only for the length of the
 callback.

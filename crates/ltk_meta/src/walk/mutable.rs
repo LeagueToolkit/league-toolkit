@@ -14,9 +14,10 @@ use crate::{property::values, Bin, BinObject, BinOverride, Error, PropertyValueE
 
 /// What a mutable walk calls.
 ///
-/// The owned tree only. The traversal, the answers and the trail are the read-only walk's: a
-/// `VisitorMut` that edits nothing sees the callbacks a [`Visitor`](super::Visitor) answering the
-/// same sees, in the same order. Beside that, the tree is whatever the last callback left.
+/// The owned tree only. The traversal, the answers and the trail are the read-only walk's. A
+/// `VisitorMut` that edits nothing sees the same callbacks in the same order as a
+/// [`Visitor`](super::Visitor) that answers the same way. Beside that, the tree is whatever the
+/// last callback left.
 ///
 /// Every callback has a default that continues. A visitor implements only what it edits or reads.
 #[expect(
@@ -29,21 +30,21 @@ pub trait VisitorMut {
 
     /// Called at every node the walk reaches, before any of its properties.
     ///
-    /// The walk walks the property map this callback leaves behind.
+    /// The walk reads the property map this callback leaves behind.
     ///
     /// # Errors
     ///
-    /// The visitor's own. An error ends the walk at once, as an [`Visit::Abort`] does.
+    /// The visitor's own. An error ends the walk at once, as a [`Visit::Abort`] does.
     fn enter_node(&mut self, node: &mut NodeRefMut<'_>) -> Result<Visit, Self::Error> {
         Ok(Visit::Continue)
     }
 
     /// Called once for every node entered: after its properties, after a [`Visit::Skip`], and
-    /// while unwinding for a [`Visit::Stop`]. Never after an [`Visit::Abort`].
+    /// while unwinding for a [`Visit::Stop`]. Never after a [`Visit::Abort`].
     ///
     /// # Errors
     ///
-    /// The visitor's own. An error ends the walk at once, as an [`Visit::Abort`] does.
+    /// The visitor's own. An error ends the walk at once, as a [`Visit::Abort`] does.
     fn exit_node(&mut self, node: &mut NodeRefMut<'_>) -> Result<Visit, Self::Error> {
         Ok(Visit::Continue)
     }
@@ -55,18 +56,18 @@ pub trait VisitorMut {
     ///
     /// # Errors
     ///
-    /// The visitor's own. An error ends the walk at once, as an [`Visit::Abort`] does.
+    /// The visitor's own. An error ends the walk at once, as a [`Visit::Abort`] does.
     fn enter_property(&mut self, property: &mut PropertyRefMut<'_>) -> Result<Visit, Self::Error> {
         Ok(Visit::Continue)
     }
 
     /// Called once for every property that holds a node and was entered: after its nodes, after
     /// a [`Visit::Skip`], and while unwinding for a [`Visit::Stop`]. Not called for a leaf. Never
-    /// after an [`Visit::Abort`].
+    /// after a [`Visit::Abort`].
     ///
     /// # Errors
     ///
-    /// The visitor's own. An error ends the walk at once, as an [`Visit::Abort`] does.
+    /// The visitor's own. An error ends the walk at once, as a [`Visit::Abort`] does.
     fn exit_property(&mut self, property: &mut PropertyRefMut<'_>) -> Result<Visit, Self::Error> {
         Ok(Visit::Continue)
     }
@@ -163,7 +164,8 @@ impl fmt::Debug for NodeRefMut<'_> {
 
 /// One property of a mutable walk: where it is, and its value.
 ///
-/// A property of a node carries no kind pin: the value can be replaced by a value of any kind.
+/// A property of a node carries no kind pin. A callback can replace the value with a value of
+/// any kind.
 pub struct PropertyRefMut<'t> {
     object_hash: BinHash,
     node_class_hash: BinHash,
@@ -395,15 +397,15 @@ impl<'w> WalkerMut<'w> {
                         continue;
                     };
                     // SAFETY: the reference is extended from the borrow of this entry to `'w`, the
-                    // borrow of the object being walked, which outlives the entry. The invariant
-                    // that makes it sound is the push and pop around `walk_node` below: the key is
-                    // on the trail only between them, and the pop runs before the entry borrow ends
-                    // and before the iterator reaches the next entry, error or not. While the key
-                    // is on the trail nothing writes it: the walker holds the map through
-                    // `entries_mut`, and a callback reaches only nodes inside this entry's value,
-                    // which is disjoint from the key. A callback sees the trail under a borrow of
-                    // its own length and cannot keep a key past it. A panic between push and pop
-                    // leaves the key in a trail that is dropped and never read.
+                    // borrow of the walked object, which outlives the entry. The push and pop
+                    // around `walk_node` below make it sound: the key is on the trail only between
+                    // them, and the pop runs before the entry borrow ends and before the iterator
+                    // reaches the next entry, error or not. Nothing writes the key while it is on
+                    // the trail: the walker holds the map through `entries_mut`, and a callback
+                    // reaches only nodes inside this entry's value, which is disjoint from the
+                    // key. A callback sees the trail under a borrow of its own length and
+                    // cannot keep a key past it. A panic between push and pop leaves the key in
+                    // a trail that is dropped and never read.
                     let key: &'w PropertyValueEnum = unsafe { &*ptr::from_ref(key) };
                     self.trail.push(TrailStep::Key(key));
                     let walked = self.walk_node(node.class_hash, &mut node.properties, visitor);
@@ -494,7 +496,7 @@ impl Bin {
 }
 
 impl BinOverride {
-    /// Walks every embedded object mutably, in file order. Patch records are not walked.
+    /// Walks every embedded object mutably, in file order. The walk skips patch records.
     ///
     /// # Errors
     ///

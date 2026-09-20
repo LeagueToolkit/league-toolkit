@@ -8,37 +8,38 @@
 
 ## Context and problem statement
 
-`ValueView` contains decoded leaves. Constructing it for a property validates strings before
-the visitor can skip the property. The walk contract permits inspecting a kind without
-decoding a leaf.
+`ValueView` holds decoded leaves. A `ValueView` built for a property validates its string before
+the visitor can skip the property. The walk contract lets a visitor read a kind without decoding
+a leaf.
 
 ## Considered options
 
-1. **Deferred walk adapter.** `ViewValue` retains a property view until decoding is requested.
+1. **Deferred walk adapter.** `RawValue` keeps a property view until a call asks for a decoded
+   value.
 2. **Deferred streaming enum.** Change `ValueView` variants to hold deferred payloads.
-3. **Eager property callbacks.** Require valid leaves before calling the visitor.
+3. **Eager property callbacks.** Decode every leaf before the visitor call.
 
 ## Decision
 
-**Use a deferred walk adapter.** `ViewValue` implements the streaming side of `TreeValue`.
+**Use a deferred walk adapter.** `RawValue` implements the streaming side of `TreeValue`.
 The surface is specified in [section 3](../design/value-walk.md#s3).
 
 ## Consequences
 
-- **Positive:** Skipped property leaves require no decoding. The streaming enum retains its
-  existing variants. Generic visitors retain their signatures.
-- **Negative:** Visitors naming the streaming value type must name `ViewValue`. The walk has
-  an additional borrowed adapter type.
-- **Revisit when:** The streaming enum itself supports deferred leaf decoding.
+- **Positive:** A skipped property's leaf needs no decoding. The streaming enum keeps its
+  variants. A generic visitor keeps its signature.
+- **Negative:** A visitor that names the streaming value type names `RawValue`. The walk has
+  one more borrowed adapter type.
+- **Revisit when:** The streaming enum itself defers leaf decoding.
 
 ## Pros and cons of the options
 
 ### Deferred streaming enum
 
 - Good: one borrowed value representation.
-- Bad: every consumer matching a decoded variant requires migration.
+- Bad: every consumer that matches a decoded variant needs migration.
 
 ### Eager property callbacks
 
-- Good: no additional adapter or API migration.
-- Bad: skipped malformed strings fail the walk; every property string incurs UTF-8 validation.
+- Good: no extra adapter and no API migration.
+- Bad: a skipped malformed string fails the walk. Every property string costs UTF-8 validation.

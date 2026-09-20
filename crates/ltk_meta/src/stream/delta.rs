@@ -16,10 +16,10 @@ use crate::{
 /// Whole-object edits held against a mounted base.
 ///
 /// Costs O(edited objects), not O(file). [`BinStream::write_patched`] writes the base with the
-/// delta applied: every object the delta does not name is copied from the base byte for byte, and
-/// only the objects it replaces or appends are encoded.
+/// delta applied: it copies every object the delta does not name from the base byte for byte, and
+/// encodes only the objects the delta replaces or appends.
 ///
-/// A delta holds whole objects. The edit itself is made on an owned object:
+/// A delta holds whole objects. The edit itself happens on an owned object:
 /// [`ObjectStream::read`](crate::stream::ObjectStream::read), then
 /// [`BinObject::walk_mut`] or the object's fields.
 ///
@@ -162,15 +162,15 @@ impl Row<'_> {
 impl<R: io::Read + io::Seek> BinStream<R> {
     /// Writes the base with `delta` applied.
     ///
-    /// The header and class table are rebuilt for the final entry set. Every object the delta
-    /// does not name is copied byte for byte from its [`ObjectEntry::byte_range`], without being
-    /// read as values; replaced and appended objects are encoded by [`BinObject::to_writer`]. The
-    /// entry order is the base's file order minus the removed objects, with each replaced object
-    /// at its base position, then the appended objects in the order appended.
+    /// The write rebuilds the header and class table for the final entry set. It copies every
+    /// object the delta does not name byte for byte from its [`ObjectEntry::byte_range`], and
+    /// reads no values. [`BinObject::to_writer`] encodes a replaced or appended object. The entry
+    /// order is the base's file order minus the removed objects, with each replaced object at its
+    /// base position, then the appended objects in the order appended.
     ///
-    /// The output uses version 3 and current property-kind numbering. Every base object is
-    /// checked before output begins, including removed and replaced objects. The check reads
-    /// kinds and verifies sizes without decoding leaf contents.
+    /// The output uses version 3 and current property-kind numbering. The write checks every base
+    /// object before output begins, including removed and replaced objects. The check reads kinds
+    /// and verifies sizes without decoding leaf contents.
     ///
     /// # Errors
     ///

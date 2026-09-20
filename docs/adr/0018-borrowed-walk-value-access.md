@@ -8,13 +8,13 @@
 
 ## Context and problem statement
 
-Manager's type checks read declared item kinds, map key kinds, counts and null class hashes.
-Empty containers carry these declarations without child values. Owned conversion decodes and
-allocates the complete subtree. The streaming views expose the declarations directly.
+The manager's type checks read declared item kinds, map key kinds, counts and null class hashes.
+An empty container carries these declarations and holds no child value. An owned conversion
+decodes and allocates the whole subtree. The streaming views expose the declarations directly.
 
 ## Considered options
 
-1. **Borrowed view access.** One explicit conversion exposes the existing streaming view API.
+1. **Borrowed view access.** One explicit conversion exposes the streaming view API.
 2. **Header methods on tree traits.** Dedicated methods expose each declaration over both trees.
 
 ## Decision
@@ -24,16 +24,16 @@ contract are specified in [section 3](../design/value-walk.md#s3).
 
 ## Consequences
 
-- **Positive:** consumers inspect declarations without materializing subtrees
-- **Negative:** concrete streaming consumers depend on the streaming enum
-- **Revisit when:** generic visitors require these declarations in the shared tree contract
+- **Positive:** a consumer reads a declaration without materializing a subtree
+- **Negative:** a concrete streaming consumer depends on the streaming enum
+- **Revisit when:** a generic visitor needs these declarations in the shared tree contract
 
 ## Pros and cons of the options
 
 ### Borrowed view access
 
 - Good: one method reuses the streaming API
-- Bad: requesting a leaf view decodes that leaf
+- Bad: a request for a leaf view decodes that leaf
 
 ### Header methods on tree traits
 

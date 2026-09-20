@@ -24,7 +24,7 @@ impl Sealed for StructView<'_> {}
 
 /// A borrowed walk value: a kind, and the bytes the value is written in.
 ///
-/// Nothing is decoded until a method asks for it, wherever the value came from: a property, a
+/// The value stays undecoded until a method asks for it, wherever it comes from: a property, a
 /// container item, a map key or a map value. [`TreeValue::kind`] reads nothing.
 /// [`TreeValue::as_leaf`] and [`TreeValue::to_value`] decode the bytes.
 pub struct RawValue<'a> {

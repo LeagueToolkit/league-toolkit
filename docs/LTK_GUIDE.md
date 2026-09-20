@@ -410,8 +410,10 @@ if report.is_clean() {
 unless `LTK_LOL_GAME_DIR` is set.
 
 **Walking a bin**: `ltk_meta::walk` is one read-only traversal over every node of an object,
-driven by a `Visitor` that is generic over the tree. The walk visits every node of an object once, in pre-order and file order, and asks the visitor before entering each property. The visitor is generic over the tree: the same `Census` runs over an owned `Bin` and over a `BinStream`, where nothing is materialised. The design is
-`docs/design/value-walk.md`.
+driven by a `Visitor` that is generic over the tree. The walk visits every node once, in
+pre-order and file order, and asks the visitor before it enters each property. The same
+`Census` runs over an owned `Bin` and over a `BinStream`, where the walk materializes nothing.
+The design is in `docs/design/value-walk.md`.
 
 ```rust
 use ltk_hash::BinHash;
@@ -443,7 +445,7 @@ let mut census = Census::default();
 bin.walk(&mut census)?;
 ```
 
-**In parallel.** The walk over one object is sequential by contract: one visitor, pre-order, `Stop` and `Skip` as ordered decisions. Objects are independent of one another, and every view, node and trail type is `Send`. A sweep parallelises across objects with one visitor instance per worker and a reduce at the end. Nothing in the crate schedules this; the split is the caller's.
+**In parallel.** The walk over one object is sequential by contract: one visitor, pre-order, `Stop` and `Skip` as ordered decisions. Objects are independent of one another, and every view, node and trail type is `Send`. A sweep parallelizes across objects with one visitor instance per worker and a reduce at the end. Nothing in the crate schedules this. The split is the caller's.
 
 ```rust
 let objects: Vec<_> = bin.objects.values().collect();
@@ -474,13 +476,13 @@ let counted = std::thread::scope(|scope| {
 })?;
 ```
 
-Across many files the same shape applies one level up: one task per file, each mounting its own `BinStream` and walking it sequentially. The per-object walk is microseconds; decompression and I/O are where a sweep spends its time.
+Across many files the same shape applies one level up: one task per file, each mounting its own `BinStream` and walking it sequentially. The per-object walk is microseconds. Decompression and I/O are where a sweep spends its time.
 
 **Editing and saving**: `walk::VisitorMut` runs the same traversal over an owned object through `&mut`: a node
 callback edits the node's properties, a property callback edits or replaces the value, and the
 trail is the read-only walk's. `BinDelta` holds whole-object edits against a mounted
-`BinStream`, and `BinStream::write_patched` writes the file with them applied: every object
-the delta does not name is copied byte for byte, and only the edited ones are encoded.
+`BinStream`, and `BinStream::write_patched` writes the file with them applied: it copies every
+object the delta does not name byte for byte, and encodes only the edited ones.
 
 ```rust
 use ltk_hash::{BinHash, Hash as _};
@@ -532,8 +534,8 @@ let mut out = Vec::new();
 stream.write_patched(&delta, &mut out)?;
 ```
 
-A handle latched onto the legacy kind numbering refuses the delta; `into_bin()` and
-`Bin::to_writer` transcode the whole file instead. The design is
+A handle latched onto the legacy kind numbering refuses the delta. `into_bin()` and
+`Bin::to_writer` transcode the whole file instead. The design is in
 `value-walk.md` [section 5.3](design/value-walk.md#s5.3) and `bin-streaming.md`
 [section 10](design/bin-streaming.md#s10).
 

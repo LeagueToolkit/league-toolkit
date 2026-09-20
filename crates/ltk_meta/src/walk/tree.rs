@@ -112,7 +112,7 @@ pub trait TreeNode<'a>: Copy + sealed::Sealed {
     /// The value type of this tree.
     type Value: TreeValue<'a, Node = Self>;
     /// The properties in file order. A view's kind byte can fail to decode. Items are
-    /// `Result`; the owned tree never fails.
+    /// `Result`. The owned tree never fails.
     type Properties: Iterator<Item = Result<(BinHash, Self::Value), Error>>;
 
     /// The class hash this node carries.
@@ -121,7 +121,7 @@ pub trait TreeNode<'a>: Copy + sealed::Sealed {
     /// The properties, in file order.
     fn properties(&self) -> Self::Properties;
 
-    /// One property by field hash. The owned tree looks it up by key; the view scans in
+    /// One property by field hash. The owned tree looks it up by key. The view scans in
     /// place.
     ///
     /// # Errors
@@ -131,7 +131,7 @@ pub trait TreeNode<'a>: Copy + sealed::Sealed {
     fn get(&self, field: BinHash) -> Result<Option<Self::Value>, Error>;
 
     /// The whole node, owned, as a `Struct` carrying this class and every property.
-    /// Allocates. The object's path hash is not part of a `Struct`; a root's is
+    /// Allocates. The object's path hash is not part of a `Struct`. A root's path hash is
     /// [`Node::object_hash`](super::Node::object_hash).
     ///
     /// # Errors
@@ -237,7 +237,7 @@ impl Leaf<'_> {
     ///
     /// An integer in decimal, a bool as `true` or `false`, a float in its shortest
     /// round-trip form, a string as a JSON string, a hash as lowercase zero-padded hex, a
-    /// vector, colour or matrix as its components in parentheses, and `None` as nothing.
+    /// vector, color or matrix as its components in parentheses, and `None` as nothing.
     pub(crate) fn write_key(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::None => Ok(()),

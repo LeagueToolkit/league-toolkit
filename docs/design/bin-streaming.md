@@ -728,9 +728,9 @@ dance.
 than about a position, which is the same sort of fact as `is_primitive`, `subtype_count` and
 `is_valid_map_key`. That leaves the layout module as exactly one type and one enum.
 
-**Size checking happens in the walk, once.** The `ReadProperty` impls used to verify sizes inline -
-`Container::from_reader` measuring its own body and raising `Error::InvalidSize`. That check is the
-layout core's walk now, raising the same error from one place ([section 7](#s7)).
+**Size checking happens in the walk, once.** The layout core's walk measures a sized region
+against what its counts consume and raises `Error::InvalidSize` from that one place
+([section 7](#s7)). No `ReadProperty` impl measures its own body.
 
 **The header rule happens in the core, once.** A container, an optional and a map each declare
 the kind of what they hold, and a map declares its key kind as well. `cur.item_kind()` and

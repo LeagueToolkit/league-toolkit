@@ -93,10 +93,10 @@ tree and the streaming surface are one parser and cannot drift.
 
 ### Walking a bin
 
-[`walk`] is one traversal for both trees. A [`Visitor`](walk::Visitor) is called once per
-node, in pre-order and file order, and answers a [`Visit`](walk::Visit) that continues, prunes
-a property, stops or aborts. The same visitor runs over an owned [`Bin`] and over a
-[`BinStream`], where nothing is materialised.
+[`walk`] is one traversal for both trees. The walk calls a [`Visitor`](walk::Visitor) once per
+node, in pre-order and file order. The visitor answers a [`Visit`](walk::Visit) that continues,
+prunes a property, stops or aborts. The same visitor runs over an owned [`Bin`] and over a
+[`BinStream`], where the walk materializes nothing.
 
 ```
 use ltk_hash::BinHash;
@@ -131,8 +131,8 @@ bin.walk(&mut census)?;
 ```
 
 The walk over one object is sequential by contract. Objects are independent, and every view,
-node and trail type is `Send`. A sweep parallelises across objects: one visitor instance per
-worker, reduced at the end. The split is the caller's; the crate schedules nothing.
+node and trail type is `Send`. A sweep parallelizes across objects: one visitor instance per
+worker, reduced at the end. The split is the caller's. The crate schedules nothing.
 
 ```
 # use ltk_hash::BinHash;
@@ -179,16 +179,16 @@ println!("{} nodes, {} hits", counted.nodes, counted.hits.len());
 ```
 
 Across many files the same shape applies one level up: one task per file, each mounting its
-own [`BinStream`] and walking it sequentially. The per-object walk is microseconds;
-decompression and I/O are where a sweep spends its time.
+own [`BinStream`] and walking it sequentially. The per-object walk is microseconds.
+Decompression and I/O are where a sweep spends its time.
 
 ### Editing and saving
 
 [`walk::VisitorMut`] runs the same traversal over an owned object through `&mut`: a node
 callback edits the node's properties, a property callback edits or replaces the value, and the
 trail is the read-only walk's. [`BinDelta`] holds whole-object edits against a mounted
-[`BinStream`], and [`BinStream::write_patched`] writes the file with them applied: every object
-the delta does not name is copied byte for byte, and only the edited ones are encoded.
+[`BinStream`], and [`BinStream::write_patched`] writes the file with them applied: it copies
+every object the delta does not name byte for byte, and encodes only the edited ones.
 
 ```
 use std::io::Cursor;
@@ -253,7 +253,7 @@ stream.write_patched(&delta, &mut out)?;
 # Ok::<(), Error>(())
 ```
 
-A handle latched onto the legacy kind numbering refuses the delta; `into_bin()` and
+A handle latched onto the legacy kind numbering refuses the delta. `into_bin()` and
 [`Bin::to_writer`] transcode the whole file instead.
 
 ### Modifying a bin file

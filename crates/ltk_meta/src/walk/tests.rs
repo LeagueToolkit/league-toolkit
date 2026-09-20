@@ -134,8 +134,8 @@ fn key_kinds() -> impl Iterator<Item = Kind> {
 }
 
 /// The section 7 fixture: a `Struct` and an `Embedded` at a property, inside a container,
-/// inside an optional, as a map value; a null pointer in each position; a container of
-/// strings; a map keyed by every kind `Kind::is_valid_map_key` admits; one leaf of every kind.
+/// inside an optional, and as a map value. A null pointer in each position. A container of
+/// strings. A map keyed by every kind `Kind::is_valid_map_key` admits. One leaf of every kind.
 fn fixture() -> Bin {
     let mut object = BinObject::builder(OBJECT, C1)
         .property(
@@ -557,7 +557,7 @@ fn exits_pair_with_entries_and_a_leaf_has_none() {
     descended.sort();
     exited.sort();
     assert_eq!(descended, exited);
-    // The empty optional and the leaves of every kind are entered and never exited.
+    // The walk enters the empty optional and the leaves of every kind, and exits none of them.
     assert!(descended.contains(&(F_OPT_EMPTY, String::new())));
     assert!(!exited.iter().any(|(field, _)| *field == F_STRINGS));
     assert!(!exited.iter().any(|(field, _)| *field >= F_LEAVES));
@@ -914,7 +914,7 @@ fn map_keys_of_every_kind_agree_between_the_trees() {
 #[test]
 fn the_class_context_holds_the_class_of_every_enclosing_node() {
     let [owned, _] = record_both(&fixture(), always_continue);
-    // A field step is read on exactly one node: the context is the open nodes, root first.
+    // Each field step sits on exactly one node: the context is the open nodes, root first.
     let mut open: Vec<u32> = Vec::new();
     for event in &owned.events {
         match event {
@@ -1130,7 +1130,7 @@ fn a_map_of_ten_thousand_entries_grows_the_trail_once() {
     let [(owned, _), (viewed, _)] = walk_both(&bin, Capacities::default);
     for visited in [owned, viewed] {
         assert_eq!(visited.0.len(), 10_001);
-        // The root sees an empty trail; every entry after it sees the same two-step trail, at a
+        // The root sees an empty trail. Every entry after it sees the same two-step trail, at a
         // capacity that never moves once it is set.
         let first = visited.0[1];
         assert!(first.0 <= 4 && first.1 <= 4, "{first:?}");
@@ -1402,7 +1402,8 @@ fn a_child_carries_its_bytes_and_decodes_only_when_asked() {
             value: RawValue<'a>,
             _node: &Node<'_, 'a, RawValue<'a>>,
         ) -> Result<Visit, Error> {
-            // Iterating reaches the item past the malformed one: no item is decoded on the way.
+            // The iterator reaches the item past the malformed one, and decodes no item on the
+            // way.
             let items: Vec<_> = value.children()?.collect::<Result<_, Error>>()?;
             assert_eq!(items.len(), 2);
 

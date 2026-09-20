@@ -42,8 +42,8 @@ pub enum Error {
     MismatchedContainerTypes { expected: Kind, got: Kind },
 
     #[error(
-        "Cannot write a delta over a bin read with the legacy property kind numbering - \
-         transcode it with BinStream::into_bin and Bin::to_writer"
+        "Cannot write a delta over a bin read with the legacy property kind numbering. \
+         Transcode it with BinStream::into_bin and Bin::to_writer"
     )]
     DeltaLegacyNumbering,
     #[error("The delta names object {0:08x}, which the base bin does not hold")]

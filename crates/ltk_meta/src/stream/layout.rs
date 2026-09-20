@@ -239,7 +239,7 @@ impl<'a> Cursor<'a> {
 
     /// The kind a container, optional or map declares for what it holds, advancing past it.
     ///
-    /// The one place the nesting rule is applied: a container, an optional and a map hold one
+    /// The one place that applies the nesting rule: a container, an optional and a map hold one
     /// value each of a kind that is none of those three. A header declaring one of them makes
     /// every byte after it mean something else, and the value model has no such value to build.
     ///
@@ -258,7 +258,7 @@ impl<'a> Cursor<'a> {
 
     /// The kind a map declares for its keys, advancing past it.
     ///
-    /// The one place the key rule is applied: [`Kind::is_valid_map_key`] is what the client's
+    /// The one place that applies the key rule: [`Kind::is_valid_map_key`] is what the client's
     /// reader accepts as a key.
     ///
     /// # Errors

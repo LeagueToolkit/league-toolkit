@@ -1,19 +1,19 @@
 //! One traversal over every node of a bin object, driven by a [`Visitor`], or by a
 //! [`VisitorMut`] that edits the owned tree as it goes.
 //!
-//! The walk is written once, against two sealed traits - [`TreeValue`] and [`TreeNode`] - that
-//! the owned tree (`&PropertyValueEnum`) and the streaming view ([`RawValue`]) both
-//! implement. A visitor is generic over the value type and runs over either unchanged:
+//! The walk is written once against two sealed traits, [`TreeValue`] and [`TreeNode`]. The
+//! owned tree (`&PropertyValueEnum`) and the streaming view ([`RawValue`]) both implement
+//! them. A visitor is generic over the value type and runs over either one unchanged:
 //! [`BinObject::walk`] and [`Bin::walk`] over the owned tree, [`ObjectView::walk`] and
 //! [`BinStream::walk`] over a buffered object's bytes.
 //!
 //! The visitor sees nodes in pre-order, in file order, each exactly once. A node is an object,
-//! or a `Struct` or `Embedded` value whose class hash is not 0. It is entered and exited, and
-//! so is every property of it that can hold a node. Every callback answers a [`Visit`]; the
+//! or a `Struct` or `Embedded` value whose class hash is not 0. The walk enters and exits each
+//! node, and each property of it that can hold a node. Every callback answers a [`Visit`]. The
 //! walk returns a [`WalkOutcome`], or the visitor's own error.
 //!
-//! The walk carries a [`Trail`]: the steps from the object's root to the current position,
-//! borrowing the tree and allocating nothing per step. A visitor renders it for a node it
+//! The walk carries a [`Trail`]: the steps from the object's root to the current position. The
+//! trail borrows the tree and allocates nothing per step. A visitor renders it for a node it
 //! reports on and for nothing else.
 //!
 //! [`BinObject::walk_mut`], [`Bin::walk_mut`] and [`BinOverride::walk_mut`] run the same
@@ -93,14 +93,14 @@ pub enum Visit {
     /// innermost first. The walk does not resume.
     Stop,
     /// Skips ahead, locally:
-    /// - from [`Visitor::enter_node`]: the node's properties are not walked; its
+    /// - from [`Visitor::enter_node`]: the walk skips the node's properties. Its
     ///   [`Visitor::exit_node`] runs regardless.
-    /// - from [`Visitor::enter_property`]: the value is not descended - the prune.
-    ///   [`Visitor::exit_property`] runs regardless for a value that holds a node.
-    /// - from [`Visitor::exit_property`]: the node's remaining properties are pruned; the walk
+    /// - from [`Visitor::enter_property`]: the walk does not descend the value. This is the
+    ///   prune. [`Visitor::exit_property`] runs regardless for a value that holds a node.
+    /// - from [`Visitor::exit_property`]: the walk prunes the node's remaining properties. It
     ///   jumps to the node's [`Visitor::exit_node`].
-    /// - from [`Visitor::exit_node`]: the parent property's remaining items are pruned; the
-    ///   walk jumps to the parent's [`Visitor::exit_property`].
+    /// - from [`Visitor::exit_node`]: the walk prunes the parent property's remaining items. It
+    ///   jumps to the parent's [`Visitor::exit_property`].
     Skip,
     /// Carries on.
     Continue,
@@ -109,7 +109,7 @@ pub enum Visit {
 /// How a walk ended.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WalkOutcome {
-    /// Every object was walked to the end.
+    /// The walk reached the end of every object.
     Completed,
     /// A callback answered [`Visit::Stop`] and the walk unwound.
     Stopped,
@@ -136,28 +136,28 @@ pub trait Visitor<'a, V: TreeValue<'a>> {
     ///
     /// # Errors
     ///
-    /// The visitor's own. An error ends the walk at once, as an [`Visit::Abort`] does.
+    /// The visitor's own. An error ends the walk at once, as a [`Visit::Abort`] does.
     fn enter_node(&mut self, node: &Node<'_, 'a, V>) -> Result<Visit, Self::Error> {
         Ok(Visit::Continue)
     }
 
     /// Called once for every node entered: after its properties, after a [`Visit::Skip`],
-    /// and while unwinding for a [`Visit::Stop`]. Never after an [`Visit::Abort`].
+    /// and while unwinding for a [`Visit::Stop`]. Never after a [`Visit::Abort`].
     ///
     /// # Errors
     ///
-    /// The visitor's own. An error ends the walk at once, as an [`Visit::Abort`] does.
+    /// The visitor's own. An error ends the walk at once, as a [`Visit::Abort`] does.
     fn exit_node(&mut self, node: &Node<'_, 'a, V>) -> Result<Visit, Self::Error> {
         Ok(Visit::Continue)
     }
 
     /// Called for every property of a node, in file order, leaves included. The value is the
-    /// tree's, undecoded until read. Only a value [`TreeValue::can_contain_node`] answers true
-    /// for is descended on [`Visit::Continue`]; a leaf is a call and nothing more.
+    /// tree's own, undecoded until read. On [`Visit::Continue`] the walk descends a value that
+    /// [`TreeValue::can_contain_node`] answers true for. A leaf is one call and nothing more.
     ///
     /// # Errors
     ///
-    /// The visitor's own. An error ends the walk at once, as an [`Visit::Abort`] does.
+    /// The visitor's own. An error ends the walk at once, as a [`Visit::Abort`] does.
     fn enter_property(
         &mut self,
         field: BinHash,
@@ -169,11 +169,11 @@ pub trait Visitor<'a, V: TreeValue<'a>> {
 
     /// Called once for every property that holds a node and was entered: after its nodes,
     /// after a [`Visit::Skip`], and while unwinding for a [`Visit::Stop`]. Not called for a
-    /// leaf. Never after an [`Visit::Abort`].
+    /// leaf. Never after a [`Visit::Abort`].
     ///
     /// # Errors
     ///
-    /// The visitor's own. An error ends the walk at once, as an [`Visit::Abort`] does.
+    /// The visitor's own. An error ends the walk at once, as a [`Visit::Abort`] does.
     fn exit_property(
         &mut self,
         field: BinHash,
@@ -293,11 +293,11 @@ pub enum TrailStep<V> {
 
 /// The steps from an object's root to the walk's position.
 ///
-/// Borrows the tree - a map key is the tree's own value, never a copy. Descending a map of ten
-/// thousand entries allocates nothing. Text is made only by `Display`.
+/// Borrows the tree. A map key is the tree's own value, never a copy. A descent through a map
+/// of ten thousand entries allocates nothing. Only `Display` makes text.
 ///
 /// Beside the steps the trail keeps the **class context**: for each `Field` step, the class
-/// hash of the node the field was read on. It is what a name table is asked with.
+/// hash of the node the field was read on. A name table lookup takes that hash.
 #[derive(Debug)]
 pub struct Trail<V> {
     steps: Vec<TrailStep<V>>,
@@ -330,7 +330,7 @@ impl<V> Trail<V> {
         self.steps.is_empty()
     }
 
-    /// The class of the node each field step was read on, one per `Field` step, in order.
+    /// The class of the node that holds each field step, one per `Field` step, in order.
     /// Never 0: the walk always knows.
     #[must_use]
     pub fn classes(&self) -> &[BinHash] {
@@ -597,8 +597,8 @@ impl Bin {
 
 impl BinOverride {
     /// Walks every embedded object, in file order, as the file holds them. A record that
-    /// targets one of them has not been applied. Patch records are not walked: a record's
-    /// value has no node of its own to stand on.
+    /// targets one of them is not applied. The walk skips patch records. A record's value has
+    /// no node of its own to stand on.
     ///
     /// # Errors
     ///
@@ -617,8 +617,8 @@ impl BinOverride {
 }
 
 impl<'a> ObjectView<'a> {
-    /// Walks this object over its buffered bytes: nothing is materialised, a header is
-    /// decoded where the walk descends, and a leaf is decoded only when the visitor asks.
+    /// Walks this object over its buffered bytes. The walk materializes nothing. It decodes a
+    /// header where it descends, and a leaf only when the visitor asks.
     ///
     /// # Errors
     ///

@@ -473,7 +473,7 @@ field step nowhere in the text. A `ValuePath` with no steps renders as the empty
 
 Hex is lowercase, zero-padded to the hash's width: eight digits for a `BinHash`, sixteen for a
 `WadHash`. A string key is written as a JSON string, escaped as `serde_json` would write it. An
-`F32` key is written in Rust's shortest round-trip form. A vector or colour key is its components
+`F32` key is written in Rust's shortest round-trip form. A vector or color key is its components
 in parentheses, comma separated, and a matrix key is its sixteen components row by row, as the
 wire holds them; it is text for a human and nothing parses it.
 
@@ -554,12 +554,12 @@ pub enum Visit {
     /// innermost first. The walk does not resume.
     Stop,
     /// Skips ahead, locally:
-    /// - from `enter_node`: the node's properties are not walked; its `exit_node` still runs.
-    /// - from `enter_property`: the value is not descended - the prune. `exit_property` still
-    ///   runs.
-    /// - from `exit_property`: the node's remaining properties are pruned; the walk jumps to
+    /// - from `enter_node`: the walk skips the node's properties. Its `exit_node` still runs.
+    /// - from `enter_property`: the walk does not descend the value. This is the prune.
+    ///   `exit_property` still runs.
+    /// - from `exit_property`: the walk prunes the node's remaining properties. It jumps to
     ///   the node's `exit_node`.
-    /// - from `exit_node`: the parent property's remaining items are pruned; the walk jumps to
+    /// - from `exit_node`: the walk prunes the parent property's remaining items. It jumps to
     ///   the parent's `exit_property`.
     Skip,
     Continue,
@@ -568,7 +568,7 @@ pub enum Visit {
 /// How a walk ended.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WalkOutcome {
-    /// Every object was walked to the end.
+    /// The walk reached the end of every object.
     Completed,
     /// A callback answered `Visit::Stop` and the walk unwound.
     Stopped,
@@ -636,8 +636,8 @@ impl<'t, 'a, V: TreeValue<'a>> Node<'t, 'a, V> {
 
 /// The steps from an object's root to the walk's position.
 ///
-/// Borrows the tree - a map key is the tree's own value, never a copy - so descending a map of
-/// ten thousand entries allocates nothing. Text is made only by `to_value_path` or `Display`.
+/// Borrows the tree. A map key is the tree's own value, never a copy. A descent through a map
+/// of ten thousand entries allocates nothing. Only `to_value_path` and `Display` make text.
 #[derive(Debug)]
 pub struct Trail<V> { /* Vec<TrailStep<V>>, Vec<BinHash> */ }
 
@@ -653,7 +653,7 @@ impl<'a, V: TreeValue<'a>> Trail<V> {
     pub fn steps(&self) -> &[TrailStep<V>];
     pub fn len(&self) -> usize;
     pub fn is_empty(&self) -> bool;
-    /// The class of the node each field step was read on, one per `Field` step, in order.
+    /// The class of the node that holds each field step, one per `Field` step, in order.
     /// Never 0: the walk always knows.
     pub fn classes(&self) -> &[BinHash];
     /// The owned address: every step copied, every key decoded to a `MapKey`, the class
@@ -684,16 +684,16 @@ impl Bin {
 impl BinOverride {
     /// Walks every embedded object, in file order, as the file holds them: a record that
     /// targets one of them (the client merges a patch's objects into the base table before
-    /// applying records, so it may) has not been applied. Patch records are not walked: a
-    /// record's value has no node of its own to stand on.
+    /// applying records, so it may) is not applied. The walk skips patch records. A record's
+    /// value has no node of its own to stand on.
     pub fn walk<'a, W>(&'a self, visitor: &mut W) -> Result<WalkOutcome, W::Error>
     where W: Visitor<'a, &'a PropertyValueEnum>;
 }
 
 /// The view.
 impl<'a> ObjectView<'a> {
-    /// Walks this object over its buffered bytes: nothing is materialised, a header is
-    /// decoded where the walk descends, and a leaf is decoded only when the visitor asks.
+    /// Walks this object over its buffered bytes. The walk materializes nothing. It decodes a
+    /// header where it descends, and a leaf only when the visitor asks.
     ///
     /// # Errors
     ///
@@ -813,7 +813,7 @@ pub trait VisitorMut {
     /// The visitor's own error. The crate's errors convert into it.
     type Error: From<Error>;
 
-    /// Before any of the node's properties. The walk walks the property map this callback
+    /// Before any of the node's properties. The walk reads the property map this callback
     /// leaves behind.
     fn enter_node(&mut self, node: &mut NodeRefMut<'_>) -> Result<Visit, Self::Error> {
         Ok(Visit::Continue)

@@ -131,8 +131,8 @@ pub(crate) fn read_string(cur: &mut Cursor<'_>) -> Result<values::String, Error>
 ///
 /// See [`read_value`].
 pub(crate) fn read_container(cur: &mut Cursor<'_>) -> Result<values::Container, Error> {
-    // Read before the body is walked, not after: a nested item kind would make every byte that
-    // follows mean something else.
+    // Read before the walk crosses the body, not after: a nested item kind would make every
+    // byte that follows mean something else.
     let item_kind = cur.item_kind()?;
 
     let items = cur.sized_region(|cur| {

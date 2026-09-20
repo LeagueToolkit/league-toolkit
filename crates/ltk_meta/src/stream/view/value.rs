@@ -241,8 +241,8 @@ impl<'a> ContainerView<'a> {
 
     /// The cursor at each item, in order, with nothing decoded.
     ///
-    /// Each item is skipped by its declared width or its counts, the same walk
-    /// [`ContainerItems`] runs, without reading the item itself.
+    /// The iterator skips each item by its declared width or its counts, the same walk
+    /// [`ContainerItems`] runs, and reads no item.
     pub(crate) fn cursors(&self) -> ItemCursors<'a> {
         ItemCursors {
             cur: self.items,
