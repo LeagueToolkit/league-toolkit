@@ -92,7 +92,10 @@ impl MapGeoVersion {
 
     /// Version has stationary light channel
     #[inline]
-    #[allow(dead_code)]
+    #[expect(
+        dead_code,
+        reason = "completes the version table; the mesh reader gates the channel on has_spherical_harmonics"
+    )]
     pub fn has_stationary_light(&self) -> bool {
         self.0 >= 9
     }
