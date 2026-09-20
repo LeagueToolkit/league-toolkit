@@ -1,27 +1,77 @@
 use glam::{vec2, vec3, vec4, Vec2, Vec3, Vec4};
+use half::f16;
 use std::marker::PhantomData;
 
-use super::vertex::{VertexBuffer, VertexElement};
+use super::vertex::{ComponentType, ElementFormat, VertexBuffer, VertexElement};
 
 /// Reads one vertex element out of a packed vertex buffer.
 ///
 /// Implemented for the types the League vertex formats decode to: [`f32`], [`Vec2`],
 /// [`Vec3`], [`Vec4`] and `[u8; 4]`.
+///
+/// A type decodes an element whose format carries at least as many components as the type
+/// needs, in the same component kind. [`Vec3`] reads a `XYZ_Float32` normal and the `xyz` of
+/// a `XYZW_Float16` one; `[u8; 4]` reads a packed colour or a set of blend indices. A type
+/// never reads an element with fewer components than it needs, and never reads a byte format
+/// as floats.
 pub trait Format {
     /// The value one element decodes to.
     type Item;
 
+    /// Whether this type decodes an element packed in `format`.
+    #[must_use]
+    fn decodes(format: ElementFormat) -> bool;
+
     /// Reads the element of vertex `index`, which begins `element_offset` bytes into it.
+    ///
+    /// `format` is the element's own packing, which decides how many bytes each component
+    /// takes and how it is widened.
     ///
     /// # Panics
     /// Panics if the element does not lie inside the buffer.
     #[must_use]
-    fn read(buffer: &VertexBuffer, index: usize, element_offset: usize) -> Self::Item;
+    fn read(
+        buffer: &VertexBuffer,
+        format: ElementFormat,
+        index: usize,
+        element_offset: usize,
+    ) -> Self::Item;
 }
 
 /// Get the offset of a single vertex element for a single vertex in a vertex buffer.
 fn offset(buffer: &VertexBuffer, index: usize, element_offset: usize) -> usize {
     buffer.stride() * index + element_offset
+}
+
+/// Reads the first `N` components of an element as [`f32`], widening a half or a byte.
+///
+/// # Panics
+/// Panics if the element does not lie inside the buffer.
+fn read_floats<const N: usize>(
+    buffer: &VertexBuffer,
+    format: ElementFormat,
+    index: usize,
+    element_offset: usize,
+) -> [f32; N] {
+    let base = offset(buffer, index, element_offset);
+    let bytes = buffer.as_bytes();
+
+    match format.component_type() {
+        ComponentType::Float32 => std::array::from_fn(|i| {
+            let at = base + i * 4;
+            f32::from_le_bytes([bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]])
+        }),
+        ComponentType::Float16 => std::array::from_fn(|i| {
+            let at = base + i * 2;
+            f16::from_le_bytes([bytes[at], bytes[at + 1]]).to_f32()
+        }),
+        ComponentType::UInt8 => std::array::from_fn(|i| f32::from(bytes[base + i])),
+    }
+}
+
+/// Whether `format` holds at least `n` float components.
+fn decodes_floats(format: ElementFormat, n: usize) -> bool {
+    format.component_type().is_float() && format.component_count() >= n
 }
 
 /// A view over all vertices of a single [`VertexElement`] in a [`VertexBuffer`].
@@ -47,7 +97,10 @@ impl<T: Format> std::fmt::Debug for VertexBufferAccessor<'_, T> {
 }
 
 impl<'a, T: Format> VertexBufferAccessor<'a, T> {
-    /// Creates a new VertexBufferAccessor. The type of element is **not** checked, so the caller must ensure that the element format matches the format of the accessor.
+    /// Creates an accessor over an element `T` decodes.
+    ///
+    /// [`VertexBuffer::accessor`] checks the element's format against
+    /// [`Format::decodes`] before calling this.
     pub(super) fn new(
         element: VertexElement,
         element_off: usize,
@@ -91,7 +144,7 @@ impl<'a, T: Format> VertexBufferAccessor<'a, T> {
     #[inline]
     #[must_use]
     pub fn get(&self, index: usize) -> T::Item {
-        T::read(self.buffer, index, self.element_off)
+        T::read(self.buffer, self.element.format, index, self.element_off)
     }
 
     /// The number of vertices this accessor spans.
@@ -107,59 +160,88 @@ impl<'a, T: Format> VertexBufferAccessor<'a, T> {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
-    // TODO (alan): impl the rest of the ElementFormat's
 }
-
-// TODO(alan): figure out endianness (again)
 
 impl Format for f32 {
     type Item = f32;
-    fn read(buffer: &VertexBuffer, index: usize, element_off: usize) -> f32 {
-        let offset = offset(buffer, index, element_off);
-        let buf = buffer.as_bytes();
-        f32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap())
+
+    fn decodes(format: ElementFormat) -> bool {
+        decodes_floats(format, 1)
+    }
+
+    fn read(buffer: &VertexBuffer, format: ElementFormat, index: usize, element_off: usize) -> f32 {
+        let [x] = read_floats::<1>(buffer, format, index, element_off);
+        x
     }
 }
 
 impl Format for Vec2 {
     type Item = Vec2;
-    fn read(buffer: &VertexBuffer, index: usize, element_off: usize) -> Vec2 {
-        let offset = offset(buffer, index, element_off);
-        let buf = buffer.as_bytes();
-        let x = f32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap());
-        let y = f32::from_le_bytes(buf[offset + 4..offset + 8].try_into().unwrap());
+
+    fn decodes(format: ElementFormat) -> bool {
+        decodes_floats(format, 2)
+    }
+
+    fn read(
+        buffer: &VertexBuffer,
+        format: ElementFormat,
+        index: usize,
+        element_off: usize,
+    ) -> Vec2 {
+        let [x, y] = read_floats::<2>(buffer, format, index, element_off);
         vec2(x, y)
     }
 }
 
 impl Format for Vec3 {
     type Item = Vec3;
-    fn read(buffer: &VertexBuffer, index: usize, element_off: usize) -> Vec3 {
-        let offset = offset(buffer, index, element_off);
-        let buf = buffer.as_bytes();
-        let x = f32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap());
-        let y = f32::from_le_bytes(buf[offset + 4..offset + 8].try_into().unwrap());
-        let z = f32::from_le_bytes(buf[offset + 8..offset + 12].try_into().unwrap());
+
+    fn decodes(format: ElementFormat) -> bool {
+        decodes_floats(format, 3)
+    }
+
+    fn read(
+        buffer: &VertexBuffer,
+        format: ElementFormat,
+        index: usize,
+        element_off: usize,
+    ) -> Vec3 {
+        let [x, y, z] = read_floats::<3>(buffer, format, index, element_off);
         vec3(x, y, z)
     }
 }
 
 impl Format for Vec4 {
     type Item = Vec4;
-    fn read(buffer: &VertexBuffer, index: usize, element_off: usize) -> Vec4 {
-        let offset = offset(buffer, index, element_off);
-        let buf = buffer.as_bytes();
-        let x = f32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap());
-        let y = f32::from_le_bytes(buf[offset + 4..offset + 8].try_into().unwrap());
-        let z = f32::from_le_bytes(buf[offset + 8..offset + 12].try_into().unwrap());
-        let w = f32::from_le_bytes(buf[offset + 12..offset + 16].try_into().unwrap());
+
+    fn decodes(format: ElementFormat) -> bool {
+        decodes_floats(format, 4)
+    }
+
+    fn read(
+        buffer: &VertexBuffer,
+        format: ElementFormat,
+        index: usize,
+        element_off: usize,
+    ) -> Vec4 {
+        let [x, y, z, w] = read_floats::<4>(buffer, format, index, element_off);
         vec4(x, y, z, w)
     }
 }
 
 impl Format for [u8; 4] {
     type Item = [u8; 4];
-    fn read(buffer: &VertexBuffer, index: usize, element_off: usize) -> [u8; 4] {
+
+    fn decodes(format: ElementFormat) -> bool {
+        format.component_type() == ComponentType::UInt8 && format.component_count() >= 4
+    }
+
+    fn read(
+        buffer: &VertexBuffer,
+        _format: ElementFormat,
+        index: usize,
+        element_off: usize,
+    ) -> [u8; 4] {
         let offset = offset(buffer, index, element_off);
         let buf = buffer.as_bytes();
         [
@@ -203,7 +285,12 @@ impl<T: Format> Iterator for Iter<'_, T> {
         if self.counter >= self.view.buffer.count() {
             return None;
         }
-        let item = T::read(self.view.buffer, self.counter, self.view.element_off);
+        let item = T::read(
+            self.view.buffer,
+            self.view.element.format,
+            self.counter,
+            self.view.element_off,
+        );
         self.counter += 1;
         Some(item)
     }
@@ -215,3 +302,108 @@ impl<T: Format> Iterator for Iter<'_, T> {
 }
 
 impl<T: Format> ExactSizeIterator for Iter<'_, T> {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mem::vertex::{
+        ElementName, VertexBufferDescription, VertexBufferUsage, VertexElement,
+    };
+
+    /// A vertex buffer holding `elements`, over the bytes given.
+    fn buffer(elements: Vec<VertexElement>, bytes: Vec<u8>) -> VertexBuffer {
+        VertexBuffer::new(
+            VertexBufferDescription::new(VertexBufferUsage::Static, elements),
+            bytes,
+        )
+    }
+
+    fn half_bytes(values: &[f32]) -> Vec<u8> {
+        values
+            .iter()
+            .flat_map(|&v| f16::from_f32(v).to_le_bytes())
+            .collect()
+    }
+
+    #[test]
+    fn a_half_uv_decodes_to_f32() {
+        let uv = VertexElement::new(ElementName::Texcoord0, ElementFormat::XY_Float16);
+        let buffer = buffer(vec![uv], half_bytes(&[0.25, 0.75]));
+
+        let accessor = buffer
+            .accessor::<Vec2>(ElementName::Texcoord0)
+            .expect("Vec2 decodes a two component half UV");
+        assert_eq!(accessor.get(0), vec2(0.25, 0.75));
+    }
+
+    #[test]
+    fn a_half_normal_decodes_to_vec3_dropping_w() {
+        let normal = VertexElement::new(ElementName::Normal, ElementFormat::XYZW_Float16);
+        let buffer = buffer(vec![normal], half_bytes(&[1.0, 0.0, 0.0, 0.5]));
+
+        let accessor = buffer
+            .accessor::<Vec3>(ElementName::Normal)
+            .expect("Vec3 decodes the xyz of a four component half normal");
+        assert_eq!(accessor.get(0), vec3(1.0, 0.0, 0.0));
+
+        let accessor = buffer
+            .accessor::<Vec4>(ElementName::Normal)
+            .expect("Vec4 decodes all four components");
+        assert_eq!(accessor.get(0), vec4(1.0, 0.0, 0.0, 0.5));
+    }
+
+    #[test]
+    fn a_half_element_is_read_at_its_own_stride() {
+        // Two vertices of one half UV each: 4 bytes per vertex, not 8.
+        let uv = VertexElement::new(ElementName::Texcoord0, ElementFormat::XY_Float16);
+        let buffer = buffer(vec![uv], half_bytes(&[0.0, 1.0, 2.0, 3.0]));
+
+        assert_eq!(buffer.stride(), 4);
+        assert_eq!(buffer.count(), 2);
+
+        let accessor = buffer.accessor::<Vec2>(ElementName::Texcoord0).unwrap();
+        assert_eq!(
+            accessor.iter().collect::<Vec<_>>(),
+            vec![vec2(0.0, 1.0), vec2(2.0, 3.0)]
+        );
+    }
+
+    #[test]
+    fn a_type_wider_than_the_element_has_no_accessor() {
+        let uv = VertexElement::new(ElementName::Texcoord0, ElementFormat::XY_Float16);
+        let buffer = buffer(vec![uv], half_bytes(&[0.25, 0.75]));
+
+        // Reading four bytes of half UV as a Vec3 would run off the vertex.
+        assert!(buffer.accessor::<Vec3>(ElementName::Texcoord0).is_none());
+        assert!(buffer.accessor::<Vec4>(ElementName::Texcoord0).is_none());
+        // And a UV is not a packed colour.
+        assert!(buffer.accessor::<[u8; 4]>(ElementName::Texcoord0).is_none());
+    }
+
+    #[test]
+    fn a_packed_colour_is_not_read_as_floats() {
+        let colour = VertexElement::new(ElementName::PrimaryColor, ElementFormat::BGRA_Packed8888);
+        let buffer = buffer(vec![colour], vec![1, 2, 3, 4]);
+
+        assert!(buffer.accessor::<Vec4>(ElementName::PrimaryColor).is_none());
+        assert_eq!(
+            buffer
+                .accessor::<[u8; 4]>(ElementName::PrimaryColor)
+                .unwrap()
+                .get(0),
+            [1, 2, 3, 4]
+        );
+    }
+
+    #[test]
+    fn a_float32_element_still_decodes() {
+        let bytes: Vec<u8> = [1.0f32, 2.0, 3.0]
+            .iter()
+            .flat_map(|f| f.to_le_bytes())
+            .collect();
+        let buffer = buffer(vec![VertexElement::POSITION], bytes);
+
+        let accessor = buffer.accessor::<Vec3>(ElementName::Position).unwrap();
+        assert_eq!(accessor.get(0), vec3(1.0, 2.0, 3.0));
+    }
+}

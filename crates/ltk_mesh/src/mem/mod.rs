@@ -28,7 +28,7 @@ pub mod vertex {
         get_element_flags, VertexBufferDescription, VertexBufferElementFlags, VertexBufferUsage,
     };
     #[doc(inline)]
-    pub use super::vertex_element::{ElementFormat, ElementName, VertexElement};
+    pub use super::vertex_element::{ComponentType, ElementFormat, ElementName, VertexElement};
 }
 
 pub use vertex::{
