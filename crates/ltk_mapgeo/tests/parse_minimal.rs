@@ -1,5 +1,6 @@
 use std::io::Cursor;
 
+use glam::{vec4, Mat4, Vec3};
 use ltk_mapgeo::EnvironmentAsset;
 
 // Builds a minimal (but structurally valid) mapgeo stream that exercises the top-level parser.
@@ -71,9 +72,16 @@ fn parses_minimal_mapgeo() {
     bytes.extend_from_slice(&0.0f32.to_le_bytes());
     bytes.extend_from_slice(&0.0f32.to_le_bytes());
     bytes.extend_from_slice(&0.0f32.to_le_bytes());
-    // Mat4 row-major: 16 f32
+    // Transform: 16 f32, the matrix's columns in order. Floats 12 to 14 are the
+    // translation, which is where the live files carry it.
     for i in 0..16 {
-        let v = if i % 5 == 0 { 1.0f32 } else { 0.0f32 };
+        let v = match i {
+            12 => 10.0f32,
+            13 => 20.0f32,
+            14 => 30.0f32,
+            _ if i % 5 == 0 => 1.0f32,
+            _ => 0.0f32,
+        };
         bytes.extend_from_slice(&v.to_le_bytes());
     }
     bytes.push(0); // quality flags
@@ -116,6 +124,19 @@ fn parses_minimal_mapgeo() {
     assert_eq!(asset.index_buffers().len(), 1);
     assert_eq!(asset.scene_graphs().len(), 1);
     assert_eq!(asset.planar_reflectors().len(), 0);
+
+    // The transform is handed back ready to multiply a position by: translation in
+    // w_axis, affine enough for glam's own transform helpers.
+    let transform = asset.meshes()[0].transform();
+    assert_eq!(
+        *transform,
+        Mat4::from_translation(Vec3::new(10.0, 20.0, 30.0))
+    );
+    assert_eq!(transform.w_axis, vec4(10.0, 20.0, 30.0, 1.0));
+    assert_eq!(
+        transform.transform_point3(Vec3::ZERO),
+        Vec3::new(10.0, 20.0, 30.0)
+    );
 }
 
 fn write_sized_string(buf: &mut Vec<u8>, s: &str) {

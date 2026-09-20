@@ -189,7 +189,11 @@ impl EnvironmentMesh {
         &self.bounding_box
     }
 
-    /// The world transform matrix
+    /// The world transform, ready to multiply a position by.
+    ///
+    /// The matrix is affine and carries its translation in `w_axis`. A vertex read out of
+    /// this mesh's buffers is in model space; `transform * vertex` puts it in world space,
+    /// inside [`bounding_box`](Self::bounding_box).
     #[inline]
     pub fn transform(&self) -> &Mat4 {
         &self.transform

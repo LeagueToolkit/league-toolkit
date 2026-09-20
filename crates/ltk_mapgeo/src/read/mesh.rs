@@ -76,9 +76,10 @@ impl EnvironmentMesh {
             false
         };
 
-        // Read bounding box and transform
+        // Read bounding box and transform. The file stores the matrix's columns in order,
+        // which is glam's own storage order — translation sits in floats 12 to 14.
         let bounding_box = reader.read_aabb::<LE>()?;
-        let transform = reader.read_mat4_row_major::<LE>()?;
+        let transform = reader.read_mat4_col_major::<LE>()?;
 
         // Read quality filter
         let quality = EnvironmentQuality::from_bits_truncate(reader.read_u8()?);
