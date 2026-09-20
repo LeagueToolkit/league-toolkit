@@ -86,8 +86,21 @@ pub trait WriterExt: Write {
         }
         Ok(())
     }
+    /// Writes a 4x4 matrix as its 16 floats in row order.
+    ///
+    /// The inverse of [`ReaderExt::read_mat4_row_major`](crate::ReaderExt::read_mat4_row_major).
     fn write_mat4_row_major<E: ByteOrder>(&mut self, mat: Mat4) -> io::Result<()> {
         for i in mat.transpose().to_cols_array() {
+            self.write_f32::<E>(i)?;
+        }
+        Ok(())
+    }
+
+    /// Writes a 4x4 matrix as its 16 floats in column order.
+    ///
+    /// The inverse of [`ReaderExt::read_mat4_col_major`](crate::ReaderExt::read_mat4_col_major).
+    fn write_mat4_col_major<E: ByteOrder>(&mut self, mat: Mat4) -> io::Result<()> {
+        for i in mat.to_cols_array() {
             self.write_f32::<E>(i)?;
         }
         Ok(())

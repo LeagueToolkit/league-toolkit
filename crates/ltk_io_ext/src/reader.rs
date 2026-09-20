@@ -97,6 +97,10 @@ pub trait ReaderExt: Read {
         ]))
     }
 
+    /// Reads a 4x4 matrix whose 16 floats are its rows in order.
+    ///
+    /// A transform stored this way carries its translation in floats 3, 7 and 11. The
+    /// returned [`Mat4`] holds those three in `w_axis`.
     fn read_mat4_row_major<T: ByteOrder>(&mut self) -> io::Result<Mat4> {
         Ok(Mat4::from_cols(
             self.read_vec4::<T>()?,
@@ -105,6 +109,19 @@ pub trait ReaderExt: Read {
             self.read_vec4::<T>()?,
         )
         .transpose())
+    }
+
+    /// Reads a 4x4 matrix whose 16 floats are its columns in order.
+    ///
+    /// This is [`Mat4`]'s own storage order. A transform stored this way carries its
+    /// translation in floats 12, 13 and 14.
+    fn read_mat4_col_major<T: ByteOrder>(&mut self) -> io::Result<Mat4> {
+        Ok(Mat4::from_cols(
+            self.read_vec4::<T>()?,
+            self.read_vec4::<T>()?,
+            self.read_vec4::<T>()?,
+            self.read_vec4::<T>()?,
+        ))
     }
 
     fn read_aabb<T: ByteOrder>(&mut self) -> io::Result<AABB> {
@@ -120,3 +137,61 @@ pub trait ReaderExt: Read {
 }
 
 impl<R: Read + ?Sized> ReaderExt for R {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use byteorder::LE;
+
+    /// The 16 floats of a translation by (10, 20, 30), laid out column by column.
+    fn translation_col_major() -> Vec<u8> {
+        let mut floats = [0.0f32; 16];
+        floats[0] = 1.0;
+        floats[5] = 1.0;
+        floats[10] = 1.0;
+        floats[15] = 1.0;
+        floats[12] = 10.0;
+        floats[13] = 20.0;
+        floats[14] = 30.0;
+        floats.iter().flat_map(|f| f.to_le_bytes()).collect()
+    }
+
+    #[test]
+    fn column_major_read_puts_translation_in_w_axis() {
+        let bytes = translation_col_major();
+        let mat = (&mut bytes.as_slice()).read_mat4_col_major::<LE>().unwrap();
+
+        assert_eq!(mat.w_axis, glam::vec4(10.0, 20.0, 30.0, 1.0));
+        assert_eq!(
+            mat.transform_point3(Vec3::ZERO),
+            Vec3::new(10.0, 20.0, 30.0)
+        );
+    }
+
+    #[test]
+    fn row_major_read_is_the_transpose_of_the_column_major_read() {
+        let bytes = translation_col_major();
+        let row = (&mut bytes.as_slice()).read_mat4_row_major::<LE>().unwrap();
+        let col = (&mut bytes.as_slice()).read_mat4_col_major::<LE>().unwrap();
+
+        assert_eq!(row, col.transpose());
+        // The same bytes read row major put the translation in the last row, where a
+        // transform consumer does not look for it.
+        assert_eq!(row.w_axis, glam::vec4(0.0, 0.0, 0.0, 1.0));
+    }
+
+    #[test]
+    fn column_major_write_round_trips() {
+        use crate::WriterExt;
+
+        let mat = Mat4::from_translation(Vec3::new(10.0, 20.0, 30.0));
+        let mut bytes = Vec::new();
+        bytes.write_mat4_col_major::<LE>(mat).unwrap();
+
+        assert_eq!(bytes, translation_col_major());
+        assert_eq!(
+            (&mut bytes.as_slice()).read_mat4_col_major::<LE>().unwrap(),
+            mat
+        );
+    }
+}
