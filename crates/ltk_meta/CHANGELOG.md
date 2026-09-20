@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.5](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_meta-v0.8.4...ltk_meta-v0.8.5) - 2026-09-20
+
+### Added
+
+- *(ltk_meta)* declaration on tree values
+- *(ltk_meta)* display map keys and value segments
+- *(ltk_meta)* diff bins into a patch
+- *(ltk_meta)* merge bins
+- *(ltk_meta)* value path
+- *(ltk_meta)* expose borrowed walk values
+- *(ltk_meta)* delta write-back
+- *(ltk_meta)* mutable walk
+- *(ltk_meta)* non-exhaustive Leaf
+- *(ltk_meta)* value walk
+
+### Fixed
+
+- *(ltk_meta)* diff repeated and shadowed keys as merge does
+- *(ltk_meta)* check item and key kinds in the layout core
+- *(ltk_meta)* defer leaves and enforce output format
+
+### Other
+
+- *(ltk_meta)* rename unnameable paths to nameless
+- *(ltk_meta)* specify value declaration
+- *(ltk_meta)* node to_value_path
+- *(ltk_meta)* specify merge and diff
+- *(ltk_meta)* diff shipped patches back in corpus
+- *(ltk_meta)* value path pop, matrix and overflow cases
+- *(ltk_meta)* rename trail steps to segments
+- *(ltk_meta)* simplify walk documentation
+- *(ltk_meta)* rename node property lookup to get
+- *(ltk_meta)* rename walk tree surface
+- *(ltk_meta)* defer every walk view value
+- *(ltk_meta)* rename walk handles to Ref and RefMut
+- *(ltk_meta)* walk examples
+- *(ltk_meta)* node predicates under walk
+
 ## [0.8.4](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_meta-v0.8.3...ltk_meta-v0.8.4) - 2026-09-20
 
 ### Other
