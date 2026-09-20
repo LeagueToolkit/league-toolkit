@@ -1,4 +1,4 @@
-//! The tree the walk sees: two sealed traits, a child segment, and a decoded leaf.
+//! The tree the walk sees: two sealed traits, a declaration, a child segment, and a decoded leaf.
 
 use std::fmt;
 
@@ -6,7 +6,7 @@ use glam::{Mat4, Vec2, Vec3, Vec4};
 use ltk_hash::{BinHash, WadHash};
 use ltk_primitives::Color;
 
-use crate::{property::values, property::Kind, Error, PropertyValueEnum};
+use crate::{path::MapKey, property::values, property::Kind, Error, PropertyValueEnum};
 
 pub(crate) mod sealed {
     pub trait Sealed {}
@@ -59,16 +59,35 @@ pub trait TreeValue<'a>: Copy + sealed::Sealed {
     /// The kind this value is.
     fn kind(&self) -> Kind;
 
+    /// What this value's header declares: its kind, item and key kinds, class and count.
+    ///
+    /// Over a view, a leaf is not read and a complex value's contents are not decoded. A
+    /// container's items, a map's entries and a node's properties stay unread.
+    ///
+    /// # Errors
+    ///
+    /// Over a view, a header that does not decode: a truncated header, a kind byte that is no
+    /// kind, [`Error::InvalidNesting`] for a container item kind, or [`Error::InvalidKeyType`] for
+    /// a key kind no map is keyed by. The owned tree never fails.
+    fn declaration(&self) -> Result<Declaration, Error>;
+
     /// Whether this value is a node or can contain one.
     ///
     /// True for a `Struct` or `Embedded` whose class hash is not 0, and for a container,
     /// optional or map whose item kind [`TreeKind::is_node`]. An empty optional or container
-    /// of a node kind answers true. Entering it costs nothing.
+    /// of a node kind answers true. Entering it costs nothing. The answer is read off
+    /// [`TreeValue::declaration`].
     ///
     /// # Errors
     ///
-    /// Over a view, a header that does not decode. The owned tree never fails.
-    fn can_contain_node(&self) -> Result<bool, Error>;
+    /// Those of [`TreeValue::declaration`]. The owned tree never fails.
+    fn can_contain_node(&self) -> Result<bool, Error> {
+        let declaration = self.declaration()?;
+        Ok(match declaration.class {
+            Some(class) => *class != 0,
+            None => declaration.item_kind.is_some_and(TreeKind::is_node),
+        })
+    }
 
     /// This value as a node, if it is a `Struct` or `Embedded` with a class hash that is not 0.
     ///
@@ -91,6 +110,18 @@ pub trait TreeValue<'a>: Copy + sealed::Sealed {
     ///
     /// Over a view, a leaf that does not decode. The owned tree never fails.
     fn as_leaf(&self) -> Result<Option<Leaf<'a>>, Error>;
+
+    /// This value as a map key. Every kind [`Kind::is_valid_map_key`] admits converts.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidKeyType`] for a kind no map is keyed by. Over a view, a leaf that does not
+    /// decode.
+    fn map_key(&self) -> Result<MapKey, Error> {
+        self.as_leaf()?
+            .and_then(MapKey::from_leaf)
+            .ok_or(Error::InvalidKeyType(self.kind()))
+    }
 
     /// The whole value, owned. Allocates. A visitor reaches for it for a subtree, not for a
     /// leaf.
@@ -139,6 +170,57 @@ pub trait TreeNode<'a>: Copy + sealed::Sealed {
     /// Over a view, whatever the eager reader raises for the same bytes. The owned tree never
     /// fails.
     fn to_struct(&self) -> Result<values::Struct, Error>;
+}
+
+/// What a value's header declares: its kind, item and key kinds, class and count.
+///
+/// [`TreeValue::declaration`] returns one over either tree. Each field is `None` for a kind
+/// that declares nothing of it. A pointer's class is recorded, 0 for the null pointer.
+/// [`ValueShape`] converts from a declaration and leaves a pointer's class and the count out.
+///
+/// Non-exhaustive: built by the crate and read by field.
+///
+/// # Examples
+///
+/// ```
+/// use ltk_meta::{property::{values, Kind}, walk::TreeValue, PropertyValueEnum};
+///
+/// let empty: PropertyValueEnum = values::Optional::empty(Kind::String)?.into();
+/// let declaration = (&empty).declaration()?;
+///
+/// assert_eq!(declaration.kind, Kind::Optional);
+/// assert_eq!(declaration.item_kind, Some(Kind::String));
+/// assert_eq!(declaration.count, Some(0));
+/// # Ok::<(), ltk_meta::Error>(())
+/// ```
+///
+/// [`ValueShape`]: crate::path::ValueShape
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub struct Declaration {
+    /// The kind of the value.
+    pub kind: Kind,
+    /// For a container or an optional the item kind, for a map the value kind.
+    pub item_kind: Option<Kind>,
+    /// For a map the key kind.
+    pub key_kind: Option<Kind>,
+    /// For a `Struct` or an `Embedded` the class it carries. 0 is the null pointer.
+    pub class: Option<BinHash>,
+    /// For a container or a map the number of items it holds, and for an optional 0 or 1.
+    pub count: Option<usize>,
+}
+
+impl Declaration {
+    /// A value of `kind` declaring nothing else: the declaration of a leaf.
+    pub(crate) const fn bare(kind: Kind) -> Self {
+        Self {
+            kind,
+            item_kind: None,
+            key_kind: None,
+            class: None,
+            count: None,
+        }
+    }
 }
 
 /// The segment from a container, optional or map to one value inside it.
@@ -233,7 +315,7 @@ impl Leaf<'_> {
         }
     }
 
-    /// Writes this leaf as the text inside a `{key}` step of the hash form.
+    /// Writes this leaf as the text inside a `{key}` segment of the hash form.
     ///
     /// An integer in decimal, a bool as `true` or `false`, a float in its shortest
     /// round-trip form, a string as a JSON string, a hash as lowercase zero-padded hex, a

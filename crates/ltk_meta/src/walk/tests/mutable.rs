@@ -1,7 +1,7 @@
 //! The mutable walk of `value-walk.md` section 5.3: edits land where the callbacks leave them.
 
 use super::*;
-use crate::walk::TrailStep;
+use crate::walk::TrailSegment;
 
 /// Records the node trails a mutable walk visits, and runs `edit` at every callback first.
 struct Editor<F> {
@@ -194,7 +194,7 @@ impl VisitorMut for CapacitiesMut {
     fn enter_node(&mut self, node: &mut NodeRefMut<'_>) -> Result<Visit, Error> {
         let trail = node.trail();
         self.0
-            .push((trail.steps.capacity(), trail.classes.capacity()));
+            .push((trail.segments.capacity(), trail.classes.capacity()));
         Ok(Visit::Continue)
     }
 }
@@ -230,7 +230,7 @@ fn a_mutable_walk_over_ten_thousand_entries_grows_the_trail_once() {
 
 #[test]
 fn a_key_in_the_trail_reads_as_the_trees_own_key() {
-    /// The decoded key of the last step at every node below a map.
+    /// The decoded key of the last segment at every node below a map.
     #[derive(Default)]
     struct Keys(Vec<String>);
 
@@ -238,7 +238,7 @@ fn a_key_in_the_trail_reads_as_the_trees_own_key() {
         type Error = Error;
 
         fn enter_node(&mut self, node: &mut NodeRefMut<'_>) -> Result<Visit, Error> {
-            if let Some(TrailStep::Key(key)) = node.trail().steps().last() {
+            if let Some(TrailSegment::Key(key)) = node.trail().segments().last() {
                 // The key stays readable while the node's own properties are edited.
                 node.properties_mut().clear();
                 self.0.push(format!("{:?}", key.as_leaf()?));

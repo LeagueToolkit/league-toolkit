@@ -8,6 +8,7 @@ use ltk_hash::{BinHash, Hash as _, WadHash};
 use crate::{
     path::{KeyLiteral, PropertyPath, Segment, Subscript},
     property::{values, Kind},
+    walk::{self, Declaration},
     Bin, BinObject, PropertyValueEnum, ValueSlot,
 };
 
@@ -52,28 +53,10 @@ pub struct ValueShape {
 }
 
 impl ValueShape {
-    /// The shape of `value`.
+    /// The shape of `value`: its [`Declaration`], converted.
     #[must_use]
     pub fn of(value: &PropertyValueEnum) -> Self {
-        use PropertyValueEnum as V;
-
-        let (item_kind, key_kind, class) = match value {
-            V::Container(list) => (Some(list.item_kind()), None, None),
-            V::UnorderedContainer(values::UnorderedContainer(list)) => {
-                (Some(list.item_kind()), None, None)
-            }
-            V::Optional(option) => (Some(option.item_kind()), None, None),
-            V::Map(map) => (Some(map.value_kind()), Some(map.key_kind()), None),
-            V::Embedded(values::Embedded(embed)) => (None, None, Some(embed.class_hash)),
-            _ => (None, None, None),
-        };
-
-        Self {
-            kind: value.kind(),
-            item_kind,
-            key_kind,
-            class,
-        }
+        walk::owned::declaration(value).into()
     }
 
     /// Whether the type rule accepts a value of shape `other` where this shape is expected.
@@ -86,6 +69,38 @@ impl ValueShape {
     #[inline]
     pub fn matches(&self, other: &Self) -> bool {
         self == other
+    }
+}
+
+/// The part of a declaration the type rule compares. The count is left out, and so is a
+/// pointer's class; an embed's class is kept.
+///
+/// # Examples
+///
+/// ```
+/// use ltk_meta::{path::ValueShape, property::values, walk::TreeValue, PropertyValueEnum};
+///
+/// let pointer: PropertyValueEnum = values::Struct {
+///     class_hash: 0xC1A5_0001u32.into(),
+///     properties: Default::default(),
+/// }
+/// .into();
+/// let declaration = (&pointer).declaration()?;
+///
+/// assert_eq!(declaration.class, Some(0xC1A5_0001u32.into()));
+/// assert_eq!(ValueShape::from(declaration).class, None);
+/// # Ok::<(), ltk_meta::Error>(())
+/// ```
+impl From<Declaration> for ValueShape {
+    fn from(declaration: Declaration) -> Self {
+        Self {
+            kind: declaration.kind,
+            item_kind: declaration.item_kind,
+            key_kind: declaration.key_kind,
+            class: declaration
+                .class
+                .filter(|_| declaration.kind == Kind::Embedded),
+        }
     }
 }
 

@@ -5,7 +5,7 @@ use std::fmt;
 use ltk_hash::BinHash;
 
 use super::{
-    tree::{sealed::Sealed, ChildSegment, Leaf, TreeKind as _, TreeNode, TreeValue},
+    tree::{sealed::Sealed, ChildSegment, Declaration, Leaf, TreeKind as _, TreeNode, TreeValue},
     Error,
 };
 use crate::{
@@ -229,17 +229,31 @@ impl<'a> TreeValue<'a> for RawValue<'a> {
         self.kind
     }
 
-    fn can_contain_node(&self) -> Result<bool, Error> {
-        if !self.kind().is_node() && !self.kind().is_container() {
-            return Ok(false);
+    fn declaration(&self) -> Result<Declaration, Error> {
+        let mut declaration = Declaration::bare(self.kind());
+        if !declaration.kind.is_node() && !declaration.kind.is_container() {
+            return Ok(declaration);
         }
-        Ok(match self.value_view()? {
-            ValueView::Struct(s) | ValueView::Embedded(s) => *s.class_hash() != 0,
-            ValueView::Container(c) | ValueView::UnorderedContainer(c) => c.item_kind().is_node(),
-            ValueView::Optional(o) => o.item_kind().is_node(),
-            ValueView::Map(m) => m.value_kind().is_node(),
-            _ => false,
-        })
+        match self.value_view()? {
+            ValueView::Struct(node) | ValueView::Embedded(node) => {
+                declaration.class = Some(node.class_hash());
+            }
+            ValueView::Container(items) | ValueView::UnorderedContainer(items) => {
+                declaration.item_kind = Some(items.item_kind());
+                declaration.count = Some(items.len() as usize);
+            }
+            ValueView::Optional(option) => {
+                declaration.item_kind = Some(option.item_kind());
+                declaration.count = Some(usize::from(option.is_some()));
+            }
+            ValueView::Map(map) => {
+                declaration.item_kind = Some(map.value_kind());
+                declaration.key_kind = Some(map.key_kind());
+                declaration.count = Some(map.len() as usize);
+            }
+            _ => {}
+        }
+        Ok(declaration)
     }
 
     fn as_node(&self) -> Result<Option<Self::Node>, Error> {

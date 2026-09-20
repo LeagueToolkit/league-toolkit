@@ -210,6 +210,18 @@ impl HashProvider for HashMapProvider {
     }
 }
 
+/// Names a [`ValuePath`](ltk_meta::path::ValuePath) from the field and hash tables. The field
+/// table is keyed by field alone and ignores the class.
+impl ltk_meta::path::FieldNames for HashMapProvider {
+    fn field(&self, field: BinHash, _class: Option<BinHash>) -> Option<Cow<'_, str>> {
+        self.lookup_field(field)
+    }
+
+    fn hash(&self, hash: BinHash) -> Option<Cow<'_, str>> {
+        self.lookup_hash(hash)
+    }
+}
+
 impl<T: HashProvider + ?Sized> HashProvider for &T {
     fn lookup_entry(&self, hash: BinHash) -> Option<Cow<'_, str>> {
         (*self).lookup_entry(hash)
@@ -299,5 +311,27 @@ mod tests {
 
         // Unknown hashes return None
         assert_eq!(provider.lookup_entry(0x11111111.into()), None);
+    }
+
+    #[test]
+    fn a_hash_map_provider_names_the_fields_and_hash_keys_of_a_value_path() {
+        use ltk_hash::Hash as _;
+        use ltk_meta::path::{MapKey, ValuePath, ValueSegment};
+
+        let lookup = BinHash::hash_str("Lookup");
+        let weapon = BinHash::hash_str("Weapon");
+        let mut provider = HashMapProvider::new();
+        provider.insert_field(lookup, "Lookup");
+        provider.insert_hash(weapon, "Weapon");
+
+        let mut path = ValuePath::new();
+        path.push_field(lookup, BinHash(0xc1a5_0001));
+        path.push(ValueSegment::Key(MapKey::Hash(weapon)));
+
+        assert_eq!(path.to_named(&provider).text, r#"Lookup{"Weapon"}"#);
+        assert_eq!(
+            path.to_property_path(&provider).unwrap().as_str(),
+            format!("Lookup{{{}}}", weapon.0)
+        );
     }
 }

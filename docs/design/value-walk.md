@@ -11,10 +11,8 @@ is the bug and gets edited. Two things it does not hold:
 - **Why this exists, who asks for it, and what it must do** -
   `docs/prd/001-ptch-property-patches.md` (FR-7, FR-8, FR-12, FR-13, FR-15), cited here as FR-N.
 - **Why an option was chosen over the alternatives it beat** - ADR-0005, ADR-0012, ADR-0013,
-  ADR-0014 and ADR-0015, cited from the rules in [section 8](#s8).
+  ADR-0014, ADR-0015 and ADR-0020, cited from the rules in [section 8](#s8).
 
-`ValuePath`, `MapKey`, `FieldNames` and the three methods that produce them -
-`TreeValue::map_key`, `Trail::to_value_path`, `Node::value_path` - are #219.
 The mutable walk of [section 5.3](#s5.3) is #237.
 
 ## <a id="s1"></a>1. Summary
@@ -85,15 +83,18 @@ Every term this document uses in a specific sense.
   mutable walk is a `VisitorMut`; a visitor of the read-only walk is a `Visitor`.
 - **kind pin** - the kind a container, optional or map declares for every item it holds. A
   property of a node carries no pin.
+- **declaration** - what a value's header declares: its kind, its kind pins, the class of a
+  `Struct` or `Embedded`, and how many items a container, optional or map holds. Over a view it is
+  read from the header, and nothing below the header is read. `Declaration` holds one.
 
 **Addresses**
 
-- **step** - one move from a node toward a position inside it: a field, an index or a map key.
-  A step carries no class; the class of each node a path passes through is the path's **class
-  context**, kept beside the steps (ADR-0012).
-- **trail** - the walk's own record of the steps from the root object to its current position.
-  It borrows the tree, allocates nothing per step, and is what a visitor renders an address from.
-- **`ValuePath`** - the owned address: the trail's steps, with map keys decoded into `MapKey`.
+- **segment** - one move from a node toward a position inside it: a field, an index or a map key.
+  A segment carries no class; the class of each node a path passes through is the path's **class
+  context**, kept beside the segments (ADR-0012).
+- **trail** - the walk's own record of the segments from the root object to its current position.
+  It borrows the tree, allocates nothing per segment, and is what a visitor renders an address from.
+- **`ValuePath`** - the owned address: the trail's segments, with map keys decoded into `MapKey`.
   Addresses a position *inside one object*; the object's hash is carried beside it, never in it
   (D13 in `ptch-property-patches.md` [section 17](ptch-property-patches.md#s17)).
 - **hash form** - a `ValuePath` rendered with every field hash as eight hex digits. Stable across
@@ -132,7 +133,18 @@ pub trait TreeValue<'a>: Copy + sealed::Sealed {
 
     fn kind(&self) -> Kind;
 
-    /// Whether this value is a node or can contain one.
+    /// What this value's header declares: its kind, item and key kinds, class and count.
+    /// Over a view, a leaf is not read, and a container's items, a map's entries and a node's
+    /// properties stay unread.
+    ///
+    /// # Errors
+    ///
+    /// Over a view, a header that does not decode: a truncated header, a kind byte that is no
+    /// kind, `Error::InvalidNesting` for a container item kind, or `Error::InvalidKeyType` for a
+    /// key kind no map is keyed by. The owned tree never fails.
+    fn declaration(&self) -> Result<Declaration, Error>;
+
+    /// Whether this value is a node or can contain one, read off `declaration`.
     ///
     /// True for a `Struct` or `Embedded` whose class hash is not 0, and for a container,
     /// optional or map whose item kind [`TreeKind::is_node`]. An empty optional or container
@@ -140,8 +152,8 @@ pub trait TreeValue<'a>: Copy + sealed::Sealed {
     ///
     /// # Errors
     ///
-    /// Over a view, a header that does not decode. The owned tree never fails.
-    fn can_contain_node(&self) -> Result<bool, Error>;
+    /// Those of `declaration`. The owned tree never fails.
+    fn can_contain_node(&self) -> Result<bool, Error> { /* provided */ }
 
     /// This value as a node, if it is a `Struct` or `Embedded` with a class hash that is not 0.
     fn as_node(&self) -> Result<Option<Self::Node>, Error>;
@@ -184,6 +196,26 @@ pub trait TreeNode<'a>: Copy + sealed::Sealed {
     /// for a root, the object's path hash is `Node::object_hash`.
     fn to_struct(&self) -> Result<values::Struct, Error>;
 }
+
+/// What a value's header declares. Each field is `None` for a kind that declares nothing of it.
+/// Non-exhaustive: built by the crate and read by field.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub struct Declaration {
+    pub kind: Kind,
+    /// For a container or an optional the item kind, for a map the value kind.
+    pub item_kind: Option<Kind>,
+    /// For a map the key kind.
+    pub key_kind: Option<Kind>,
+    /// For a `Struct` or an `Embedded` the class it carries. 0 is the null pointer.
+    pub class: Option<BinHash>,
+    /// For a container or a map the number of items it holds, and for an optional 0 or 1.
+    pub count: Option<usize>,
+}
+
+/// The part of a declaration the patch type rule compares: every field but the count, and the
+/// class of an `Embedded` only (ADR-0003).
+impl From<Declaration> for ValueShape {}
 
 /// The segment from a container, optional or map to one value inside it.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -278,17 +310,19 @@ under either.
 client does (W19): a visitor reads a texture path as `Leaf::File`, whatever `Kind` calls it.
 
 `RawValue` is a kind and the bytes the value is written in, whatever position it holds: a
-property, a container item, a map key or a map value. `kind()` reads nothing. `can_contain_node()`,
-`as_node()` and `children()` read headers and no payload. `as_leaf()` decodes that one value, and
-`to_value()` reads the whole subtree through the reader an owned read uses. A child iterator
-yields the bytes of each value and decodes none of them. A malformed item is reached, and it
-fails where it is read. The deferral is [ADR-0017](../adr/0017-deferred-walk-values.md).
+property, a container item, a map key or a map value. `kind()` reads nothing. `declaration()`,
+`can_contain_node()`, `as_node()` and `children()` read headers and no payload. `as_leaf()`
+decodes that one value, and `to_value()` reads the whole subtree through the reader an owned
+read uses. A child iterator yields the bytes of each value and decodes none of them. A malformed
+item is reached, and it fails where it is read. The deferral is
+[ADR-0017](../adr/0017-deferred-walk-values.md).
 
-`RawValue::value_view()` exposes the borrowed streaming enum without allocating. Container
-item kinds, map key and value kinds, counts and null class hashes are available through its
-variants. Requesting a leaf view decodes that leaf. Complex contents decode only through
-subsequent view access. The access choice is
-[ADR-0018](../adr/0018-borrowed-walk-value-access.md).
+`TreeValue::declaration()` answers item kinds, map key and value kinds, counts and classes over
+either tree, a null pointer's class 0 included. The owned tree and `ValueShape::of` read the same
+declaration. The choice is [ADR-0020](../adr/0020-declaration-on-tree-values.md).
+
+`RawValue::value_view()` exposes the borrowed streaming enum without allocating. Requesting a
+leaf view decodes that leaf. Complex contents decode only through subsequent view access.
 
 ## <a id="s4"></a>4. `ValuePath`
 
@@ -308,22 +342,22 @@ a patch record carries and the client resolves; `ValuePath` is the reporting lan
 /// whose plaintext is unknown - and never written to a file. The object it is inside is
 /// carried beside it, never in it.
 ///
-/// Beside the steps it keeps the **class context**: for each `Field` step, the class hash of
+/// Beside the segments it keeps the **class context**: for each `Field` segment, the class hash of
 /// the node the field was read on, which is what a name table is asked with (ADR-0012). A
 /// class of 0 means unknown - no node carries the null class (W2), so the value is free. The
-/// context is not part of the address: two paths with the same steps are equal whatever
+/// context is not part of the address: two paths with the same segments are equal whatever
 /// their classes, and the hash form does not print them.
 ///
-/// `PartialEq`, `Eq` and `Hash` are written by hand over the steps alone (W16).
+/// `PartialEq`, `Eq` and `Hash` are written by hand over the segments alone (W16).
 #[derive(Clone, Debug, Default)]
-pub struct ValuePath { /* steps: Vec<Step>, classes: Vec<BinHash>, one per Field step */ }
-impl PartialEq for ValuePath { /* steps only */ }
+pub struct ValuePath { /* segments: Vec<ValueSegment>, classes: Vec<BinHash>, one per Field segment */ }
+impl PartialEq for ValuePath { /* segments only */ }
 impl Eq for ValuePath {}
-impl Hash for ValuePath { /* steps only */ }
+impl Hash for ValuePath { /* segments only */ }
 
-/// One step from a node toward a position inside it.
+/// One segment from a node toward a position inside it.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Step {
+pub enum ValueSegment {
     /// A property of a node, by the field's name hash.
     Field(BinHash),
     /// A container element by position, or the value of a present optional, which is always 0.
@@ -331,6 +365,9 @@ pub enum Step {
     /// A map entry, by its key.
     Key(MapKey),
 }
+/// The segment in the hash form: `1e6ba0c4`, `[3]`, `{"weapon"}`. A path writes `.` before a
+/// field that follows another segment.
+impl fmt::Display for ValueSegment {}
 
 /// A map key, owned and metadata-free: every kind `Kind::is_valid_map_key` admits.
 ///
@@ -345,16 +382,18 @@ pub enum MapKey {
     F32(FloatBits),
     Vector2([FloatBits; 2]), Vector3([FloatBits; 3]), Vector4([FloatBits; 4]),
     Matrix44([FloatBits; 16]),
-    Color(Color),
+    Color(Color<u8>),
     String(String),
     Hash(BinHash),
     File(WadHash),
 }
 
-/// An `f32` by its bits: `Eq` and `Hash`, and equal exactly when the wire bytes are.
+/// An `f32` by its bits: `Eq` and `Hash`, and equal exactly when the wire bytes are. A `NaN`
+/// equals itself when the bits agree, and `-0.0` differs from `0.0`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct FloatBits(u32);
 impl FloatBits { pub fn new(value: f32) -> Self; pub fn get(self) -> f32; }
+impl From<f32> for FloatBits {}
 
 impl MapKey {
     pub fn kind(&self) -> Kind;
@@ -363,24 +402,26 @@ impl MapKey {
     pub fn to_value(&self) -> PropertyValueEnum;
 }
 impl TryFrom<&PropertyValueEnum> for MapKey { type Error = Error; /* InvalidKeyType */ }
+/// The text inside a `{key}` segment of the hash form: `"weapon"`, `1e6ba0c4`, `(1, 2)`.
+impl fmt::Display for MapKey {}
 
 impl ValuePath {
     pub fn new() -> Self;
-    pub fn steps(&self) -> &[Step];
+    pub fn segments(&self) -> &[ValueSegment];
     pub fn len(&self) -> usize;
     pub fn is_empty(&self) -> bool;
 
-    /// Appends a field step, recording `class` - the class hash of the node `field` is on -
+    /// Appends a field segment, recording `class` - the class hash of the node `field` is on -
     /// in the class context. Pass 0 when it is not known.
     pub fn push_field(&mut self, field: BinHash, class: BinHash);
     pub fn push_index(&mut self, index: usize);
     pub fn push_key(&mut self, key: MapKey);
-    /// Appends `step` with no class: a `Field` records 0.
-    pub fn push(&mut self, step: Step);
-    /// Removes the last step, and its class if it was a field.
-    pub fn pop(&mut self) -> Option<Step>;
+    /// Appends `segment` with no class: a `Field` records 0.
+    pub fn push(&mut self, segment: ValueSegment);
+    /// Removes the last segment, and its class if it was a field.
+    pub fn pop(&mut self) -> Option<ValueSegment>;
 
-    /// Every field step with its class, in order; `None` where the class is unknown.
+    /// Every field segment with its class, in order; `None` where the class is unknown.
     pub fn fields(&self) -> Fields<'_>;
 
     /// The client path naming the same position, if every field has a name and every key a
@@ -388,24 +429,24 @@ impl ValuePath {
     ///
     /// # Errors
     ///
-    /// [`Unnameable`] at the first step that cannot be spelled: a field `names` has no plaintext
-    /// for, or a key whose kind has no `{...}` literal.
-    pub fn to_property_path(&self, names: &dyn FieldNames) -> Result<PropertyPath, Unnameable>;
+    /// [`Nameless`] at the first segment that cannot be spelled: a field `names` has no usable
+    /// plaintext for, a key with no `{...}` literal, or segments that spell no property path.
+    pub fn to_property_path(&self, names: &dyn FieldNames) -> Result<PropertyPath, Nameless>;
 
     /// The path for reading: every hash `names` can spell, spelled; the rest left as hex.
     pub fn to_named(&self, names: &dyn FieldNames) -> NamedPath;
 }
 
 impl fmt::Display for ValuePath { /* the hash form, section 4.2 */ }
-/// Steps only; every field's class is unknown.
-impl FromIterator<Step> for ValuePath {}
-impl Extend<Step> for ValuePath {}
+/// Segments only; every field's class is unknown.
+impl FromIterator<ValueSegment> for ValuePath {}
+impl Extend<ValueSegment> for ValuePath {}
 /// The iterator behind [`ValuePath::fields`]: `(field, class)` pairs.
 #[derive(Clone, Debug)]
 pub struct Fields<'a> { /* ... */ }
 impl Iterator for Fields<'_> { type Item = (BinHash, Option<BinHash>); }
-impl<'a> IntoIterator for &'a ValuePath { type Item = &'a Step; /* ... */ }
-impl IntoIterator for ValuePath { type Item = Step; /* ... */ }
+impl<'a> IntoIterator for &'a ValuePath { type Item = &'a ValueSegment; /* ... */ }
+impl IntoIterator for ValuePath { type Item = ValueSegment; /* ... */ }
 
 /// A best-effort readable rendering of a [`ValuePath`].
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -428,48 +469,58 @@ impl NamedPath {
 impl fmt::Display for NamedPath { /* `text` */ }
 
 /// A position `to_property_path` could not spell.
-#[derive(Debug, Clone, PartialEq, thiserror::Error)]
-#[error("{kind} (step {step})")]
-pub struct Unnameable {
-    /// Index into `ValuePath::steps` of the first step that could not be spelled.
-    pub step: usize,
-    pub kind: UnnameableKind,
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("{kind} (segment {segment})")]
+pub struct Nameless {
+    /// Index into `ValuePath::segments` of the first segment that could not be spelled. 0 for a
+    /// path with no segments.
+    pub segment: usize,
+    pub kind: NamelessKind,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
-pub enum UnnameableKind {
-    /// `names` has no plaintext for `field`; `class` is the context it was asked with.
+pub enum NamelessKind {
+    /// `names` has no plaintext for `field` that is a property name hashing back to it; `class`
+    /// is the context it was asked with.
     Field { field: BinHash, class: Option<BinHash> },
-    /// A map key of a kind the path grammar has no literal for.
+    /// A map key of a kind the path grammar has no literal for, or an `F32` key that is `NaN` or
+    /// an infinity.
     Key(Kind),
+    /// The segments spell no property path: none at all, a subscript first, a subscript after a
+    /// subscript, an index past `u32::MAX`, or text past `PropertyPath::MAX_LEN`.
+    Path(PropertyPathError),
 }
 ```
 
-`Unnameable` follows D30 of `ptch-property-patches.md`: a struct carrying a position and a public
-kind. The first unspellable step is reported, not the last, because a caller that wants to lift a
-record to the nearest nameable ancestor (`Lift::Unnameable`, `ptch-property-patches.md`
-[section 12](ptch-property-patches.md#s12)) needs the first.
+`Nameless` follows D30 of `ptch-property-patches.md`: a struct carrying a position and a public
+kind. It reports the first unspellable segment, not the last. Every prefix of the path shorter than
+that segment spells, and a diff writes a lifted record at the longest such prefix (`Lift::Nameless`,
+`ptch-property-patches.md` [section 12](ptch-property-patches.md#s12)).
+
+A path from a walk begins with a field and never holds two subscripts in a row. Over a tree,
+`to_property_path` answers `Field` or `Key` only.
 
 ### <a id="s4.2"></a>4.2 Rendering
 
 Both text forms share one grammar, which is the `PropertyPath` grammar of
 `ptch-property-patches.md` [section 8.1](ptch-property-patches.md#s8.1) with hex where a name
 is not known: `.` between fields, `[i]` for an index, `{key}` for a map entry, and the class of a
-field step nowhere in the text. A `ValuePath` with no steps renders as the empty string.
+field segment nowhere in the text. A `ValuePath` with no segments renders as the empty string.
 
-| step                            | hash form           | named form, when the table spells it | `to_property_path`                 |
+| segment                            | hash form           | named form, when the table spells it | `to_property_path`                 |
 | ------------------------------- | ------------------- | ------------------------------------ | ---------------------------------- |
-| `Field`                         | `1e6ba0c4`          | `Position`                           | `Position`; else `Unnameable`      |
+| `Field`                         | `1e6ba0c4`          | `Position`                           | `Position`; else `Nameless`         |
 | `Index(3)`                      | `[3]`               | `[3]`                                | `[3]`                              |
 | `Key` of an integer kind        | `{12}`              | `{12}`                               | `{12}`                             |
 | `Key` of `Bool` or `BitBool`    | `{true}`            | `{true}`                             | `{true}`                           |
 | `Key` of `F32`                  | `{1.5}`             | `{1.5}`                              | `{1.5}`                            |
+| `Key` of `F32`, `NaN` or infinite | `{NaN}`, `{inf}`  | `{NaN}`, `{inf}`                     | `Nameless`, `Key(Kind::F32)`        |
 | `Key` of `String`               | `{"weapon"}`        | `{"weapon"}`                         | `{"weapon"}`                       |
 | `Key` of `Hash`                 | `{1e6ba0c4}`        | `{"Weapon"}`, via `FieldNames::hash` | `{510369988}`, the raw value       |
 | `Key` of `WadChunkLink`         | `{00c9fd8f1a2b3c4d}` | `{00c9fd8f1a2b3c4d}`                | `{56855261380033613}`, the raw value |
-| `Key` of a vector, `Color`, `Matrix44` | `{(1, 2)}`   | `{(1, 2)}`                           | `Unnameable`, `Key(kind)`          |
-| `Key` of `None`                 | `{}`                | `{}`                                 | `Unnameable`, `Key(Kind::None)`    |
+| `Key` of a vector, `Color`, `Matrix44` | `{(1, 2)}`   | `{(1, 2)}`                           | `Nameless`, `Key(kind)`             |
+| `Key` of `None`                 | `{}`                | `{}`                                 | `Nameless`, `Key(Kind::None)`       |
 
 Hex is lowercase, zero-padded to the hash's width: eight digits for a `BinHash`, sixteen for a
 `WadHash`. A string key is written as a JSON string, escaped as `serde_json` would write it. An
@@ -486,7 +537,7 @@ attested, and the literal the client coerces is a number either way
 What that round trip attests is this crate's resolver, not the client's. The `{key}` literal is
 JSON by D10, inferred from `PropertyPath.hpp`; the reversing notes' worked example writes the
 bare text `PerAttachmentMaterial{weapon}`, no shipped record uses a `{key}` at all, and the two
-readings have not been settled in game. A path with a `Key` step is therefore **unattested** as
+readings have not been settled in game. A path with a `Key` segment is therefore **unattested** as
 a client path, and a tool that exports one should say so until D10 is tested (W18). Field-only
 paths and `[i]` subscripts are the forms every shipped record uses and carry no such caveat.
 
@@ -513,16 +564,24 @@ pub trait FieldNames {
 /// Names nothing: every hash renders as hex.
 impl FieldNames for () {}
 /// Keyed by field alone; `class` is ignored.
-impl FieldNames for HashMap<BinHash, String> {}
+impl<S: BuildHasher> FieldNames for HashMap<BinHash, String, S> {}
 /// Keyed by `(class, field)`.
-impl FieldNames for HashMap<(BinHash, BinHash), String> {}
+impl<S: BuildHasher> FieldNames for HashMap<(BinHash, BinHash), String, S> {}
 impl<T: FieldNames + ?Sized> FieldNames for &T {}
 ```
+
+`ltk_ritobin::hashes::HashMapProvider` answers `field` from its field table, ignoring `class`, and
+`hash` from its hash table.
+
+A rendering uses a name only when it is a property name - no `.`, `[`, `]`, `{`, `}`, `(`, `)` or
+control character - that hashes back to the field under `BinHash::hash_str`. A table answer that
+fails either test counts as no answer. The named form uses a `Hash`-kind key's plaintext only when
+it hashes back to the key.
 
 The `class` parameter exists because the tables a consumer holds are keyed by class:
 `lol-meta-classes` dumps one meta class at a time, and `ltk-manager`'s migration tables name a
 field by the class it is on. A name is looked up with the class the walk saw the field on, which
-is what the path's class context holds (ADR-0012). A path built without a tree - from steps
+is what the path's class context holds (ADR-0012). A path built without a tree - from segments
 alone - asks with `None`, and a field-keyed table still answers.
 
 The class in the context is the **concrete** class, as the file states it: the object's class
@@ -631,32 +690,32 @@ impl<'t, 'a, V: TreeValue<'a>> Node<'t, 'a, V> {
     pub fn is_root(&self) -> bool;
     /// The node's address, copied out of the trail. Allocates; call it for a node worth
     /// reporting on.
-    pub fn value_path(&self) -> Result<ValuePath, Error>;
+    pub fn to_value_path(&self) -> Result<ValuePath, Error>;
 }
 
-/// The steps from an object's root to the walk's position.
+/// The segments from an object's root to the walk's position.
 ///
 /// Borrows the tree. A map key is the tree's own value, never a copy. A descent through a map
 /// of ten thousand entries allocates nothing. Only `to_value_path` and `Display` make text.
 #[derive(Debug)]
-pub struct Trail<V> { /* Vec<TrailStep<V>>, Vec<BinHash> */ }
+pub struct Trail<V> { /* Vec<TrailSegment<V>>, Vec<BinHash> */ }
 
-/// One step of a [`Trail`]. The borrowing form of [`Step`]: a key is the tree's value.
+/// One segment of a [`Trail`]. The borrowing form of [`ValueSegment`]: a key is the tree's value.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum TrailStep<V> {
+pub enum TrailSegment<V> {
     Field(BinHash),
     Index(usize),
     Key(V),
 }
 
 impl<'a, V: TreeValue<'a>> Trail<V> {
-    pub fn steps(&self) -> &[TrailStep<V>];
+    pub fn segments(&self) -> &[TrailSegment<V>];
     pub fn len(&self) -> usize;
     pub fn is_empty(&self) -> bool;
-    /// The class of the node that holds each field step, one per `Field` step, in order.
+    /// The class of the node that holds each field segment, one per `Field` segment, in order.
     /// Never 0: the walk always knows.
     pub fn classes(&self) -> &[BinHash];
-    /// The owned address: every step copied, every key decoded to a `MapKey`, the class
+    /// The owned address: every segment copied, every key decoded to a `MapKey`, the class
     /// context carried over.
     ///
     /// # Errors
@@ -765,14 +824,14 @@ For one object:
      then `exit_node`.
    - `Struct` or `Embedded` with class hash 0: a null pointer. Nothing.
    - `Container` or `UnorderedContainer`: for each item, `Index(i)` is pushed, the item is
-     descended, and the step is popped.
-   - `Optional` holding a value: `Index(0)` is pushed, the value is descended, the step is
+     descended, and the segment is popped.
+   - `Optional` holding a value: `Index(0)` is pushed, the value is descended, the segment is
      popped. An optional is indexed rather than stepped through, because that is how the path
      grammar addresses it (D9 in `ptch-property-patches.md`).
-   - `Map`: for each entry, `Key(key)` is pushed, the value is descended, the step is popped.
+   - `Map`: for each entry, `Key(key)` is pushed, the value is descended, the segment is popped.
      Keys are never descended; a map key is a leaf by construction.
    - Anything else holds no node. Nothing.
-4. The `Field` step is popped and `exit_property(field, value, node)` is called.
+4. The `Field` segment is popped and `exit_property(field, value, node)` is called.
 5. `exit_node` is called on the node.
 
 `Visit::Skip` from `enter_node` runs rule 5 without rule 2; from `exit_property` it runs rule 5
@@ -791,12 +850,12 @@ between objects. Nothing carries over from one object to the next.
 
 ### <a id="s5.2"></a>5.2 The trail
 
-The trail holds hashes, indices and the tree's own key values, never text. A step costs a push.
+The trail holds hashes, indices and the tree's own key values, never text. A segment costs a push.
 `Display` on a `Trail` writes the hash form straight from the tree, and `to_value_path` copies
-the steps out decoding each key to a `MapKey`; either is what a visitor does for a node it
+the segments out decoding each key to a `MapKey`; either is what a visitor does for a node it
 reports on, and neither happens otherwise.
 
-Beside the steps the trail keeps the class context: for each `Field` step, the class hash of
+Beside the segments the trail keeps the class context: for each `Field` segment, the class hash of
 the node the field was read on - the object's class hash at the root, the `Struct` or
 `Embedded` class hash below it. It is what a name table is asked with ([section 4.3](#s4.3)),
 and `to_value_path` carries it over.
@@ -970,14 +1029,17 @@ and over an `ObjectView` of the same bytes, through one generic visitor.
   walk over a map of 10,000 hash-keyed entries allocates nothing in the trail (a counting
   allocator, or the trail's capacity measured before and after). Over a view, nothing beyond
   the trail allocates at all.
+- **Declarations.** `declaration()` agrees between the two trees for every root property's value
+  and for every item, key and value inside it, and `ValueShape::from` of it equals `ValueShape::of`
+  the owned value. Over a view it succeeds on a container whose leaf payload does not decode.
 - **Leaves and keys.** `as_leaf()` over both trees agrees for every leaf kind; `map_key()` agrees
   and round-trips through `MapKey::to_value`; two `F32` keys with the same bits are equal and
   `Hash` on them agrees.
 - **Deferral.** Over a view of a container holding a malformed string, every item is reached and
   the item after the malformed one reads; only `as_leaf()` on the malformed item fails.
 - **Rendering.** Every row of [section 4.2](#s4.2), in all three forms; `NamedPath::named` plus
-  `unnamed` equals the number of field steps plus hash-kind keys; `Unnameable::step` is the first
-  unspellable step, not the last.
+  `unnamed` equals the number of field segments plus hash-kind keys; `Nameless::segment` is the first
+  unspellable segment, not the last.
 - **The round trip.** For every node and every leaf position of the fixture tree, with a complete
   name table, `to_property_path` then `Bin::resolve` lands on the value the walk was at
   (FR-13, AC-7 of PRD-001).
@@ -989,7 +1051,7 @@ and over an `ObjectView` of the same bytes, through one generic visitor.
   value replaced in `enter_property` is descended as replaced, a node value replaced by a leaf gets
   no `exit_property`. `Trail::to_string()` at every node equals the read-only walk's at the same
   node, and a walk over a map of 10,000 hash-keyed entries grows the trail's capacity by at most
-  one step. `BinOverride::walk_mut` edits embedded objects and leaves every record unchanged.
+  one segment. `BinOverride::walk_mut` edits embedded objects and leaves every record unchanged.
 - **Corpus, `#[ignore]`, under `LTK_LOL_GAME_DIR`.** Every object in the install walks through
   `BinStream::walk` and through `Bin::walk` of the same chunk with a counting visitor; the two
   visit sequences are identical, and the node count equals the count of `Struct` and `Embedded`
@@ -1009,30 +1071,32 @@ rules append.
 
 | ID | Rule | Instead of | Why | Spec |
 | -- | ---- | ---------- | --- | ---- |
-| W1 | The walk's prune is `TreeValue::can_contain_node`, built on `TreeKind::is_node` (`Struct`, `Embedded`), asked of the tree before the visitor. Both are traits in `walk`; `Kind` and `PropertyValueEnum` carry no inherent walk predicate. `Kind::is_primitive` plays no part. | Inherent `Kind::is_node` and `PropertyValueEnum::can_contain_node`; or entering everything `is_primitive` does not cover. | "Node" is the walk's vocabulary, defined in this document, and a method on `Kind` shows the word to every reader of the crate with nothing beside it to say what it means. `ObjectLink` and `BitBool` are neither primitive nor a node, so the complement of `is_primitive` enters containers that hold nothing. | [section 3](#s3), [section 5.1](#s5.1) |
+| W1 | The walk's prune is `TreeValue::can_contain_node`, read off `TreeValue::declaration` with `TreeKind::is_node` (`Struct`, `Embedded`), asked of the tree before the visitor. Both are traits in `walk`; `Kind` and `PropertyValueEnum` carry no inherent walk predicate. `Kind::is_primitive` plays no part. | Inherent `Kind::is_node` and `PropertyValueEnum::can_contain_node`; or entering everything `is_primitive` does not cover. | "Node" is the walk's vocabulary, defined in this document, and a method on `Kind` shows the word to every reader of the crate with nothing beside it to say what it means. `ObjectLink` and `BitBool` are neither primitive nor a node, so the complement of `is_primitive` enters containers that hold nothing. | [section 3](#s3), [section 5.1](#s5.1) |
 | W2 | A `Struct` or `Embedded` with class 0 is not a node and is not entered. | Visiting it as a node with class 0. | It is the client's null pointer, has no properties, and the resolver already treats it as one (`NullPointer`). A visitor keyed on class would otherwise see a class no meta class dump has. | [section 5.1](#s5.1) |
-| W3 | `ltk_meta` owns one single-visitor walk with a trail; scheduling several visitors over one walk, and what each does with a node, is the consumer's. | A multi-visitor walk with per-visitor pruning in the crate; or only a predicate and a step enum. | The single-visitor descent is identical for every consumer and is what merge and diff need; the active-set policy is one consumer's and would pin its shape under semver. | [section 5](#s5); ADR-0013 |
-| W4 | A `ValuePath` keeps a class context beside its steps - the class of the node each field was read on - and `Step::Field` carries the field hash alone. | `Field { class, field }`, or no class anywhere. | Naming a field takes the class it is on, and every table a consumer holds is keyed by class; keeping it beside the steps leaves `Step` the address and the context free to grow. | [section 4.1](#s4.1); ADR-0012 |
+| W3 | `ltk_meta` owns one single-visitor walk with a trail; scheduling several visitors over one walk, and what each does with a node, is the consumer's. | A multi-visitor walk with per-visitor pruning in the crate; or only a predicate and a segment enum. | The single-visitor descent is identical for every consumer and is what merge and diff need; the active-set policy is one consumer's and would pin its shape under semver. | [section 5](#s5); ADR-0013 |
+| W4 | A `ValuePath` keeps a class context beside its segments - the class of the node each field was read on - and `ValueSegment::Field` carries the field hash alone. | `Field { class, field }`, or no class anywhere. | Naming a field takes the class it is on, and every table a consumer holds is keyed by class; keeping it beside the segments leaves `ValueSegment` the address and the context free to grow. | [section 4.1](#s4.1); ADR-0012 |
 | W5 | A map key in a `ValuePath` is a `MapKey`, owned and metadata-free, with floats held as bits; `ValuePath` is `Eq` and `Hash`. | `Key(PropertyValueEnum)`, and `PartialEq` only. | The address type must not name the value model, and a repair keys its findings on the address. Bit equality is the only equality a map on the wire has. | [section 4.1](#s4.1) |
 | W6 | Every callback answers `Result<Visit, Visitor::Error>`; the walk returns `Result<WalkOutcome, Visitor::Error>`, with the tree's errors converted through `From`. | An infallible walk with a `bool` prune; or `ltk_meta::Error` as the only error. | Over a view a header can fail to decode and a visitor reading a leaf can too, so the walk is fallible; the error is the visitor's because the visitor is what the caller wrote, and a `Stop` is not an error. | [section 5](#s5) |
 | W7 | `enter_property` is called for every property, leaves included; a value is descended only when `can_contain_node` answers true; the items of a container, optional or map are all descended, never asked about. | Asking only for values that hold a node, or asking per item. | A visitor reads a `File` leaf where it sits instead of iterating the node's properties again; an item has no field hash to prune on, and asking per item would make a container of ten thousand structs ten thousand calls for a decision already taken. | [section 5.1](#s5.1) |
 | W8 | `exit_property` is paired with every property descended and `exit_node` with every node entered, including while unwinding for a `Stop`. | Enter callbacks alone. | A consumer running several visitors over one walk carries an active set down the recursion and needs the point to pop it; symmetric exits are also what `ltk_ritobin`'s visitor guarantees. | [section 5](#s5) |
-| W9 | The trail holds the tree's own key values; `ValuePath` owns decoded `MapKey`s. `TrailStep<V>` is generic over the tree's value, `Step` is not. | One owned step type in both places. | Owning a key per push allocates for every string-keyed entry descended; holding the tree's value costs nothing and the decode happens only for a reported node. | [section 5.2](#s5.2) |
+| W9 | The trail holds the tree's own key values; `ValuePath` owns decoded `MapKey`s. `TrailSegment<V>` is generic over the tree's value, `ValueSegment` is not. | One owned segment type in both places. | Owning a key per push allocates for every string-keyed entry descended; holding the tree's value costs nothing and the decode happens only for a reported node. | [section 5.2](#s5.2) |
 | W10 | `Index` is `usize`. | `u32`, the width of the wire count. | It indexes a `Vec` and is compared with `len()`; the wire width is the writer's concern. | [section 4.1](#s4.1) |
 | W11 | `to_property_path` writes a `Hash` key as its raw decimal value; `to_named` writes the name where one is known. | Writing the name in both. | The value is what is attested; the client coerces a number and a string alike, and a number cannot be mis-hashed. | [section 4.2](#s4.2) |
 | W12 | `BinOverride::walk` walks embedded objects only. | Walking record values too, at their record's path. | A record's value is a fragment with no node to stand on until applied; a consumer that wants applied content applies first. | [section 5](#s5) |
 | W13 | `FieldNames::field` returns `Cow<'_, str>`. | `&str`, or `String`. | Matches `ltk_ritobin::HashProvider`, so its provider implements this trait without copying, and a computed name is possible. | [section 4.3](#s4.3) |
 | W14 | `ValuePath`, `MapKey` and `FieldNames` live in `ltk_meta::path` beside `PropertyPath`; the tree traits, `Leaf` and the walk in `ltk_meta::walk`. | Everything under `walk`. | Both paths are addresses and are converted between; the walk is one producer of them. | [section 4](#s4), [section 5](#s5) |
-| W15 | A class of 0 in the context means unknown; `Trail` never records one, `FromIterator<Step>` and `push(Step)` always do. | `Vec<Option<BinHash>>`. | No node carries the null class (W2), so 0 is free, and the public reading is `Option` through `fields()` either way. | [section 4.1](#s4.1) |
-| W16 | Two paths with the same steps are equal, and hash the same, whatever their class context. | Comparing the context too. | The context is what a name table is asked with, not where the position is; a report keyed on an address must match the same position however it was reached. | [section 4.1](#s4.1) |
+| W15 | A class of 0 in the context means unknown; `Trail` never records one, `FromIterator<ValueSegment>` and `push(ValueSegment)` always do. | `Vec<Option<BinHash>>`. | No node carries the null class (W2), so 0 is free, and the public reading is `Option` through `fields()` either way. | [section 4.1](#s4.1) |
+| W16 | Two paths with the same segments are equal, and hash the same, whatever their class context. | Comparing the context too. | The context is what a name table is asked with, not where the position is; a report keyed on an address must match the same position however it was reached. | [section 4.1](#s4.1) |
 | W17 | The class context holds the concrete class the file states; a class-keyed `FieldNames` walks the base chain itself. | Recording the declaring class, or walking the chain in `to_named`. | The crate holds no schema (ADR-0006), so it cannot know where a field is declared; the client resolves from the concrete class up, and a dump names fields under the class that declares them. | [section 4.3](#s4.3) |
-| W18 | A `PropertyPath` produced from a `Key` step is unattested as a client path until D10 is tested in game. | Refusing to produce one. | The resolver's own reading is consistent and round-trips here; what is unknown is whether the client reads the literal as JSON or as bare text, and no shipped record decides it. | [section 4.2](#s4.2) |
+| W18 | A `PropertyPath` produced from a `Key` segment is unattested as a client path until D10 is tested in game. | Refusing to produce one. | The resolver's own reading is consistent and round-trips here; what is unknown is whether the client reads the literal as JSON or as bare text, and no shipped record decides it. | [section 4.2](#s4.2) |
 | W19 | `Leaf` and `MapKey` name the tags as the client does: `File`, `Link`, `Flag`. `Kind` keeps `WadChunkLink`, `ObjectLink`, `BitBool`. | Reusing `Kind`'s names in the new types. | The new surface is what a consumer writes against and should carry the vocabulary the reversing notes and the meta class dumps use; renaming `Kind` is a break for every existing caller and is its own decision. | [section 3](#s3) |
 | W20 | The walk runs over two sealed traits, `TreeNode` and `TreeValue`, implemented by the owned tree and by the views; a visitor is generic over the value type. | A walk over `PropertyValueEnum` only, with `read()` per streamed object; or a walk over the views only. | One traversal, one visitor, both sources; the stream pass materialises nothing and the repair's in-memory check uses the same rule. Sealed, because a third tree would have to be this crate's. | [section 3](#s3), [section 5](#s5); ADR-0014; [ADR-0017](../adr/0017-deferred-walk-values.md) |
 | W21 | The visitor has `ltk_ritobin`'s CST visitor shape: symmetric enter and exit, a `Visit` answer of `Abort`, `Stop`, `Skip` or `Continue`, a `WalkOutcome`. `Skip` from `enter_property` prunes that value, where the CST's token `Skip` prunes the rest of the node. | A `bool` prune and no early exit. | One visitor idiom across the workspace; and a property, unlike a token, has a subtree of its own to prune. | [section 5](#s5) |
-| W22 | `Leaf` is `#[non_exhaustive]`; `Visit`, `WalkOutcome`, `ChildSegment`, `TrailStep` and `Step` are exhaustive. | Marking every new public enum, or none. | The leaf kinds are the game's to extend, and `WadChunkLink` was added once; a consumer's wildcard arm is the price of a minor release carrying the next one. The other enums are this crate's own, and a consumer matching a new `Visit` answer or step kind is told by the compiler. | [section 3](#s3) |
+| W22 | `Leaf` is `#[non_exhaustive]`; `Visit`, `WalkOutcome`, `ChildSegment`, `TrailSegment` and `ValueSegment` are exhaustive. | Marking every new public enum, or none. | The leaf kinds are the game's to extend, and `WadChunkLink` was added once; a consumer's wildcard arm is the price of a minor release carrying the next one. The other enums are this crate's own, and a consumer matching a new `Visit` answer or segment kind is told by the compiler. | [section 3](#s3) |
 | W23 | The mutable walk runs over the owned tree only. A view has no mutable walk. | A mutable walk over `RawValue`. | An edit to a buffered object's bytes keeps its size only for a fixed-width leaf; a string edit moves every size field above it. The editable object is the one `read()` returns. | [section 5.3](#s5.3); `bin-streaming.md` [section 10.4](bin-streaming.md#s10.4) |
 | W24 | `VisitorMut` shares `Visit`, `WalkOutcome`, the traversal of [section 5.1](#s5.1) and `Trail<&PropertyValueEnum>` with the read-only walk. The walker extends a map key's borrow in one `unsafe` block, and a callback sees a key only for its own length. | A trail type of the mutable walk's own; resolving addresses collected by the read-only walk. | The address a check records and the address a repair matches on are one rendering of one type, and descent over a map allocates nothing. | [section 5.3](#s5.3); ADR-0015 |
 | W25 | A node callback edits the node's property map, a property callback edits or replaces the property's value, `NodeRefMut` sets no class hash, and no callback reaches an item of a container, optional or map as a value. | A `&mut PropertyValueEnum` for every value the walk crosses, with pins checked after the walk. | A property carries no kind pin and an item does. A pin checked after the walk reports a broken tree; a pin no callback can reach holds. | [section 5.3](#s5.3) |
 | W26 | The mutable walk iterates the property map `enter_node` leaves and descends the value `enter_property` leaves. | Walking a snapshot taken before the callback. | A retagged value is the value the file holds after the repair, and its nodes are the ones a verification walk visits. | [section 5.3](#s5.3) |
 | W27 | A handle that borrows the owned tree ends in `Ref`, and one that borrows it mutably ends in `RefMut`: `NodeRef`, `PropertiesRef` and `ChildrenRef` under the read-only walk, `NodeRefMut` and `PropertyRefMut` under the mutable walk. The view's iterators keep the `View` prefix, and the value its tree is made of is `RawValue`. | `OwnedNode`, `OwnedProperties`, `OwnedChildren`, `NodeMut` and `PropertyMut`; `ViewValue` beside the streaming `ValueView`. | Each of these types borrows the tree and owns none of it. `std::cell::Ref` and `RefMut` name a shared and a unique borrow the same way. A `RawValue` carries a kind and undecoded bytes; a `ValueView` carries one decoded value, and a name that reverses another's reads as the other. | [section 3](#s3), [section 5.3](#s5.3) |
+| W28 | A piece of an address is a segment: a `ValuePath` holds `ValueSegment`s, a `Trail` holds `TrailSegment`s, and `path::Segment` is a piece of a `PropertyPath`. | `Step` and `TrailStep`; or renaming `PropertyPath`'s `Segment` to free the name. | One word names a piece of a path in all three types. `path::Segment` is published, and a rename breaks every caller of it. | [section 4.1](#s4.1), [section 5](#s5) |
+| W29 | A `Declaration` records a pointer's class, 0 for the null pointer, and counts an optional as 0 or 1. `ValueShape` converts from it without the count and without a pointer's class. | A `ValueShape` plus a count; or an optional counted as `None`, as `PropertyView::item_count` answers. | A type check keyed on class reads a pointer's class, and the patch type rule leaves it out (ADR-0003). An optional holding a value holds one item. | [section 3](#s3); [ADR-0020](../adr/0020-declaration-on-tree-values.md) |

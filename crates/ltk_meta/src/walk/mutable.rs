@@ -9,7 +9,7 @@ use std::{
 use indexmap::IndexMap;
 use ltk_hash::BinHash;
 
-use super::{Interrupt, NodeRef, Resume, Trail, TrailStep, TreeValue as _, Visit, WalkOutcome};
+use super::{Interrupt, NodeRef, Resume, Trail, TrailSegment, TreeValue as _, Visit, WalkOutcome};
 use crate::{property::values, Bin, BinObject, BinOverride, Error, PropertyValueEnum};
 
 /// What a mutable walk calls.
@@ -407,7 +407,7 @@ impl<'w> WalkerMut<'w> {
                     // cannot keep a key past it. A panic between push and pop leaves the key in
                     // a trail that is dropped and never read.
                     let key: &'w PropertyValueEnum = unsafe { &*ptr::from_ref(key) };
-                    self.trail.push(TrailStep::Key(key));
+                    self.trail.push(TrailSegment::Key(key));
                     let walked = self.walk_node(node.class_hash, &mut node.properties, visitor);
                     self.trail.pop();
                     match walked? {
@@ -422,7 +422,7 @@ impl<'w> WalkerMut<'w> {
         }
     }
 
-    /// Descends the nodes among `items`, stepping into each by its index.
+    /// Descends the nodes among `items`, entering each by its index.
     fn descend_items<'i, W: VisitorMut>(
         &mut self,
         items: impl Iterator<Item = &'i mut PropertyValueEnum>,
@@ -432,7 +432,7 @@ impl<'w> WalkerMut<'w> {
             let Some(node) = as_node_mut(item) else {
                 continue;
             };
-            self.trail.push(TrailStep::Index(index));
+            self.trail.push(TrailSegment::Index(index));
             let walked = self.walk_node(node.class_hash, &mut node.properties, visitor);
             self.trail.pop();
             match walked? {

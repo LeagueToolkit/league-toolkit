@@ -3,7 +3,7 @@ use std::io::{self, Read, Write};
 
 /// Generic RGBA Color struct
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Default)]
 pub struct Color<T = f32> {
     pub r: T,
     pub g: T,
