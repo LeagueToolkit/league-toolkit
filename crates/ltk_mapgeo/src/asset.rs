@@ -26,16 +26,15 @@ use crate::{BucketedGeometry, EnvironmentMesh, PlanarReflector, ShaderTextureOve
 /// let mut file = File::open("base.mapgeo")?;
 /// let asset = EnvironmentAsset::from_reader(&mut file)?;
 ///
-/// for mesh in asset.meshes() {
-///     println!("Mesh: {} (material: {})", mesh.name(), mesh.material_name());
-///     
-///     // Access the mesh's vertex buffer
-///     let vb_id = mesh.vertex_buffer_ids()[0];
-///     let vertex_buffer = &asset.vertex_buffers()[vb_id];
-///     println!("  Vertices: {}", vertex_buffer.count());
+/// for (mesh, vertex_buffers, _index_buffer) in asset.meshes_with_buffers() {
+///     // A submesh names the material, as the bin entry path of a StaticMaterialDef.
+///     for submesh in mesh.submeshes() {
+///         println!("{} -> {}", mesh.name(), submesh.material());
+///     }
+///     println!("  Vertices: {}", vertex_buffers[0].count());
 /// }
 /// ```
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct EnvironmentAsset {
     /// Shader texture overrides (global sampler replacements)
     shader_texture_overrides: Vec<ShaderTextureOverride>,
