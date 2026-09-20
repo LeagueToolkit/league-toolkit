@@ -58,10 +58,10 @@ impl<'a> Builder<'a> {
                         .unwrap(),
                     );
                 }
-                Value::String(Spanned::new(
-                    *span,
-                    self.text[Span::new(span.start + 1, span.end - 1)].into(),
-                ))
+                let text =
+                    crate::escaping::unescape(&self.text[Span::new(span.start + 1, span.end - 1)])
+                        .map_err(|e| e.into_diagnostic(*span))?;
+                Value::String(text.with_span(*span))
             }
             Some(Token {
                 kind: TokenKind::HexLit,
