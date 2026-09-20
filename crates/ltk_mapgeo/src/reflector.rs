@@ -35,7 +35,9 @@ impl PlanarReflector {
         }
     }
 
-    /// The reflector's world transform
+    /// The reflector's world transform, ready to multiply a position by.
+    ///
+    /// The matrix is affine and carries its translation in `w_axis`.
     #[inline]
     pub fn transform(&self) -> &Mat4 {
         &self.transform

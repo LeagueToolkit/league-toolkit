@@ -41,11 +41,48 @@ pub enum ElementName {
     Texcoord7,
 }
 
+/// What one component of a vertex element is stored as.
+///
+/// A component is one scalar of an element: the `y` of a UV, the `z` of a normal, the blue
+/// of a packed colour.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ComponentType {
+    /// A 32-bit float.
+    Float32,
+    /// A 16-bit float, widened to [`f32`] on read.
+    Float16,
+    /// One byte.
+    UInt8,
+}
+
+impl ComponentType {
+    /// The size in bytes of one component.
+    #[must_use]
+    pub fn size(self) -> usize {
+        match self {
+            ComponentType::Float32 => 4,
+            ComponentType::Float16 => 2,
+            ComponentType::UInt8 => 1,
+        }
+    }
+
+    /// Whether components of this type hold a float.
+    ///
+    /// A [`ComponentType::UInt8`] component holds a colour channel or a skinning index.
+    #[must_use]
+    pub fn is_float(self) -> bool {
+        matches!(self, ComponentType::Float32 | ComponentType::Float16)
+    }
+}
+
 /// How a vertex element is packed.
 ///
 /// Mirrors `Riot::Renderer::Mesh::ElemFormat`. The game rejects any value above 8, treating
 /// it as a zero-size "none" element.
-#[allow(non_camel_case_types)]
+#[expect(
+    non_camel_case_types,
+    reason = "the variant names mirror the game's own ElemFormat spelling"
+)]
 #[repr(u32)]
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, TryFromPrimitive, IntoPrimitive,
@@ -72,20 +109,40 @@ pub enum ElementFormat {
 }
 
 impl ElementFormat {
+    /// What one component of this format is stored as.
+    #[must_use]
+    pub fn component_type(&self) -> ComponentType {
+        match self {
+            ElementFormat::X_Float32
+            | ElementFormat::XY_Float32
+            | ElementFormat::XYZ_Float32
+            | ElementFormat::XYZW_Float32 => ComponentType::Float32,
+            ElementFormat::XY_Float16 | ElementFormat::XYZW_Float16 => ComponentType::Float16,
+            ElementFormat::BGRA_Packed8888
+            | ElementFormat::RGBA_Packed8888
+            | ElementFormat::UByte4 => ComponentType::UInt8,
+        }
+    }
+
+    /// How many components this format packs.
+    #[must_use]
+    pub fn component_count(&self) -> usize {
+        match self {
+            ElementFormat::X_Float32 => 1,
+            ElementFormat::XY_Float32 | ElementFormat::XY_Float16 => 2,
+            ElementFormat::XYZ_Float32 => 3,
+            ElementFormat::XYZW_Float32
+            | ElementFormat::XYZW_Float16
+            | ElementFormat::BGRA_Packed8888
+            | ElementFormat::RGBA_Packed8888
+            | ElementFormat::UByte4 => 4,
+        }
+    }
+
     /// The size in bytes of one element in this format.
     #[must_use]
     pub fn size(&self) -> usize {
-        match self {
-            ElementFormat::X_Float32 => 4,
-            ElementFormat::XY_Float32 => 8,
-            ElementFormat::XYZ_Float32 => 12,
-            ElementFormat::XYZW_Float32 => 16,
-            ElementFormat::BGRA_Packed8888 => 4,
-            ElementFormat::RGBA_Packed8888 => 4,
-            ElementFormat::UByte4 => 4,
-            ElementFormat::XY_Float16 => 4,
-            ElementFormat::XYZW_Float16 => 8,
-        }
+        self.component_count() * self.component_type().size()
     }
 }
 

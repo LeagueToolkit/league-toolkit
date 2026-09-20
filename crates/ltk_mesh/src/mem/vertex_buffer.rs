@@ -89,16 +89,19 @@ impl VertexBuffer {
         }
     }
 
-    /// A view over one element of every vertex, or [`None`] if this layout has no such
-    /// element.
+    /// A view over one element of every vertex.
     ///
-    /// `T` must match the element's [`ElementFormat`](super::vertex::ElementFormat) - `Vec3`
-    /// for a position or normal, `Vec2` for a UV, `Vec4` for blend weights or a tangent,
-    /// `[u8; 4]` for blend indices or a packed colour. It is **not** checked.
+    /// Returns [`None`] if this layout has no such element, or if the element's
+    /// [`ElementFormat`](super::vertex::ElementFormat) is not one `T` decodes. `Vec3` reads a
+    /// position or a normal, `Vec2` a UV, `Vec4` blend weights or a tangent, `[u8; 4]` blend
+    /// indices or a packed colour. [`Format::decodes`] states the rule.
+    ///
+    /// The half formats decode as floats: `Vec2` reads both a `XY_Float32` and a
+    /// `XY_Float16` UV, and hands back [`f32`] either way.
     ///
     /// # Examples
     /// ```
-    /// use glam::Vec3;
+    /// use glam::{Vec2, Vec3};
     /// use ltk_mesh::{
     ///     mem::vertex::ElementName, mem::VertexBuffer, mem::VertexBufferDescription,
     ///     SkinnedMeshVertexType,
@@ -112,15 +115,24 @@ impl VertexBuffer {
     /// assert!(vertices.accessor::<Vec3>(ElementName::Position).is_some());
     /// // The 52 byte layout carries no colour.
     /// assert!(vertices.accessor::<[u8; 4]>(ElementName::PrimaryColor).is_none());
+    /// // A two component UV has no third component to hand back.
+    /// assert!(vertices.accessor::<Vec3>(ElementName::Texcoord0).is_none());
+    /// assert!(vertices.accessor::<Vec2>(ElementName::Texcoord0).is_some());
     /// ```
     #[must_use]
     pub fn accessor<T: Format>(
         &self,
         element_name: ElementName,
     ) -> Option<VertexBufferAccessor<'_, T>> {
-        self.elements
-            .get(&element_name)
-            .map(|desc| VertexBufferAccessor::<T>::new(desc.element, desc.offset as usize, self))
+        let desc = self.elements.get(&element_name)?;
+        if !T::decodes(desc.element.format) {
+            return None;
+        }
+        Some(VertexBufferAccessor::<T>::new(
+            desc.element,
+            desc.offset as usize,
+            self,
+        ))
     }
 
     /// The layout of a single vertex.

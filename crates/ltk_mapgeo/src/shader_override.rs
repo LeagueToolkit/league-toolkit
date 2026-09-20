@@ -1,35 +1,39 @@
 //! Shader texture override definition
 
-/// A shader texture override allows replacing a texture sampler globally.
+/// A binding for one shader texture sampler, applied to every material in the map.
 ///
-/// These overrides are applied to all materials using a specific sampler index,
-/// enabling features like global environment maps or lighting textures.
+/// The client binds the slot by a literal `strcmp` of the name against the shader's own
+/// sampler names, not by hash. A live v17 or v18 map carries names such as
+/// `BAKED_DIFFUSE_TEXTURE` and `BAKED_DIFFUSE_TEXTURE_ALPHA` at sampler indices 0 and 1.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShaderTextureOverride {
-    /// The sampler index to override
+    /// The sampler index to bind
     sampler_index: u32,
-    /// The texture path to use
-    texture_path: String,
+    /// The name of the sampler slot to bind
+    sampler_name: String,
 }
 
 impl ShaderTextureOverride {
-    /// Creates a new shader texture override
-    pub fn new(sampler_index: u32, texture_path: String) -> Self {
+    /// Pairs a sampler index with the name of the slot it binds.
+    pub fn new(sampler_index: u32, sampler_name: String) -> Self {
         Self {
             sampler_index,
-            texture_path,
+            sampler_name,
         }
     }
 
-    /// The sampler index this override applies to
+    /// The sampler index this binding applies to
     #[inline]
     pub fn sampler_index(&self) -> u32 {
         self.sampler_index
     }
 
-    /// The texture path to use for this override
+    /// The name of the sampler slot this binds.
+    ///
+    /// This is a sampler name, not a texture path. A consumer resolving a texture reads the
+    /// material's own `samplerValues` out of the sibling `.materials.bin`.
     #[inline]
-    pub fn texture_path(&self) -> &str {
-        &self.texture_path
+    pub fn sampler_name(&self) -> &str {
+        &self.sampler_name
     }
 }

@@ -21,10 +21,10 @@ fn parse_brawl_mapgeo() {
     );
     for (i, sto) in asset.shader_texture_overrides().iter().enumerate() {
         println!(
-            "  [{}] sampler={} texture=\"{}\"",
+            "  [{}] sampler={} name=\"{}\"",
             i,
             sto.sampler_index(),
-            sto.texture_path()
+            sto.sampler_name()
         );
     }
 
