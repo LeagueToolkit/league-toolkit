@@ -1,6 +1,6 @@
 [package]
 name = "ltk_mapgeo"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 description = "Map Geometry (.mapgeo) parsing for League Toolkit"
 license = "Apache-2.0"
@@ -17,6 +17,6 @@ glam = { workspace = true }
 
 ltk_io_ext = { version = "0.4.7", path = "../ltk_io_ext" }
 ltk_primitives = { version = "0.3.6", path = "../ltk_primitives" }
-ltk_mesh = { version = "0.5.1", path = "../ltk_mesh" }
+ltk_mesh = { version = "0.5.2", path = "../ltk_mesh" }
 
 [dev-dependencies]
