@@ -9,12 +9,16 @@ readme = "../../README.md"
 [lints]
 workspace = true
 
+[features]
+tangent-baking = ["dep:bevy_mikktspace"]
+
 [dependencies]
 byteorder = { workspace = true }
 bitflags = { workspace = true }
 num_enum = { workspace = true }
 thiserror = { workspace = true }
 lazy_static = { workspace = true }
+bevy_mikktspace = { workspace = true, optional = true }
 
 glam = { workspace = true }
 half = { workspace = true }

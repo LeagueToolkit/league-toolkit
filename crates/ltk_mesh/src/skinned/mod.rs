@@ -18,6 +18,8 @@ use super::Result;
 
 mod range;
 mod read;
+#[cfg(feature = "tangent-baking")]
+mod tangent;
 mod vertex;
 mod write;
 
