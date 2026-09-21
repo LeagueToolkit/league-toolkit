@@ -26,3 +26,24 @@ pub enum ParseError {
     #[error(transparent)]
     ReaderError(#[from] ltk_io_ext::ReaderError),
 }
+
+/// Tangent baking failed; the mesh is left unchanged.
+///
+/// Available with the `tangent-baking` feature.
+#[cfg(feature = "tangent-baking")]
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum BakeTangentsError {
+    /// The vertex layout is not one of the four supported `.skn` layouts.
+    #[error("unsupported skinned mesh vertex layout")]
+    UnsupportedLayout,
+    /// Invalid ranges, indices, or vertex attributes prevent tangent generation.
+    #[error("invalid tangent geometry: {0}")]
+    InvalidGeometry(String),
+    /// Splitting a range would exceed its 65536-vertex index limit.
+    #[error("tangent splitting exceeds the vertex limit for range {0}")]
+    TooManyVertices(usize),
+    /// The tangent generator could not process the geometry.
+    #[error("tangent generation failed: {0}")]
+    Generation(String),
+}

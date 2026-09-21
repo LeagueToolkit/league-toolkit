@@ -30,6 +30,9 @@
 //!
 //! See the [`SkinnedMesh`] docs for the indexing rules and the GPU upload path, and
 //! `examples/skinned_mesh.rs` for a complete walk over a real file.
+//! Enable the opt-in `tangent-baking` feature to use `SkinnedMesh::bake_tangents`
+//! for tangent-space normal mapping, including splitting vertices at tangent
+//! discontinuities. This feature adds the MikkTSpace dependency.
 pub mod error;
 pub mod mem;
 
