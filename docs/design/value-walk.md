@@ -332,6 +332,8 @@ it is. `ValuePath` is the address that never needs to: it is **total** - every p
 value tree has one, including the ones that have no name and never will, a container element or
 a map entry - and it is never written to a file. `PropertyPath` is the export language, the thing
 a patch record carries and the client resolves; `ValuePath` is the reporting language (ADR-0005).
+A `ValuePath` also resolves and patches, by the traversal and type rules a `PropertyPath` follows
+(`ptch-property-patches.md` [section 9](ptch-property-patches.md#s9), ADR-0021).
 
 ### <a id="s4.1"></a>4.1 The types
 
@@ -399,6 +401,9 @@ impl MapKey {
     pub fn kind(&self) -> Kind;
     /// A leaf as a key, or `None` for `Link` and `Flag`, which no map is keyed by.
     pub fn from_leaf(leaf: Leaf<'_>) -> Option<Self>;
+    /// The key a `{key}` literal selects in a map keyed by `kind`: the conversion `resolve`
+    /// applies to a `{key}` subscript. `None` when the literal does not convert.
+    pub fn from_literal(literal: &KeyLiteral<'_>, kind: Kind) -> Option<Self>;
     pub fn to_value(&self) -> PropertyValueEnum;
 }
 impl TryFrom<&PropertyValueEnum> for MapKey { type Error = Error; /* InvalidKeyType */ }
@@ -1100,3 +1105,4 @@ rules append.
 | W27 | A handle that borrows the owned tree ends in `Ref`, and one that borrows it mutably ends in `RefMut`: `NodeRef`, `PropertiesRef` and `ChildrenRef` under the read-only walk, `NodeRefMut` and `PropertyRefMut` under the mutable walk. The view's iterators keep the `View` prefix, and the value its tree is made of is `RawValue`. | `OwnedNode`, `OwnedProperties`, `OwnedChildren`, `NodeMut` and `PropertyMut`; `ViewValue` beside the streaming `ValueView`. | Each of these types borrows the tree and owns none of it. `std::cell::Ref` and `RefMut` name a shared and a unique borrow the same way. A `RawValue` carries a kind and undecoded bytes; a `ValueView` carries one decoded value, and a name that reverses another's reads as the other. | [section 3](#s3), [section 5.3](#s5.3) |
 | W28 | A piece of an address is a segment: a `ValuePath` holds `ValueSegment`s, a `Trail` holds `TrailSegment`s, and `path::Segment` is a piece of a `PropertyPath`. | `Step` and `TrailStep`; or renaming `PropertyPath`'s `Segment` to free the name. | One word names a piece of a path in all three types. `path::Segment` is published, and a rename breaks every caller of it. | [section 4.1](#s4.1), [section 5](#s5) |
 | W29 | A `Declaration` records a pointer's class, 0 for the null pointer, and counts an optional as 0 or 1. `ValueShape` converts from it without the count and without a pointer's class. | A `ValueShape` plus a count; or an optional counted as `None`, as `PropertyView::item_count` answers. | A type check keyed on class reads a pointer's class, and the patch type rule leaves it out (ADR-0003). An optional holding a value holds one item. | [section 3](#s3); [ADR-0020](../adr/0020-declaration-on-tree-values.md) |
+| W30 | A `ValuePath` resolves and patches through `resolve_at`, `resolve_at_mut` and `patch_at` beside every `resolve`, `resolve_mut` and `patch`, by the same traversal and type rules. | A hash escape in `PropertyPath`; a naming strategy passed to `resolve` and `patch`. | A field with no known plaintext is addressable only by hash, and a `PropertyPath` is the client's language. | `ptch-property-patches.md` [section 9](ptch-property-patches.md#s9); ADR-0021 |

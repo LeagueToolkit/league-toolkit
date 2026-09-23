@@ -594,7 +594,27 @@ impl<M> Bin<M> {
     pub fn patch(&mut self, object_hash: impl Into<BinHash>, path: &PropertyPath, value: PropertyValueEnum<M>)
         -> Result<Option<PropertyValueEnum<M>>, PatchError>;
 }
+
+// The same operations by `ValuePath`, on the same five types: `resolve_at`, `resolve_at_mut`,
+// and `patch_at` where `patch` exists.
+impl<M> BinObject<M> {
+    pub fn resolve_at(&self, path: &ValuePath) -> Result<&PropertyValueEnum<M>, ResolveError>;
+    pub fn resolve_at_mut(&mut self, path: &ValuePath) -> Result<ValueSlot<'_, M>, ResolveError>;
+    pub fn patch_at(&mut self, path: &ValuePath, value: PropertyValueEnum<M>)
+        -> Result<Option<PropertyValueEnum<M>>, PatchError>;
+}
 ```
+
+A `ValuePath` (`value-walk.md` [section 4](value-walk.md#s4)) addresses a field by its hash, and
+reaches a field no plaintext name is known for. Its traversal is the table in
+[section 9.2](#s9.2), and `patch_at` follows the type rule of [section 9.3](#s9.3). A field segment
+matches the property with that hash. A key segment matches the entry whose key equals it; a key of
+another kind than the map's is `InvalidKey`. A field and its subscript are two segments of a
+`ValuePath`, and a `ResolveError` counts them apart. A `ValuePath` into an object, a pointer or an
+embed starts with a field: the empty path and a leading subscript are `FieldExpected`. From a
+`PropertyValueEnum` the first segment applies to the value, and the empty path names the value.
+An index past `u32::MAX` reports `IndexOutOfRange` with `index` `u32::MAX`. `MapKey::from_literal`
+is the `{key}` conversion of [section 9.2](#s9.2) (ADR-0021).
 
 Everything is inherent (M-ESSENTIAL-FN-INHERENT), receivers are plain references
 (M-AVOID-WRAPPERS), and `M` stays free so `ltk_ritobin` can resolve over `PropertyValueEnum<Span>`.
@@ -685,6 +705,7 @@ pub enum ResolveErrorKind {
     IndexOutOfRange { index: u32, len: usize },
     InvalidKey(Kind),
     KeyNotFound,
+    FieldExpected,             // ValuePath only
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]

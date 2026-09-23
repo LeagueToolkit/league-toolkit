@@ -6,9 +6,9 @@ use indexmap::IndexMap;
 use ltk_hash::{BinHash, Hash as _, WadHash};
 
 use crate::{
-    path::{KeyLiteral, PropertyPath, Segment, Subscript},
+    path::{KeyLiteral, MapKey, PropertyPath, Segment, Subscript, ValuePath, ValueSegment},
     property::{values, Kind},
-    walk::{self, Declaration},
+    walk::{self, Declaration, TreeValue as _},
     Bin, BinObject, PropertyValueEnum, ValueSlot,
 };
 
@@ -119,7 +119,8 @@ impl fmt::Display for ValueShape {
     }
 }
 
-/// Why a [`PropertyPath`] does not name a value in the tree it was walked through.
+/// Why a [`PropertyPath`] or a [`ValuePath`] does not name a value in the tree it was walked
+/// through.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error("{kind} (segment {segment})")]
@@ -190,6 +191,12 @@ pub enum ResolveErrorKind {
     /// A `{k}` that converts but matches no entry.
     #[error("no entry has that key")]
     KeyNotFound,
+    /// A [`ValuePath`] into an object, a pointer or an embed that does not start with a field.
+    ///
+    /// An object is reached by field only. The empty path names the object itself, which is not
+    /// a value. A [`PropertyPath`] always starts with a field and never produces this.
+    #[error("a path into an object starts with a field")]
+    FieldExpected,
 }
 
 /// Why a patch record does not apply.
@@ -526,7 +533,14 @@ pub(crate) fn patch_in(
         };
     }
 
-    let mut slot = step_mut(properties, &segment, index)?;
+    replace(step_mut(properties, &segment, index)?, value)
+}
+
+/// Replaces the value in `slot` with `value` under the type rule, and returns the value replaced.
+fn replace(
+    mut slot: ValueSlot<'_>,
+    value: PropertyValueEnum,
+) -> Result<Option<PropertyValueEnum>, PatchError> {
     let expected = ValueShape::of(slot.get());
     let found = ValueShape::of(&value);
     if !expected.matches(&found) {
@@ -817,6 +831,442 @@ impl Bin {
         let object_hash = object_hash.into();
         self.objects
             .get(&object_hash)
+            .ok_or_else(|| ResolveError::new(0, ResolveErrorKind::MissingObject(object_hash)))
+    }
+}
+
+impl MapKey {
+    /// The key a `{key}` literal selects in a map keyed by `kind`, or `None` when the literal
+    /// does not convert.
+    ///
+    /// The conversion is the one [`BinObject::resolve`] applies to a `{key}` subscript: a
+    /// number fills an integer or float key, a string is the text of a string key and is hashed
+    /// for a `Hash` or `WadChunkLink` key, and a number is the raw value of a hashed key.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ltk_hash::{BinHash, Hash as _};
+    /// use ltk_meta::{
+    ///     path::{KeyLiteral, MapKey},
+    ///     property::Kind,
+    /// };
+    ///
+    /// let weapon = KeyLiteral::from("weapon");
+    /// assert_eq!(
+    ///     MapKey::from_literal(&weapon, Kind::Hash),
+    ///     Some(MapKey::Hash(BinHash::hash_str("weapon")))
+    /// );
+    /// assert_eq!(MapKey::from_literal(&weapon, Kind::U32), None);
+    /// ```
+    #[must_use]
+    pub fn from_literal(literal: &KeyLiteral<'_>, kind: Kind) -> Option<Self> {
+        (&key_as(kind, literal)?).map_key().ok()
+    }
+}
+
+/// Where a [`ValuePath`] stands between two of its segments.
+enum Cursor<'a> {
+    /// The properties of an object, a pointer's target or an embed, before any segment.
+    Properties(&'a Properties),
+    /// The value the segments so far reached.
+    Value(&'a PropertyValueEnum),
+}
+
+/// See [`Cursor`].
+enum CursorMut<'a> {
+    Properties(&'a mut Properties),
+    Value(ValueSlot<'a>),
+}
+
+/// The property `field` of `properties`.
+fn field_of(
+    properties: &Properties,
+    field: BinHash,
+) -> Result<&PropertyValueEnum, ResolveErrorKind> {
+    properties
+        .get(&field)
+        .ok_or(ResolveErrorKind::MissingProperty(field))
+}
+
+/// Which slot an [`ValueSegment::Index`] or a [`ValueSegment::Key`] selects inside `value`.
+///
+/// The rules of [`slot_for`], with the key already of a kind: a key of another kind than the
+/// map's is [`ResolveErrorKind::InvalidKey`]. An index past `u32::MAX` is out of range of every
+/// list and reports `u32::MAX`.
+fn slot_at(value: &PropertyValueEnum, segment: &ValueSegment) -> Result<Slot, ResolveErrorKind> {
+    use PropertyValueEnum as V;
+
+    let out_of_range = |index: usize, len: usize| ResolveErrorKind::IndexOutOfRange {
+        index: u32::try_from(index).unwrap_or(u32::MAX),
+        len,
+    };
+    match (value, segment) {
+        (V::Container(list), ValueSegment::Index(index))
+        | (V::UnorderedContainer(values::UnorderedContainer(list)), ValueSegment::Index(index)) => {
+            match *index < list.len() {
+                true => Ok(Slot::Item(*index)),
+                false => Err(out_of_range(*index, list.len())),
+            }
+        }
+        (V::Optional(option), ValueSegment::Index(index)) => match (*index, option.is_some()) {
+            (0, true) => Ok(Slot::OptionValue),
+            _ => Err(out_of_range(*index, usize::from(option.is_some()))),
+        },
+        (V::Map(map), ValueSegment::Key(key)) => {
+            if key.kind() != map.key_kind() {
+                return Err(ResolveErrorKind::InvalidKey(map.key_kind()));
+            }
+            map.entries()
+                .iter()
+                .position(|(entry, _)| entry.map_key().is_ok_and(|entry| entry == *key))
+                .map(Slot::Entry)
+                .ok_or(ResolveErrorKind::KeyNotFound)
+        }
+        (value, _) => Err(ResolveErrorKind::NotIndexable(value.kind())),
+    }
+}
+
+/// Applies `segments` from `cursor`, and returns where they stop.
+///
+/// A field descends into an object, a pointer or an embed; an index or a key subscripts the value
+/// reached. The traversal rules are [`PropertyPath`]'s. An error names the position of the
+/// segment in `segments` plus `offset`.
+fn walk_at<'a>(
+    mut cursor: Cursor<'a>,
+    segments: &[ValueSegment],
+    offset: usize,
+) -> Result<Cursor<'a>, ResolveError> {
+    for (index, segment) in segments.iter().enumerate() {
+        let error = |kind| ResolveError::new(offset + index, kind);
+        let value = match (cursor, segment) {
+            (Cursor::Properties(properties), ValueSegment::Field(field)) => {
+                field_of(properties, *field).map_err(error)?
+            }
+            (Cursor::Value(value), ValueSegment::Field(field)) => {
+                descend_check(value).map_err(error)?;
+                let properties = properties_of(value).expect("descend_check accepted this value");
+                field_of(properties, *field).map_err(error)?
+            }
+            (Cursor::Properties(_), _) => return Err(error(ResolveErrorKind::FieldExpected)),
+            (Cursor::Value(value), subscript) => {
+                take(value, slot_at(value, subscript).map_err(error)?)
+            }
+        };
+        cursor = Cursor::Value(value);
+    }
+    Ok(cursor)
+}
+
+/// See [`walk_at`].
+fn walk_at_mut<'a>(
+    mut cursor: CursorMut<'a>,
+    segments: &[ValueSegment],
+    offset: usize,
+) -> Result<CursorMut<'a>, ResolveError> {
+    for (index, segment) in segments.iter().enumerate() {
+        let error = |kind| ResolveError::new(offset + index, kind);
+        let slot = match (cursor, segment) {
+            (CursorMut::Properties(properties), ValueSegment::Field(field)) => ValueSlot::free(
+                properties
+                    .get_mut(field)
+                    .ok_or_else(|| error(ResolveErrorKind::MissingProperty(*field)))?,
+            ),
+            (CursorMut::Value(slot), ValueSegment::Field(field)) => {
+                let value = slot.into_inner();
+                descend_check(value).map_err(error)?;
+                let properties =
+                    properties_of_mut(value).expect("descend_check accepted this value");
+                ValueSlot::free(
+                    properties
+                        .get_mut(field)
+                        .ok_or_else(|| error(ResolveErrorKind::MissingProperty(*field)))?,
+                )
+            }
+            (CursorMut::Properties(_), _) => return Err(error(ResolveErrorKind::FieldExpected)),
+            (CursorMut::Value(slot), subscript) => {
+                let value = slot.into_inner();
+                let at = slot_at(value, subscript).map_err(error)?;
+                take_mut(value, at)
+            }
+        };
+        cursor = CursorMut::Value(slot);
+    }
+    Ok(cursor)
+}
+
+/// The value `path` names inside `properties`.
+fn resolve_in<'a>(
+    properties: &'a Properties,
+    path: &ValuePath,
+) -> Result<&'a PropertyValueEnum, ResolveError> {
+    match walk_at(Cursor::Properties(properties), path.segments(), 0)? {
+        Cursor::Value(value) => Ok(value),
+        Cursor::Properties(_) => Err(ResolveError::new(0, ResolveErrorKind::FieldExpected)),
+    }
+}
+
+/// See [`resolve_in`].
+fn resolve_in_mut<'a>(
+    properties: &'a mut Properties,
+    path: &ValuePath,
+) -> Result<ValueSlot<'a>, ResolveError> {
+    match walk_at_mut(CursorMut::Properties(properties), path.segments(), 0)? {
+        CursorMut::Value(slot) => Ok(slot),
+        CursorMut::Properties(_) => Err(ResolveError::new(0, ResolveErrorKind::FieldExpected)),
+    }
+}
+
+/// [`patch_in`] by a [`ValuePath`].
+fn patch_at_in(
+    properties: &mut Properties,
+    path: &ValuePath,
+    value: PropertyValueEnum,
+) -> Result<Option<PropertyValueEnum>, PatchError> {
+    let segments = path.segments();
+    let Some((ValueSegment::Field(field), parents)) = segments.split_last() else {
+        return replace(resolve_in_mut(properties, path)?, value);
+    };
+
+    let properties = match walk_at_mut(CursorMut::Properties(properties), parents, 0)? {
+        CursorMut::Properties(properties) => properties,
+        CursorMut::Value(slot) => {
+            let value = slot.into_inner();
+            descend_check(value).map_err(|kind| ResolveError::new(parents.len(), kind))?;
+            properties_of_mut(value).expect("descend_check accepted this value")
+        }
+    };
+    match properties.get_mut(field) {
+        // The leaf the path names outright is created, as `patch_in` creates it.
+        None => {
+            properties.insert(*field, value);
+            Ok(None)
+        }
+        Some(existing) => replace(ValueSlot::free(existing), value),
+    }
+}
+
+impl BinObject {
+    /// The value at `path` inside this object.
+    ///
+    /// The traversal rules are [`BinObject::resolve`]'s. A field segment names a property by its
+    /// hash, and a key segment selects a map entry by an equal key of the map's key kind. An
+    /// error names a segment of `path`.
+    ///
+    /// # Errors
+    ///
+    /// [`ResolveError`] naming the segment that could not be applied.
+    /// [`ResolveErrorKind::FieldExpected`] for the empty path and for a path that starts with a
+    /// subscript.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ltk_hash::BinHash;
+    /// use ltk_meta::{
+    ///     path::{ValuePath, ValueSegment},
+    ///     property::values,
+    ///     BinObject,
+    /// };
+    ///
+    /// // A field whose plaintext name is unknown.
+    /// let elements = BinHash(0x1e6b_a0c4);
+    /// let object = BinObject::builder(0x1234, 0x5678)
+    ///     .property(
+    ///         elements,
+    ///         values::Container::from(vec![values::I32::new(10), values::I32::new(20)]),
+    ///     )
+    ///     .build();
+    ///
+    /// let path: ValuePath = [ValueSegment::Field(elements), ValueSegment::Index(1)]
+    ///     .into_iter()
+    ///     .collect();
+    /// assert_eq!(object.resolve_at(&path)?, &values::I32::new(20).into());
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn resolve_at(&self, path: &ValuePath) -> Result<&PropertyValueEnum, ResolveError> {
+        resolve_in(&self.properties, path)
+    }
+
+    /// A mutable handle on the value at `path` inside this object. See
+    /// [`BinObject::resolve_mut`] and [`BinObject::resolve_at`].
+    ///
+    /// # Errors
+    ///
+    /// The same as [`BinObject::resolve_at`].
+    pub fn resolve_at_mut(&mut self, path: &ValuePath) -> Result<ValueSlot<'_>, ResolveError> {
+        resolve_in_mut(&mut self.properties, path)
+    }
+
+    /// Sets the property at `path` the way [`BinObject::patch`] sets it.
+    ///
+    /// The type rule and the creation of an absent leaf are [`BinObject::patch`]'s. A leaf
+    /// named by a field segment is created; a leaf named by a subscript never is.
+    ///
+    /// # Errors
+    ///
+    /// [`PatchError::Resolve`] if `path` does not name a property, with the kinds of
+    /// [`BinObject::resolve_at`], or [`PatchError::TypeMismatch`] if it names one of a different
+    /// shape, in which case nothing is changed.
+    pub fn patch_at(
+        &mut self,
+        path: &ValuePath,
+        value: PropertyValueEnum,
+    ) -> Result<Option<PropertyValueEnum>, PatchError> {
+        patch_at_in(&mut self.properties, path, value)
+    }
+}
+
+impl values::Struct {
+    /// See [`BinObject::resolve_at`].
+    ///
+    /// # Errors
+    ///
+    /// [`ResolveErrorKind::NullPointer`] at segment 0 if the class hash is 0, otherwise the same
+    /// as [`BinObject::resolve_at`].
+    pub fn resolve_at(&self, path: &ValuePath) -> Result<&PropertyValueEnum, ResolveError> {
+        self.null_check()?;
+        resolve_in(&self.properties, path)
+    }
+
+    /// See [`BinObject::resolve_at_mut`].
+    ///
+    /// # Errors
+    ///
+    /// The same as [`values::Struct::resolve_at`].
+    pub fn resolve_at_mut(&mut self, path: &ValuePath) -> Result<ValueSlot<'_>, ResolveError> {
+        self.null_check()?;
+        resolve_in_mut(&mut self.properties, path)
+    }
+
+    /// See [`BinObject::patch_at`].
+    ///
+    /// # Errors
+    ///
+    /// The same as [`BinObject::patch_at`], plus [`ResolveErrorKind::NullPointer`].
+    pub fn patch_at(
+        &mut self,
+        path: &ValuePath,
+        value: PropertyValueEnum,
+    ) -> Result<Option<PropertyValueEnum>, PatchError> {
+        self.null_check()?;
+        patch_at_in(&mut self.properties, path, value)
+    }
+}
+
+impl values::Embedded {
+    /// See [`BinObject::resolve_at`].
+    ///
+    /// # Errors
+    ///
+    /// The same as [`BinObject::resolve_at`].
+    pub fn resolve_at(&self, path: &ValuePath) -> Result<&PropertyValueEnum, ResolveError> {
+        resolve_in(&self.0.properties, path)
+    }
+
+    /// See [`BinObject::resolve_at_mut`].
+    ///
+    /// # Errors
+    ///
+    /// The same as [`BinObject::resolve_at`].
+    pub fn resolve_at_mut(&mut self, path: &ValuePath) -> Result<ValueSlot<'_>, ResolveError> {
+        resolve_in_mut(&mut self.0.properties, path)
+    }
+
+    /// See [`BinObject::patch_at`].
+    ///
+    /// # Errors
+    ///
+    /// The same as [`BinObject::patch_at`].
+    pub fn patch_at(
+        &mut self,
+        path: &ValuePath,
+        value: PropertyValueEnum,
+    ) -> Result<Option<PropertyValueEnum>, PatchError> {
+        patch_at_in(&mut self.0.properties, path, value)
+    }
+}
+
+impl PropertyValueEnum {
+    /// The value at `path` relative to this one.
+    ///
+    /// The first segment applies to this value: a field descends into a pointer or an embed, an
+    /// index or a key subscripts a list, an option or a map. The empty path names this value.
+    ///
+    /// # Errors
+    ///
+    /// The kinds of [`BinObject::resolve_at`], [`ResolveErrorKind::FieldExpected`] excepted.
+    pub fn resolve_at(&self, path: &ValuePath) -> Result<&PropertyValueEnum, ResolveError> {
+        match walk_at(Cursor::Value(self), path.segments(), 0)? {
+            Cursor::Value(value) => Ok(value),
+            Cursor::Properties(_) => unreachable!("a walk from a value never returns properties"),
+        }
+    }
+
+    /// See [`PropertyValueEnum::resolve_at`] and [`BinObject::resolve_at_mut`].
+    ///
+    /// # Errors
+    ///
+    /// The same as [`PropertyValueEnum::resolve_at`].
+    pub fn resolve_at_mut(&mut self, path: &ValuePath) -> Result<ValueSlot<'_>, ResolveError> {
+        match walk_at_mut(CursorMut::Value(ValueSlot::free(self)), path.segments(), 0)? {
+            CursorMut::Value(slot) => Ok(slot),
+            CursorMut::Properties(_) => {
+                unreachable!("a walk from a value never returns properties")
+            }
+        }
+    }
+}
+
+impl Bin {
+    /// The value at `path` inside object `object_hash`. See [`BinObject::resolve_at`].
+    ///
+    /// # Errors
+    ///
+    /// [`ResolveErrorKind::MissingObject`] if the bin has no such object, otherwise the same as
+    /// [`BinObject::resolve_at`].
+    pub fn resolve_at(
+        &self,
+        object_hash: impl Into<BinHash>,
+        path: &ValuePath,
+    ) -> Result<&PropertyValueEnum, ResolveError> {
+        self.object(object_hash)?.resolve_at(path)
+    }
+
+    /// See [`Bin::resolve_at`] and [`BinObject::resolve_at_mut`].
+    ///
+    /// # Errors
+    ///
+    /// The same as [`Bin::resolve_at`].
+    pub fn resolve_at_mut(
+        &mut self,
+        object_hash: impl Into<BinHash>,
+        path: &ValuePath,
+    ) -> Result<ValueSlot<'_>, ResolveError> {
+        self.object_mut(object_hash)?.resolve_at_mut(path)
+    }
+
+    /// Sets a property inside object `object_hash`. See [`BinObject::patch_at`].
+    ///
+    /// # Errors
+    ///
+    /// The same as [`BinObject::patch_at`], plus [`ResolveErrorKind::MissingObject`].
+    pub fn patch_at(
+        &mut self,
+        object_hash: impl Into<BinHash>,
+        path: &ValuePath,
+        value: PropertyValueEnum,
+    ) -> Result<Option<PropertyValueEnum>, PatchError> {
+        self.object_mut(object_hash)?.patch_at(path, value)
+    }
+
+    fn object_mut(
+        &mut self,
+        object_hash: impl Into<BinHash>,
+    ) -> Result<&mut BinObject, ResolveError> {
+        let object_hash = object_hash.into();
+        self.objects
+            .get_mut(&object_hash)
             .ok_or_else(|| ResolveError::new(0, ResolveErrorKind::MissingObject(object_hash)))
     }
 }
