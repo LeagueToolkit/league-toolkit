@@ -1,4 +1,4 @@
-//! Tests for walking a [`PropertyPath`] and applying `PTCH` records.
+//! Tests for walking a [`PropertyPath`] or a [`ValuePath`] and applying `PTCH` records.
 
 use std::io::Cursor;
 
@@ -6,7 +6,10 @@ use indexmap::IndexMap;
 use insta::assert_ron_snapshot;
 use ltk_hash::{BinHash, Hash as _};
 use ltk_meta::{
-    path::{PatchError, PropertyPath, ResolveErrorKind, ValueShape},
+    path::{
+        MapKey, PatchError, PropertyPath, ResolveErrorKind, Subscript, ValuePath, ValueSegment,
+        ValueShape,
+    },
     property::{values, Kind},
     Bin, BinObject, BinOverride, PropertyValueEnum,
 };
@@ -521,5 +524,244 @@ fn applies_deletions_objects_and_records_in_order() {
     assert_eq!(
         *base.resolve(0x0003_u32, &path("Enabled")).unwrap(),
         values::Bool::new(true).into()
+    );
+}
+
+/// The [`ValuePath`] of a [`PropertyPath`] over [`tree`]: each name as its hash, each key as a
+/// key of the kind its map holds.
+fn value_path(text: &str) -> ValuePath {
+    let mut path = ValuePath::new();
+    for segment in PropertyPath::new(text).unwrap().segments() {
+        path.push(ValueSegment::Field(segment.name_hash()));
+        match segment.subscript {
+            None => {}
+            Some(Subscript::Index(index)) => path.push_index(index as usize),
+            Some(Subscript::Key(literal)) => {
+                let kind = match segment.name {
+                    "Lookup" => Kind::Hash,
+                    "Numbers" => Kind::U32,
+                    other => panic!("no map named {other}"),
+                };
+                path.push_key(MapKey::from_literal(&literal, kind).unwrap());
+            }
+        }
+    }
+    path
+}
+
+#[track_caller]
+fn fails_at(path: &ValuePath, segment: usize, kind: ResolveErrorKind) {
+    let error = tree()
+        .resolve_at(OBJECT, path)
+        .expect_err(&format!("{path} resolved but should not have"));
+    assert_eq!((error.segment(), error.kind()), (segment, kind), "{path}");
+}
+
+#[test]
+fn a_value_path_resolves_where_its_property_path_does() {
+    let bin = tree();
+    for text in [
+        "Enabled",
+        "Position.UIRect.Size",
+        "Elements[1]",
+        "Unordered[0]",
+        "Maybe[0]",
+        r#"Lookup{"weapon"}"#,
+        "Numbers{5}",
+        "Nested[0].Deep",
+    ] {
+        assert_eq!(
+            bin.resolve_at(OBJECT, &value_path(text)),
+            bin.resolve(OBJECT, &path(text)),
+            "{text}"
+        );
+    }
+}
+
+/// A field no plaintext name is known for is reachable by its hash alone.
+#[test]
+fn a_value_path_reaches_a_nameless_field() {
+    let nameless = BinHash(0x1e6b_a0c4);
+    let mut bin = tree();
+    let at: ValuePath = [
+        ValueSegment::Field(hash("Position")),
+        ValueSegment::Field(nameless),
+    ]
+    .into_iter()
+    .collect();
+
+    assert_eq!(
+        bin.patch_at(OBJECT, &at, values::U8::new(3).into()),
+        Ok(None)
+    );
+    assert_eq!(bin.resolve_at(OBJECT, &at), Ok(&values::U8::new(3).into()));
+    assert_eq!(
+        bin.patch_at(OBJECT, &at, values::U8::new(4).into()),
+        Ok(Some(values::U8::new(3).into()))
+    );
+}
+
+/// A field and its subscript are two segments of a value path, and an error counts them.
+#[test]
+fn a_value_path_reports_the_segment_that_failed() {
+    fails_at(
+        &value_path("Position.Nope"),
+        1,
+        ResolveErrorKind::MissingProperty(hash("Nope")),
+    );
+    fails_at(
+        &value_path("Nested[0].Nope"),
+        2,
+        ResolveErrorKind::MissingProperty(hash("Nope")),
+    );
+    fails_at(
+        &value_path("Absent.Anything"),
+        1,
+        ResolveErrorKind::NullPointer,
+    );
+    fails_at(
+        &value_path("Enabled.Size"),
+        1,
+        ResolveErrorKind::CannotDescend(Kind::Bool),
+    );
+    fails_at(
+        &value_path("Elements[9]"),
+        1,
+        ResolveErrorKind::IndexOutOfRange { index: 9, len: 3 },
+    );
+    fails_at(&value_path("Numbers{6}"), 1, ResolveErrorKind::KeyNotFound);
+
+    // A key of another kind than the map's selects nothing.
+    let wrong_kind: ValuePath = [
+        ValueSegment::Field(hash("Numbers")),
+        ValueSegment::Key(MapKey::I32(5)),
+    ]
+    .into_iter()
+    .collect();
+    fails_at(&wrong_kind, 1, ResolveErrorKind::InvalidKey(Kind::U32));
+
+    // An index past `u32::MAX` is past the end of every list.
+    let huge: ValuePath = [
+        ValueSegment::Field(hash("Elements")),
+        ValueSegment::Index(usize::MAX),
+    ]
+    .into_iter()
+    .collect();
+    fails_at(
+        &huge,
+        1,
+        ResolveErrorKind::IndexOutOfRange {
+            index: u32::MAX,
+            len: 3,
+        },
+    );
+}
+
+#[test]
+fn a_value_path_into_an_object_starts_with_a_field() {
+    fails_at(&ValuePath::new(), 0, ResolveErrorKind::FieldExpected);
+    let subscript: ValuePath = [ValueSegment::Index(0)].into_iter().collect();
+    fails_at(&subscript, 0, ResolveErrorKind::FieldExpected);
+}
+
+/// From a value, the first segment applies to the value itself, and the empty path is the value.
+#[test]
+fn a_value_path_from_a_value_starts_at_the_value() {
+    let bin = tree();
+    let elements = bin.resolve(OBJECT, &path("Elements")).unwrap();
+    let second: ValuePath = [ValueSegment::Index(1)].into_iter().collect();
+    assert_eq!(
+        elements.resolve_at(&second),
+        Ok(&values::I32::new(20).into())
+    );
+    assert_eq!(elements.resolve_at(&ValuePath::new()), Ok(elements));
+
+    let position = bin.resolve(OBJECT, &path("Position")).unwrap();
+    let size: ValuePath = [
+        ValueSegment::Field(hash("UIRect")),
+        ValueSegment::Field(hash("Size")),
+    ]
+    .into_iter()
+    .collect();
+    assert_eq!(
+        position.resolve_at(&size),
+        Ok(&values::Vector2::default().into())
+    );
+}
+
+#[test]
+fn patch_at_follows_the_rules_of_patch() {
+    let mut bin = tree();
+
+    assert_eq!(
+        bin.patch_at(
+            OBJECT,
+            &value_path("Elements[1]"),
+            values::I32::new(99).into()
+        ),
+        Ok(Some(values::I32::new(20).into()))
+    );
+    assert_eq!(
+        bin.patch_at(
+            OBJECT,
+            &value_path("Nested[0].Fresh"),
+            values::Bool::new(true).into()
+        ),
+        Ok(None)
+    );
+    resolves_in(&bin, "Nested[0].Fresh", values::Bool::new(true).into());
+
+    // A subscripted leaf is never created.
+    let error = bin
+        .patch_at(
+            OBJECT,
+            &value_path("Missing[0]"),
+            values::I32::new(1).into(),
+        )
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        PatchError::Resolve(e) if e.kind() == ResolveErrorKind::MissingProperty(hash("Missing"))
+    ));
+
+    // The type rule refuses a different shape and changes nothing.
+    assert_eq!(
+        bin.patch_at(
+            OBJECT,
+            &value_path(r#"Lookup{"weapon"}"#),
+            values::I32::new(1).into()
+        ),
+        Err(PatchError::TypeMismatch {
+            expected: shape(values::String::from("sword").into()),
+            found: shape(values::I32::new(1).into()),
+        })
+    );
+    resolves_in(
+        &bin,
+        r#"Lookup{"weapon"}"#,
+        values::String::from("sword").into(),
+    );
+
+    // Patching the object itself is not a patch of a property.
+    assert!(bin
+        .patch_at(OBJECT, &ValuePath::new(), values::I32::new(1).into())
+        .is_err());
+}
+
+#[test]
+fn a_key_literal_converts_as_resolve_converts_it() {
+    use ltk_meta::path::KeyLiteral;
+
+    assert_eq!(
+        MapKey::from_literal(&KeyLiteral::from("weapon"), Kind::Hash),
+        Some(MapKey::Hash(hash("weapon")))
+    );
+    assert_eq!(
+        MapKey::from_literal(&KeyLiteral::from("weapon"), Kind::String),
+        Some(MapKey::String("weapon".into()))
+    );
+    assert_eq!(
+        MapKey::from_literal(&KeyLiteral::from(true), Kind::Hash),
+        None
     );
 }
