@@ -3,16 +3,59 @@ use std::io::Cursor;
 use glam::{vec4, Mat4, Vec3};
 use ltk_mapgeo::EnvironmentAsset;
 
+#[test]
+fn parses_minimal_mapgeo() {
+    let bytes = minimal_mapgeo(&[&[0u8; 12]], 0);
+
+    let mut cur = Cursor::new(bytes);
+    let asset = EnvironmentAsset::from_reader(&mut cur).expect("should parse minimal mapgeo");
+
+    assert_eq!(asset.meshes().len(), 1);
+    assert_eq!(asset.vertex_buffers().len(), 1);
+    assert_eq!(asset.index_buffers().len(), 1);
+    assert_eq!(asset.scene_graphs().len(), 1);
+    assert_eq!(asset.planar_reflectors().len(), 0);
+
+    // The transform is handed back ready to multiply a position by: translation in
+    // w_axis, affine enough for glam's own transform helpers.
+    let transform = asset.meshes()[0].transform();
+    assert_eq!(
+        *transform,
+        Mat4::from_translation(Vec3::new(10.0, 20.0, 30.0))
+    );
+    assert_eq!(transform.w_axis, vec4(10.0, 20.0, 30.0, 1.0));
+    assert_eq!(
+        transform.transform_point3(Vec3::ZERO),
+        Vec3::new(10.0, 20.0, 30.0)
+    );
+}
+
+#[test]
+fn drops_a_vertex_buffer_no_mesh_references() {
+    let used = [1.0f32, 2.0, 3.0].map(f32::to_le_bytes).concat();
+    // Five bytes are no whole vertex of any declaration.
+    let bytes = minimal_mapgeo(&[&[0u8; 5], &used, &[0u8; 24]], 1);
+
+    let mut cur = Cursor::new(bytes);
+    let asset = EnvironmentAsset::from_reader(&mut cur).expect("should parse");
+
+    assert_eq!(asset.vertex_buffers().len(), 1);
+    assert_eq!(asset.meshes()[0].vertex_buffer_ids(), [0]);
+    let buffer = asset.vertex_buffer(0).expect("the mesh's buffer");
+    assert_eq!(buffer.count(), 1);
+    assert_eq!(buffer.as_bytes(), used.as_slice());
+}
+
 // Builds a minimal (but structurally valid) mapgeo stream that exercises the top-level parser.
 //
 // Notes:
 // - Uses version 15 to avoid texture override format (v17) and planar reflectors (v13+) are present,
 //   but we set reflector count to 0.
-// - Uses 1 vertex declaration (POSITION/XYZ_Float32) and 1 vertex buffer with 1 vertex.
+// - Uses 1 vertex declaration (POSITION/XYZ_Float32) and the vertex buffers given.
 // - Uses 1 index buffer with 3 indices (one triangle).
-// - Uses 1 mesh with 0 submeshes and disabled bucketed-geometry (so no vertices/indices/buckets).
-#[test]
-fn parses_minimal_mapgeo() {
+// - Uses 1 mesh of 1 vertex, on vertex buffer `mesh_vertex_buffer`, with 0 submeshes and
+//   disabled bucketed-geometry (so no vertices/indices/buckets).
+fn minimal_mapgeo(vertex_buffers: &[&[u8]], mesh_vertex_buffer: i32) -> Vec<u8> {
     let mut bytes = Vec::new();
 
     // Magic + version (u32 LE)
@@ -34,11 +77,12 @@ fn parses_minimal_mapgeo() {
     bytes.extend(std::iter::repeat_n(0u8, 8 * (15 - 1)));
 
     // Vertex buffers (v15 has visibility byte)
-    bytes.extend_from_slice(&1u32.to_le_bytes()); // vb count
-    bytes.push(0); // visibility flags (ignored)
-    let vb_data = [0u8; 12]; // 1 vertex, XYZ_Float32
-    bytes.extend_from_slice(&(vb_data.len() as u32).to_le_bytes());
-    bytes.extend_from_slice(&vb_data);
+    bytes.extend_from_slice(&(vertex_buffers.len() as u32).to_le_bytes()); // vb count
+    for vb_data in vertex_buffers {
+        bytes.push(0); // visibility flags (ignored)
+        bytes.extend_from_slice(&(vb_data.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(vb_data);
+    }
 
     // Index buffers (v15 has visibility byte)
     bytes.extend_from_slice(&1u32.to_le_bytes()); // ib count
@@ -57,7 +101,7 @@ fn parses_minimal_mapgeo() {
     bytes.extend_from_slice(&1i32.to_le_bytes()); // vertex_count
     bytes.extend_from_slice(&1u32.to_le_bytes()); // vertex_declaration_count
     bytes.extend_from_slice(&0i32.to_le_bytes()); // base_vertex_declaration_id
-    bytes.extend_from_slice(&0i32.to_le_bytes()); // vertex_buffer_id[0]
+    bytes.extend_from_slice(&mesh_vertex_buffer.to_le_bytes()); // vertex_buffer_id[0]
     bytes.extend_from_slice(&3u32.to_le_bytes()); // index_count
     bytes.extend_from_slice(&0i32.to_le_bytes()); // index_buffer_id
     bytes.extend_from_slice(&0u8.to_le_bytes()); // visibility flags (early; v>=13)
@@ -116,27 +160,7 @@ fn parses_minimal_mapgeo() {
     // Planar reflectors (v>=13): u32 count
     bytes.extend_from_slice(&0u32.to_le_bytes());
 
-    let mut cur = Cursor::new(bytes);
-    let asset = EnvironmentAsset::from_reader(&mut cur).expect("should parse minimal mapgeo");
-
-    assert_eq!(asset.meshes().len(), 1);
-    assert_eq!(asset.vertex_buffers().len(), 1);
-    assert_eq!(asset.index_buffers().len(), 1);
-    assert_eq!(asset.scene_graphs().len(), 1);
-    assert_eq!(asset.planar_reflectors().len(), 0);
-
-    // The transform is handed back ready to multiply a position by: translation in
-    // w_axis, affine enough for glam's own transform helpers.
-    let transform = asset.meshes()[0].transform();
-    assert_eq!(
-        *transform,
-        Mat4::from_translation(Vec3::new(10.0, 20.0, 30.0))
-    );
-    assert_eq!(transform.w_axis, vec4(10.0, 20.0, 30.0, 1.0));
-    assert_eq!(
-        transform.transform_point3(Vec3::ZERO),
-        Vec3::new(10.0, 20.0, 30.0)
-    );
+    bytes
 }
 
 fn write_sized_string(buf: &mut Vec<u8>, s: &str) {

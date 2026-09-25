@@ -133,6 +133,11 @@ impl EnvironmentMesh {
         &self.vertex_buffer_ids
     }
 
+    /// The buffer ids, which the reader renumbers past a dropped buffer.
+    pub(crate) fn vertex_buffer_ids_mut(&mut self) -> &mut [usize] {
+        &mut self.vertex_buffer_ids
+    }
+
     /// Index into the parent asset's index buffer array
     #[inline]
     pub fn index_buffer_id(&self) -> usize {
