@@ -28,7 +28,7 @@ pub enum Kind {
   Entry, EntryKey, EntryValue, EntryTerminator,
   Literal,
 
-  Comment,
+  Comment, Annotation, AnnotationArgList, AnnotationArg,
 }
 impl Display for Kind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -49,6 +49,9 @@ impl Display for Kind {
             Self::ListItem => "list item",
             Self::ListItemBlock => "list item (block)",
             Self::Comment => "comment",
+            Self::Annotation => "annotation",
+            Self::AnnotationArgList => "annotation argument list",
+            Self::AnnotationArg => "annotation argument",
         })
     }
 }

@@ -11,7 +11,7 @@ pub enum TokenKind {
   LParen, RParen, LCurly, RCurly,
   LBrack, RBrack,
   Eq, Comma, Colon, SemiColon,
-  Star, Slash,
+  Star, Slash, At,
   Quote,
 
   String, UnterminatedString,
@@ -45,6 +45,7 @@ impl TokenKind {
             b';' => Self::SemiColon,
             b'*' => Self::Star,
             b'/' => Self::Slash,
+            b'@' => Self::At,
             _ => return None,
         })
     }
@@ -66,6 +67,7 @@ impl TokenKind {
             TokenKind::SemiColon => Some(";"),
             TokenKind::Star => Some("*"),
             TokenKind::Slash => Some("/"),
+            TokenKind::At => Some("@"),
             TokenKind::Quote => Some("\""),
             TokenKind::String => None,
             TokenKind::UnterminatedString => None,
@@ -98,6 +100,7 @@ impl Display for TokenKind {
             TokenKind::SemiColon => "';'",
             TokenKind::Star => "'*'",
             TokenKind::Slash => "'/'",
+            TokenKind::At => "'@'",
             TokenKind::Quote => "'\"'",
             TokenKind::String => "string literal",
             TokenKind::UnterminatedString => "unterminated string literal",
@@ -279,12 +282,13 @@ fn ends_value(kind: TokenKind) -> bool {
     use TokenKind::*;
     matches!(
         kind,
-        Name | HexLit | True | False | Number | RCurly | String | Eq | Comment
+        Name | HexLit | True | False | Number | RCurly | String | Eq | Comment | At
     )
 }
 
 fn ends_line(last: Option<&Token>, ws: &[u8]) -> bool {
-    last.is_some_and(|t| ends_value(t.kind)) && ws.iter().any(|&b| matches!(b, b'\n' | b'\r'))
+    last.is_some_and(|t| ends_value(t.kind) || matches!(t.kind, TokenKind::LParen))
+        && ws.iter().any(|&b| matches!(b, b'\n' | b'\r'))
 }
 
 #[inline]
