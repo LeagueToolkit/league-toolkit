@@ -1,6 +1,6 @@
 [package]
 name = "ltk_anim"
-version = "0.3.9"
+version = "0.3.10"
 edition = "2021"
 description = "Animation formats support for League Toolkit"
 license = "Apache-2.0"
