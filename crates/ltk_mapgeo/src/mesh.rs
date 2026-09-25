@@ -145,7 +145,10 @@ impl EnvironmentMesh {
         self.index_count
     }
 
-    /// Base vertex buffer description index
+    /// Index of the first vertex declaration this mesh read, one per vertex buffer.
+    ///
+    /// The writer derives the declarations from the vertex buffers, and keeps this index
+    /// where the declarations it names still match.
     #[inline]
     pub fn base_vertex_declaration_id(&self) -> usize {
         self.base_vertex_declaration_id
@@ -161,6 +164,16 @@ impl EnvironmentMesh {
     #[inline]
     pub fn visibility_controller_path_hash(&self) -> u32 {
         self.visibility_controller_path_hash
+    }
+
+    /// Sets the visibility controller path hash; `0` means none.
+    ///
+    /// The mesh's faces belong to the scene graph of this hash, so re-bake the scene graphs
+    /// with [`EnvironmentAsset::bake_scene_graphs`](crate::EnvironmentAsset::bake_scene_graphs)
+    /// if the mesh has faces in one.
+    #[inline]
+    pub fn set_visibility_controller_path_hash(&mut self, hash: u32) {
+        self.visibility_controller_path_hash = hash;
     }
 
     /// Hash of a map region placeable this mesh is anchored to (version >= 18).
@@ -209,6 +222,12 @@ impl EnvironmentMesh {
     #[inline]
     pub fn visibility(&self) -> EnvironmentVisibility {
         self.visibility
+    }
+
+    /// Sets the visibility layer flags
+    #[inline]
+    pub fn set_visibility(&mut self, visibility: EnvironmentVisibility) {
+        self.visibility = visibility;
     }
 
     /// The layer transition behavior

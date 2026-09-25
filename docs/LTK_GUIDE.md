@@ -601,7 +601,7 @@ Useful for debugging, diffing, or hand-editing bin data.
 
 ### `ltk_mapgeo` - Map Geometry
 
-**Purpose**: Parse .mapgeo files containing environment geometry for maps (Summoner's Rift, ARAM, etc.).
+**Purpose**: Read and write .mapgeo files containing environment geometry for maps (Summoner's Rift, ARAM, etc.).
 
 **Key Types**:
 - `EnvironmentAsset` - Complete map geometry asset
@@ -633,7 +633,18 @@ for scene_graph in asset.scene_graphs() {
 }
 ```
 
-**Supported Versions**: 5, 6, 7, 9, 11, 12, 13, 14, 15, 17, 18
+**Supported Versions**: reads 5, 6, 7, 9, 11, 12, 13, 14, 15, 17, 18; writes 18 only
+(`WRITE_VERSION`). A v18 file writes back byte for byte. Older files are written as v18, which
+drops the fields v18 does not store (mesh names, spherical harmonics, point lights).
+
+```rust
+let mut asset = EnvironmentAsset::from_reader(&mut file)?;
+asset.meshes_mut()[0].set_visibility_controller_path_hash(controller_hash);
+// Scene graphs are written as they are; re-bake them after moving faces between grids.
+let baked = asset.bake_scene_graphs(&asset.scene_graph_selection()?)?;
+asset.replace_scene_graphs(baked);
+asset.to_writer(&mut out)?;
+```
 
 Versions 19 and 20 are known (the game client's parser accepts them) but have
 never shipped, and the client discards the extra data they add - a dead byte

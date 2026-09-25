@@ -1,6 +1,7 @@
-//! Map Geometry (.mapgeo) parsing for League of Legends environment assets.
+//! Map Geometry (.mapgeo) reading and writing for League of Legends environment assets.
 //!
-//! This crate provides parsing for the `.mapgeo` file format, which contains
+//! This crate reads every shipped version of the `.mapgeo` file format and writes the newest,
+//! [`WRITE_VERSION`]. The format contains
 //! 3D geometry data for League of Legends maps (Summoner's Rift, ARAM, etc.).
 //!
 //! # Overview
@@ -55,6 +56,9 @@ mod asset;
 pub use asset::*;
 
 pub(crate) mod read;
+
+mod write;
+pub use write::WRITE_VERSION;
 
 /// Magic bytes for Map Geometry files: "OEGM"
 pub const MAGIC: &[u8; 4] = b"OEGM";

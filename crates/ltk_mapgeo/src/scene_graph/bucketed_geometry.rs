@@ -59,7 +59,6 @@ pub struct BucketedGeometry {
     is_disabled: bool,
 
     /// Flags for this bucketed geometry
-    #[allow(dead_code)]
     flags: BucketedGeometryFlags,
 
     /// Simplified vertex positions for spatial queries
@@ -160,6 +159,12 @@ impl BucketedGeometry {
     #[inline]
     pub fn is_disabled(&self) -> bool {
         self.is_disabled
+    }
+
+    /// The flags as read
+    #[inline]
+    pub(crate) fn flags(&self) -> BucketedGeometryFlags {
+        self.flags
     }
 
     /// The simplified vertex positions

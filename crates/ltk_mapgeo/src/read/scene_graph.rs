@@ -38,7 +38,7 @@ impl BucketedGeometry {
 
         let buckets_per_side = reader.read_u16::<LE>()?;
         let is_disabled = reader.read_u8()? != 0;
-        let flags = BucketedGeometryFlags::from_bits_truncate(reader.read_u8()?);
+        let flags = BucketedGeometryFlags::from_bits_retain(reader.read_u8()?);
 
         let vertex_count = reader.read_u32::<LE>()? as usize;
         let index_count = reader.read_u32::<LE>()? as usize;

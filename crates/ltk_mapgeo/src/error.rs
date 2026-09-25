@@ -1,5 +1,55 @@
 //! Error types for map geometry parsing
 
+/// Errors that can occur when writing a map geometry file
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum WriteError {
+    /// A mesh refers to a vertex buffer the asset does not have.
+    #[error("mesh {mesh} refers to vertex buffer {index}, which does not exist")]
+    MissingVertexBuffer { mesh: usize, index: usize },
+
+    /// A mesh refers to an index buffer the asset does not have.
+    #[error("mesh {mesh} refers to index buffer {index}, which does not exist")]
+    MissingIndexBuffer { mesh: usize, index: usize },
+
+    /// A vertex buffer does not hold the vertex count of a mesh that uses it.
+    #[error("vertex buffer {buffer} holds {actual} vertices, but mesh {mesh} says {expected}")]
+    VertexCountMismatch {
+        mesh: usize,
+        buffer: usize,
+        expected: usize,
+        actual: usize,
+    },
+
+    /// A mesh uses more indices than its index buffer holds.
+    #[error("mesh {mesh} uses {index_count} indices, but its index buffer holds {buffer_len}")]
+    IndexCountOutOfBounds {
+        mesh: usize,
+        index_count: usize,
+        buffer_len: usize,
+    },
+
+    /// No mesh uses a vertex buffer, so a reader could not tell its layout.
+    #[error("vertex buffer {index} is not used by any mesh")]
+    UnreferencedVertexBuffer { index: usize },
+
+    /// A vertex layout has more elements than a declaration has slots.
+    #[error("a vertex layout has {count} elements, but declarations hold at most 15")]
+    TooManyVertexElements { count: usize },
+
+    /// A scene graph is disabled, which the client refuses to load.
+    #[error("scene graph {index} is disabled")]
+    DisabledSceneGraph { index: usize },
+
+    /// A count or size does not fit its field.
+    #[error("too many {0} for the format")]
+    TooLarge(&'static str),
+
+    /// An IO error occurred
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+}
+
 /// Errors that can occur when parsing a map geometry file
 #[derive(Debug, thiserror::Error)]
 pub enum ParseError {

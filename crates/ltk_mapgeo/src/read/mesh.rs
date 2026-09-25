@@ -82,7 +82,7 @@ impl EnvironmentMesh {
         let transform = reader.read_mat4_col_major::<LE>()?;
 
         // Read quality filter
-        let quality = EnvironmentQuality::from_bits_truncate(reader.read_u8()?);
+        let quality = EnvironmentQuality::from_bits_retain(reader.read_u8()?);
 
         // Read visibility flags (version >= 7 && <= 12, mid position)
         if version.has_mid_visibility_flags() {
@@ -94,7 +94,7 @@ impl EnvironmentMesh {
         let mut layer_transition_behavior = VisibilityTransitionBehavior::default();
 
         if version.has_old_render_flags() {
-            render_flags = EnvironmentMeshRenderFlags::from_bits_truncate(reader.read_u8()? as u16);
+            render_flags = EnvironmentMeshRenderFlags::from_bits_retain(reader.read_u8()? as u16);
             layer_transition_behavior =
                 if render_flags.contains(EnvironmentMeshRenderFlags::IS_DECAL) {
                     VisibilityTransitionBehavior::TurnVisibleDoesMatchNewLayerFilter
@@ -106,9 +106,9 @@ impl EnvironmentMesh {
                 VisibilityTransitionBehavior::try_from(reader.read_u8()?).unwrap_or_default();
 
             render_flags = if version.has_u16_render_flags() {
-                EnvironmentMeshRenderFlags::from_bits_truncate(reader.read_u16::<LE>()?)
+                EnvironmentMeshRenderFlags::from_bits_retain(reader.read_u16::<LE>()?)
             } else {
-                EnvironmentMeshRenderFlags::from_bits_truncate(reader.read_u8()? as u16)
+                EnvironmentMeshRenderFlags::from_bits_retain(reader.read_u8()? as u16)
             };
         }
 
