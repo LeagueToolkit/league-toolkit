@@ -30,6 +30,9 @@ const MAX_VERTEX_ELEMENTS_IN_DECL: usize = 15;
 impl EnvironmentAsset {
     /// Reads an environment asset from a binary stream.
     ///
+    /// The reader drops a vertex buffer that no mesh references. The meshes' buffer ids index
+    /// the buffers that remain.
+    ///
     /// # Arguments
     ///
     /// * `reader` - A reader that implements `Read` and `Seek`
@@ -95,7 +98,7 @@ impl EnvironmentAsset {
         }
 
         let index_buffers = Self::read_index_buffers(reader, version)?;
-        let meshes = Self::read_meshes(reader, version, use_separate_point_lights)?;
+        let mut meshes = Self::read_meshes(reader, version, use_separate_point_lights)?;
         let scene_graphs = Self::read_scene_graphs(reader, version)?;
         let reflection_planes = if version.has_planar_reflectors() {
             Self::read_reflection_planes(reader)?
@@ -155,12 +158,16 @@ impl EnvironmentAsset {
             }
         }
 
-        // Materialize vertex buffers from their offsets/sizes using the inferred declarations
+        // Materialize vertex buffers from their offsets/sizes using the inferred declarations.
+        // A buffer no mesh references has no declaration, and the client never draws it. The
+        // reader drops the buffer and renumbers the meshes' buffer ids past it.
         let mut vertex_buffers = Vec::with_capacity(vertex_buffer_count);
+        let mut renumbered = vec![usize::MAX; vertex_buffer_count];
         for vb_id in 0..vertex_buffer_count {
             let Some((desc, expected_vertex_count)) = vb_plan[vb_id].clone() else {
-                return Err(ParseError::UnreferencedVertexBuffer { index: vb_id });
+                continue;
             };
+            renumbered[vb_id] = vertex_buffers.len();
 
             reader.seek(SeekFrom::Start(vertex_buffer_offsets[vb_id]))?;
             let size = vertex_buffer_sizes[vb_id] as usize;
@@ -178,6 +185,14 @@ impl EnvironmentAsset {
             }
 
             vertex_buffers.push(vb);
+        }
+
+        if vertex_buffers.len() != vertex_buffer_count {
+            for mesh in &mut meshes {
+                for id in mesh.vertex_buffer_ids_mut() {
+                    *id = renumbered[*id];
+                }
+            }
         }
 
         Ok(EnvironmentAsset::builder()
