@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.10](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_anim-v0.3.9...ltk_anim-v0.3.10) - 2026-09-25
+
+### Fixed
+
+- *(ltk_anim)* evaluate compressed tracks with one key or none
+- *(ltk_anim)* accept and name every compressed animation flag bit
+
 ## [0.3.9](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_anim-v0.3.8...ltk_anim-v0.3.9) - 2026-09-20
 
 ### Other
