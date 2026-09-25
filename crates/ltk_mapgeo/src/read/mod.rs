@@ -187,6 +187,7 @@ impl EnvironmentAsset {
             .planar_reflectors(reflection_planes)
             .vertex_buffers(vertex_buffers)
             .index_buffers(index_buffers)
+            .vertex_declarations(vertex_declarations)
             .build())
     }
 

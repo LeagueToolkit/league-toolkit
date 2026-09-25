@@ -1,6 +1,6 @@
 //! Environment asset definition
 
-use ltk_mesh::mem::{IndexBuffer, VertexBuffer};
+use ltk_mesh::mem::{IndexBuffer, VertexBuffer, VertexBufferDescription};
 
 use crate::{BucketedGeometry, EnvironmentMesh, PlanarReflector, ShaderTextureOverride};
 
@@ -53,6 +53,9 @@ pub struct EnvironmentAsset {
 
     /// Shared index buffers (meshes reference by index)
     index_buffers: Vec<IndexBuffer<u16>>,
+
+    /// The vertex declaration table as read, which the writer keeps the order of
+    pub(crate) vertex_declarations: Vec<VertexBufferDescription>,
 }
 
 impl EnvironmentAsset {
@@ -73,10 +76,27 @@ impl EnvironmentAsset {
         &self.meshes
     }
 
+    /// The environment meshes, for editing in place
+    #[inline]
+    pub fn meshes_mut(&mut self) -> &mut [EnvironmentMesh] {
+        &mut self.meshes
+    }
+
     /// The bucketed geometry scene graphs
     #[inline]
     pub fn scene_graphs(&self) -> &[BucketedGeometry] {
         &self.scene_graphs
+    }
+
+    /// Replaces the scene graphs, typically with those of
+    /// [`EnvironmentAsset::bake_scene_graphs`].
+    ///
+    /// Returns the previous scene graphs.
+    pub fn replace_scene_graphs(
+        &mut self,
+        scene_graphs: Vec<BucketedGeometry>,
+    ) -> Vec<BucketedGeometry> {
+        std::mem::replace(&mut self.scene_graphs, scene_graphs)
     }
 
     /// The planar reflectors
@@ -159,6 +179,7 @@ pub(crate) struct EnvironmentAssetBuilder {
     planar_reflectors: Vec<PlanarReflector>,
     vertex_buffers: Vec<VertexBuffer>,
     index_buffers: Vec<IndexBuffer<u16>>,
+    vertex_declarations: Vec<VertexBufferDescription>,
 }
 
 impl EnvironmentAssetBuilder {
@@ -192,6 +213,11 @@ impl EnvironmentAssetBuilder {
         self
     }
 
+    pub fn vertex_declarations(mut self, declarations: Vec<VertexBufferDescription>) -> Self {
+        self.vertex_declarations = declarations;
+        self
+    }
+
     pub fn build(self) -> EnvironmentAsset {
         EnvironmentAsset {
             shader_texture_overrides: self.shader_texture_overrides,
@@ -200,6 +226,7 @@ impl EnvironmentAssetBuilder {
             planar_reflectors: self.planar_reflectors,
             vertex_buffers: self.vertex_buffers,
             index_buffers: self.index_buffers,
+            vertex_declarations: self.vertex_declarations,
         }
     }
 }
