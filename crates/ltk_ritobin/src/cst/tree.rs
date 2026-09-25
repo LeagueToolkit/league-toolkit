@@ -1,7 +1,9 @@
 use std::fmt::{self, Display};
 
+use ltk_meta::BinFile;
+
 use crate::{
-    ast::PartialBin,
+    ast::{diagnostics::DiagnosticWithSpan, PartialBin},
     cst::{
         visitor::{Visit, VisitCtx},
         ChildRange, ErrorRange, NodeId, TokenId, Visitor,
@@ -253,9 +255,25 @@ impl Cst {
         p.build_tree(error_propagation)
     }
 
-    /// Construct a best-effort [`Bin`] from this tree, along with any diagnostics. If there
-    /// are any diagnostics, the [`Bin`] may only be partially/best-effort constructed - use
-    /// [`PartialBin::finish`] to get a quick Result type.
+    /// Construct a best-effort [`BinFile`] from this tree, of the kind its `type` root names,
+    /// along with any diagnostics.
+    ///
+    /// A `PTCH` file builds a [`BinFile::Override`], any other file a [`BinFile::Prop`]. With
+    /// diagnostics present the file is best-effort: a record or object the diagnostics name may
+    /// be missing from it. A parse error is not among the diagnostics: it is in [`Self::errors`],
+    /// and the tree around it is dropped from the file. A caller that needs a faithful file
+    /// rejects any parse error and any diagnostic.
+    pub fn build(&self, text: &str) -> (BinFile, Vec<DiagnosticWithSpan>) {
+        let ast = self.build_ast(text);
+        (ast.to_bin_file(), ast.diagnostics)
+    }
+
+    /// Construct a best-effort [`Bin`](ltk_meta::Bin) from this tree, along with any diagnostics.
+    ///
+    /// With diagnostics present the bin is best-effort. [`PartialBin::into_result`] rejects any
+    /// diagnostic. A `PTCH` file is diagnosed as
+    /// [`Diagnostic::UnexpectedFileKind`](crate::ast::diagnostics::Diagnostic::UnexpectedFileKind),
+    /// and [`Self::build`] builds it.
     pub fn build_bin(&self, text: &str) -> PartialBin {
         self.build_ast(text).into_partial_bin(text)
     }

@@ -12,10 +12,10 @@ is the bug and gets edited. Two things it does not hold:
   ADR-NNNN from the rules in [section 17](#s17).
 
 The crate implements [section 4](#s4) to [section 12](#s12): reading, writing, the path language,
-resolution, apply, merge, `ValuePath` and diff. [section 13](#s13) and [section 14](#s14) (join,
-the per-record surface) are designed and not built, tracked as #223 and #239, and so is
-[section 15](#s15) (ritobin text). `ValuePath` itself, and the walk that produces one, are
-specified in `value-walk.md`.
+resolution, apply, merge, `ValuePath` and diff. `ltk_ritobin` implements [section 15](#s15), ritobin
+text, short of byte parity with moonshadow's printer, tracked as #242. [section 13](#s13) and
+[section 14](#s14) (join, the per-record surface) are designed and not built, tracked as #223 and
+#239. `ValuePath` itself, and the walk that produces one, are specified in `value-walk.md`.
 
 ## <a id="s1"></a>1. Summary
 
@@ -1120,15 +1120,15 @@ Four things this surface has to get right:
 
 ## <a id="s15"></a>15. ritobin text
 
-moonshadow's ritobin already has a text shape for PTCH. Its binary reader emits a `patches` section
-of type `map[hash,embed]` whose values are `patch` embeds with two fields, `path: string` and
-`value`, and it records the inner PROP version as `version`
-(`ritobin_lib/src/ritobin/bin_io_binary_read.cpp`, `_write.cpp`). LtMAO's `pyRitoFile` uses the
-same vocabulary (`is_patch`, `patches`, fields `hash`, `path`, `type`, `data`). Matching it means
-existing `.py` / `.rito` files keep working and our output diffs cleanly against theirs:
+moonshadow's ritobin has a text shape for PTCH. Its binary reader emits a `patches` section of
+type `map[hash,embed]` whose values are `patch` embeds with two fields, `path: string` and `value`,
+and it records the inner PROP version as `version` (`ritobin_lib/src/ritobin/bin_io_binary_read.cpp`,
+`_write.cpp`). LtMAO's `pyRitoFile` uses the same vocabulary (`is_patch`, `patches`, fields `hash`,
+`path`, `type`, `data`). `ltk_ritobin` reads and writes that shape. Existing `.py` / `.rito` files
+parse, and a hash table names the object hashes and the embed contents as it does for a `PROP`:
 
 ```text
-#PROP_text
+#PTCH_text
 type: string = "PTCH"
 version: u32 = 3
 linked: list[string] = {}
@@ -1150,19 +1150,96 @@ patches: map[hash,embed] = {
 }
 ```
 
+The surface:
+
+```rust
+// ltk_ritobin::ast::node::root
+pub enum RootKind { Unknown, Version, Type, Linked, Entries, Patches, Deleted }
+pub enum FileKind { Prop, Patch, Unknown }                  // Display: "PROP", "PTCH", "unknown"
+
+impl Cst {
+    /// Builds the kind of bin the `type` root names: `BinFile::Override` for a `PTCH` file,
+    /// `BinFile::Prop` for any other. Best-effort when diagnostics are present.
+    pub fn build(&self, text: &str) -> (BinFile, Vec<DiagnosticWithSpan>);
+    /// A `PTCH` file is diagnosed as `UnexpectedFileKind`.
+    pub fn build_bin(&self, text: &str) -> PartialBin;
+}
+
+impl Ast {
+    pub fn to_bin_file(&self) -> BinFile;
+    pub fn to_bin_override(&self) -> BinOverride;
+}
+
+impl Roots {
+    /// The well-formed records of the `patches` root, in the order they are written.
+    pub fn patches(&self) -> Option<&KnownRoot<Vec<RootPatch>>>;
+    pub fn deleted(&self) -> Option<&KnownRoot<Vec<BinHash>>>;
+}
+
+pub struct RootPatch {
+    pub object_hash: HashedLiteral<BinHash>,
+    pub path: Spanned<PropertyPath>,
+    pub value: Value,
+    /// The whole `object = patch { .. }` pair.
+    pub span: Span,
+}
+
+impl Print for BinOverride { /* .. */ }
+impl Print for BinFile { /* .. */ }
+
+impl cst::builder::Builder<H> {
+    /// The tree `Print for BinOverride` prints, and the text buffer its spans point into.
+    pub fn build_override(self, patch: &BinOverride) -> (Cst, String);
+}
+```
+
 Rules:
 
-- `patches` keys repeat (one object, many records). `values::Map` is a `Vec` of pairs, so the
-  typechecker keeps duplicates and order; it must not collapse them into an `IndexMap`.
-- `deleted: list[hash] = { }` is a new root entry for the delete list. It is ours only; it is
-  omitted when empty so every shipped file prints exactly as ritobin prints it (D14).
-- On a `PTCH` file, `linked` must be empty (diagnostic, D3) and `version` must be 3. `entries` and
-  `linked` are still printed when empty, as ritobin does.
-- `RootKind` gains `Patches` and `Deleted`. `Cst::build_bin` is joined by `Cst::build` returning
-  `(BinFile, Vec<DiagnosticWithSpan>)`; `build_bin` keeps its signature and diagnoses a `PTCH`
-  file. `Print` is implemented for `BinOverride` and `BinFile`.
-- `path` is a plain `string`. There is no new literal syntax, and the path is not unhashed or
-  rehashed: property names inside it are already names.
+- `patches` keys repeat (one object, many records). The typechecker's `Value::Map` is a `Vec` of
+  pairs, and a record keeps its place in it; records are never collapsed into an `IndexMap` keyed
+  by object hash. An absent or empty `patches` root is zero records, as in moonshadow's writer.
+- A record is `object = patch { path: string = "..", value: <type> = .. }`. The key is the object's
+  path hash. `path` is a plain `string`: no new literal syntax, and the path is not unhashed or
+  rehashed. The property names inside it are plain names. `value` keeps its authored kind, with
+  no schema coercion.
+- `deleted: list[hash]` is a root for the delete list, and a toolkit extension. It prints after
+  `patches`, and is omitted when empty (D14, D33).
+- On a `PTCH` file, `linked` must be empty (D3) and `version` must be 3. `entries` and `linked`
+  print when empty, as ritobin prints them.
+- A `patches` or `deleted` root on a file of another kind is diagnosed, and left out of the `Bin`.
+  Its records are not resolved.
+- `Cst::build` returns a best-effort file with its diagnostics (D34). A record without a usable path
+  or value is left out of the patch. A record of another class, or with another field, keeps its
+  path and value. Every malformed record is diagnosed. A parse error is in `Cst::errors`, not among
+  the diagnostics, and the tree around it is absent from the file. A caller that needs a faithful
+  file rejects any parse error and any diagnostic. `build_bin` on a `PTCH` file reports
+  `UnexpectedFileKind`, and `PartialBin::into_result` rejects it.
+- A record path is a string like any other and takes the same escapes: the `"` of a `{"key"}`
+  subscript prints as `\"`.
+- A `PTCH` file prints under a `#PTCH_text` comment and a `PROP` file under `#PROP_text`, so a scan
+  can tell them apart without parsing. The comment is not read back: the `type` root decides the
+  kind. moonshadow's ritobin prints `#PROP_text` for both and recognizes `#PTCH_text`.
+
+Each diagnostic points at the source span of what it names:
+
+| diagnostic                | span                                                                    |
+| ------------------------- | ----------------------------------------------------------------------- |
+| `PatchOnlyRoot`           | the name of a `patches` or `deleted` root on a file that is not `PTCH`  |
+| `PatchLinked`             | the value of a non-empty `linked` root on a `PTCH` file                 |
+| `UnsupportedPatchVersion` | the value of a `version` root other than 3 on a `PTCH` file             |
+| `UnexpectedFileKind`      | the value of the `type` root of a `PTCH` file handed to `build_bin`     |
+| `UnexpectedPatchClass`    | the class name of a record embed that is not `patch`                    |
+| `MissingPatchField`       | the class name of a record without `path` or without `value`            |
+| `DuplicatePatchField`     | the name of a second `path` or `value` field; the first one is used     |
+| `UnexpectedPatchField`    | a record field other than `path` and `value`                            |
+| `InvalidPropertyPath`     | the `path` string literal `PropertyPath::new` rejects, quotes included  |
+| `TypeMismatch`            | a `path` that is not a `string`; a record key that is not a hash        |
+
+A record value is type-checked as any property value is, with the same diagnostics.
+
+The printer's layout is `ltk_ritobin`'s own, not moonshadow's: hashes are not zero-padded, a map
+type prints as `map[hash, embed]`, an empty block as `{ }`, and a list of scalars on one line. Byte
+parity with moonshadow's printer (FR-6) is #242.
 
 On #173's framing: the language is Riot's own `PropertyPathIterator` grammar (dotted members,
 `[i]`, `{k}`), not rapidjson's JSON Pointer (`/a/b/0`, RFC 6901). rapidjson is involved only in
@@ -1197,9 +1274,19 @@ Both come from `UI.wad.client` of client 16.16.804.9184.
   re-writes byte-identical, and `check` against its `uibase` reproduces the numbers in
   [section 3.1](#s3.1).
 
-**ritobin text:** print and parse snapshots for the fixture, and diagnostics for a non-empty
-`linked` on a `PTCH`, a `patches` entry that is not a `patch`, and a `path` that fails
-`PropertyPath::new`.
+**ritobin text**, in `crates/ltk_ritobin/tests/ptch.rs`:
+
+- The fixture prints, parses back equal, and writes back byte-identical. Its text has no `deleted`
+  root.
+- A builder-made patch with added objects, deletions and a record of every value kind survives
+  print and parse. One record path holds a `{"key"}` subscript.
+- Parsed text writes bytes `BinOverride::from_reader` reads back equal.
+- Two records for one object and one path apply in the order they are written.
+- An absent and an empty `patches` root are both zero records.
+- One test per row of the diagnostic table in [section 15](#s15), each asserting the span, and
+  that a record without a usable path or value is left out of the patch. A `patches` root on a
+  `PROP` file reports `PatchOnlyRoot` only. A record with a parse error is in `Cst::errors`.
+- Golden files against moonshadow's printer are #242.
 
 **Merge, diff and join** (`crates/ltk_meta/tests/merge.rs`, `diff.rs`, generated pairs from
 `tests/common`):
@@ -1290,6 +1377,8 @@ rules append.
 | D30 | `ltk_meta::Error` stays one public `thiserror` enum; `PropertyPathError` and `ResolveError` are structs carrying a position and a public kind. | Situation-specific error structs with a private kind, per M-ERRORS-CANONICAL-STRUCTS. | The crate convention is the enum, and C-GOOD-ERR is met either way. The kind stays public rather than hiding behind `is_xxx()` helpers, because callers classify skips out of `ApplyReport`. | [section 6](#s6), [section 8.3](#s8.3), [section 9.4](#s9.4) |
 | D31 | The new builder is `BinOverrideBuilder`. | `Builder`, matching what `Bin` exposes. | M-INIT-BUILDER wants `FooBuilder`; renaming `Bin`'s `Builder` to `BinBuilder` is a separate cleanup, not this one's to make. | [section 5.1](#s5.1) |
 | D32 | `BinOverride` and `PropertyPatch` expose their fields; `PropertyPath` keeps its private. | C-STRUCT-PRIVATE throughout. | `Bin` and `BinObject` are public-field types and the new ones sit beside them. `PropertyPath` is the exception because it carries a validated invariant. | [section 5.1](#s5.1), [section 5.2](#s5.2), [section 5.3](#s5.3) |
+| D33 | The `deleted` root prints after `patches`. | Printing it in wire order, before `entries`. | Every root moonshadow prints comes first, in moonshadow's order. A patch that deletes prints as ritobin's text plus one trailing root. | [section 15](#s15) |
+| D34 | `Cst::build` returns a best-effort `BinFile` with its diagnostics. A record without a usable path or value is left out of the patch, and every malformed record is diagnosed. | A `Result` that fails the whole file on the first malformed record. | An editor holds a tree between keystrokes, when a buffer is almost always invalid, and `build_bin` returns a best-effort `Bin` the same way. A caller that needs a faithful file rejects any diagnostic. | [section 15](#s15) |
 
 ## <a id="appendix-a"></a>Appendix A. Client functions
 

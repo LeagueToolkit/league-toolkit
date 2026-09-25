@@ -1,4 +1,4 @@
-use std::{convert::Infallible, str::FromStr};
+use std::{convert::Infallible, fmt, str::FromStr};
 
 use crate::{
     ast::{
@@ -12,11 +12,31 @@ use crate::{
 mod kind;
 pub use kind::*;
 
+/// The kind of bin a ritobin file describes, read from its `type` root.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FileKind {
     Prop,
     Patch,
     Unknown,
+}
+
+impl FileKind {
+    /// The `type` root value naming this kind.
+    ///
+    /// [`Self::Unknown`] names no kind, and is written as `"unknown"` by this method.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Prop => "PROP",
+            Self::Patch => "PTCH",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+impl fmt::Display for FileKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 impl FromStr for FileKind {
@@ -69,6 +89,12 @@ impl Root {
                 .map(RootValue::span)
                 .unwrap_or(self.type_expr.span),
         )
+    }
+
+    /// The span of the root's value, or of the whole root when it has none.
+    #[must_use]
+    pub(crate) fn value_span(&self) -> Span {
+        self.value.as_ref().map_or(self.span(), RootValue::span)
     }
 }
 
