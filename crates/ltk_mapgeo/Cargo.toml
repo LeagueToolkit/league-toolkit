@@ -1,6 +1,6 @@
 [package]
 name = "ltk_mapgeo"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 description = "Map Geometry (.mapgeo) parsing for League Toolkit"
 license = "Apache-2.0"
