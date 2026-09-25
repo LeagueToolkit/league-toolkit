@@ -52,11 +52,26 @@ impl Default for QuaternionHotFrame {
 }
 
 /// Joint hot frame state containing 4 control points for each transform
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct JointHotFrame {
     pub rotation: [QuaternionHotFrame; 4],
     pub translation: [VectorHotFrame; 4],
     pub scale: [VectorHotFrame; 4],
+}
+
+/// The identity transform, which is what a joint without keys for a transform samples.
+impl Default for JointHotFrame {
+    fn default() -> Self {
+        let unit_scale = VectorHotFrame {
+            time: 0,
+            value: Vec3::ONE,
+        };
+        Self {
+            rotation: Default::default(),
+            translation: Default::default(),
+            scale: [unit_scale; 4],
+        }
+    }
 }
 
 impl JointHotFrame {
@@ -140,6 +155,9 @@ impl JointHotFrame {
 
     /// Samples rotation using parametrized Catmull-Rom interpolation
     fn sample_rotation_parametrized(&self, time: u16) -> Quat {
+        if self.rotation[2].time == self.rotation[1].time {
+            return self.rotation[1].value;
+        }
         let (amount, scale_in, scale_out) = create_keyframe_weights(
             time,
             self.rotation[0].time,
@@ -161,6 +179,9 @@ impl JointHotFrame {
 
     /// Samples translation using parametrized Catmull-Rom interpolation
     fn sample_translation_parametrized(&self, time: u16) -> Vec3 {
+        if self.translation[2].time == self.translation[1].time {
+            return self.translation[1].value;
+        }
         let (amount, scale_in, scale_out) = create_keyframe_weights(
             time,
             self.translation[0].time,
@@ -182,6 +203,9 @@ impl JointHotFrame {
 
     /// Samples scale using parametrized Catmull-Rom interpolation
     fn sample_scale_parametrized(&self, time: u16) -> Vec3 {
+        if self.scale[2].time == self.scale[1].time {
+            return self.scale[1].value;
+        }
         let (amount, scale_in, scale_out) = create_keyframe_weights(
             time,
             self.scale[0].time,

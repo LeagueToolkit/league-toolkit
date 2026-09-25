@@ -142,13 +142,15 @@ impl<'a> CompressedEvaluator<'a> {
         }
     }
 
+    /// A transform without keys has out of range indices (`0xFFFF`) in the jump cache. They
+    /// leave that transform at its default and must not move the cursor.
     fn init_joint_hot_frame<J: JumpFrame>(&mut self, joint_id: usize, jump_frame: &J) {
         let mut hot_frame = JointHotFrame::default();
 
         // Initialize rotation hot frames
         for (i, &frame_idx) in jump_frame.rotation_keys().iter().enumerate() {
-            self.state.cursor = self.state.cursor.max(frame_idx);
             if let Some(frame) = self.animation.frames.get(frame_idx) {
+                self.state.cursor = self.state.cursor.max(frame_idx);
                 hot_frame.rotation[i] = QuaternionHotFrame {
                     time: frame.time(),
                     value: quantized::decompress_quat_u16(&frame.value()),
@@ -158,8 +160,8 @@ impl<'a> CompressedEvaluator<'a> {
 
         // Initialize translation hot frames
         for (i, &frame_idx) in jump_frame.translation_keys().iter().enumerate() {
-            self.state.cursor = self.state.cursor.max(frame_idx);
             if let Some(frame) = self.animation.frames.get(frame_idx) {
+                self.state.cursor = self.state.cursor.max(frame_idx);
                 hot_frame.translation[i] = VectorHotFrame {
                     time: frame.time(),
                     value: decompress_vector3(
@@ -173,8 +175,8 @@ impl<'a> CompressedEvaluator<'a> {
 
         // Initialize scale hot frames
         for (i, &frame_idx) in jump_frame.scale_keys().iter().enumerate() {
-            self.state.cursor = self.state.cursor.max(frame_idx);
             if let Some(frame) = self.animation.frames.get(frame_idx) {
+                self.state.cursor = self.state.cursor.max(frame_idx);
                 hot_frame.scale[i] = VectorHotFrame {
                     time: frame.time(),
                     value: decompress_vector3(

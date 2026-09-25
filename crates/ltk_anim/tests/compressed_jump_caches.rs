@@ -81,3 +81,78 @@ fn exporter_flags_do_not_stop_parsing() {
         "rotation is {r}, expected {rotation}"
     );
 }
+
+/// The flags bit that selects the key time weighted spline.
+const USE_KEYFRAME_PARAMETRIZATION: u32 = 0x4;
+
+/// A jump cache index that marks a transform without keys.
+const NO_KEYS: u16 = 0xFFFF;
+
+/// Pruned files store a transform that never changes as one key, and leave an unused
+/// transform out. One key used to collapse the weighted spline to zero and panic in
+/// `Quat::normalize`. A transform without keys used to sample a zero scale.
+#[test]
+fn a_single_key_or_no_key_samples_the_key_or_identity() {
+    let rotation = Quat::from_rotation_y(std::f32::consts::FRAC_PI_2);
+    let mut jump_caches = Vec::new();
+    push_jump_frame_u16(&mut jump_caches, [0; 4], [1; 4], [NO_KEYS; 4]);
+    let clip = CompressedClip {
+        flags: USE_KEYFRAME_PARAMETRIZATION,
+        translation_min: [0.0; 3],
+        translation_max: [65535.0; 3],
+        joints: vec![JOINT],
+        frames: vec![
+            RawFrame::rotation(0, 0, rotation),
+            RawFrame::new(0, 0, Transform::Translation, [1, 2, 3]),
+        ],
+        jump_cache_count: 1,
+        jump_caches,
+        ..CompressedClip::default()
+    };
+    let animation = Compressed::from_reader(&mut Cursor::new(clip.to_bytes())).unwrap();
+
+    let (r, t, s) = animation.evaluate(0.5)[&JOINT];
+    assert!(
+        r.angle_between(rotation) < 0.01,
+        "rotation is {r}, expected {rotation}"
+    );
+    let translation = Vec3::new(1.0, 2.0, 3.0);
+    assert!(
+        t.abs_diff_eq(translation, 1e-3),
+        "translation is {t}, expected {translation}"
+    );
+    assert_eq!(s, Vec3::ONE);
+}
+
+/// The `0xFFFF` of a transform without keys must not move the frame cursor. It used to
+/// move it past every frame, so no key after the jump cache was ever read.
+#[test]
+fn a_transform_without_keys_does_not_stop_later_keys() {
+    let (a, b) = (
+        Quat::IDENTITY,
+        Quat::from_rotation_y(std::f32::consts::FRAC_PI_2),
+    );
+    let mut jump_caches = Vec::new();
+    push_jump_frame_u16(&mut jump_caches, [0, 1, 2, 3], [4; 4], [NO_KEYS; 4]);
+    let clip = CompressedClip {
+        flags: USE_KEYFRAME_PARAMETRIZATION,
+        joints: vec![JOINT],
+        frames: vec![
+            RawFrame::rotation(0, 0, a),
+            RawFrame::rotation(16384, 0, a),
+            RawFrame::rotation(32768, 0, a),
+            RawFrame::rotation(49151, 0, b),
+            RawFrame::new(0, 0, Transform::Translation, [0; 3]),
+            // Only reachable by advancing the cursor past the jump cache.
+            RawFrame::rotation(65535, 0, b),
+        ],
+        jump_cache_count: 1,
+        jump_caches,
+        ..CompressedClip::default()
+    };
+    let animation = Compressed::from_reader(&mut Cursor::new(clip.to_bytes())).unwrap();
+
+    // 0.75 compresses to 49151, the time of the first `b` key.
+    let (r, _, _) = animation.evaluate(0.75)[&JOINT];
+    assert!(r.angle_between(b) < 0.01, "rotation is {r}, expected {b}");
+}
