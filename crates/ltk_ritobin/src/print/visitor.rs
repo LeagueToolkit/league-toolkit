@@ -395,15 +395,20 @@ impl<'a, W: Write> CstVisitor<'a, W> {
         let tree = ctx.node(tree).unwrap();
 
         match tree.kind {
-            Kind::TypeArgList => {
+            Kind::TypeArgList | Kind::AnnotationArgList => {
                 let grp = self.begin_group(Some(Mode::Flat))?;
                 // eprintln!("{:#?}", tree.children);
+                let item_kind = match tree.kind {
+                    Kind::TypeArgList => Kind::TypeArg,
+                    Kind::AnnotationArgList => Kind::AnnotationArg,
+                    _ => unreachable!(),
+                };
                 self.list_stack.push(ListContext {
                     len: tree
                         .children
                         .get(ctx.cst)
                         .iter()
-                        .filter(|n| n.tree(ctx.cst).is_some_and(|t| t.kind == Kind::TypeArg))
+                        .filter(|n| n.tree(ctx.cst).is_some_and(|t| t.kind == item_kind))
                         .count()
                         .try_into()
                         .unwrap(),
@@ -499,6 +504,9 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                 };
                 // self.flush().unwrap();
             }
+            Kind::Annotation => {
+                self.line()?;
+            }
             _ => {}
         }
         Ok(())
@@ -507,7 +515,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
     fn exit_tree_inner(&mut self, ctx: &VisitCtx<'_>, tree: NodeId) -> Result<(), PrintError> {
         let tree = ctx.node(tree).unwrap();
         match tree.kind {
-            Kind::TypeArgList => {
+            Kind::TypeArgList | Kind::AnnotationArgList => {
                 self.list_stack.pop();
                 self.end_group()?;
             }
@@ -534,16 +542,14 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                     // self.softline();
                 }
             }
-            Kind::ListItem | Kind::TypeArg => {
+            Kind::ListItem | Kind::TypeArg | Kind::AnnotationArg => {
                 if let Some(ctx) = self.list_stack.last() {
                     let last_item = ctx.idx + 1 == ctx.len;
 
                     if !last_item {
                         self.text_if(",", Mode::Flat)?;
                         self.space()?;
-                        if tree.kind == Kind::ListItem {
-                            self.softline()?;
-                        }
+                        self.softline()?;
                     }
 
                     self.list_stack.last_mut().unwrap(/* Safety: guaranteed by if let */).idx += 1;
