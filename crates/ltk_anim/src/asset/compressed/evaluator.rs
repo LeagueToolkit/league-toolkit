@@ -67,7 +67,7 @@ impl<'a> CompressedEvaluator<'a> {
         let parametrized = self
             .animation
             .flags
-            .contains(AnimationFlags::UseKeyframeParametrization);
+            .contains(AnimationFlags::USE_KEYFRAME_PARAMETRIZATION);
 
         // Update hot frames
         self.update_hot_frames(time);

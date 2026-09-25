@@ -64,3 +64,20 @@ fn evaluate_starts_from_the_jump_cache_pose() {
         );
     }
 }
+
+/// Shipped files set exporter bits `0x8`, `0x10` and `0x20`, which the reader used to reject.
+#[test]
+fn exporter_flags_do_not_stop_parsing() {
+    let rotation = Quat::from_rotation_y(std::f32::consts::FRAC_PI_2);
+    let clip = CompressedClip {
+        flags: 0x3F,
+        ..constant_clip(rotation, [1, 2, 3], [4, 5, 6])
+    };
+    let animation = Compressed::from_reader(&mut Cursor::new(clip.to_bytes())).unwrap();
+
+    let (r, _, _) = animation.evaluate(0.5)[&JOINT];
+    assert!(
+        r.angle_between(rotation) < 0.01,
+        "rotation is {r}, expected {rotation}"
+    );
+}
