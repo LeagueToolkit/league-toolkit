@@ -46,7 +46,7 @@ fn located<'a>(text: &'a str, diagnostics: &[DiagnosticWithSpan]) -> Vec<(&'a st
 /// A `PTCH` file with `records` as the body of its `patches` root.
 fn ptch(records: &str) -> String {
     format!(
-        r#"#PROP_text
+        r#"#PTCH_text
 type: string = "PTCH"
 version: u32 = 3
 linked: list[string] = {{}}
@@ -80,7 +80,7 @@ fn path(text: &str) -> PropertyPath {
 
 #[test]
 fn the_ticket_example_parses_into_two_records_in_authored_order() {
-    let text = r#"#PROP_text
+    let text = r#"#PTCH_text
 type: string = "PTCH"
 version: u32 = 3
 linked: list[string] = {}
@@ -417,7 +417,7 @@ fn a_record_key_that_is_not_a_hash_is_diagnosed_and_left_out() {
 
 #[test]
 fn an_absent_patches_root_is_zero_records() {
-    let text = r#"#PROP_text
+    let text = r#"#PTCH_text
 type: string = "PTCH"
 version: u32 = 3
 linked: list[string] = {}
@@ -467,7 +467,7 @@ fn a_patch_prints_its_records_under_patches_and_its_deletions_last() {
 
     pretty_assertions::assert_eq!(
         text,
-        r#"#PROP_text
+        r#"#PTCH_text
 type: string = "PTCH"
 version: u32 = 3
 linked: list[string] = { }
@@ -550,7 +550,7 @@ fn a_patch_with_added_objects_and_mixed_records_survives_print_and_parse() {
             path("Anchor"),
             values::Vector2::new(Vec2::new(0.0, 1.0)),
         )
-        .set(0x1, path("Nothing"), values::None::default())
+        .set(0x1, path("Nothing"), values::None)
         .set(0x1, path("Scale"), values::F32::new(0.25))
         .set(0x1, path("Name"), values::String::from("minimap"))
         .set(0x1, path("Id"), values::Hash::new(0x3b9c7079))
@@ -621,9 +621,30 @@ fn a_patch_with_added_objects_and_mixed_records_survives_print_and_parse() {
         .build();
 
     let text = patch.print().unwrap();
+    assert!(
+        text.contains(r#"path: string = "Lookup{\"weapon\"}""#),
+        "{text}"
+    );
     let file = build_clean(&text);
 
     pretty_assertions::assert_eq!(file, BinFile::Override(patch), "{text}");
+}
+
+#[test]
+fn prop_text_comment_on_a_ptch_file_builds_a_patch() {
+    // moonshadow's ritobin heads a PTCH file with `#PROP_text`: the `type` root decides the kind
+    let text = ptch(
+        r#"    0xa4edcb0d = patch {
+        path: string = "FlipX"
+        value: bool = true
+    }"#,
+    )
+    .replacen("#PTCH_text", "#PROP_text", 1);
+
+    let BinFile::Override(patch) = build_clean(&text) else {
+        panic!("expected a patch");
+    };
+    assert_eq!(patch.patches.len(), 1);
 }
 
 #[test]

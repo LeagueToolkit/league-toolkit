@@ -439,9 +439,9 @@ impl<H: HashProvider> Builder<H> {
         }
     }
 
-    /// The `#PROP_text` comment, then the `type` and `version` roots.
+    /// The `#PROP_text` or `#PTCH_text` comment, then the `type` and `version` roots.
     fn header_to_cst(&mut self, file_kind: FileKind) -> [Child; 3] {
-        let comment = self.spanned_token(Tok::Comment, "#PROP_text");
+        let comment = self.spanned_token(Tok::Comment, format!("#{file_kind}_text"));
         let comment = self.tree(Kind::Comment, vec![comment]);
 
         let type_entry = self.string(format!("\"{file_kind}\""));
@@ -551,19 +551,11 @@ impl<H: HashProvider> Builder<H> {
         self.entry_tree(key, Some(rito_type), value)
     }
 
-    /// A record path as a string literal.
-    ///
-    /// ritobin text has no escapes: a string runs to the next quote of the kind that opened it.
-    /// A path holding a `"`, such as one with a `{"key"}` subscript, is written in single quotes.
+    /// A record path as an escaped string literal.
     fn path_literal(&mut self, path: &PropertyPath) -> Child {
-        let path = path.as_str();
-        let quote = if path.contains('"') && !path.contains('\'') {
-            '\''
-        } else {
-            '"'
-        };
-        let lit = self.string(format!("{quote}{path}{quote}"));
-        self.tree(Kind::Literal, [lit])
+        let s = self.string(crate::escaping::escape(path.as_str()));
+        let quote = self.token(Tok::Quote);
+        self.tree(Kind::Literal, [quote, s, quote])
     }
 }
 

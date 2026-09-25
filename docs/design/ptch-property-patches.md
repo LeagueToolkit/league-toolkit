@@ -1128,7 +1128,7 @@ and it records the inner PROP version as `version` (`ritobin_lib/src/ritobin/bin
 parse, and a hash table names the object hashes and the embed contents as it does for a `PROP`:
 
 ```text
-#PROP_text
+#PTCH_text
 type: string = "PTCH"
 version: u32 = 3
 linked: list[string] = {}
@@ -1214,11 +1214,11 @@ Rules:
   the diagnostics, and the tree around it is absent from the file. A caller that needs a faithful
   file rejects any parse error and any diagnostic. `build_bin` on a `PTCH` file reports
   `UnexpectedFileKind`, and `PartialBin::into_result` rejects it.
-- `ltk_ritobin` reads no string escapes: a string runs to the next quote of the kind that opened it,
-  and a backslash stays in its value. A path holding a `"`, such as one with a `{"key"}` subscript,
-  prints in single quotes. A path holding both quote kinds has no `ltk_ritobin` text form.
-  moonshadow writes a `"`, a `\` and a control character inside a string as an escape and reads it
-  back; those escapes are part of #242.
+- A record path is a string like any other and takes the same escapes: the `"` of a `{"key"}`
+  subscript prints as `\"`.
+- A `PTCH` file prints under a `#PTCH_text` comment and a `PROP` file under `#PROP_text`, so a scan
+  can tell them apart without parsing. The comment is not read back: the `type` root decides the
+  kind. moonshadow's ritobin prints `#PROP_text` for both and recognizes `#PTCH_text`.
 
 Each diagnostic points at the source span of what it names:
 

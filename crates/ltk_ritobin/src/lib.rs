@@ -92,7 +92,7 @@
 //! use ltk_ritobin::Cst;
 //!
 //! let text = r#"
-//! #PROP_text
+//! #PTCH_text
 //! type: string = "PTCH"
 //! version: u32 = 3
 //! linked: list[string] = {}
