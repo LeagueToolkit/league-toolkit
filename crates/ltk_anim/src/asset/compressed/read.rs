@@ -15,11 +15,30 @@ use std::io::{Read, Seek, SeekFrom};
 use std::mem::size_of;
 
 bitflags! {
-    #[derive(Clone, Debug)]
+    /// Header flags of a compressed animation.
+    ///
+    /// The client reads only [`USE_KEYFRAME_PARAMETRIZATION`](Self::USE_KEYFRAME_PARAMETRIZATION).
+    /// The other bits record exporter settings, and their names describe what files with
+    /// the bit have in common.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
     pub struct AnimationFlags: u32 {
-        const Unk1 = 1 << 0;
-        const Unk2 = 1 << 1;
-        const UseKeyframeParametrization = 1 << 2;
+        /// Key times are not snapped to the frame grid.
+        const SUB_FRAME_KEYS = 1 << 0;
+        /// Exporter setting of unknown effect. Files with it show no measurable
+        /// difference, and almost all of them also set `SUB_FRAME_KEYS`.
+        const EXPORTER_OPTION_1 = 1 << 1;
+        /// Spline tangents are weighted by the real key spacing (non-uniform
+        /// Catmull-Rom). When clear, they use a fixed 0.5/0.5 weighting.
+        const USE_KEYFRAME_PARAMETRIZATION = 1 << 2;
+        /// Exporter setting of unknown effect. It appears only in files from the
+        /// newer exporter, the one that also writes `PRUNED_TRACKS`.
+        const EXPORTER_OPTION_3 = 1 << 3;
+        /// Unchanging tracks are stored as one key and unused tracks are left out.
+        /// Both bits are always set together.
+        const PRUNED_TRACKS = 0b11 << 4;
+
+        // Keep any other bit a file sets.
+        const _ = !0;
     }
 }
 
@@ -49,8 +68,7 @@ impl Compressed {
         let _resource_size = reader.read_u32::<LE>()?;
         let _format_token = reader.read_u32::<LE>()?;
         let flags = reader.read_u32::<LE>()?;
-        let flags = AnimationFlags::from_bits(flags)
-            .ok_or_else(|| InvalidField("flags", flags.to_string()))?;
+        let flags = AnimationFlags::from_bits_retain(flags);
 
         let joint_count = reader.read_u32::<LE>()?;
         let frame_count = reader.read_u32::<LE>()?;
