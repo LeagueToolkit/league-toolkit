@@ -46,7 +46,10 @@ mod reflector;
 pub use reflector::*;
 
 pub mod scene_graph;
-pub use scene_graph::{BucketGridConfig, BucketedGeometry, BuildError, GeometryBucket};
+pub use scene_graph::{
+    BakeFace, BucketedGeometry, BuildError, EdgeRounding, FaceMask, GeometryBucket, GridLayout,
+    SceneGraphKey, SceneGraphSelection,
+};
 
 mod asset;
 pub use asset::*;

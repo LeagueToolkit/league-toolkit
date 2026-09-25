@@ -20,3 +20,4 @@ ltk_primitives = { version = "0.3.6", path = "../ltk_primitives" }
 ltk_mesh = { version = "0.5.2", path = "../ltk_mesh" }
 
 [dev-dependencies]
+ltk_wad = { path = "../ltk_wad" }

@@ -1,329 +1,480 @@
-//! Building bucketed geometry from input triangles.
+//! Baking bucketed geometry from triangles.
+//!
+//! [`BucketedGeometry::bake`] packs triangles into a grid the same way the
+//! baker that produced the shipped `.mapgeo` files does. Given the same faces
+//! in the same order, its output equals the shipped grid bit for bit.
+//!
+//! The layout rules:
+//!
+//! - The grid bounds are the XZ bounds of every face's *min corner* (the
+//!   component-wise minimum of its three vertices), padded by
+//!   [`BOUNDS_PADDING`] on each side.
+//! - A face goes to the bucket that contains its min corner.
+//! - A face is *inside* its bucket when every vertex is strictly below the
+//!   bucket's upper X and Z edges. Inside faces come first, then the faces
+//!   that stick out, each group in input order.
+//! - Vertices are deduplicated per bucket by their exact bit pattern, in
+//!   first-use order.
+//! - A bucket's upper edge is `min + index * bucket_size + bucket_size`,
+//!   rounded as [`EdgeRounding`] says.
+//! - Empty buckets keep the running `start_index` and `base_vertex`.
+//! - Per-face visibility flags are written only when the faces carry at least
+//!   two distinct values.
 
 use std::collections::HashMap;
 
-use glam::Vec3;
+use glam::{Vec2, Vec3};
 
-use crate::EnvironmentVisibility;
+use crate::{EnvironmentMesh, EnvironmentVisibility};
 
 use super::bucketed_geometry::{BucketedGeometryBuilder, BucketedGeometryFlags};
 use super::{BucketedGeometry, GeometryBucket};
 
-/// Configuration for building a bucketed geometry grid.
-#[derive(Debug, Clone)]
-pub struct BucketGridConfig {
-    /// Number of buckets per side (grid is NxN). Typical value: 128 for Summoner's Rift.
-    pub buckets_per_side: u16,
-    /// Hash identifying which visibility controller/scene graph this belongs to.
-    pub visibility_controller_path_hash: u32,
+/// Distance the grid bounds extend past the outermost face min corner.
+pub const BOUNDS_PADDING: f32 = 10.0;
+
+/// Starting value of the bounds fold. A grid with no faces keeps it, so its
+/// bounds are `(+EMPTY_BOUND, -EMPTY_BOUND)`.
+const EMPTY_BOUND: f32 = f32::MAX / 10.0;
+
+/// Identifies one scene graph in an [`EnvironmentAsset`](crate::EnvironmentAsset).
+///
+/// A mesh feeds the scene graph whose key equals its own
+/// `(visibility_controller_path_hash, region_path_hash)` pair.
+/// [`SceneGraphKey::MAIN`] is the map's main grid.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub struct SceneGraphKey {
+    visibility_controller_path_hash: u32,
+    region_path_hash: u32,
 }
 
-/// Errors that can occur when building bucketed geometry.
+impl SceneGraphKey {
+    /// The main grid: no visibility controller and no region.
+    pub const MAIN: Self = Self::new(0, 0);
+
+    /// Creates a key from a visibility controller path hash and a region path hash.
+    pub const fn new(visibility_controller_path_hash: u32, region_path_hash: u32) -> Self {
+        Self {
+            visibility_controller_path_hash,
+            region_path_hash,
+        }
+    }
+
+    /// The key of the scene graph that `mesh` feeds.
+    pub fn of_mesh(mesh: &EnvironmentMesh) -> Self {
+        Self::new(
+            mesh.visibility_controller_path_hash(),
+            mesh.region_path_hash(),
+        )
+    }
+
+    /// The key of `graph`.
+    pub fn of_graph(graph: &BucketedGeometry) -> Self {
+        Self::new(
+            graph.visibility_controller_path_hash(),
+            graph.region_path_hash(),
+        )
+    }
+
+    /// Hash of the visibility controller path.
+    #[inline]
+    pub fn visibility_controller_path_hash(&self) -> u32 {
+        self.visibility_controller_path_hash
+    }
+
+    /// Hash of the region placeable path.
+    #[inline]
+    pub fn region_path_hash(&self) -> u32 {
+        self.region_path_hash
+    }
+
+    /// Sort key for the order of scene graphs in a file: the main grid
+    /// first, then ascending by the non-zero hash.
+    pub(crate) fn file_order(&self) -> (u32, u32, u32) {
+        (
+            self.visibility_controller_path_hash | self.region_path_hash,
+            self.visibility_controller_path_hash,
+            self.region_path_hash,
+        )
+    }
+}
+
+/// How a bucket's upper edge, `min + index * bucket_size + bucket_size`, is rounded.
+///
+/// The edge decides which faces are inside a bucket and how far the others
+/// stick out.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub enum EdgeRounding {
+    /// Each operation is rounded to `f32`. Every map in the current client
+    /// is baked this way.
+    #[default]
+    PerOperation,
+    /// `min + index * bucket_size` is a fused multiply-add, rounded once.
+    /// Some older maps are baked this way.
+    FusedMultiplyAdd,
+}
+
+impl EdgeRounding {
+    /// The upper edge of bucket `index` on one axis.
+    pub(crate) fn upper_edge(self, min: f32, index: usize, size: f32) -> f32 {
+        match self {
+            Self::PerOperation => min + index as f32 * size + size,
+            Self::FusedMultiplyAdd => (index as f32).mul_add(size, min) + size,
+        }
+    }
+}
+
+/// The shape of a grid: how many buckets per side, and how bucket edges round.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct GridLayout {
+    buckets_per_side: u16,
+    edge_rounding: EdgeRounding,
+}
+
+impl GridLayout {
+    /// A grid of `buckets_per_side` x `buckets_per_side` buckets with
+    /// [`EdgeRounding::PerOperation`].
+    pub const fn new(buckets_per_side: u16) -> Self {
+        Self {
+            buckets_per_side,
+            edge_rounding: EdgeRounding::PerOperation,
+        }
+    }
+
+    /// The same layout with `edge_rounding`.
+    pub const fn with_edge_rounding(self, edge_rounding: EdgeRounding) -> Self {
+        Self {
+            edge_rounding,
+            ..self
+        }
+    }
+
+    /// Number of buckets per side.
+    #[inline]
+    pub fn buckets_per_side(&self) -> u16 {
+        self.buckets_per_side
+    }
+
+    /// How bucket edges round.
+    #[inline]
+    pub fn edge_rounding(&self) -> EdgeRounding {
+        self.edge_rounding
+    }
+}
+
+/// One triangle to bake into a grid.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BakeFace {
+    positions: [Vec3; 3],
+    visibility: EnvironmentVisibility,
+}
+
+impl BakeFace {
+    /// Creates a face from its three positions (in winding order) and the
+    /// visibility layers of the mesh it comes from.
+    pub fn new(positions: [Vec3; 3], visibility: EnvironmentVisibility) -> Self {
+        Self {
+            positions,
+            visibility,
+        }
+    }
+
+    /// The three positions, in winding order.
+    #[inline]
+    pub fn positions(&self) -> [Vec3; 3] {
+        self.positions
+    }
+
+    /// The visibility layers of the face.
+    #[inline]
+    pub fn visibility(&self) -> EnvironmentVisibility {
+        self.visibility
+    }
+
+    /// Component-wise XZ minimum of the three vertices.
+    fn min_corner(&self) -> Vec2 {
+        let [a, b, c] = self.positions;
+        Vec2::new(a.x.min(b.x).min(c.x), a.z.min(b.z).min(c.z))
+    }
+}
+
+/// Errors from baking bucketed geometry.
 #[derive(Debug, thiserror::Error)]
 pub enum BuildError {
+    /// `buckets_per_side` is zero.
     #[error("buckets_per_side must be greater than 0")]
     ZeroBucketsPerSide,
 
-    #[error("bucket grid size {0}x{0} overflows usize")]
-    GridSizeOverflow(u16),
+    /// A face has a NaN or infinite position.
+    #[error("face {face} has a non-finite position")]
+    NonFinitePosition {
+        /// Index of the face in the input.
+        face: usize,
+    },
 
-    #[error("index count ({0}) is not a multiple of 3")]
-    InvalidIndexCount(usize),
+    /// The faces need more indices than a `u32` can address.
+    #[error("{faces} faces need more than u32::MAX indices")]
+    TooManyFaces {
+        /// Number of faces given.
+        faces: usize,
+    },
 
-    #[error("index {index} out of bounds for {vertex_count} vertices")]
-    IndexOutOfBounds { index: u32, vertex_count: usize },
-
-    #[error("bucket ({bucket_x}, {bucket_z}) has {count} unique vertices, exceeding u16 max")]
+    /// A bucket needs more distinct vertices than its `u16` indices can address.
+    #[error("bucket ({bucket_x}, {bucket_z}) has {count} unique vertices, more than u16 indices address")]
     BucketVertexOverflow {
+        /// Bucket column.
         bucket_x: usize,
+        /// Bucket row.
         bucket_z: usize,
+        /// Distinct vertices the bucket needs.
         count: usize,
     },
 
-    #[error("face visibility flags length ({got}) does not match face count ({expected})")]
-    VisibilityFlagsMismatch { got: usize, expected: usize },
-}
+    /// A bucket has more inside or sticking-out faces than a `u16` counts.
+    #[error("bucket ({bucket_x}, {bucket_z}) has {count} faces in one group, more than u16::MAX")]
+    BucketFaceOverflow {
+        /// Bucket column.
+        bucket_x: usize,
+        /// Bucket row.
+        bucket_z: usize,
+        /// Faces in the group that overflows.
+        count: usize,
+    },
 
-struct FaceAssignment {
-    face_index: usize,
-    vertex_indices: [u32; 3],
-    is_inside: bool,
+    /// A selection has a different number of meshes than the asset.
+    #[error("the selection has {selection} meshes, the asset has {asset}")]
+    MeshCountMismatch {
+        /// Meshes in the selection.
+        selection: usize,
+        /// Meshes in the asset.
+        asset: usize,
+    },
+
+    /// A face mask has a different length than its mesh has faces.
+    #[error("the face mask of mesh {mesh} has {mask} faces, the mesh has {faces}")]
+    FaceMaskLength {
+        /// Mesh index.
+        mesh: usize,
+        /// Faces in the mask.
+        mask: usize,
+        /// Faces in the mesh.
+        faces: usize,
+    },
+
+    /// A mesh has no `XYZ_Float32` position element.
+    #[error("mesh {mesh} has no XYZ_Float32 position element")]
+    MissingPositions {
+        /// Mesh index.
+        mesh: usize,
+    },
+
+    /// A mesh's index or vertex buffer id does not exist in the asset.
+    #[error("mesh {mesh} refers to a buffer the asset does not have")]
+    MissingBuffer {
+        /// Mesh index.
+        mesh: usize,
+    },
+
+    /// A mesh's index buffer refers past the end of its vertices.
+    #[error("mesh {mesh} index {index} is out of bounds for {vertex_count} vertices")]
+    IndexOutOfBounds {
+        /// Mesh index.
+        mesh: usize,
+        /// The index value.
+        index: u32,
+        /// Vertices in the mesh.
+        vertex_count: usize,
+    },
+
+    /// A scene graph's buckets refer past its vertices or indices.
+    #[error("the scene graph {0:?} refers past its vertices or indices")]
+    CorruptSceneGraph(SceneGraphKey),
+
+    /// Two scene graphs in the asset have the same key.
+    #[error("the asset has two scene graphs for {0:?}")]
+    DuplicateSceneGraph(SceneGraphKey),
+
+    /// A scene graph has faces that no mesh with its key contains, so its
+    /// selection cannot be recovered.
+    #[error("{count} faces of the scene graph {key:?} are in no mesh with that key")]
+    UnmatchedFaces {
+        /// The scene graph.
+        key: SceneGraphKey,
+        /// Faces not found.
+        count: usize,
+    },
 }
 
 impl BucketedGeometry {
-    /// Builds a bucketed geometry from simplified world-space triangles.
+    /// Bakes `faces` into a grid with `layout`.
     ///
-    /// # Arguments
-    /// - `config` — Grid parameters (buckets_per_side, visibility hash)
-    /// - `vertices` — World-space vertex positions
-    /// - `indices` — Triangle indices (length must be a multiple of 3)
-    /// - `face_visibility_flags` — Optional per-face visibility layer masks
+    /// `faces` must be in source order: mesh order, then index buffer order.
+    /// The order decides the face and vertex order inside each bucket.
+    /// Positions are used as given, with no transform applied.
     ///
-    /// Returns `BucketedGeometry::empty()` if the input has no triangles.
-    pub fn build(
-        config: &BucketGridConfig,
-        vertices: &[Vec3],
-        indices: &[u32],
-        face_visibility_flags: Option<&[EnvironmentVisibility]>,
+    /// With no faces, the result is the empty layout the game ships: one
+    /// bucket and inverted sentinel bounds. `layout` is ignored in that case.
+    ///
+    /// # Errors
+    ///
+    /// - [`BuildError::ZeroBucketsPerSide`] if the layout has 0 buckets per side.
+    /// - [`BuildError::NonFinitePosition`] if a position is NaN or infinite.
+    /// - [`BuildError::TooManyFaces`], [`BuildError::BucketVertexOverflow`] or
+    ///   [`BuildError::BucketFaceOverflow`] if the result does not fit the format.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use glam::Vec3;
+    /// use ltk_mapgeo::{
+    ///     BakeFace, BucketedGeometry, EnvironmentVisibility, GridLayout, SceneGraphKey,
+    /// };
+    ///
+    /// let face = BakeFace::new(
+    ///     [Vec3::ZERO, Vec3::new(0.0, 0.0, 50.0), Vec3::new(50.0, 0.0, 0.0)],
+    ///     EnvironmentVisibility::all(),
+    /// );
+    /// let grid = BucketedGeometry::bake(SceneGraphKey::MAIN, GridLayout::new(4), &[face])?;
+    /// assert_eq!(grid.indices().len(), 3);
+    /// # Ok::<(), ltk_mapgeo::BuildError>(())
+    /// ```
+    pub fn bake(
+        key: SceneGraphKey,
+        layout: GridLayout,
+        faces: &[BakeFace],
     ) -> Result<BucketedGeometry, BuildError> {
-        // Phase 1: Validate & compute world bounds
-        if config.buckets_per_side == 0 {
+        if layout.buckets_per_side == 0 {
             return Err(BuildError::ZeroBucketsPerSide);
         }
-
-        let n_usize = config.buckets_per_side as usize;
-        let total_buckets = n_usize
-            .checked_mul(n_usize)
-            .ok_or(BuildError::GridSizeOverflow(config.buckets_per_side))?;
-
-        if !indices.len().is_multiple_of(3) {
-            return Err(BuildError::InvalidIndexCount(indices.len()));
+        if faces.len() > (u32::MAX / 3) as usize {
+            return Err(BuildError::TooManyFaces { faces: faces.len() });
+        }
+        if let Some(face) = faces
+            .iter()
+            .position(|f| !f.positions.iter().all(|p| p.is_finite()))
+        {
+            return Err(BuildError::NonFinitePosition { face });
         }
 
-        let face_count = indices.len() / 3;
+        let buckets_per_side = if faces.is_empty() {
+            1
+        } else {
+            layout.buckets_per_side
+        };
+        let n = buckets_per_side as usize;
 
-        for &idx in indices {
-            if idx as usize >= vertices.len() {
-                return Err(BuildError::IndexOutOfBounds {
-                    index: idx,
-                    vertex_count: vertices.len(),
-                });
-            }
+        let mut lo = Vec2::splat(EMPTY_BOUND);
+        let mut hi = Vec2::splat(-EMPTY_BOUND);
+        for face in faces {
+            let corner = face.min_corner();
+            lo = lo.min(corner);
+            hi = hi.max(corner);
+        }
+        let min = lo - Vec2::splat(BOUNDS_PADDING);
+        let max = hi + Vec2::splat(BOUNDS_PADDING);
+        let bucket_size = (max - min) / buckets_per_side as f32;
+
+        let mut bucket_faces: Vec<Vec<usize>> = vec![Vec::new(); n * n];
+        for (i, face) in faces.iter().enumerate() {
+            let t = (face.min_corner() - min) / bucket_size;
+            let x = (t.x as i64).clamp(0, n as i64 - 1) as usize;
+            let z = (t.y as i64).clamp(0, n as i64 - 1) as usize;
+            bucket_faces[z * n + x].push(i);
         }
 
-        if let Some(flags) = face_visibility_flags {
-            if flags.len() != face_count {
-                return Err(BuildError::VisibilityFlagsMismatch {
-                    got: flags.len(),
-                    expected: face_count,
-                });
-            }
-        }
+        let mut vertices: Vec<Vec3> = Vec::new();
+        let mut indices: Vec<u16> = Vec::with_capacity(faces.len() * 3);
+        let mut buckets = Vec::with_capacity(n * n);
+        let mut face_flags = Vec::with_capacity(faces.len());
+        let mut max_stick_out = Vec2::ZERO;
+        let mut local: HashMap<[u32; 3], u16> = HashMap::new();
 
-        if face_count == 0 {
-            return Ok(BucketedGeometry::empty());
-        }
-
-        // Compute AABB on XZ plane across all referenced vertices
-        let mut min_x = f32::MAX;
-        let mut min_z = f32::MAX;
-        let mut max_x = f32::MIN;
-        let mut max_z = f32::MIN;
-
-        for &idx in indices {
-            let v = vertices[idx as usize];
-            min_x = min_x.min(v.x);
-            min_z = min_z.min(v.z);
-            max_x = max_x.max(v.x);
-            max_z = max_z.max(v.z);
-        }
-
-        // Add epsilon to max bounds to prevent boundary edge cases
-        const EPSILON: f32 = 1e-3;
-        max_x += EPSILON;
-        max_z += EPSILON;
-
-        // Phase 2: Compute grid parameters
-        let n = config.buckets_per_side as f32;
-        let bucket_size_x = (max_x - min_x) / n;
-        let bucket_size_z = (max_z - min_z) / n;
-
-        // Phase 3: Assign triangles to buckets & classify
-        let mut bucket_faces: Vec<Vec<FaceAssignment>> =
-            (0..total_buckets).map(|_| Vec::new()).collect();
-
-        for face_idx in 0..face_count {
-            let i0 = indices[face_idx * 3];
-            let i1 = indices[face_idx * 3 + 1];
-            let i2 = indices[face_idx * 3 + 2];
-
-            let v0 = vertices[i0 as usize];
-            let v1 = vertices[i1 as usize];
-            let v2 = vertices[i2 as usize];
-
-            // Compute centroid on XZ
-            let cx = (v0.x + v1.x + v2.x) / 3.0;
-            let cz = (v0.z + v1.z + v2.z) / 3.0;
-
-            // Map to bucket coords
-            let bx = ((cx - min_x) / bucket_size_x)
-                .floor()
-                .clamp(0.0, (n_usize - 1) as f32) as usize;
-            let bz = ((cz - min_z) / bucket_size_z)
-                .floor()
-                .clamp(0.0, (n_usize - 1) as f32) as usize;
-
-            // Bucket bounds
-            let bucket_min_x = min_x + bx as f32 * bucket_size_x;
-            let bucket_max_x = bucket_min_x + bucket_size_x;
-            let bucket_min_z = min_z + bz as f32 * bucket_size_z;
-            let bucket_max_z = bucket_min_z + bucket_size_z;
-
-            // Classify: inside if all 3 vertices fall within bucket bounds
-            let is_inside = [v0, v1, v2].iter().all(|v| {
-                v.x >= bucket_min_x
-                    && v.x <= bucket_max_x
-                    && v.z >= bucket_min_z
-                    && v.z <= bucket_max_z
-            });
-
-            bucket_faces[bz * n_usize + bx].push(FaceAssignment {
-                face_index: face_idx,
-                vertex_indices: [i0, i1, i2],
-                is_inside,
-            });
-        }
-
-        // Stable-sort each bucket's face list so inside faces come first
-        for faces in &mut bucket_faces {
-            faces.sort_by_key(|f| !f.is_inside);
-        }
-
-        // Phase 4: Pack geometry buffers
-        let mut global_vertices: Vec<Vec3> = Vec::new();
-        let mut global_indices: Vec<u16> = Vec::new();
-        let mut buckets: Vec<GeometryBucket> = Vec::with_capacity(total_buckets);
-        let mut reordered_visibility_flags: Vec<EnvironmentVisibility> =
-            if face_visibility_flags.is_some() {
-                Vec::with_capacity(face_count)
-            } else {
-                Vec::new()
+        for (bucket, list) in bucket_faces.iter().enumerate() {
+            let (x, z) = (bucket % n, bucket / n);
+            let edge = layout.edge_rounding;
+            let bucket_hi = Vec2::new(
+                edge.upper_edge(min.x, x, bucket_size.x),
+                edge.upper_edge(min.y, z, bucket_size.y),
+            );
+            let is_inside = |f: &BakeFace| {
+                f.positions
+                    .iter()
+                    .all(|p| p.x < bucket_hi.x && p.z < bucket_hi.y)
             };
 
-        for (bucket_idx, faces) in bucket_faces.iter().enumerate() {
-            if faces.is_empty() {
-                buckets.push(GeometryBucket::new(0.0, 0.0, 0, 0, 0, 0));
-                continue;
-            }
+            let (inside, sticking_out): (Vec<usize>, Vec<usize>) =
+                list.iter().partition(|&&i| is_inside(&faces[i]));
+            let face_count = |count: usize| {
+                u16::try_from(count).map_err(|_| BuildError::BucketFaceOverflow {
+                    bucket_x: x,
+                    bucket_z: z,
+                    count,
+                })
+            };
+            let inside_count = face_count(inside.len())?;
+            let sticking_out_count = face_count(sticking_out.len())?;
 
-            let base_vertex = global_vertices.len() as u32;
-            let start_index = global_indices.len() as u32;
+            let start_index = indices.len() as u32;
+            let base_vertex = vertices.len();
+            let mut stick_out = Vec2::ZERO;
+            local.clear();
 
-            let mut local_vertex_map: HashMap<u32, u16> = HashMap::new();
-            let mut local_vertices: Vec<Vec3> = Vec::new();
-
-            let mut inside_face_count: u16 = 0;
-            let mut sticking_out_face_count: u16 = 0;
-
-            for face in faces {
-                let mut local_tri = [0u16; 3];
-                for (j, &orig_idx) in face.vertex_indices.iter().enumerate() {
-                    let local_idx = match local_vertex_map.get(&orig_idx) {
-                        Some(&idx) => idx,
+            for &i in inside.iter().chain(&sticking_out) {
+                for p in faces[i].positions {
+                    let key = [p.x.to_bits(), p.y.to_bits(), p.z.to_bits()];
+                    let index = match local.get(&key) {
+                        Some(&index) => index,
                         None => {
-                            let idx = local_vertices.len();
-                            if idx > u16::MAX as usize {
-                                let bx = bucket_idx % n_usize;
-                                let bz = bucket_idx / n_usize;
-                                return Err(BuildError::BucketVertexOverflow {
-                                    bucket_x: bx,
-                                    bucket_z: bz,
-                                    count: idx + 1,
-                                });
-                            }
-                            let idx = idx as u16;
-                            local_vertex_map.insert(orig_idx, idx);
-                            local_vertices.push(vertices[orig_idx as usize]);
-                            idx
+                            let count = vertices.len() - base_vertex;
+                            let index = u16::try_from(count).map_err(|_| {
+                                BuildError::BucketVertexOverflow {
+                                    bucket_x: x,
+                                    bucket_z: z,
+                                    count: count + 1,
+                                }
+                            })?;
+                            local.insert(key, index);
+                            vertices.push(p);
+                            index
                         }
                     };
-                    local_tri[j] = local_idx;
+                    indices.push(index);
+                    stick_out = stick_out.max(Vec2::new(p.x, p.z) - bucket_hi);
                 }
-
-                global_indices.extend_from_slice(&local_tri);
-
-                if face.is_inside {
-                    inside_face_count += 1;
-                } else {
-                    sticking_out_face_count += 1;
-                }
-
-                if let Some(flags) = face_visibility_flags {
-                    reordered_visibility_flags.push(flags[face.face_index]);
-                }
+                face_flags.push(faces[i].visibility);
             }
 
-            global_vertices.extend_from_slice(&local_vertices);
-
-            // Phase 5: Compute stick-out distances for this bucket
-            let bx = bucket_idx % n_usize;
-            let bz = bucket_idx / n_usize;
-            let bucket_min_x = min_x + bx as f32 * bucket_size_x;
-            let bucket_max_x = bucket_min_x + bucket_size_x;
-            let bucket_min_z = min_z + bz as f32 * bucket_size_z;
-            let bucket_max_z = bucket_min_z + bucket_size_z;
-
-            let mut max_so_x: f32 = 0.0;
-            let mut max_so_z: f32 = 0.0;
-
-            for face in faces {
-                if !face.is_inside {
-                    for &orig_idx in &face.vertex_indices {
-                        let v = vertices[orig_idx as usize];
-                        let overshoot_x = if v.x < bucket_min_x {
-                            bucket_min_x - v.x
-                        } else if v.x > bucket_max_x {
-                            v.x - bucket_max_x
-                        } else {
-                            0.0
-                        };
-                        let overshoot_z = if v.z < bucket_min_z {
-                            bucket_min_z - v.z
-                        } else if v.z > bucket_max_z {
-                            v.z - bucket_max_z
-                        } else {
-                            0.0
-                        };
-                        max_so_x = max_so_x.max(overshoot_x);
-                        max_so_z = max_so_z.max(overshoot_z);
-                    }
-                }
-            }
-
+            max_stick_out = max_stick_out.max(stick_out);
             buckets.push(GeometryBucket::new(
-                max_so_x,
-                max_so_z,
+                stick_out.x,
+                stick_out.y,
                 start_index,
-                base_vertex,
-                inside_face_count,
-                sticking_out_face_count,
+                base_vertex as u32,
+                inside_count,
+                sticking_out_count,
             ));
         }
 
-        // Compute global max stick-out
-        let mut global_max_stick_out_x: f32 = 0.0;
-        let mut global_max_stick_out_z: f32 = 0.0;
-        for bucket in &buckets {
-            global_max_stick_out_x = global_max_stick_out_x.max(bucket.max_stick_out_x());
-            global_max_stick_out_z = global_max_stick_out_z.max(bucket.max_stick_out_z());
-        }
+        let has_face_flags = face_flags.iter().any(|&f| f != face_flags[0]);
+        let flags = if has_face_flags {
+            BucketedGeometryFlags::HAS_FACE_VISIBILITY_FLAGS
+        } else {
+            BucketedGeometryFlags::empty()
+        };
 
-        // Phase 6: Assemble
-        let has_visibility_flags = face_visibility_flags.is_some();
-
-        let mut flags = BucketedGeometryFlags::empty();
-        if has_visibility_flags {
-            flags |= BucketedGeometryFlags::HAS_FACE_VISIBILITY_FLAGS;
-        }
-
-        let result = BucketedGeometryBuilder::default()
-            .visibility_controller_path_hash(config.visibility_controller_path_hash)
-            .bounds(min_x, min_z, max_x, max_z)
-            .max_stick_out(global_max_stick_out_x, global_max_stick_out_z)
-            .bucket_size(bucket_size_x, bucket_size_z)
-            .buckets_per_side(config.buckets_per_side)
+        Ok(BucketedGeometryBuilder::default()
+            .visibility_controller_path_hash(key.visibility_controller_path_hash)
+            .region_path_hash(key.region_path_hash)
+            .bounds(min.x, min.y, max.x, max.y)
+            .max_stick_out(max_stick_out.x, max_stick_out.y)
+            .bucket_size(bucket_size.x, bucket_size.y)
+            .buckets_per_side(buckets_per_side)
             .set_disabled(false)
             .flags(flags)
-            .vertices(global_vertices)
-            .indices(global_indices)
+            .vertices(vertices)
+            .indices(indices)
             .buckets(buckets)
-            .face_visibility_flags(if has_visibility_flags {
-                Some(reordered_visibility_flags)
-            } else {
-                None
-            })
-            .build();
-
-        Ok(result)
+            .face_visibility_flags(has_face_flags.then_some(face_flags))
+            .build())
     }
 }
