@@ -5,3 +5,4 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 cc c364d406e66ad0d56b568b53b1695aadd09b0d3b99a075463c6bf3c3efe433b1 # shrinks to text = "¡\tA:#"
+cc 3b32d4707786d56ff101cdc47d8d8dfcdf976429cf3711c1aa058758807e9ef4 # shrinks to text = "¡\t@(!"
