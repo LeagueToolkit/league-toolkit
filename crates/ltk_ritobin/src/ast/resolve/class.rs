@@ -4,10 +4,7 @@ use ltk_meta::PropertyKind;
 use crate::{
     ast::{
         builder::Builder,
-        diagnostics::{
-            Diagnostic::{self, *},
-            RitoTypeOrVirtual,
-        },
+        diagnostics::{Diagnostic as D, RitoTypeOrVirtual, TypeMismatch},
         hash::HashedLiteral,
         Object, Value,
     },
@@ -20,7 +17,7 @@ impl<'a> Builder<'a> {
     pub(crate) fn resolve_class_hash(
         &mut self,
         token: &Token,
-    ) -> Result<HashedLiteral<BinHash>, Diagnostic> {
+    ) -> Result<HashedLiteral<BinHash>, D> {
         match token {
             Token {
                 kind: TokenKind::Name,
@@ -40,19 +37,16 @@ impl<'a> Builder<'a> {
                     expected: RitoType::simple(PropertyKind::Hash).into(),
                     expected_span: None,
                     got: value.rito_type().into(),
-                }),
+                }
+                .into()),
             },
-            _ => Err(InvalidHash(token.span)),
+            _ => Err(D::InvalidHash(token.span)),
         }
     }
-    pub(crate) fn resolve_class(
-        &mut self,
-        class: &Node,
-        hint: RitoType,
-    ) -> Result<Value, Diagnostic> {
+    pub(crate) fn resolve_class(&mut self, class: &Node, hint: RitoType) -> Result<Value, D> {
         let children = class.children.get(self.cst);
         let Some(name_token) = children.first().and_then(|c| c.token(self.cst)) else {
-            return Err(InvalidHash(class.span));
+            return Err(D::InvalidHash(class.span));
         };
         let class_hash = self.resolve_class_hash(name_token)?;
 
@@ -62,7 +56,8 @@ impl<'a> Builder<'a> {
                 expected: RitoType::simple(hint.base).into(),
                 expected_span: None,
                 got: RitoTypeOrVirtual::StructOrEmbedded,
-            });
+            }
+            .into());
         }
 
         let properties = match children.find_tree(self.cst, Kind::Block) {

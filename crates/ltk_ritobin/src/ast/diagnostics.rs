@@ -4,9 +4,12 @@ use ltk_hash::{BinHash, Hash as _};
 use ltk_meta::{path::PropertyPathError, PropertyKind};
 
 use crate::{
-    ast::node::root::{FileKind, RootKind},
+    ast::{
+        node::root::{FileKind, RootKind},
+        resolve::literals::ValueEvalError,
+    },
     cst,
-    escaping::InvalidEscapeReason,
+    escaping::{InvalidEscape, InvalidEscapeReason},
     parse::{Span, TokenKind},
     ItemShape, RitoType, Spanned,
 };
@@ -137,21 +140,22 @@ impl Display for PatchField {
     }
 }
 
+#[derive(Debug, thiserror::Error, Clone, Copy)]
+#[error("Type mismatch - expected {expected}, got {got}")]
+pub struct TypeMismatch {
+    pub span: Span,
+    pub expected: RitoTypeOrVirtual,
+    pub expected_span: Option<Span>,
+    pub got: RitoTypeOrVirtual,
+}
+
 /// Something the type checker found wrong with a tree.
 ///
 /// Each variant carries the spans needed to point at the offending source. Use [`Display`] to render the user-facing message.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, thiserror::Error)]
 #[non_exhaustive]
 pub enum Diagnostic {
     CustomSpan(&'static str, Span),
-
-    InvalidEscape {
-        /// Span of the offending string literal
-        span: Span,
-        /// index of the invalid `\`, relative to `span.start`
-        offset: u32,
-        reason: InvalidEscapeReason,
-    },
 
     UnexpectedTree {
         tree: cst::Kind,
@@ -165,12 +169,11 @@ pub enum Diagnostic {
     UnknownType(Span),
     MissingType(Span),
 
-    TypeMismatch {
-        span: Span,
-        expected: RitoTypeOrVirtual,
-        expected_span: Option<Span>,
-        got: RitoTypeOrVirtual,
-    },
+    InvalidHash(Span),
+
+    InvalidEscape(#[from] Spanned<InvalidEscape>),
+    TypeMismatch(#[from] TypeMismatch),
+    ValueEvalError(#[from] ValueEvalError),
 
     UnexpectedContainerItem {
         span: Span,
@@ -211,12 +214,6 @@ pub enum Diagnostic {
     },
 
     ResolveLiteral,
-    ParseNumericError {
-        expected: PropertyKind,
-        error: Option<std::num::IntErrorKind>,
-        span: Span,
-    },
-    AmbiguousNumeric(Span),
 
     NotEnoughItems {
         span: Span,
@@ -320,8 +317,6 @@ pub enum Diagnostic {
         shadower: usize,
     },
 
-    InvalidHash(Span),
-
     SubtypeCountMismatch {
         span: Span,
         got: u8,
@@ -371,14 +366,15 @@ impl Display for Diagnostic {
             EmptyTree(kind) => write!(f, "Empty {kind}"),
             MissingToken(kind) => write!(f, "Missing {kind}"),
 
+            Self::ValueEvalError(err) => err.fmt(f),
+
+            InvalidHash(_) => f.write_str("Invalid hash"),
             UnknownType(_) => f.write_str("Unknown type"),
             MissingType(_) => {
                 f.write_str("Missing type - entries are written 'name: type = value'")
             }
 
-            TypeMismatch { expected, got, .. } => {
-                write!(f, "Type mismatch - expected {expected}, got {got}")
-            }
+            TypeMismatch(e) => e.fmt(f),
             UnexpectedContainerItem { expected, .. } => write!(
                 f,
                 "{expected} does not accept container items / blocks - remove the curly \
@@ -398,26 +394,6 @@ impl Display for Diagnostic {
             ),
 
             ResolveLiteral => f.write_str("Could not resolve literal"),
-            ParseNumericError {
-                expected, error, ..
-            } => {
-                let reason = match error {
-                    Some(IntErrorKind::Empty) => "cannot parse integer from empty literal",
-                    Some(IntErrorKind::InvalidDigit) => "invalid digit found in literal",
-                    Some(IntErrorKind::PosOverflow) => "number too large to fit in target type",
-                    Some(IntErrorKind::NegOverflow) => "number too small to fit in target type",
-                    Some(IntErrorKind::Zero) => "number would be zero",
-                    _ => "invalid literal",
-                };
-                write!(
-                    f,
-                    "Could not parse {} - {reason}",
-                    RitoType::simple(*expected)
-                )
-            }
-            AmbiguousNumeric(_) => {
-                f.write_str("Ambiguous numeric literal - it needs a type to be resolved against")
-            }
 
             NotEnoughItems { got, expected, .. } => write!(
                 f,
@@ -482,8 +458,6 @@ impl Display for Diagnostic {
                 f.write_str("Entry shadows a previous entry with the same key")
             }
 
-            InvalidHash(_) => f.write_str("Invalid hash"),
-
             SubtypeCountMismatch { got, expected, .. } => {
                 write!(f, "Expected {expected} type parameters, got {got}")
             }
@@ -510,12 +484,13 @@ impl Diagnostic {
             | ShadowedRoot { .. }
             | ResolveLiteral
             | MissingRootEntry { .. } => None,
-            InvalidEscape { span, offset, .. } => Some(Span::new(
-                span.start + offset,
-                (span.start + offset + 1).min(span.end),
+            InvalidEscape(Spanned { span, value }) => Some(Span::new(
+                span.start + value.index as u32,
+                (span.start + value.index as u32 + 1).min(span.end),
             )),
             UnknownType(span)
             | UnknownRoot { span }
+            | InvalidHash(span)
             | UnexpectedTree { span, .. }
             | CustomSpan(_, span)
             | SubtypeCountMismatch { span, .. }
@@ -525,13 +500,9 @@ impl Diagnostic {
             | UnexpectedItem { span, .. }
             | QuotedPropertyName { span, .. }
             | MissingType(span)
-            | TypeMismatch { span, .. }
             | MissingEntryType { key_span: span, .. }
             | MissingEntryValue { key_span: span, .. }
             | ShadowedEntry { shadower: span, .. }
-            | InvalidHash(span)
-            | AmbiguousNumeric(span)
-            | ParseNumericError { span, .. }
             | NotEnoughItems { span, .. }
             | TooManyItems { span, .. }
             | InvalidNesting { span, .. }
@@ -546,6 +517,8 @@ impl Diagnostic {
             | InvalidPropertyPath { span, .. }
             | UnexpectedFileKind { span, .. }
             | InvalidRootEntryType { key_span: span, .. } => Some(*span),
+            TypeMismatch(err) => Some(err.span),
+            Self::ValueEvalError(err) => Some(err.span()),
         }
     }
 

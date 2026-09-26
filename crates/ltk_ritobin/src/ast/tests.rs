@@ -4,8 +4,9 @@ use ltk_meta::{property::values, Bin, BinObject, ObjectBuilder, PropertyKind, Pr
 
 use crate::{
     ast::{
-        diagnostics::{Diagnostic, DiagnosticWithSpan, RitoTypeOrVirtual},
+        diagnostics::{Diagnostic, DiagnosticWithSpan, RitoTypeOrVirtual, TypeMismatch},
         node::root::RootKind,
+        resolve::literals::{ParseNumericError, ValueEvalError},
     },
     Cst, ItemShape, RitoType,
 };
@@ -162,10 +163,10 @@ fn numeric_parse_error() {
     assert!(
         matches!(
             errs[0].diagnostic,
-            Diagnostic::ParseNumericError {
+            Diagnostic::ValueEvalError(ValueEvalError::ParseNumericError(ParseNumericError {
                 expected: PropertyKind::U8,
                 ..
-            }
+            }))
         ),
         "{:#?}",
         errs[0]
@@ -504,9 +505,14 @@ fn a_type_mismatch_blames_the_type_expression_that_set_it() {
     let blamed = |input: &str| {
         let text = wrap(input);
         let errs = Cst::parse(&text).build_ast(&text).diagnostics;
+        eprintln!("{errs:?}");
         errs.into_iter()
             .find_map(|e| match e.diagnostic {
-                Diagnostic::TypeMismatch { expected_span, .. } => Some(expected_span),
+                Diagnostic::TypeMismatch(TypeMismatch { expected_span, .. }) => Some(expected_span),
+                Diagnostic::ValueEvalError(ValueEvalError::TypeMismatch(TypeMismatch {
+                    expected_span,
+                    ..
+                })) => Some(expected_span),
                 _ => None,
             })
             .expect("expected a TypeMismatch")
@@ -684,7 +690,7 @@ fn bad_option_coerce_is_reported() {
     assert_one_err(r#"0x1: option[u32] = false"#, |d| {
         matches!(
             d,
-            Diagnostic::TypeMismatch {
+            Diagnostic::TypeMismatch(TypeMismatch {
                 expected: RitoTypeOrVirtual::RitoType(RitoType {
                     base: PropertyKind::Optional,
                     subtypes: [Some(PropertyKind::U32), None],
@@ -694,7 +700,7 @@ fn bad_option_coerce_is_reported() {
                     subtypes: [Some(PropertyKind::Bool), None],
                 }),
                 ..
-            }
+            })
         )
     });
 }
@@ -705,13 +711,13 @@ fn a_property_name_that_cannot_be_hashed_is_reported() {
     let err = assert_one_err(r#"true: u32 = 3"#, |d| {
         matches!(
             d,
-            Diagnostic::TypeMismatch {
+            Diagnostic::TypeMismatch(TypeMismatch {
                 expected: RitoTypeOrVirtual::RitoType(RitoType {
                     base: PropertyKind::Hash,
                     ..
                 }),
                 ..
-            }
+            })
         )
     });
     assert_eq!(

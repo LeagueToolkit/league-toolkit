@@ -1,11 +1,11 @@
-use crate::{ast::diagnostics::Diagnostic, parse::Span};
+use crate::{ast::diagnostics::Diagnostic, parse::Span, SpannedExt};
 
 #[derive(Debug, Clone, Copy, thiserror::Error)]
 #[error("Invalid escape character - {reason}")]
 pub struct InvalidEscape {
     /// byte index of the offending `\`, relative to the start of the unquoted text
-    index: usize,
-    reason: InvalidEscapeReason,
+    pub index: usize,
+    pub reason: InvalidEscapeReason,
 }
 
 #[derive(Debug, Clone, Copy, thiserror::Error)]
@@ -24,12 +24,7 @@ pub enum InvalidEscapeReason {
 
 impl InvalidEscape {
     pub(crate) fn into_diagnostic(self, span: Span) -> Diagnostic {
-        Diagnostic::InvalidEscape {
-            span,
-            // +1 for the opening quote the unquoted text sits past
-            offset: u32::try_from(self.index).unwrap() + 1,
-            reason: self.reason,
-        }
+        Diagnostic::InvalidEscape(self.with_span(span))
     }
 }
 

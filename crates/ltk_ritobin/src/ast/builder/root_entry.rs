@@ -1,6 +1,6 @@
 use crate::{
     ast::{
-        diagnostics::Diagnostic as D,
+        diagnostics::{Diagnostic as D, TypeMismatch},
         node::{
             root::{KnownRoot, Root, RootKind, RootValue},
             roots::Roots,
@@ -94,15 +94,15 @@ impl<'a> Builder<'a> {
 
         if let Some(RootValue::Value(value)) = root.value.as_ref() {
             if let Some(got) = value.rito_type().filter(|got| *got != expected_type) {
-                self.push(
-                    D::TypeMismatch {
+                self.push(D::unwrap(
+                    TypeMismatch {
                         span: value.span(),
                         expected: expected_type.into(),
                         expected_span: None,
                         got: got.into(),
                     }
-                    .unwrap(),
-                );
+                    .into(),
+                ));
                 return false;
             }
         }

@@ -3,7 +3,7 @@ use ltk_meta::PropertyKind;
 use crate::{
     ast::{
         builder::Builder,
-        diagnostics::{Diagnostic::*, MaybeSpanDiag},
+        diagnostics::{Diagnostic as D, MaybeSpanDiag, TypeMismatch},
         Property, Value,
     },
     cst::Kind,
@@ -24,7 +24,7 @@ impl<'a> Builder<'a> {
         match hint.base {
             K::Struct | K::Embedded => {
                 self.push(
-                    MissingClassName {
+                    D::MissingClassName {
                         span: block.open_brace_span(self.cst),
                         expected: hint,
                     }
@@ -121,15 +121,15 @@ impl<'a> Builder<'a> {
                             match self.resolve_value(node, Some(item_hint), hint_span) {
                                 Ok(v) => match v.try_coerce_to(item_kind) {
                                     Ok(coerced) => value = Some(coerced),
-                                    Err(v) => self.push(
+                                    Err(v) => self.push(D::unwrap(
                                         TypeMismatch {
                                             span: v.span(),
                                             expected: RitoType::simple(item_kind).into(),
                                             expected_span: hint_span,
                                             got: v.rito_type().into(),
                                         }
-                                        .unwrap(),
-                                    ),
+                                        .into(),
+                                    )),
                                 },
                                 Err(e) => self.push(e.default_span(node.span)),
                             }
@@ -141,7 +141,7 @@ impl<'a> Builder<'a> {
                             }
                         }
                         _ => self.push(
-                            UnexpectedItem {
+                            D::UnexpectedItem {
                                 span: node.trimmed_span(self.cst),
                                 parent: hint,
                                 expected: crate::ItemShape::Value,
@@ -156,7 +156,7 @@ impl<'a> Builder<'a> {
                     span: block.span,
                 })
             }
-            _ => Err(UnexpectedContainerItem {
+            _ => Err(D::UnexpectedContainerItem {
                 span: block.span,
                 expected: hint,
                 expected_span: hint_span,
@@ -184,20 +184,20 @@ impl<'a> Builder<'a> {
                             type_expr: entry.type_expr,
                             value: entry.value,
                         }),
-                        Ok(value) | Err(value) => self.push(
+                        Ok(value) | Err(value) => self.push(D::unwrap(
                             TypeMismatch {
                                 span: value.span(),
                                 expected: RitoType::simple(PropertyKind::Hash).into(),
                                 expected_span: None,
                                 got: value.rito_type().into(),
                             }
-                            .unwrap(),
-                        ),
+                            .into(),
+                        )),
                     },
                     Err(e) => self.push(e.fallback(node.span)),
                 },
                 Kind::ListItem | Kind::ListItemBlock => self.push(
-                    UnexpectedItem {
+                    D::UnexpectedItem {
                         span: node.trimmed_span(self.cst),
                         parent: hint,
                         expected: crate::ItemShape::Entry,
@@ -230,15 +230,15 @@ impl<'a> Builder<'a> {
                         Ok(key) => {
                             match entry.value.as_ref() {
                                 Some(value) if value.kind().is_some_and(|k| k != value_kind) => {
-                                    self.push(
+                                    self.push(D::unwrap(
                                         TypeMismatch {
                                             span: value.span(),
                                             expected: RitoType::simple(value_kind).into(),
                                             expected_span: hint_span,
                                             got: value.rito_type().into(),
                                         }
-                                        .unwrap(),
-                                    );
+                                        .into(),
+                                    ));
                                 }
                                 _ => {
                                     // reporting the error for not having a value should be handled already
@@ -246,20 +246,20 @@ impl<'a> Builder<'a> {
                             }
                             entries.push((key, entry.value));
                         }
-                        Err(key) => self.push(
+                        Err(key) => self.push(D::unwrap(
                             TypeMismatch {
                                 span: key.span(),
                                 expected: RitoType::simple(key_kind).into(),
                                 expected_span: hint_span,
                                 got: key.rito_type().into(),
                             }
-                            .unwrap(),
-                        ),
+                            .into(),
+                        )),
                     },
                     Err(e) => self.push(e.fallback(node.span)),
                 },
                 Kind::ListItem | Kind::ListItemBlock => self.push(
-                    UnexpectedItem {
+                    D::UnexpectedItem {
                         span: node.trimmed_span(self.cst),
                         parent: hint,
                         expected: crate::ItemShape::Entry,
@@ -290,14 +290,15 @@ impl<'a> Builder<'a> {
                     match self
                         .resolve_value(node, Some(item_hint), hint_span)
                         .and_then(|value| {
-                            value
-                                .try_coerce_to(item_kind)
-                                .map_err(|value| TypeMismatch {
+                            value.try_coerce_to(item_kind).map_err(|value| {
+                                TypeMismatch {
                                     span: value.span(),
                                     expected: RitoType::simple(item_kind).into(),
                                     expected_span: hint_span,
                                     got: value.rito_type().into(),
-                                })
+                                }
+                                .into()
+                            })
                         }) {
                         Ok(value) => {
                             items.push(value);
@@ -312,7 +313,7 @@ impl<'a> Builder<'a> {
                     }
                 }
                 Kind::Entry => self.push(
-                    UnexpectedItem {
+                    D::UnexpectedItem {
                         span: node.trimmed_span(self.cst),
                         parent: RitoType::container(item_kind),
                         expected: crate::ItemShape::Value,

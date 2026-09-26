@@ -3,7 +3,7 @@ use ltk_meta::{path::PropertyPath, PropertyKind};
 
 use crate::{
     ast::{
-        diagnostics::{Diagnostic as D, PatchField},
+        diagnostics::{Diagnostic as D, PatchField, TypeMismatch},
         node::{
             root::{FileKind, RootKind, RootValue},
             roots::Roots,
@@ -172,15 +172,15 @@ impl Builder<'_> {
             // an unresolved value carries its own diagnostic
             value if !is_resolved(value) => None,
             value => {
-                self.push(
-                    D::TypeMismatch {
+                self.push(D::unwrap(
+                    TypeMismatch {
                         span: value.span(),
                         expected: RitoType::simple(PropertyKind::String).into(),
                         expected_span: None,
                         got: value.rito_type().into(),
                     }
-                    .unwrap(),
-                );
+                    .into(),
+                ));
                 None
             }
         }

@@ -3,15 +3,13 @@ use ltk_meta::PropertyKind;
 use crate::{
     ast::{
         builder::Builder,
-        diagnostics::{Diagnostic, ListLike, MaybeSpanDiag},
+        diagnostics::{Diagnostic as D, ListLike, MaybeSpanDiag, TypeMismatch},
         Value,
     },
     cst::{Child, Cst, Kind, Node},
     parse::Span,
     RitoType, Spanned,
 };
-
-use Diagnostic::*;
 
 struct ListIter<'a, 'b, 'c> {
     ctx: &'a mut Builder<'b>,
@@ -49,7 +47,7 @@ impl<'c> ListIter<'_, '_, 'c> {
     ) -> Result<Value, MaybeSpanDiag> {
         match self.next_value(expected_kind) {
             Some(v) => v,
-            None => Err(NotEnoughItems {
+            None => Err(D::NotEnoughItems {
                 span: self.span,
                 got: self.count,
                 expected,
@@ -67,12 +65,12 @@ impl<'c> ListIter<'_, '_, 'c> {
             *slot = match self.expect_next(PropertyKind::F32, expected)? {
                 Value::F32(v) => v.value,
                 other => {
-                    return Err(TypeMismatch {
+                    return Err(D::from(TypeMismatch {
                         span: other.span(),
                         expected: RitoType::simple(PropertyKind::F32).into(),
                         expected_span: self.type_span,
                         got: other.kind().map(RitoType::simple).into(),
-                    }
+                    })
                     .into())
                 }
             };
@@ -86,12 +84,12 @@ impl<'c> ListIter<'_, '_, 'c> {
             *slot = match self.expect_next(PropertyKind::U8, expected)? {
                 Value::U8(v) => v.value,
                 other => {
-                    return Err(TypeMismatch {
+                    return Err(D::from(TypeMismatch {
                         span: other.span(),
                         expected: RitoType::simple(PropertyKind::U8).into(),
                         expected_span: self.type_span,
                         got: other.kind().map(RitoType::simple).into(),
-                    }
+                    })
                     .into())
                 }
             };
@@ -107,7 +105,7 @@ impl<'a> Builder<'a> {
         node: &Node,
         expected: PropertyKind,
         hint_span: Option<Span>,
-    ) -> Result<Value, Diagnostic> {
+    ) -> Result<Value, D> {
         self.resolve_value(node, Some(RitoType::simple(expected)), hint_span)
     }
 
@@ -173,7 +171,7 @@ impl<'a> Builder<'a> {
         if let Some(extra) = items.next_value(PropertyKind::F32) {
             let extra = extra?;
             let count = 1 + items.children.count();
-            return Err(TooManyItems {
+            return Err(D::TooManyItems {
                 span: extra.span(),
                 extra: count as _,
                 expected,

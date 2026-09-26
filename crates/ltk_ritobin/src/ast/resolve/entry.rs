@@ -4,13 +4,11 @@ use crate::{
     ast::{
         builder::Builder,
         diagnostics::{
-            Diagnostic::{
-                self, InvalidHash, MissingTree, MissingType, QuotedPropertyName, TypeMismatch,
-            },
-            MaybeSpanDiag,
+            Diagnostic::{self, MissingTree, MissingType, QuotedPropertyName},
+            MaybeSpanDiag, TypeMismatch,
         },
         node::TypeExpr,
-        resolve::literals::{self},
+        resolve::literals::{self, ValueEvalError::InvalidHash},
         Value,
     },
     cst::{ChildrenExt as _, Kind},
@@ -35,7 +33,7 @@ impl<'a> Builder<'a> {
             .children
             .get(self.cst)
             .first()
-            .ok_or(InvalidHash(key_node.span))?
+            .ok_or(Diagnostic::InvalidHash(key_node.span))?
             .token(self.cst);
 
         Ok(match token {
@@ -75,7 +73,8 @@ impl<'a> Builder<'a> {
                     .map(RitoType::simple),
                 parent_type_span,
             ),
-            None => return Err(InvalidHash(key_node.span)),
+            // TODO: change this error
+            None => return Err(Diagnostic::InvalidHash(key_node.span)),
         })
     }
 
@@ -134,15 +133,15 @@ impl<'a> Builder<'a> {
         match (desired_kind, value.as_ref()) {
             (Some(kind), Some(value)) => {
                 if value.rito_type().is_some_and(|k| k != kind) {
-                    self.push(
+                    self.push(Diagnostic::unwrap(
                         TypeMismatch {
                             span: value.span(),
                             expected: kind.into(),
                             expected_span: type_expr_span,
                             got: value.rito_type().into(),
                         }
-                        .unwrap(),
-                    )
+                        .into(),
+                    ))
                 }
             }
             (None, None) => {
