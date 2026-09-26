@@ -143,11 +143,13 @@ ltk_texture = { version = "0.4", features = ["intel-tex"] }
 
 ### `ltk_mesh` - Mesh Formats
 
-**Purpose**: Parse skinned meshes (.skn) and static meshes (.scb/.sco).
+**Purpose**: Parse skinned meshes (.skn), static meshes (.scb/.sco) and render meshes (.gmesh/.tmesh).
 
 **Key Types**:
 - `SkinnedMesh` - Skinned mesh for characters (vertex skinning with bone weights)
 - `StaticMesh` - Static environment mesh
+- `RenderMesh` - GPU-ready mesh (`.gmesh`/`.tmesh`): vertex streams, `u16` indices, submeshes
+- `RenderMeshSubmesh` - Index range and material of one render mesh submesh
 - `VertexBuffer`, `IndexBuffer` - GPU-ready buffer abstractions
 - `SkinnedMeshRange` - Submesh range (material assignment)
 - `SkinnedMeshVertexType` - `Basic` (52 B), `Color` (56 B), `Tangent` (72 B), `Ext` (104 B)
@@ -259,6 +261,25 @@ println!("Mesh: {}", mesh.name());
 println!("Vertices: {}", mesh.vertices().len());
 println!("Faces: {}", mesh.faces().len());
 ```
+
+**Render Mesh (.gmesh/.tmesh)**:
+```rust
+use glam::Vec3;
+use ltk_mesh::{mem::vertex::ElementName, RenderMesh};
+
+let mesh = RenderMesh::from_reader(&mut file)?;
+// Positions and the other elements are in different streams.
+let positions = mesh.accessor::<Vec3>(ElementName::Position);
+for submesh in mesh.submeshes() {
+    println!("{}: {} indices", submesh.material, submesh.index_count);
+}
+```
+
+A `.gmesh` and a `.tmesh` share one parser in the game. Every shipped `.gmesh` starts with
+`GMSH`. The game does not check the magic, and the reader accepts any. The vertex buffer
+descriptions are the 128-byte `.mapgeo` descriptions
+(`VertexBufferDescription::from_reader` / `to_writer`). A shipped file round-trips byte for
+byte.
 
 **Vertex Elements**: `Position`, `Normal`, `Tangent`, `TexCoord`, `Color`, `BlendWeight`, `BlendIndex`
 
@@ -816,6 +837,7 @@ use glam::{Vec2, Vec3, Vec4, Mat4, Quat};
 | `.anm` | `ltk_anim` | `Animation` | Animation clip |
 | `.scb` | `ltk_mesh` | `StaticMesh` | Static mesh (binary) |
 | `.sco` | `ltk_mesh` | `StaticMesh` | Static mesh (ASCII) |
+| `.gmesh` / `.tmesh` | `ltk_mesh` | `RenderMesh` | GPU-ready render mesh |
 | `.tex` | `ltk_texture` | `Tex` | League texture format |
 | `.dds` | `ltk_texture` | `Dds` | DirectDraw Surface |
 | `.mapgeo` | `ltk_mapgeo` | `EnvironmentAsset` | Map geometry |

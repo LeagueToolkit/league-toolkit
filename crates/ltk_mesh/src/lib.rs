@@ -1,9 +1,10 @@
 #![warn(missing_docs)]
 #![warn(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-//! Skinned & static meshes
+//! Skinned, static & render meshes
 //!
-//! [`SkinnedMesh`] parses `.skn` (character meshes, skinning data included) and
-//! [`StaticMesh`] parses `.scb`/`.sco` (environment geometry).
+//! [`SkinnedMesh`] parses `.skn` (character meshes, skinning data included),
+//! [`StaticMesh`] parses `.scb`/`.sco` (environment geometry), and [`RenderMesh`] parses
+//! `.gmesh`/`.tmesh` (GPU-ready vertex streams).
 //!
 //! ```no_run
 //! use std::{fs::File, io::BufReader};
@@ -37,10 +38,14 @@ pub mod error;
 pub mod mem;
 
 // Private, so every mesh type has exactly one public path: the crate root.
+mod render;
 mod skinned;
 mod r#static;
 
 use error::ParseError;
+
+#[doc(inline)]
+pub use render::{RenderMesh, RenderMeshSubmesh, GMESH_MAGIC};
 
 #[doc(inline)]
 pub use r#static::{StaticMesh, StaticMeshFace, StaticMeshFlags, SCB_MAGIC};
