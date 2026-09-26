@@ -112,7 +112,10 @@
 //! assert_eq!(patch.patches.len(), 1);
 //! ```
 
-use std::ops::{Deref, DerefMut};
+use std::{
+    fmt::{self, Display},
+    ops::{Deref, DerefMut},
+};
 
 #[allow(unused, reason = "for module level doc link")]
 use ltk_meta::Bin;
@@ -150,6 +153,12 @@ impl<T> SpannedExt for T {
 pub struct Spanned<T> {
     pub span: Span,
     pub value: T,
+}
+
+impl<T: Display> Display for Spanned<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.value.fmt(f)
+    }
 }
 
 impl<T> Spanned<T> {
