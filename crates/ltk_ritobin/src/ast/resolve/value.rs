@@ -8,9 +8,10 @@ use crate::{
         Value,
     },
     cst::Kind,
-    parse::{Span, Token},
+    parse::Token,
     Node, RitoType,
 };
+use span::Span;
 
 impl<'a> Builder<'a> {
     pub(crate) fn resolve_literal(

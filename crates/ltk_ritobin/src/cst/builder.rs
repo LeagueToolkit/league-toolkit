@@ -12,9 +12,10 @@ use ltk_meta::{
 use crate::{
     ast::node::root::FileKind,
     cst::{Child, ChildRange, Cst, ErrorRange, Kind, Node, NodeId, TokenId},
-    parse::{Error, Span, Token, TokenKind as Tok},
+    parse::{Error, Token, TokenKind as Tok},
     HashProvider, PropertyValueExt as _, RitoType, RitobinName as _,
 };
+use span::Span;
 
 #[derive(Default)]
 pub struct Builder<H: HashProvider> {

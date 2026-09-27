@@ -10,11 +10,12 @@ pub use coerce::CanCoerce;
 
 use crate::{
     ast::{hash::HashedLiteral, Object},
-    parse::Span,
     RitoType, RitobinName, Spanned,
 };
+use span::Span;
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "span_print", derive(span::DebugSpans))]
 pub enum Value {
     Unresolved {
         span: Span,

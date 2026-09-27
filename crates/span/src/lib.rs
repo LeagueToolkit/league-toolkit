@@ -1,3 +1,11 @@
+extern crate self as span;
+
+#[cfg(feature = "derive")]
+pub use span_derive::DebugSpans;
+
+pub mod debug;
+pub use debug::{DebugSpans, SpannedToString, debug_with_source};
+
 use std::cmp;
 
 /// A span of text in the source file - `[start, end)` in bytes.

@@ -8,9 +8,9 @@ use crate::{
         Property, Value,
     },
     cst::Kind,
-    parse::Span,
     Node, RitoType,
 };
+use span::Span;
 
 impl<'a> Builder<'a> {
     /// Attempt to resolve a `Block`/`ListItemBlock` node to a value

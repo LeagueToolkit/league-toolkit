@@ -7,9 +7,10 @@ use crate::{
         node::TypeExpr,
     },
     cst::{ChildrenExt as _, Kind},
-    parse::{Span, TokenKind},
+    parse::TokenKind,
     Node, RitoType, RitobinName as _,
 };
+use span::Span;
 
 impl<'a> Builder<'a> {
     pub fn resolve_type_expr(&mut self, tree: &Node) -> Option<TypeExpr> {

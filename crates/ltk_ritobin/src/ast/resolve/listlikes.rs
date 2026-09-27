@@ -7,9 +7,9 @@ use crate::{
         Value,
     },
     cst::{Child, Cst, Kind, Node},
-    parse::Span,
     RitoType, Spanned,
 };
+use span::Span;
 
 struct ListIter<'a, 'b, 'c> {
     ctx: &'a mut Builder<'b>,

@@ -12,9 +12,10 @@ use crate::{
         Value,
     },
     cst::{ChildrenExt as _, Kind},
-    parse::{Span, Token, TokenKind},
+    parse::{Token, TokenKind},
     Node, RitoType, Spanned, SpannedExt,
 };
+use span::Span;
 
 pub struct RawEntry {
     pub key: Value,

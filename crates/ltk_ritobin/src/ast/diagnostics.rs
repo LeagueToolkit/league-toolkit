@@ -1,7 +1,8 @@
-use std::{fmt::Display, num::IntErrorKind};
+use std::fmt::Display;
 
 use ltk_hash::{BinHash, Hash as _};
 use ltk_meta::{path::PropertyPathError, PropertyKind};
+use span::Span;
 
 use crate::{
     ast::{
@@ -9,8 +10,8 @@ use crate::{
         resolve::literals::ValueEvalError,
     },
     cst,
-    escaping::{InvalidEscape, InvalidEscapeReason},
-    parse::{Span, TokenKind},
+    escaping::InvalidEscape,
+    parse::TokenKind,
     ItemShape, RitoType, Spanned,
 };
 
@@ -538,6 +539,7 @@ impl Diagnostic {
 }
 
 #[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "span_print", derive(span::DebugSpans))]
 pub struct DiagnosticWithSpan {
     pub diagnostic: Diagnostic,
     pub span: Span,

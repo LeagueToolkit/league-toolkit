@@ -1,4 +1,5 @@
-use crate::{ast::diagnostics::Diagnostic, parse::Span, SpannedExt};
+use crate::{ast::diagnostics::Diagnostic, SpannedExt};
+use span::Span;
 
 #[derive(Debug, Clone, Copy, thiserror::Error)]
 #[error("Invalid escape character - {reason}")]

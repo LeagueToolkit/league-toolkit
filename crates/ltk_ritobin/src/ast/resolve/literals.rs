@@ -10,9 +10,10 @@ use crate::{
         Value,
     },
     escaping,
-    parse::{Span, Token, TokenKind},
+    parse::{Token, TokenKind},
     RitoType, Spanned, SpannedExt,
 };
+use span::Span;
 
 use ValueEvalError as E;
 

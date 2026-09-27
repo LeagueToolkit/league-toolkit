@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::parse::Span;
+use span::Span;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

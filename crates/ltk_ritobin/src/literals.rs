@@ -4,7 +4,7 @@ use ltk_hash::{BinHash, Hash as _, WadHash};
 use ltk_meta::{property::values, PropertyKind, PropertyValueEnum};
 
 use crate::{
-    parse::{Span, Token, TokenKind},
+    parse::{Token, TokenKind},
     typecheck::diagnostics::{Diagnostic, RitoTypeOrVirtual},
     RitoType,
 };

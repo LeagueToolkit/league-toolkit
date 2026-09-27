@@ -1,11 +1,10 @@
 use ltk_hash::BinHash;
 
-use crate::{
-    ast::{hash::HashedLiteral, node::Object},
-    parse::Span,
-};
+use crate::ast::{hash::HashedLiteral, node::Object};
+use span::Span;
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "span_print", derive(span::DebugSpans))]
 pub struct RootEntry {
     pub path_hash: HashedLiteral<BinHash>,
     pub object: Object,

@@ -5,12 +5,12 @@ use crate::{
         node::{roots::Roots, TypeExpr},
         RootEntry, Value,
     },
-    parse::Span,
     Spanned,
 };
 
 mod kind;
 pub use kind::*;
+use span::Span;
 
 /// The kind of bin a ritobin file describes, read from its `type` root.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -68,7 +68,18 @@ impl<V> KnownRoot<V> {
     }
 }
 
+#[cfg(feature = "span_print")]
+impl<V: span::DebugSpans> span::DebugSpans for KnownRoot<V> {
+    fn fmt(&self, text: &str, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("KnownRoot")
+            .field("idx", &self.idx)
+            .field("value", &span::debug_with_source(&self.value, text))
+            .finish()
+    }
+}
+
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "span_print", derive(span::DebugSpans))]
 /// A root is a special-cased property (`key: type = value`), that exists at the top level of a
 /// ritobin file.
 pub struct Root {
@@ -99,6 +110,7 @@ impl Root {
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "span_print", derive(span::DebugSpans))]
 pub enum RootValue {
     Value(Value),
     /// The resolved entries of the `entries` root. Stores extra span to preserve the original `Value::Map` span

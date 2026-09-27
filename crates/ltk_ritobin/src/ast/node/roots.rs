@@ -12,6 +12,7 @@ pub type PatchesRoot = KnownRoot<Vec<RootPatch>>;
 pub type DeletedRoot = KnownRoot<Vec<BinHash>>;
 
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "span_print", derive(span::DebugSpans))]
 pub struct Roots {
     pub(crate) file_type: Option<FileTypeRoot>,
     pub(crate) version: Option<VersionRoot>,

@@ -9,7 +9,6 @@ use crate::{
         RootEntry, Value,
     },
     cst::Kind,
-    parse::Span,
     Node, Spanned, SpannedExt,
 };
 
@@ -17,6 +16,7 @@ use super::*;
 
 use ltk_hash::BinHash;
 use ltk_meta::PropertyKind::{self};
+use span::Span;
 
 #[derive(Debug, Clone)]
 pub struct RawRootProperty {
