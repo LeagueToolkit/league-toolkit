@@ -4,7 +4,7 @@ use crate::{
         node::{
             root::{KnownRoot, Root, RootKind, RootValue},
             roots::Roots,
-            TypeExpr,
+            MapEntry, TypeExpr,
         },
         RootEntry, Value,
     },
@@ -252,17 +252,20 @@ fn deleted_hashes(items: &[Value]) -> Vec<BinHash> {
 /// Returns `false` for any other value, and leaves it in place to navigate and diagnose.
 fn resolve_entries(root: &mut Root) -> bool {
     match root.value.take() {
-        Some(RootValue::Value(Value::Map {
-            entries: map, span, ..
-        })) => {
+        Some(RootValue::Value(Value::Map(map))) => {
+            let span = map.span;
             let items = map
                 .into_iter()
-                .filter_map(|(k, v)| match (k, v) {
-                    (Value::Hash(path_hash), Some(Value::Embedded(object))) => {
-                        Some(RootEntry { path_hash, object })
-                    }
-                    _ => None,
-                })
+                .filter_map(
+                    |MapEntry {
+                         key: k, value: v, ..
+                     }| match (k, v) {
+                        (Value::Hash(path_hash), Some(Value::Embedded(object))) => {
+                            Some(RootEntry { path_hash, object })
+                        }
+                        _ => None,
+                    },
+                )
                 .collect();
             root.value = Some(RootValue::Entries(Spanned::new(span, items)));
             true

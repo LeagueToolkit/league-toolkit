@@ -7,6 +7,7 @@ use crate::{
         node::{
             root::{FileKind, RootKind, RootValue},
             roots::Roots,
+            MapEntry,
         },
         Property, RootPatch, Value,
     },
@@ -50,14 +51,15 @@ impl Builder<'_> {
         let Some(patches) = roots.patches.as_mut() else {
             return;
         };
-        let Some(Some(RootValue::Value(Value::Map { entries, .. }))) =
+        let Some(Some(RootValue::Value(Value::Map(map)))) =
             roots.all.get(patches.idx).map(|root| &root.value)
         else {
             return;
         };
-        patches.value = entries
+        patches.value = map
+            .entries
             .iter()
-            .filter_map(|(key, value)| self.resolve_patch(key, value.as_ref()))
+            .filter_map(|MapEntry { key, value, .. }| self.resolve_patch(key, value.as_ref()))
             .collect();
     }
 

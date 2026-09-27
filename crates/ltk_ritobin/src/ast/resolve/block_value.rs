@@ -4,6 +4,7 @@ use crate::{
     ast::{
         builder::Builder,
         diagnostics::{Diagnostic as D, MaybeSpanDiag, TypeMismatch},
+        node::{Map, MapEntry},
         Property, Value,
     },
     cst::Kind,
@@ -43,12 +44,13 @@ impl<'a> Builder<'a> {
                 let key_kind = hint.subtype(0);
                 let value_kind = hint.subtype(1);
                 let entries = self.resolve_body_map_entries(block, key_kind, value_kind, hint_span);
-                Ok(Value::Map {
+                Ok(Map {
                     key_kind,
                     value_kind,
                     entries,
                     span: block.span,
-                })
+                }
+                .into())
             }
             K::Container | K::UnorderedContainer => {
                 let item_kind = hint.subtype(0);
@@ -216,7 +218,7 @@ impl<'a> Builder<'a> {
         key_kind: PropertyKind,
         value_kind: PropertyKind,
         hint_span: Option<Span>,
-    ) -> Vec<(Value, Option<Value>)> {
+    ) -> Vec<MapEntry> {
         let hint = RitoType::map(key_kind, value_kind);
         let mut entries = Vec::new();
         for child in block.children.get(self.cst).iter() {
@@ -244,7 +246,10 @@ impl<'a> Builder<'a> {
                                     // reporting the error for not having a value should be handled already
                                 }
                             }
-                            entries.push((key, entry.value));
+                            entries.push(MapEntry {
+                                key,
+                                value: entry.value,
+                            });
                         }
                         Err(key) => self.push(D::unwrap(
                             TypeMismatch {

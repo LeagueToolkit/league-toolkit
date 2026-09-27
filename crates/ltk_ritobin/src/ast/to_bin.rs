@@ -6,7 +6,7 @@ use ltk_meta::{
 use crate::{
     ast::{
         diagnostics::{Diagnostic, DiagnosticWithSpan},
-        node::root::FileKind,
+        node::{root::FileKind, Map, MapEntry},
         Ast, Object, RootEntry, RootPatch, Value,
     },
     Spanned,
@@ -193,17 +193,20 @@ impl Value {
             } => P::UnorderedContainer(values::UnorderedContainer(container_from(
                 *item_kind, items,
             ))),
-            Value::Map {
+            Value::Map(Map {
                 key_kind,
                 value_kind,
                 entries,
                 span: _,
-            } => {
+            }) => {
                 let mut map = assert(values::Map::empty(*key_kind, *value_kind), || {
                     values::Map::empty(PropertyKind::None, PropertyKind::None)
                         .expect("None is always a valid map key and value kind")
                 });
-                for (k, v) in entries {
+                for MapEntry {
+                    key: k, value: v, ..
+                } in entries
+                {
                     if let Some((k, v)) = k
                         .to_bin_value()
                         .zip(v.as_ref().and_then(|v| v.to_bin_value()))

@@ -56,17 +56,49 @@ pub enum Value {
         items: Vec<Value>,
         span: Span,
     },
-    Map {
-        key_kind: PropertyKind,
-        value_kind: PropertyKind,
-        entries: Vec<(Value, Option<Value>)>,
-        span: Span,
-    },
+    Map(Map),
     Optional {
         item_kind: Option<PropertyKind>,
         value: Option<Box<Value>>,
         span: Span,
     },
+}
+
+#[derive(Debug, Clone)]
+pub struct Map {
+    pub key_kind: PropertyKind,
+    pub value_kind: PropertyKind,
+    pub entries: Vec<MapEntry>,
+    pub span: Span,
+}
+
+impl Map {
+    pub fn keys(&self) -> impl Iterator<Item = &Value> {
+        self.entries.iter().map(|MapEntry { key, .. }| key)
+    }
+    pub fn values(&self) -> impl Iterator<Item = &Value> {
+        self.entries
+            .iter()
+            .filter_map(|MapEntry { value, .. }| value.as_ref())
+    }
+    pub fn iter(&self) -> impl Iterator<Item = &MapEntry> {
+        self.entries.iter()
+    }
+}
+
+impl IntoIterator for Map {
+    type Item = MapEntry;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.entries.into_iter()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct MapEntry {
+    pub key: Value,
+    pub value: Option<Value>,
 }
 
 impl Value {
@@ -150,12 +182,12 @@ impl Value {
     pub fn default_for(kind: RitoType, span: Span) -> Value {
         use PropertyKind as K;
         match kind.base {
-            K::Map => Value::Map {
+            K::Map => Value::Map(Map {
                 key_kind: kind.subtype(0),
                 value_kind: kind.subtype(1),
                 entries: Vec::new(),
                 span,
-            },
+            }),
             K::Container => Value::Container {
                 item_kind: kind.subtype(0),
                 items: Vec::new(),
@@ -271,7 +303,7 @@ impl Value {
             Value::Struct(s) | Value::Embedded(s) => s.span,
             Value::Container { span, .. }
             | Value::UnorderedContainer { span, .. }
-            | Value::Map { span, .. }
+            | Value::Map(Map { span, .. })
             | Value::Optional { span, .. } => *span,
         }
     }
@@ -284,11 +316,11 @@ impl Value {
                     subtypes: [Some(*item_kind), None],
                 }
             }
-            Value::Map {
+            Value::Map(Map {
                 key_kind,
                 value_kind,
                 ..
-            } => RitoType {
+            }) => RitoType {
                 base: self.kind()?,
                 subtypes: [Some(*key_kind), Some(*value_kind)],
             },
@@ -307,5 +339,11 @@ impl Value {
     }
     pub fn bitbool(span: Span, value: bool) -> Self {
         Self::BitBool(Spanned::new(span, value))
+    }
+}
+
+impl From<Map> for Value {
+    fn from(value: Map) -> Self {
+        Self::Map(value)
     }
 }
