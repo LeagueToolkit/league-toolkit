@@ -49,21 +49,6 @@ const WAD_HEADER_SIZE: u64 = 268;
 /// Write buffer size for a rebased WAD.
 const WRITE_BUFFER_SIZE: usize = 1 << 20; // 1 MiB
 
-/// TOC entries reserved beyond a rebasable WAD's current entry count.
-///
-/// Zero, deliberately. Reserving slack would let a WAD gain or lose a chunk
-/// without moving any data, but it leaves a gap between the last TOC entry and
-/// the first data byte, and the game has not been observed tolerating that gap
-/// in a real session. The capacity is still recorded and honoured throughout,
-/// and a rebase zeroes the slots it leaves unfilled, so enabling slack once
-/// that is proven is this constant alone.
-///
-/// While it is zero, capacity equals the entry count, so any change to a WAD's
-/// entry set fails the capacity precondition and leaves the caller its full
-/// rebuild - which also means nothing exercises the zero-fill until this is
-/// raised.
-const TOC_SLACK_ENTRIES: u32 = 0;
-
 /// Highest byte offset the WAD v3.4 format's `u32` offset fields can address.
 const MAX_WAD_OFFSET: u64 = u32::MAX as u64;
 
@@ -246,7 +231,7 @@ pub struct WadTailLayout {
     pub tail_offset: u64,
     /// TOC entries the file has room for without moving any data.
     ///
-    /// Equal to the entry count: the crate reserves no slack beyond it today.
+    /// At least the entry count. The writer of the file decides the slack.
     pub toc_capacity: u32,
 }
 
@@ -314,16 +299,14 @@ impl WadTailLayout {
         })
     }
 
-    /// Whether `entry_count` entries fit this TOC without an unreserved gap.
+    /// Whether `entry_count` entries fit this TOC.
     ///
-    /// The count may not exceed the capacity, nor fall short of it by more than
-    /// the slack the crate reserves. That slack is zero today, because the game
-    /// has not been observed tolerating the gap it would leave between the last
-    /// TOC entry and the first data byte, so this is currently equality.
+    /// The count may not exceed the capacity. The game reads `chunk_count`
+    /// entries and ignores the zeroed slots between the last entry and the
+    /// first data byte. Any count up to the capacity fits.
     #[must_use]
     pub fn admits_entry_count(&self, entry_count: usize) -> bool {
-        let fewest = self.toc_capacity.saturating_sub(TOC_SLACK_ENTRIES);
-        u32::try_from(entry_count).is_ok_and(|count| (fewest..=self.toc_capacity).contains(&count))
+        u32::try_from(entry_count).is_ok_and(|count| count <= self.toc_capacity)
     }
 
     /// Check the layout's own numbers hang together before its offsets are used.
@@ -517,9 +500,8 @@ impl<'a> WadRebasePlan<'a> {
             chunk.write_v3_4(&mut writer)?;
         }
         // Reserved slots this rebase did not fill are zeroed, as a full rebuild
-        // zeroes them: rewriting in place would otherwise leave the previous
-        // TOC's entries sitting past the new chunk count. Empty while
-        // `TOC_SLACK_ENTRIES` is zero, since capacity then equals the entry count.
+        // zeroes them. A rewrite in place leaves the previous TOC's entries
+        // past the new chunk count otherwise.
         for _ in self.entries.len()..self.layout.toc_capacity as usize {
             writer.write_all(&[0u8; TOC_ENTRY_SIZE])?;
         }

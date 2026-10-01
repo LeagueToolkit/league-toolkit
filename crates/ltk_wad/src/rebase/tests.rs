@@ -132,6 +132,52 @@ fn a_rejected_entry_count_leaves_the_file_untouched() {
     );
 }
 
+/// Any entry count up to the capacity fits, down to zero.
+#[test]
+fn an_entry_count_below_the_capacity_is_admitted() {
+    let built = build_wad(&[(SKIN, b"the original skin"), (VFX, b"the original vfx")]);
+    let (layout, _) = layout_of(&built);
+    let layout = WadTailLayout {
+        toc_capacity: 4,
+        ..layout
+    };
+
+    for count in 0..=4 {
+        assert!(
+            layout.admits_entry_count(count),
+            "{count} entries fit 4 slots"
+        );
+    }
+    assert!(!layout.admits_entry_count(5), "5 entries overflow 4 slots");
+}
+
+/// Dropping an entry leaves a slot past the new chunk count. The rebase zeroes
+/// it, and the WAD mounts with the remaining entry.
+#[test]
+fn a_dropped_entry_leaves_a_zeroed_slot() {
+    let built = build_wad(&[(SKIN, b"the original skin"), (VFX, b"the original vfx")]);
+    let (layout, mut base_entries) = layout_of(&built);
+    base_entries.remove(&hash(VFX));
+
+    let plan = WadRebasePlan::tail(&layout, base_entries, &[]).expect("the plan is admissible");
+    let mut cursor = Cursor::new(built[..layout.tail_offset as usize].to_vec());
+    let report = plan.write(&mut cursor, 0).expect("the tail writes");
+    let rebased = cursor.into_inner();
+
+    assert_eq!(report.entry_count, 1);
+    let toc = layout.toc_offset().expect("the layout is coherent") as usize;
+    assert!(
+        rebased[toc + TOC_ENTRY_SIZE..toc + 2 * TOC_ENTRY_SIZE]
+            .iter()
+            .all(|byte| *byte == 0),
+        "the slot past the chunk count must be zeroed"
+    );
+
+    let wad = Wad::mount(Cursor::new(&rebased)).expect("the rebased WAD mounts");
+    assert_eq!(wad.chunks().len(), 1);
+    assert!(wad.chunks().get(hash(SKIN)).is_some());
+}
+
 /// Story: the same rewrite, into a WAD that is not the whole file.
 ///
 /// A WAD packed inside an archive starts partway through its container, so
