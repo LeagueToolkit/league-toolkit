@@ -1,6 +1,6 @@
 [package]
 name = "league-toolkit"
-version = "0.2.40"
+version = "0.2.41"
 edition = "2021"
 
 description = "Toolkit library for serializing and editing various League of Legends formats"
@@ -43,7 +43,7 @@ ltk_mesh = { version = "0.5.3", path = "../ltk_mesh", optional = true }
 ltk_meta = { version = "0.8.6", path = "../ltk_meta", optional = true }
 ltk_primitives = { version = "0.3.6", path = "../ltk_primitives", optional = true }
 ltk_texture = { version = "0.6.4", path = "../ltk_texture", optional = true }
-ltk_wad = { version = "0.5.7", path = "../ltk_wad", optional = true }
+ltk_wad = { version = "0.5.8", path = "../ltk_wad", optional = true }
 ltk_hash = { version = "0.4.0", path = "../ltk_hash", optional = true }
 ltk_rst = { version = "0.2.1", path = "../ltk_rst", optional = true }
 
