@@ -159,6 +159,32 @@ entries: map[hash, embed] = {
         assert_success(r#"mVelMultiplier: f32 = 0 # asd"#);
     }
 
+    #[test]
+    fn unterminated_string_value() {
+        let text = r#"#PROP_text
+type: string = "PROP"
+version: u32 = 3
+linked: list[string] = {}
+entries: map[hash, embed] = {
+    "a" = Foo {
+        name: string = "
+    }
+}
+"#;
+        let cst = Cst::parse(text);
+        assert!(
+            matches!(
+                cst.errors.as_slice(),
+                [err] if matches!(err.kind, super::ErrorKind::UnterminatedString)
+            ),
+            "{:#?}",
+            cst.errors
+        );
+
+        let bin = cst.build_bin(text);
+        assert!(bin.diagnostics.is_empty(), "{:#?}", bin.diagnostics);
+    }
+
     #[ignore = "Nice to have"]
     #[test]
     fn naked_class() {

@@ -72,17 +72,13 @@ impl<'a> Builder<'a> {
                     .map_err(|e| e.fallback(node.span).diagnostic)
             }
             Kind::Literal => {
-                let Some(token_child) = node.children.get(self.cst).first() else {
-                    return Err(Diagnostic::CustomSpan(
-                        "[resolve_value] literal node has no children",
-                        wrapper.span,
-                    ));
-                };
-                let Some(token) = token_child.token(self.cst) else {
-                    return Err(Diagnostic::CustomSpan(
-                        "[resolve_value] literal node's first child is not a token",
-                        wrapper.span,
-                    ));
+                let Some(token) = node
+                    .children
+                    .get(self.cst)
+                    .first()
+                    .and_then(|child| child.token(self.cst))
+                else {
+                    return Ok(Value::Unknown(node.span));
                 };
                 Ok(self.resolve_literal(self.text, token, hint, hint_span))
             }
