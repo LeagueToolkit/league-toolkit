@@ -10,7 +10,9 @@ use std::fmt::{self};
 use ltk_meta::{Bin, BinFile, BinOverride};
 
 use crate::{cst, hashes::HashProvider};
+use canonical::CanonicalWriter;
 
+pub mod canonical;
 pub mod command;
 pub mod visitor;
 
@@ -82,6 +84,34 @@ impl Print for BinFile {
             BinFile::Prop(bin) => bin.print_to_writer_with_config(writer, config),
             BinFile::Override(patch) => patch.print_to_writer_with_config(writer, config),
         }
+    }
+}
+
+/// Prints the canonical text: the text `ritobin_cli -k -i bin -o text` writes, byte for byte
+/// ([`canonical`]). Hashes print as hex and the indent is 4 spaces. Nothing about it is
+/// configurable.
+///
+/// The canonical text is stable: a value prints as the same bytes in every release, and a change
+/// to it is a breaking change.
+pub trait PrintCanonical {
+    /// Print the canonical text to the given writer, and return the number of bytes written.
+    fn print_canonical_to_writer<W: fmt::Write>(&self, writer: &mut W)
+        -> Result<usize, PrintError>;
+
+    /// Print the canonical text to a string.
+    fn print_canonical(&self) -> Result<String, PrintError> {
+        let mut str = String::new();
+        Self::print_canonical_to_writer(self, &mut str)?;
+        Ok(str)
+    }
+}
+
+impl PrintCanonical for Bin {
+    fn print_canonical_to_writer<W: fmt::Write>(
+        &self,
+        writer: &mut W,
+    ) -> Result<usize, PrintError> {
+        Ok(CanonicalWriter::new(writer).bin(self)?)
     }
 }
 
@@ -354,6 +384,15 @@ linked: list[string] = { "DATA/Characters/Viego/Viego.bin"
 }"#,
             PrintConfig::default(),
         )
+    }
+
+    #[test]
+    fn string_keeps_spaces_at_its_ends() {
+        assert_pretty_rt(
+            r#"a: string = " a "
+b: list[string] = { "pad ", " pad" }"#,
+            PrintConfig::default(),
+        );
     }
 
     #[ignore = "nice to have"]

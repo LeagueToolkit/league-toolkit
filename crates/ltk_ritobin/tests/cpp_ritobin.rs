@@ -1,4 +1,5 @@
-//! C++ ritobin's text parses back to the bin `ritobin_cli -k -i bin -o text` wrote it from.
+//! C++ ritobin's text is the canonical form: a bin prints as `ritobin_cli -k -i bin -o text`
+//! prints it, and that text parses back to the same bin.
 //!
 //! The fixtures in `tests/data` are synthetic. Each `.rito` is `ritobin_cli`'s text for the `.bin`
 //! beside it, from ritobin `368b413`.
@@ -7,8 +8,8 @@ use std::io::Cursor;
 
 use glam::{Mat4, Vec4};
 use ltk_hash::{BinHash, Hash as _};
-use ltk_meta::{property::values, Bin, PropertyKind, PropertyValueEnum};
-use ltk_ritobin::{ast::diagnostics::Diagnostic, Cst};
+use ltk_meta::{property::values, Bin, BinObject, PropertyKind, PropertyValueEnum};
+use ltk_ritobin::{ast::diagnostics::Diagnostic, Cst, PrintCanonical as _};
 
 fn fixture(name: &str) -> (Vec<u8>, String) {
     let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/");
@@ -50,6 +51,16 @@ fn prop(fields: &str) -> String {
     )
 }
 
+/// The bin [`prop`] describes, with `fields` as its object's properties.
+fn prop_bin(fields: impl IntoIterator<Item = (u32, PropertyValueEnum)>) -> Bin {
+    let object = fields
+        .into_iter()
+        .fold(BinObject::builder(1, 2), |o, (name, value)| {
+            o.property(name, value)
+        });
+    Bin::builder().object(object.build()).build()
+}
+
 /// The properties of [`prop`]'s one object.
 fn fields(bin: &Bin) -> Vec<(u32, PropertyValueEnum)> {
     bin.objects[&BinHash(1)]
@@ -78,6 +89,12 @@ fn string(s: &str) -> PropertyValueEnum {
 // -- the fixtures ---------------------------------------------------------------------------------
 
 #[test]
+fn test_bin_prints_as_cpp_ritobin_text() {
+    let (bin, text) = fixture("test");
+    pretty_assertions::assert_eq!(read(&bin).print_canonical().unwrap(), text);
+}
+
+#[test]
 fn cpp_ritobin_text_parses_to_test_bin() {
     let (bytes, text) = fixture("test");
     let bin = build(&text);
@@ -86,10 +103,23 @@ fn cpp_ritobin_text_parses_to_test_bin() {
 }
 
 #[test]
+fn edge_prop_bin_prints_as_cpp_ritobin_text() {
+    let (bin, text) = fixture("edge-prop");
+    pretty_assertions::assert_eq!(read(&bin).print_canonical().unwrap(), text);
+}
+
+#[test]
 fn cpp_ritobin_text_parses_to_edge_prop_bin() {
     let (bytes, text) = fixture("edge-prop");
     // The fixture holds a NaN, unequal to itself: the written bytes are compared, not the bins.
     assert_eq!(write(&build(&text)), bytes);
+}
+
+#[test]
+fn version_1_bin_prints_without_linked_root() {
+    let (bin, text) = fixture("edge-v1");
+    assert!(!text.contains("linked:"));
+    pretty_assertions::assert_eq!(read(&bin).print_canonical().unwrap(), text);
 }
 
 #[test]
@@ -287,4 +317,133 @@ fn map_keys_take_vectors_and_64_bit_hashes() {
     );
     let bin = build(&text);
     assert_eq!(fields(&bin).len(), 2);
+    assert_eq!(bin.print_canonical().unwrap(), text);
+}
+
+// -- printing -------------------------------------------------------------------------------------
+
+#[test]
+fn strings_keep_spaces_at_their_ends() {
+    let bin = prop_bin([(0x43, string(" a ")), (0x44, string("pad "))]);
+    assert_eq!(
+        bin.print_canonical().unwrap(),
+        prop("0x00000043: string = \" a \"\n0x00000044: string = \"pad \"")
+    );
+}
+
+#[test]
+fn strings_print_with_cpp_escapes() {
+    let bin = prop_bin([(0x44, string("tab\there \"quoted\" back\\slash\x01 é"))]);
+    assert_eq!(
+        bin.print_canonical().unwrap(),
+        prop(r#"0x00000044: string = "tab\there \"quoted\" back\\slash\x01 é""#)
+    );
+}
+
+#[test]
+fn null_pointer_prints_as_null() {
+    let bin = prop_bin([(0x20, null_pointer())]);
+    assert_eq!(
+        bin.print_canonical().unwrap(),
+        prop("0x00000020: pointer = null")
+    );
+}
+
+#[test]
+fn mtx44_prints_four_rows_of_four() {
+    let rows = [
+        1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.5, 1e5, 0.0, 1.0,
+    ];
+    let bin = prop_bin([(
+        0x16,
+        values::Matrix44::new(Mat4::from_cols_array(&rows).transpose()).into(),
+    )]);
+    assert_eq!(
+        bin.print_canonical().unwrap(),
+        prop(
+            "0x00000016: mtx44 = {
+    1, 0, 0, 0
+    0, 1, 0, 0
+    0, 0, 1, 0
+    2.5, 1e+05, 0, 1
+}"
+        )
+    );
+}
+
+#[test]
+fn list_of_pointers_closes_at_its_field_indent() {
+    let pointer = values::Struct {
+        class_hash: BinHash(0x30),
+        properties: [(BinHash(0x31), values::U32::new(1).into())]
+            .into_iter()
+            .collect(),
+    };
+    let list =
+        values::Container::new(PropertyKind::Struct, vec![null_pointer(), pointer.into()]).unwrap();
+    let bin = prop_bin([(0x21, list.into())]);
+    assert_eq!(
+        bin.print_canonical().unwrap(),
+        prop(
+            "0x00000021: list[pointer] = {
+    null
+    0x00000030 {
+        0x00000031: u32 = 1
+    }
+}"
+        )
+    );
+}
+
+#[test]
+fn floats_print_in_shortest_to_chars_form() {
+    let bin = prop_bin([
+        (0x10, f32(1e5)),
+        (0x11, f32(2.315781e-5)),
+        (0x12, f32(0.14117648)),
+        (0x13, f32(4294967296.0)),
+        (0x14, f32(-28936.8125)),
+    ]);
+    assert_eq!(
+        bin.print_canonical().unwrap(),
+        prop(
+            "0x00000010: f32 = 1e+05
+0x00000011: f32 = 2.315781e-05
+0x00000012: f32 = 0.14117648
+0x00000013: f32 = 4294967296
+0x00000014: f32 = -28936.812"
+        )
+    );
+}
+
+#[test]
+fn empty_containers_print_as_empty_braces() {
+    let bin = prop_bin([
+        (
+            0x1,
+            values::Container::empty(PropertyKind::U32).unwrap().into(),
+        ),
+        (
+            0x2,
+            values::Map::empty(PropertyKind::Hash, PropertyKind::Embedded)
+                .unwrap()
+                .into(),
+        ),
+        (
+            0x3,
+            values::Embedded(values::Struct {
+                class_hash: BinHash(0x40),
+                properties: Default::default(),
+            })
+            .into(),
+        ),
+    ]);
+    assert_eq!(
+        bin.print_canonical().unwrap(),
+        prop(
+            "0x00000001: list[u32] = {}
+0x00000002: map[hash,embed] = {}
+0x00000003: embed = 0x00000040 {}"
+        )
+    );
 }

@@ -13,6 +13,7 @@ use crate::{
     ast::node::root::FileKind,
     cst::{Child, ChildRange, Cst, ErrorRange, Kind, Node, NodeId, TokenId},
     parse::{Error, Span, Token, TokenKind as Tok},
+    print::canonical::F32Text,
     HashProvider, PropertyValueExt as _, RitoType, RitobinName as _,
 };
 
@@ -223,13 +224,13 @@ impl<H: HashProvider> Builder<H> {
             PropertyValueEnum::I16(n) => self.number(**n),
             PropertyValueEnum::I32(n) => self.number(**n),
             PropertyValueEnum::I64(n) => self.number(**n),
-            PropertyValueEnum::F32(n) => self.number(**n),
+            PropertyValueEnum::F32(n) => self.number(F32Text(**n)),
             PropertyValueEnum::Vector2(v) => {
                 let items = v
                     .to_array()
                     .iter()
                     .map(|v| {
-                        let v = self.number(*v);
+                        let v = self.number(F32Text(*v));
                         self.tree(Kind::ListItem, [v])
                     })
                     .collect();
@@ -240,7 +241,7 @@ impl<H: HashProvider> Builder<H> {
                     .to_array()
                     .iter()
                     .map(|v| {
-                        let v = self.number(*v);
+                        let v = self.number(F32Text(*v));
                         self.tree(Kind::ListItem, [v])
                     })
                     .collect();
@@ -251,7 +252,7 @@ impl<H: HashProvider> Builder<H> {
                     .to_array()
                     .iter()
                     .map(|v| {
-                        let v = self.number(*v);
+                        let v = self.number(F32Text(*v));
                         self.tree(Kind::ListItem, [v])
                     })
                     .collect();
@@ -264,10 +265,10 @@ impl<H: HashProvider> Builder<H> {
                     .iter()
                     .flat_map(|v| {
                         let values = [
-                            self.number(v[0]),
-                            self.number(v[1]),
-                            self.number(v[2]),
-                            self.number(v[3]),
+                            self.number(F32Text(v[0])),
+                            self.number(F32Text(v[1])),
+                            self.number(F32Text(v[2])),
+                            self.number(F32Text(v[3])),
                         ];
                         [
                             self.tree(Kind::ListItem, [values[0]]),
@@ -312,6 +313,10 @@ impl<H: HashProvider> Builder<H> {
 
                 children.push(self.token(Tok::RCurly));
                 self.tree(Kind::TypeArgList, children)
+            }
+            PropertyValueEnum::Struct(s) if s.class_hash.0 == 0 => {
+                let tok = self.token(Tok::Null);
+                self.tree(Kind::Literal, [tok])
             }
             PropertyValueEnum::Embedded(values::Embedded(s)) | PropertyValueEnum::Struct(s) => {
                 let k = self.hash_type_lit(s.class_hash);
