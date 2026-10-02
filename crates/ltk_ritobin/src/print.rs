@@ -87,9 +87,9 @@ impl Print for BinFile {
     }
 }
 
-/// Prints the canonical text: the text `ritobin_cli -k -i bin -o text` writes, byte for byte
-/// ([`canonical`]). Hashes print as hex and the indent is 4 spaces. Nothing about it is
-/// configurable.
+/// Prints the canonical text: the text `ritobin_cli -k -i bin -o text` writes, byte for byte, the
+/// first line of a `PTCH` file aside ([`canonical`]). Hashes print as hex and the indent is 4
+/// spaces. Nothing about it is configurable.
 ///
 /// The canonical text is stable: a value prints as the same bytes in every release, and a change
 /// to it is a breaking change.
@@ -112,6 +112,27 @@ impl PrintCanonical for Bin {
         writer: &mut W,
     ) -> Result<usize, PrintError> {
         Ok(CanonicalWriter::new(writer).bin(self)?)
+    }
+}
+
+impl PrintCanonical for BinOverride {
+    fn print_canonical_to_writer<W: fmt::Write>(
+        &self,
+        writer: &mut W,
+    ) -> Result<usize, PrintError> {
+        Ok(CanonicalWriter::new(writer).bin_override(self)?)
+    }
+}
+
+impl PrintCanonical for BinFile {
+    fn print_canonical_to_writer<W: fmt::Write>(
+        &self,
+        writer: &mut W,
+    ) -> Result<usize, PrintError> {
+        match self {
+            BinFile::Prop(bin) => bin.print_canonical_to_writer(writer),
+            BinFile::Override(patch) => patch.print_canonical_to_writer(writer),
+        }
     }
 }
 

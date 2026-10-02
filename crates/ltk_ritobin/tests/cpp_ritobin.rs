@@ -8,7 +8,9 @@ use std::io::Cursor;
 
 use glam::{Mat4, Vec4};
 use ltk_hash::{BinHash, Hash as _};
-use ltk_meta::{property::values, Bin, BinObject, PropertyKind, PropertyValueEnum};
+use ltk_meta::{
+    property::values, Bin, BinFile, BinObject, BinOverride, PropertyKind, PropertyValueEnum,
+};
 use ltk_ritobin::{ast::diagnostics::Diagnostic, Cst, PrintCanonical as _};
 
 fn fixture(name: &str) -> (Vec<u8>, String) {
@@ -128,6 +130,33 @@ fn version_1_text_without_linked_root_parses_to_its_bin() {
     let bin = build(&text);
     assert_eq!(bin.version, 1);
     assert_eq!(bin, read(&bytes));
+}
+
+#[test]
+fn ptch_bin_prints_as_cpp_ritobin_text_past_its_first_line() {
+    let (bytes, text) = fixture("ptch");
+    let patch = BinOverride::from_reader(&mut Cursor::new(&bytes)).unwrap();
+    let printed = patch.print_canonical().unwrap();
+    // C++ ritobin heads every file `#PROP_text`, a `PTCH` file printed here `#PTCH_text`.
+    let (cpp_header, cpp_body) = text.split_once('\n').unwrap();
+    assert_eq!(cpp_header, "#PROP_text");
+    pretty_assertions::assert_eq!(printed, format!("#PTCH_text\n{cpp_body}"));
+}
+
+#[test]
+fn cpp_ritobin_ptch_text_parses_to_ptch_bin() {
+    let (bytes, text) = fixture("ptch");
+    let cst = Cst::parse(&text);
+    assert!(cst.errors.is_empty(), "parse errors: {:#?}", cst.errors);
+    let (file, diagnostics) = cst.build(&text);
+    assert!(diagnostics.is_empty(), "diagnostics: {diagnostics:#?}");
+    let BinFile::Override(patch) = file else {
+        panic!("{file:#?}");
+    };
+    // The fixture holds a NaN, unequal to itself: the written bytes are compared, not the patches.
+    let mut out = Cursor::new(Vec::new());
+    patch.to_writer(&mut out).unwrap();
+    assert_eq!(out.into_inner(), bytes);
 }
 
 // -- parsing --------------------------------------------------------------------------------------

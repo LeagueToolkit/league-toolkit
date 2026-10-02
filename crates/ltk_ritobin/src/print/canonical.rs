@@ -14,12 +14,22 @@
 //! - An integer is decimal. A float is [`F32Text`].
 //! - A string is quoted, with `\t \n \r \b \f \\ \"` escaped, `\xHH` for any other character below
 //!   0x20, and every other character as is.
+//!
+//! A `PTCH` file prints the same way, past its first line:
+//!
+//! - Its first line is `#PTCH_text`, where C++ ritobin writes `#PROP_text` for every file. The
+//!   `type` root names the kind, and the comment lets a scan tell the kinds apart unparsed.
+//! - The roots are `type`, `version` (3), `linked` (empty), `entries` and `patches`, in that order.
+//! - A record is `0xOBJECT = patch { path: string = "..", value: <type> = .. }`, one field per
+//!   line.
+//! - A `deleted: list[hash]` root of the deleted objects follows `patches`, and is absent when
+//!   nothing is deleted. It is a toolkit extension: C++ ritobin has no such root.
 
 use std::fmt::{self, Write};
 
 use indexmap::IndexMap;
 use ltk_hash::BinHash;
-use ltk_meta::{property::values, Bin, BinObject, PropertyValueEnum};
+use ltk_meta::{property::values, Bin, BinObject, BinOverride, PropertyPatch, PropertyValueEnum};
 
 use crate::{escaping, PropertyValueExt as _};
 
@@ -197,6 +207,40 @@ impl<'a, W: Write + ?Sized> CanonicalWriter<'a, W> {
         self.items(bin.objects.values(), |w, object| w.object(object))?;
         self.write_char('\n')?;
         Ok(self.written)
+    }
+
+    /// Writes the `PTCH` file of `patch`, and returns the number of bytes written.
+    pub(crate) fn bin_override(mut self, patch: &BinOverride) -> Result<usize, fmt::Error> {
+        self.write_str("#PTCH_text\ntype: string = \"PTCH\"\nversion: u32 = 3\n")?;
+        self.write_str("linked: list[string] = {}\nentries: map[hash,embed] = ")?;
+        self.items(patch.objects.values(), |w, object| w.object(object))?;
+        self.write_str("\npatches: map[hash,embed] = ")?;
+        self.items(&patch.patches, |w, record| w.patch(record))?;
+        self.write_char('\n')?;
+        if !patch.deleted.is_empty() {
+            self.write_str("deleted: list[hash] = ")?;
+            self.items(&patch.deleted, |w, hash| w.hash(*hash))?;
+            self.write_char('\n')?;
+        }
+        Ok(self.written)
+    }
+
+    /// `0xOBJECT = patch { path: string = "..", value: <type> = .. }`, one field per line.
+    fn patch(&mut self, record: &PropertyPatch) -> fmt::Result {
+        self.hash(record.object_hash)?;
+        self.write_str(" = patch {\n")?;
+        self.indent += INDENT;
+        self.pad()?;
+        self.write_str("path: string = ")?;
+        self.string(record.path.as_str())?;
+        self.write_char('\n')?;
+        self.pad()?;
+        write!(self, "value: {} = ", record.value.rito_type())?;
+        self.value(&record.value)?;
+        self.write_char('\n')?;
+        self.indent -= INDENT;
+        self.pad()?;
+        self.write_char('}')
     }
 
     fn pad(&mut self) -> fmt::Result {
