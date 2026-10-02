@@ -7,6 +7,10 @@ use std::fmt::Display;
 pub trait RitobinName {
     /// Maps a ritobin type name string to a [`ltk_meta::PropertyKind`].
     /// **NOTE:** Case sensitive.
+    ///
+    /// `none` maps to nothing. [`PropertyKind::None`](ltk_meta::PropertyKind::None) is C++
+    /// ritobin's unassigned value, not a type a bin holds: C++ ritobin's binary reader rejects it,
+    /// and no shipped bin has one.
     fn from_rito_name(name: &str) -> Option<Self>
     where
         Self: Sized;
@@ -18,7 +22,6 @@ pub trait RitobinName {
 impl RitobinName for PropertyKind {
     fn from_rito_name(name: &str) -> Option<Self> {
         match name {
-            "none" => Some(Self::None),
             "bool" => Some(Self::Bool),
             "i8" => Some(Self::I8),
             "u8" => Some(Self::U8),

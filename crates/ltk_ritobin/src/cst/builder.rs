@@ -605,12 +605,18 @@ mod test {
     }
 
     #[test]
-    fn null() {
+    fn null_pointer() {
         roundtrip(
             Bin::builder()
                 .object(
                     BinObject::builder(0xDEADBEEF, 0x12344321)
-                        .property(0x1, values::None)
+                        .property(
+                            0x1,
+                            values::Struct {
+                                class_hash: 0.into(),
+                                properties: Default::default(),
+                            },
+                        )
                         .build(),
                 )
                 .build(),
