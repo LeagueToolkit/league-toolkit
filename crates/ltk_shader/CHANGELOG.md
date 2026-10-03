@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.10](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_shader-v0.3.9...ltk_shader-v0.3.10) - 2026-10-03
+
+### Added
+
+- *(ltk_mapgeo)* add nvr reader
+
 ## [0.3.9](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_shader-v0.3.8...ltk_shader-v0.3.9) - 2026-10-01
 
 ### Other
