@@ -50,6 +50,59 @@ pub enum WriteError {
     Io(#[from] std::io::Error),
 }
 
+/// Errors that can occur when reading or lifting a `.nvr` file
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum NvrError {
+    /// The file signature is not `NVR\0`.
+    #[error("invalid file signature")]
+    InvalidFileSignature,
+
+    /// The file version is not 8.1 or 9.1.
+    #[error("unsupported file version: {major}.{minor}")]
+    UnsupportedVersion { major: u16, minor: u16 },
+
+    /// An index buffer has a format other than 16 or 32 bit.
+    #[error("index buffer {index} has unsupported format {format:#x}")]
+    UnsupportedIndexFormat { index: usize, format: u32 },
+
+    /// A material has a type outside the known five.
+    #[error("material {material} has unknown type {kind}")]
+    UnknownMaterialType { material: usize, kind: i32 },
+
+    /// A mesh refers to a material the file does not have.
+    #[error("mesh {mesh} refers to material {material}, which does not exist")]
+    MissingMaterial { mesh: usize, material: i32 },
+
+    /// A mesh primitive refers to a buffer the file does not have.
+    #[error("mesh {mesh} primitive {primitive} refers to a buffer that does not exist")]
+    MissingBuffer { mesh: usize, primitive: usize },
+
+    /// A mesh primitive's vertex or index range runs past its buffer.
+    #[error("mesh {mesh} primitive {primitive} runs past the end of its buffer")]
+    RangeOutOfBounds { mesh: usize, primitive: usize },
+
+    /// A mesh index points outside the mesh's own vertex range.
+    #[error("mesh {mesh} has index {index} outside its vertex range")]
+    IndexOutOfRange { mesh: usize, index: u32 },
+
+    /// A mesh has more vertices than a 16-bit index buffer can address.
+    #[error("mesh {mesh} has {count} vertices, more than 16-bit indices address")]
+    TooManyVertices { mesh: usize, count: usize },
+
+    /// Baking the scene graph failed.
+    #[error("scene graph: {0}")]
+    SceneGraph(#[from] crate::BuildError),
+
+    /// An IO error occurred
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+
+    /// A reader extension error occurred
+    #[error("Reader error: {0}")]
+    Reader(#[from] ltk_io_ext::ReaderError),
+}
+
 /// Errors that can occur when parsing a map geometry file
 #[derive(Debug, thiserror::Error)]
 pub enum ParseError {

@@ -629,6 +629,7 @@ Useful for debugging, diffing, or hand-editing bin data.
 - `EnvironmentMesh` - Individual mesh with materials
 - `BucketedGeometry` - Spatial acceleration structure (grid-based)
 - `PlanarReflector` - Reflection plane definition
+- `nvr::SimpleEnvironment` - Legacy `.nvr` map geometry, read-only
 
 **Example**:
 ```rust
@@ -672,6 +673,17 @@ never shipped, and the client discards the extra data they add - a dead byte
 per mesh in v19, a parsed-then-destroyed `MapGeoExtension` reflection blob per
 mesh in v20 - so they are intentionally unsupported. The format deltas are
 documented in `crates/ltk_mapgeo/src/read/version.rs`.
+
+`.nvr` is the map geometry format of the first clients. The `nvr` module reads versions 8.1 and
+9.1 and lifts them into an `EnvironmentAsset`, which writes as a version 18 `.mapgeo`:
+
+```rust
+use ltk_mapgeo::nvr::SimpleEnvironment;
+
+let nvr = SimpleEnvironment::from_reader(&mut file)?;
+let asset = nvr.to_environment_asset(|material| format!("Maps/Map1/{}", material.name()))?;
+asset.to_writer(&mut out)?;
+```
 
 ---
 
@@ -841,6 +853,7 @@ use glam::{Vec2, Vec3, Vec4, Mat4, Quat};
 | `.tex` | `ltk_texture` | `Tex` | League texture format |
 | `.dds` | `ltk_texture` | `Dds` | DirectDraw Surface |
 | `.mapgeo` | `ltk_mapgeo` | `EnvironmentAsset` | Map geometry |
+| `.nvr` | `ltk_mapgeo` | `nvr::SimpleEnvironment` | Legacy map geometry (read-only) |
 
 ---
 

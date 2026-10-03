@@ -12,6 +12,8 @@
 //! - **Bucketed Geometry**: Spatial acceleration structure for queries
 //! - **Planar Reflectors**: Reflection plane definitions
 //!
+//! The [`nvr`] module reads the legacy `.nvr` format and lifts it into an [`EnvironmentAsset`].
+//!
 //! # Example
 //!
 //! ```ignore
@@ -56,6 +58,8 @@ mod asset;
 pub use asset::*;
 
 pub(crate) mod read;
+
+pub mod nvr;
 
 mod write;
 pub use write::WRITE_VERSION;
