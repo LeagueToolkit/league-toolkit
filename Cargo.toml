@@ -17,6 +17,7 @@ bevy_mikktspace = "1.0.0"
 num_enum = "0.7.2"
 enum_dispatch = "0.3.13"
 memchr = "2.7.2"
+ryu = "1.0.20"
 miette = "7.2.0"
 
 bumpalo = { version = "3.20", features = ["collections", "boxed", "serde"] }

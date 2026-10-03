@@ -550,7 +550,14 @@ fn a_patch_with_added_objects_and_mixed_records_survives_print_and_parse() {
             path("Anchor"),
             values::Vector2::new(Vec2::new(0.0, 1.0)),
         )
-        .set(0x1, path("Nothing"), values::None)
+        .set(
+            0x1,
+            path("Nothing"),
+            values::Struct {
+                class_hash: 0.into(),
+                properties: Default::default(),
+            },
+        )
         .set(0x1, path("Scale"), values::F32::new(0.25))
         .set(0x1, path("Name"), values::String::from("minimap"))
         .set(0x1, path("Id"), values::Hash::new(0x3b9c7079))

@@ -246,14 +246,16 @@ impl<'a> Cursor<'a> {
         let quote = self.bytes[self.pos];
         self.pos += 1;
 
+        // A `\` escapes the one byte after it, a `\` included: `"end\\"` ends at its last quote.
         let mut escaped = false;
         while let Some(&b) = self.bytes.get(self.pos) {
             self.pos += 1;
             match b {
-                b'\\' => escaped = true,
                 b'\n' | b'\r' => return UnterminatedString,
-                _ if b == quote && !escaped => return String,
-                _ => escaped = false,
+                _ if escaped => escaped = false,
+                b'\\' => escaped = true,
+                _ if b == quote => return String,
+                _ => {}
             }
         }
 
@@ -263,6 +265,12 @@ impl<'a> Cursor<'a> {
 
 fn is_name_char(b: u8) -> bool {
     matches!(b, b'_' | b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9')
+}
+
+/// Whether `word` is `inf` or `nan`: a `Name`, and a float where a value stands. `inf: f32 = 1`
+/// is a field named `inf`.
+pub(crate) fn is_float_word(word: &str) -> bool {
+    matches!(word, "inf" | "nan")
 }
 
 fn keyword_or_name(word: &str) -> TokenKind {
@@ -279,7 +287,7 @@ fn ends_value(kind: TokenKind) -> bool {
     use TokenKind::*;
     matches!(
         kind,
-        Name | HexLit | True | False | Number | RCurly | String | Eq | Comment
+        Name | HexLit | True | False | Null | Number | RCurly | String | Eq | Comment
     )
 }
 
@@ -305,6 +313,16 @@ fn scan_number_segment(bytes: &[u8]) -> Option<usize> {
 fn scan_number(bytes: &[u8]) -> Option<usize> {
     let mut i = (bytes.first() == Some(&b'-')) as usize;
 
+    // "-inf" / "-nan": a negative non-finite float. No name starts with `-`. A bare `inf` or `nan`
+    // is a `Name`, a float only where a value stands (`is_float_word`).
+    if i == 1 {
+        for word in [b"inf", b"nan"] {
+            if bytes[1..].starts_with(word) && !bytes.get(4).is_some_and(|&b| is_name_char(b)) {
+                return Some(4);
+            }
+        }
+    }
+
     // ".5"
     if bytes.get(i) == Some(&b'.') {
         return Some(i + 1 + scan_number_segment(&bytes[i + 1..])?);
@@ -316,5 +334,19 @@ fn scan_number(bytes: &[u8]) -> Option<usize> {
         i += 1 + scan_number_segment(&bytes[i + 1..])?;
     }
 
-    Some(i)
+    Some(i + scan_exponent(&bytes[i..]))
+}
+
+/// The length of an exponent, `e` or `E`, an optional sign and digits: `e+05`, `E-7`, `e38`.
+/// Zero when `bytes` does not start with one.
+#[inline]
+fn scan_exponent(bytes: &[u8]) -> usize {
+    if !matches!(bytes.first(), Some(b'e' | b'E')) {
+        return 0;
+    }
+    let sign = matches!(bytes.get(1), Some(b'+' | b'-')) as usize;
+    match scan_run(&bytes[1 + sign..], |b| b.is_ascii_digit()) {
+        0 => 0,
+        digits => 1 + sign + digits,
+    }
 }

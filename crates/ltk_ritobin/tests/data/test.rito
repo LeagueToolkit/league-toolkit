@@ -1,0 +1,44 @@
+#PROP_text
+type: string = "PROP"
+version: u32 = 3
+linked: list[string] = {}
+entries: map[hash,embed] = {
+    0x00000001 = 0x00000002 {
+        0x00000010: f32 = 1e+05
+        0x00000011: f32 = 2.315781e-05
+        0x00000012: f32 = -8.742278e-08
+        0x00000013: f32 = 3.4028235e+38
+        0x00000014: f32 = 1e-45
+        0x00000015: vec4 = { 2.315781e-05, 0, 0.14117648, 0 }
+        0x00000016: mtx44 = {
+            1, 0, 0, 0
+            0, -8.742278e-08, -0.99999994, 0
+            0, 0.99999994, -8.742278e-08, 0
+            2.315781e-05, 1e+05, 0, 1
+        }
+        0x00000020: pointer = null
+        0x00000021: list[pointer] = {
+            null
+            0x00000030 {
+                0x00000031: u32 = 1
+            }
+        }
+        0x00000040: string = "ConstantShadow\\"
+        0x00000041: string = " a.Spirit"
+        0x00000042: string = "Eve_Mask_MAT Minor_Wraith Minor_Wraith_Mist "
+        0x00000043: string = " a "
+        0x00000044: string = "tab\there \"quoted\" back\\slash\x01"
+        0x00000050: option[f32] = {
+            1e-10
+        }
+        0x00000051: map[hash,string] = {
+            0x000000aa = "end\\"
+            0x000000bb = " pad "
+        }
+        0x00000052: embed = 0x00000060 {
+            0x00000061: f32 = 1.5e-07
+            0x00000062: pointer = null
+        }
+        0x00000099: u32 = 7
+    }
+}

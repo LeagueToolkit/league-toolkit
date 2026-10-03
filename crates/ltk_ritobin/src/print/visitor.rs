@@ -563,7 +563,12 @@ impl<'a, W: Write> CstVisitor<'a, W> {
         let token = ctx.cst.token(token).unwrap();
         let parent = ctx.node(parent).unwrap();
 
-        let txt = self.src[token.span].trim();
+        // A string's text is its value, spaces at its ends included. An unterminated string runs
+        // to the end of its line, line break included.
+        let txt = match token.kind {
+            TokenKind::String => &self.src[token.span],
+            _ => self.src[token.span].trim(),
+        };
         let print_value = token.kind.print_value();
 
         if txt.is_empty() && print_value.is_none() {

@@ -1,0 +1,9 @@
+#PROP_text
+type: string = "PROP"
+version: u32 = 1
+entries: map[hash,embed] = {
+    0x00000001 = 0x10000000 {
+        0x00000001: f32 = 1e+05
+        0x00000002: string = " v1 has no linked section "
+    }
+}

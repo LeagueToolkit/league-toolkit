@@ -10,11 +10,10 @@ use crate::{
             MaybeSpanDiag,
         },
         node::TypeExpr,
-        resolve::literals::{self},
         Value,
     },
     cst::{ChildrenExt as _, Kind},
-    parse::{Span, Token, TokenKind},
+    parse::{tokenizer::is_float_word, Span, Token, TokenKind},
     Node, RitoType, Spanned, SpannedExt,
 };
 
@@ -31,14 +30,38 @@ impl<'a> Builder<'a> {
         parent_value_kind: Option<RitoType>,
         parent_type_span: Option<Span>,
     ) -> Result<Value, Diagnostic> {
-        let token = key_node
+        let key = key_node
             .children
             .get(self.cst)
             .first()
-            .ok_or(InvalidHash(key_node.span))?
-            .token(self.cst);
+            .ok_or(InvalidHash(key_node.span))?;
 
+        // `{ 1, 0, -1 } = value`: a map key of a vector type
+        if let Some(block) = key.tree(self.cst).filter(|t| t.kind == Kind::Block) {
+            let key_kind = parent_value_kind
+                .and_then(|k| k.subtypes[0])
+                .ok_or(InvalidHash(key_node.span))?;
+            return self
+                .resolve_block_value(block, RitoType::simple(key_kind), parent_type_span)
+                .map_err(|e| e.fallback(block.span).diagnostic);
+        }
+        let token = key.token(self.cst);
+
+        let key_kind = parent_value_kind.and_then(|k| k.subtypes[0]);
         Ok(match token {
+            // `inf = ..` in a `map[f32,..]`
+            Some(
+                token @ Token {
+                    kind: TokenKind::Name,
+                    span,
+                },
+            ) if key_kind == Some(PropertyKind::F32) && is_float_word(&self.text[span]) => self
+                .resolve_literal(
+                    self.text,
+                    token,
+                    key_kind.map(RitoType::simple),
+                    parent_type_span,
+                ),
             Some(Token {
                 kind: TokenKind::Name,
                 span,
@@ -66,7 +89,7 @@ impl<'a> Builder<'a> {
             Some(Token {
                 kind: TokenKind::HexLit,
                 span,
-            }) => Value::Hash(literals::eval_hash(self.text, *span)?),
+            }) => Value::eval_unknown_hash(self.text, *span)?,
             Some(token) => self.resolve_literal(
                 self.text,
                 token,
