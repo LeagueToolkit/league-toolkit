@@ -205,15 +205,16 @@ impl<'a> Builder<'a> {
                     },
                     Err(e) => self.push(e.fallback(node.span)),
                 },
-                Kind::ListItem | Kind::ListItemBlock => self.push(
-                    D::UnexpectedItem {
-                        span: node.trimmed_span(self.cst),
-                        parent: hint,
-                        expected: crate::ItemShape::Entry,
-                    }
-                    .unwrap(),
-                ),
-                _ => {}
+                _ => {
+                    self.push(
+                        D::UnexpectedItem {
+                            span: node.trimmed_span(self.cst),
+                            parent: hint,
+                            expected: crate::ItemShape::Entry,
+                        }
+                        .unwrap(),
+                    );
+                }
             }
         }
         properties
@@ -275,15 +276,16 @@ impl<'a> Builder<'a> {
                     },
                     Err(e) => self.push(e.fallback(node.span)),
                 },
-                Kind::ListItem | Kind::ListItemBlock => self.push(
-                    D::UnexpectedItem {
-                        span: node.trimmed_span(self.cst),
-                        parent: hint,
-                        expected: crate::ItemShape::Entry,
-                    }
-                    .unwrap(),
-                ),
-                _ => {}
+                _ => {
+                    self.push(
+                        D::UnexpectedItem {
+                            span: node.trimmed_span(self.cst),
+                            parent: hint,
+                            expected: crate::ItemShape::Entry,
+                        }
+                        .unwrap(),
+                    );
+                }
             }
         }
         entries
@@ -329,15 +331,16 @@ impl<'a> Builder<'a> {
                         Err(e) => self.push(e.fallback(node.span)),
                     }
                 }
-                Kind::Entry => self.push(
-                    D::UnexpectedItem {
-                        span: node.trimmed_span(self.cst),
-                        parent: hint,
-                        expected: crate::ItemShape::Value,
-                    }
-                    .unwrap(),
-                ),
-                _ => {}
+                _ => {
+                    self.push(
+                        D::UnexpectedItem {
+                            span: node.trimmed_span(self.cst),
+                            parent: hint,
+                            expected: crate::ItemShape::Value,
+                        }
+                        .unwrap(),
+                    );
+                }
             }
         }
         items
