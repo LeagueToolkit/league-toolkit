@@ -43,7 +43,7 @@ pub fn stmt_or_list_item(p: &mut Parser) -> (MarkClosed, TreeKind) {
             res = (p.close(m, TreeKind::ListItemBlock), TreeKind::ListItemBlock);
             p.eat(Comma);
         }
-        (Name | HexLit | String | Number | True | False, _, _) => {
+        (Name | HexLit | String | Number | True | False | Null, _, _) => {
             let m = p.open();
             p.scope(TreeKind::Literal, |p| p.advance());
             p.eat(Comment);
