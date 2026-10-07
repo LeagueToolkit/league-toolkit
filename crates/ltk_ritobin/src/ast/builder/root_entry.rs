@@ -69,11 +69,11 @@ impl<'a> Builder<'a> {
                 continue;
             }
             if let Some(root) = self.resolve_root(node, roots.len()) {
-                if let Some(anns) = (!anns.is_empty()).then(|| take(&mut anns)) {
-                    self.apply_annotations(anns, root.span());
-                };
                 roots.push(root);
             }
+            if let Some(anns) = (!anns.is_empty()).then(|| take(&mut anns)) {
+                self.apply_annotations(anns, node.span);
+            };
         }
         roots
     }
