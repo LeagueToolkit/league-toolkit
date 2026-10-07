@@ -53,19 +53,20 @@ impl<H: HashProvider> BinPrinter<H> {
     }
 
     pub fn print<W: fmt::Write + ?Sized>(
-        &mut self,
+        self,
         tree: &Bin,
         writer: &mut W,
     ) -> Result<usize, PrintError>
     where
         H: Clone,
     {
-        let builder = cst::builder::Builder::new().with_hashes(self.config.hashes.clone());
+        let (config, hashes) = self.config.take_hashes();
+        let builder = cst::builder::Builder::new().with_hashes(hashes);
         let (cst, buf) = builder.build(tree);
-        CstPrinter::new(&buf, writer, Default::default()).print(&cst)
+        CstPrinter::new(&buf, writer, config).print(&cst)
     }
 
-    pub fn print_to_string(&mut self, tree: &Bin) -> Result<String, PrintError>
+    pub fn print_to_string(self, tree: &Bin) -> Result<String, PrintError>
     where
         H: Clone,
     {

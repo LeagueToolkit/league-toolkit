@@ -83,4 +83,15 @@ impl<H: HashProvider> PrintConfig<H> {
             hashes,
         }
     }
+
+    pub fn take_hashes(self) -> (PrintConfig<()>, H) {
+        (
+            PrintConfig {
+                indent_size: self.indent_size,
+                wrap: self.wrap,
+                hashes: (),
+            },
+            self.hashes,
+        )
+    }
 }
