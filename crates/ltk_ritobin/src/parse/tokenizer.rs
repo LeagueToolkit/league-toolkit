@@ -197,7 +197,7 @@ impl<'a> Cursor<'a> {
     }
 
     #[inline]
-    fn consume_while(&mut self, pred: impl Fn(u8) -> bool) -> usize {
+    fn consume_while(&mut self, pred: impl Fn(&u8) -> bool) -> usize {
         let n = scan_run(self.rest(), pred);
         self.pos += n;
         n
@@ -266,7 +266,7 @@ impl<'a> Cursor<'a> {
     }
 }
 
-fn is_name_char(b: u8) -> bool {
+fn is_name_char(b: &u8) -> bool {
     matches!(b, b'_' | b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9')
 }
 
@@ -294,8 +294,8 @@ fn ends_line(last: Option<&Token>, ws: &[u8]) -> bool {
 }
 
 #[inline]
-fn scan_run(bytes: &[u8], pred: impl Fn(u8) -> bool) -> usize {
-    bytes.iter().position(|&b| !pred(b)).unwrap_or(bytes.len())
+fn scan_run(bytes: &[u8], pred: impl Fn(&u8) -> bool) -> usize {
+    bytes.iter().position(|b| !pred(b)).unwrap_or(bytes.len())
 }
 
 #[inline]
@@ -308,19 +308,79 @@ fn scan_number_segment(bytes: &[u8]) -> Option<usize> {
 }
 
 #[inline]
+fn scan_exponent(bytes: &[u8]) -> Option<usize> {
+    if !matches!(bytes.first(), Some(b'e' | b'E')) {
+        return Some(0);
+    }
+    let sign = 1 + matches!(bytes.get(1), Some(b'+' | b'-')) as usize;
+
+    Some(match scan_run(&bytes[sign..], u8::is_ascii_digit) {
+        // must be at least 1 digit
+        0 => return None,
+        digits => sign + digits,
+    })
+}
+
+#[inline]
 fn scan_number(bytes: &[u8]) -> Option<usize> {
-    let mut i = (bytes.first() == Some(&b'-')) as usize;
+    let starts_with_minus = bytes.first() == Some(&b'-');
+    let mut i = starts_with_minus as usize;
+
+    // check for inf/nan, only if there's no minus, or a minus as first char
+    if matches!(i, 0 | 1) {
+        let end = i + 3;
+        if bytes.len() >= end {
+            // 0 1 2 3 4
+            // - i n f
+            for word in [b"inf", b"nan"] {
+                if bytes[i..end].eq_ignore_ascii_case(word)
+                    && bytes.get(end).is_none_or(|c| !is_name_char(c))
+                {
+                    return Some(end);
+                }
+            }
+        }
+    }
 
     // ".5"
     if bytes.get(i) == Some(&b'.') {
-        return Some(i + 1 + scan_number_segment(&bytes[i + 1..])?);
+        i += 1;
+        i += scan_number_segment(&bytes[i..])?;
+        i += scan_exponent(&bytes[i..])?;
+        return Some(i);
     }
 
     // "123" / "123.45"
     i += scan_number_segment(&bytes[i..])?;
     if bytes.get(i) == Some(&b'.') {
-        i += 1 + scan_number_segment(&bytes[i + 1..])?;
+        i += 1;
+        i += scan_number_segment(&bytes[i..])?;
     }
 
-    Some(i)
+    Some(i + scan_exponent(&bytes[i..])?)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::parse::tokenizer::scan_number;
+
+    #[test]
+    fn number_scan() {
+        assert_eq!(scan_number(b"1234"), Some(4));
+        assert_eq!(scan_number(b"-1234"), Some(5));
+        assert_eq!(scan_number(b"-1234.212"), Some(9));
+
+        assert_eq!(scan_number(b"-1234.212e"), None);
+        assert_eq!(scan_number(b"-1234e120"), Some(9));
+        assert_eq!(scan_number(b"-1234.212E+120"), Some(14));
+        assert_eq!(scan_number(b"-1234.212e-120"), Some(14));
+
+        assert_eq!(scan_number(b".5e10"), Some(5));
+
+        assert_eq!(scan_number(b"NaN"), Some(3));
+        assert_eq!(scan_number(b"-nan"), Some(4));
+
+        assert_eq!(scan_number(b"Inf"), Some(3));
+        assert_eq!(scan_number(b"-inf"), Some(4));
+    }
 }
