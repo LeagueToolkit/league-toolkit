@@ -1,10 +1,10 @@
 use std::fmt::Display;
 
+use crate::span::Span;
 use crate::Spanned;
-use span::Span;
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "span_print", derive(span::DebugSpans))]
+#[cfg_attr(feature = "span_print", derive(crate::span::DebugSpans))]
 pub struct HashedLiteral<H: ltk_hash::Hash> {
     pub value: H,
     /// What this hash was originally, before being coerced to a hash

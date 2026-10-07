@@ -1,3 +1,4 @@
+use crate::span::Span;
 use crate::{
     ast::{
         builder::Builder,
@@ -11,7 +12,6 @@ use crate::{
     parse::Token,
     Node, RitoType,
 };
-use span::Span;
 
 impl<'a> Builder<'a> {
     pub(crate) fn resolve_literal(

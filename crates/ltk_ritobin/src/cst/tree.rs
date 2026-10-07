@@ -2,6 +2,7 @@ use std::fmt::{self, Display};
 
 use ltk_meta::BinFile;
 
+use crate::span::Span;
 use crate::{
     ast::{diagnostics::DiagnosticWithSpan, PartialBin},
     cst::{
@@ -14,7 +15,6 @@ use crate::{
         Error, ErrorPropagation, Parser, TokenKind,
     },
 };
-use span::Span;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

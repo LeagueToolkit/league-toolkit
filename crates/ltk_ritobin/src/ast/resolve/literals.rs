@@ -3,6 +3,7 @@ use std::{borrow::Cow, fmt::Display, num::IntErrorKind, str::FromStr};
 use ltk_hash::{BinHash, WadHash};
 use ltk_meta::PropertyKind;
 
+use crate::span::Span;
 use crate::{
     ast::{
         diagnostics::{Diagnostic, RitoTypeOrVirtual, TypeMismatch},
@@ -13,7 +14,6 @@ use crate::{
     parse::{Token, TokenKind},
     RitoType, Spanned, SpannedExt,
 };
-use span::Span;
 
 use ValueEvalError as E;
 

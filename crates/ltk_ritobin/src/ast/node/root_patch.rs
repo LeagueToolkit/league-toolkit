@@ -1,18 +1,18 @@
 use ltk_hash::BinHash;
 use ltk_meta::path::PropertyPath;
 
+use crate::span::Span;
 use crate::{
     ast::{hash::HashedLiteral, Value},
     Spanned,
 };
-use span::Span;
 
 /// One well-formed record of the `patches` root: `object = patch { path: .., value: .. }`.
 ///
 /// Records keep the order they are written in, and several records may name the same object
 /// and the same path.
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "span_print", derive(span::DebugSpans))]
+#[cfg_attr(feature = "span_print", derive(crate::span::DebugSpans))]
 pub struct RootPatch {
     /// The path hash of the object the record patches.
     pub object_hash: HashedLiteral<BinHash>,

@@ -1,10 +1,10 @@
-extern crate self as span;
+//! Source spans and span-resolving debug output.
 
-#[cfg(feature = "derive")]
-pub use span_derive::DebugSpans;
+#[cfg(feature = "span_print")]
+pub use ltk_ritobin_derive::DebugSpans;
 
 pub mod debug;
-pub use debug::{DebugSpans, SpannedToString, debug_with_source};
+pub use debug::{debug_with_source, DebugSpans, SpannedToString};
 
 use std::cmp;
 

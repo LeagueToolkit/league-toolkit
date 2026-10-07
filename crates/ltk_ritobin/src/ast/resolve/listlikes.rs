@@ -1,5 +1,6 @@
 use ltk_meta::PropertyKind;
 
+use crate::span::Span;
 use crate::{
     ast::{
         builder::Builder,
@@ -9,7 +10,6 @@ use crate::{
     cst::{Child, Cst, Kind, Node},
     RitoType, Spanned,
 };
-use span::Span;
 
 struct ListIter<'a, 'b, 'c> {
     ctx: &'a mut Builder<'b>,

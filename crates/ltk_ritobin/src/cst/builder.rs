@@ -9,13 +9,13 @@ use ltk_meta::{
     PropertyValueEnum,
 };
 
+use crate::span::Span;
 use crate::{
     ast::node::root::FileKind,
     cst::{Child, ChildRange, Cst, ErrorRange, Kind, Node, NodeId, TokenId},
     parse::{Error, Token, TokenKind as Tok},
     HashProvider, PropertyValueExt as _, RitoType, RitobinName as _,
 };
-use span::Span;
 
 #[derive(Default)]
 pub struct Builder<H: HashProvider> {
