@@ -13,10 +13,14 @@ mod tests;
 
 pub use crate::Spanned;
 pub use node::{Object, Property, RootEntry, RootPatch, Value};
+
 pub use to_bin::PartialBin;
 
 use crate::{
-    ast::{diagnostics::DiagnosticWithSpan, node::roots::Roots},
+    ast::{
+        diagnostics::DiagnosticWithSpan,
+        node::{roots::Roots, Annotation, Annotations},
+    },
     Cst,
 };
 
@@ -26,14 +30,40 @@ pub(crate) type Ptr<T> = Box<T>;
 pub(crate) type Ptr<T> = std::sync::Arc<T>;
 
 #[derive(Debug, Clone)]
-pub struct Ast {
+#[cfg_attr(feature = "span_print", derive(span::DebugSpans))]
+pub struct Ast<A = Annotation> {
     pub roots: Roots,
+    pub annotations: Annotations<A>,
     pub diagnostics: Vec<DiagnosticWithSpan>,
 }
 
-impl Ast {
+impl<A> Ast<A> {
     pub fn root_entries(&self) -> impl Iterator<Item = &RootEntry> {
         self.roots.entries().unwrap_or_default().iter()
+    }
+
+    pub fn map_annotations<T>(self, map: impl FnOnce(Annotations<A>) -> Annotations<T>) -> Ast<T> {
+        Ast {
+            roots: self.roots,
+            annotations: map(self.annotations),
+            diagnostics: self.diagnostics,
+        }
+    }
+
+    pub fn try_map_annotations<T, E, F>(self, mut map: F) -> Ast<T>
+    where
+        E: Into<DiagnosticWithSpan>,
+        F: FnMut(A) -> Result<T, E>,
+    {
+        let mut diagnostics = self.diagnostics;
+
+        Ast {
+            roots: self.roots,
+            annotations: self
+                .annotations
+                .map_fallible(|a| map(a).map_err(|e| e.into()), &mut diagnostics),
+            diagnostics,
+        }
     }
 }
 

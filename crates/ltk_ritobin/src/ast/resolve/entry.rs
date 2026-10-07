@@ -8,7 +8,7 @@ use crate::{
             MaybeSpanDiag, TypeMismatch,
         },
         node::TypeExpr,
-        resolve::literals::{self, ValueEvalError::InvalidHash},
+        resolve::literals,
         Value,
     },
     cst::{ChildrenExt as _, Kind},

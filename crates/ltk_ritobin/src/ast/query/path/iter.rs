@@ -13,7 +13,7 @@ pub struct AstPathIter<'a> {
 }
 
 impl<'a> AstPathIter<'a> {
-    pub(crate) fn from_ast(ast: &'a Ast, offset: u32) -> Self {
+    pub(crate) fn from_ast<A>(ast: &'a Ast<A>, offset: u32) -> Self {
         Self {
             next: ast
                 .root_entries()
@@ -51,7 +51,7 @@ pub struct AstFinePathIter<'a> {
     offset: u32,
 }
 impl<'a> AstFinePathIter<'a> {
-    pub(crate) fn from_ast(ast: &'a Ast, offset: u32) -> Self {
+    pub(crate) fn from_ast<A>(ast: &'a Ast<A>, offset: u32) -> Self {
         Self {
             next: ast
                 .roots

@@ -1,3 +1,5 @@
+use std::mem::take;
+
 use crate::{
     ast::{
         diagnostics::{Diagnostic as D, TypeMismatch},
@@ -46,23 +48,34 @@ impl<'a> Builder<'a> {
         Ast {
             roots,
             diagnostics: self.diagnostics,
+            annotations: self.annotations,
         }
     }
 
     /// Resolves every top-level entry of the tree to a [`Root`], in file order.
     fn resolve_roots(&mut self) -> Vec<Root> {
         let cst = self.cst;
-        let mut idx = 0;
-        cst.root()
-            .children
-            .get(cst)
-            .iter()
-            .filter_map(|child| {
-                let root = self.resolve_root(child.tree(cst)?, idx)?;
-                idx += 1;
-                Some(root)
-            })
-            .collect()
+        let mut roots = vec![];
+        let mut anns = vec![];
+        for child in cst.root().children.get(cst).iter() {
+            let Some(node) = child.tree(cst) else {
+                continue;
+            };
+
+            if node.kind == Kind::Annotation {
+                if let Some(ann) = self.resolve_annotation(node) {
+                    anns.push(ann);
+                }
+                continue;
+            }
+            if let Some(root) = self.resolve_root(node, roots.len()) {
+                if let Some(anns) = (!anns.is_empty()).then(|| take(&mut anns)) {
+                    self.apply_annotations(anns, root.span());
+                };
+                roots.push(root);
+            }
+        }
+        roots
     }
 
     /// Checks a root's type expression and value against the type its kind expects.
@@ -199,7 +212,7 @@ impl<'a> Builder<'a> {
 
     fn resolve_root(&mut self, node: &Node, idx: usize) -> Option<Root> {
         match node.kind {
-            Kind::Comment | Kind::ErrorTree => return None,
+            Kind::Comment | Kind::ErrorTree | Kind::Annotation => return None,
             Kind::Entry => match self.resolve_entry(node, None, None) {
                 Ok(entry) => {
                     let kind = RootKind::from_value(&entry.key);
