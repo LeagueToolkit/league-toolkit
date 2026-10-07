@@ -282,7 +282,7 @@ fn ends_value(kind: TokenKind) -> bool {
     use TokenKind::*;
     matches!(
         kind,
-        Name | HexLit | True | False | Number | RCurly | String | Eq | Comment | At
+        Name | HexLit | True | False | Number | Null | RCurly | String | Eq | Comment | At
     )
 }
 
