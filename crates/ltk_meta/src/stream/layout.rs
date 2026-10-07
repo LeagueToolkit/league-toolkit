@@ -7,6 +7,10 @@
 //! complex values carry their byte size ahead of their body, [`Kind::Optional`] is as wide as
 //! the zero-or-one element it holds, and [`Kind::BitBool`] is one byte.
 //!
+//! A [`Kind::Hash`] value occupies 4 or 8 bytes. The file does not store the width. A cursor
+//! reads the width of a `Hash` value from a [`HashWidths`] record. The [`resolve`] module computes
+//! that record from the declared sizes of the regions that contain each value.
+//!
 //! A cursor carries the [`Numbering`] its bytes were written under, so nothing downstream has
 //! to thread a flag through every call — and a slice can never be read under the wrong
 //! numbering by accident, because the two travel together.
@@ -24,11 +28,56 @@
 //! happens only when a leaf codec is asked for.
 
 mod codec;
+pub(crate) mod resolve;
 
 #[cfg(test)]
 mod tests;
 
+use ltk_hash::HashWidth;
+
 use crate::{path::ValueShape, property::Kind, Error};
+
+/// The offsets of the 8-byte [`Kind::Hash`] values of one buffer.
+///
+/// A `Hash` value at an offset that is not in the record is 4 bytes wide. An empty record has no
+/// allocation.
+#[derive(Debug, Default)]
+pub struct HashWidths {
+    /// Offsets from the start of the buffer, in ascending order.
+    wide: Vec<usize>,
+}
+
+/// An empty record. Every `Hash` value of its buffer is 4 bytes wide.
+static NARROW: HashWidths = HashWidths::new();
+
+impl HashWidths {
+    /// Returns an empty record.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self { wide: Vec::new() }
+    }
+
+    /// Returns a record that contains one offset, `offset`.
+    #[must_use]
+    pub fn wide_at(offset: usize) -> Self {
+        Self { wide: vec![offset] }
+    }
+
+    /// Removes every offset. Keeps the allocation.
+    pub fn clear(&mut self) {
+        self.wide.clear();
+    }
+
+    /// Returns the width of the `Hash` value at `offset`. Returns [`HashWidth::W8`] if the record
+    /// contains `offset`. Returns [`HashWidth::W4`] otherwise.
+    #[must_use]
+    pub fn width_at(&self, offset: usize) -> HashWidth {
+        match !self.wide.is_empty() && self.wide.binary_search(&offset).is_ok() {
+            true => HashWidth::W8,
+            false => HashWidth::W4,
+        }
+    }
+}
 
 /// Which property-kind numbering a cursor's bytes were written under.
 ///
@@ -74,18 +123,56 @@ impl Numbering {
 pub struct Cursor<'a> {
     buf: &'a [u8],
     pos: usize,
+    /// The offset of `buf` in the buffer of `widths`.
+    base: usize,
     numbering: Numbering,
+    widths: &'a HashWidths,
 }
 
 impl<'a> Cursor<'a> {
-    /// A cursor at the start of `buf`, reading it under `numbering`.
+    /// Returns a cursor at the start of `buf` that reads kind bytes with `numbering`. The cursor
+    /// reads every `Hash` value as 4 bytes.
     #[must_use]
     pub fn new(buf: &'a [u8], numbering: Numbering) -> Self {
+        Self::with_widths(buf, numbering, &NARROW)
+    }
+
+    /// Returns a cursor at the start of `buf` that reads kind bytes with `numbering`. The cursor
+    /// reads the width of each `Hash` value from `widths`, by the offset of the value in `buf`.
+    #[must_use]
+    pub fn with_widths(buf: &'a [u8], numbering: Numbering, widths: &'a HashWidths) -> Self {
         Self {
             buf,
             pos: 0,
+            base: 0,
             numbering,
+            widths,
         }
+    }
+
+    /// Returns a cursor over the next `n` bytes and advances past them.
+    ///
+    /// The returned cursor has the numbering and the `Hash` widths of this cursor.
+    ///
+    /// # Errors
+    ///
+    /// See [`Cursor::take`].
+    pub fn sub(&mut self, n: usize) -> Result<Self, Error> {
+        let base = self.base + self.pos;
+        let buf = self.take(n)?;
+        Ok(Self {
+            buf,
+            pos: 0,
+            base,
+            numbering: self.numbering,
+            widths: self.widths,
+        })
+    }
+
+    /// Returns the width of a `Hash` value at the position of the cursor.
+    #[must_use]
+    pub fn hash_width(&self) -> HashWidth {
+        self.widths.width_at(self.base + self.pos)
     }
 
     /// The numbering this cursor reads kind bytes under.
@@ -151,6 +238,7 @@ impl<'a> Cursor<'a> {
             return self.skip(width);
         }
         match kind {
+            K::Hash => self.skip(self.hash_width().bytes()),
             K::String => {
                 let len = self.u16()? as usize;
                 self.skip(len)
@@ -183,7 +271,7 @@ impl<'a> Cursor<'a> {
         }
     }
 
-    /// The bytes one value of `kind` occupies, advancing past it.
+    /// Returns a cursor over the bytes of one value of `kind` and advances past the value.
     ///
     /// What the views hand out as a property's or an item's raw bytes: exactly what the writer
     /// emits for that value, and exactly what
@@ -191,11 +279,20 @@ impl<'a> Cursor<'a> {
     ///
     /// # Errors
     ///
-    /// See [`Cursor::skip_value`].
-    pub fn take_value(&mut self, kind: Kind) -> Result<&'a [u8], Error> {
+    /// See [`Cursor::skip_value`]. Leaves the cursor at the start of the value if it fails.
+    pub fn sub_value(&mut self, kind: Kind) -> Result<Self, Error> {
         let start = self.pos;
-        self.skip_value(kind)?;
-        Ok(&self.buf[start..self.pos])
+        if let Err(error) = self.skip_value(kind) {
+            self.pos = start;
+            return Err(error);
+        }
+        Ok(Self {
+            buf: &self.buf[start..self.pos],
+            pos: 0,
+            base: self.base + start,
+            numbering: self.numbering,
+            widths: self.widths,
+        })
     }
 
     // ── reading a value's header ────────────────────────────────────────────
@@ -296,6 +393,7 @@ impl<'a> Cursor<'a> {
             return self.skip(width);
         }
         match kind {
+            K::Hash => self.skip(self.hash_width().bytes()),
             K::String => {
                 let len = self.u16()? as usize;
                 self.skip(len)

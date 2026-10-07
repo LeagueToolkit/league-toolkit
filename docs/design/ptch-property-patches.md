@@ -477,7 +477,9 @@ match needs a wildcard arm; crate-internal exhaustive matches still compile.
    client ignores, consistent with objects, structs and maps). `kind` goes through
    `Kind::unpack(raw, legacy)`, the path through `read_sized_string_u16` and `PropertyPath::new`
    (`InvalidPropertyPath`, D4), the value through `PropertyValueEnum::from_reader(reader, kind,
-   legacy)`.
+   legacy)`. The reader reads a `Hash` value as 8 bytes if `payloadSize` leaves 8 bytes for the
+   value, and as 4 bytes otherwise. The same rule applies to the `Hash` item of an optional value
+   (`bin-streaming.md` [section 7.1](bin-streaming.md#s7.1)).
 8. No end-of-stream check, same as `Bin`.
 
 `BinOverride::to_writer` always emits `PTCH`, `1`, `deleted`, `PROP`, `3`, `0`, the class table and
@@ -640,6 +642,11 @@ client-faithful operation.
 
 Link (0x84) is a leaf. The client does not follow links while resolving a path; only Pointers are
 dereferenced.
+
+If the `Hash` keys of a map have 8 bytes, a number in `{k}` is the raw value of the key. A string
+in `{k}` fails with `InvalidKey` for such a map. The file does not store the hash function of the
+keys. If the `Hash` keys of a map have 4 bytes, a string in `{k}` is hashed with FNV-1a.
+
 
 ### <a id="s9.3"></a>9.3 The type rule in `patch`
 
@@ -814,6 +821,7 @@ property by property. An object on both sides with different classes is replaced
 | Struct with class 0 (a null pointer) | any                   | replace                                                                                           |
 | Map, same key and value kinds        | Map                   | recurse on common keys, append `edited`'s new ones in its order, keep base-only keys              |
 | Map, different key or value kinds    | any                   | replace                                                                                           |
+| Map, different hash widths           | Map                   | replace, with `mismatched` set                                                                    |
 | Container, UnorderedContainer        | any                   | replace whole (D22)                                                                               |
 | Optional, both present               | Optional              | recurse into the contained value                                                                  |
 | Optional, either absent              | Optional              | replace                                                                                           |
@@ -823,7 +831,10 @@ property by property. An object on both sides with different classes is replaced
 
 "Replace" happens only where the two values differ. A replacement is reported with the value the
 base held, moved out of the base. It is `mismatched` when the two sides differ in `ValueShape` -
-kind, item and key kinds, an Embed's class - or are Structs of different classes.
+kind, item and key kinds, an Embed's class - or are Structs of different classes. It is also
+`mismatched` if the two sides have different hash widths: two `Hash` values, the `Hash` items of
+two containers or two optionals, or the `Hash` keys or the `Hash` values of two maps. An empty
+container and an empty map have no hash width.
 
 A map entry is matched by its `MapKey` (D36): metadata is ignored, and a float key matches by its
 bits. The base's keys are indexed once per map, and a key the base holds twice matches its first

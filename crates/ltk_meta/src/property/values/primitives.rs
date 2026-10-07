@@ -2,7 +2,7 @@ use crate::{
     property::Kind,
     traits::{PropertyExt, PropertyValueExt, ReadProperty, WriteProperty},
 };
-use ltk_hash::{BinHash, ReadBytesExt as _, WadHash, WriteBytesExt as _};
+use ltk_hash::{BinHash, HashValue, HashWidth, ReadBytesExt as _, WadHash, WriteBytesExt as _};
 use ltk_io_ext::{ReaderExt, WriterExt};
 
 macro_rules! impl_prim {
@@ -121,13 +121,108 @@ impl_prim!(Matrix44, Mat4, [], mat4_row_major::<LE>);
 
 type ColorU8 = ColorPrim<u8>;
 impl_prim!(Color, ColorU8, [], color_u8, value.as_ref());
-impl_prim!(
-    Hash,
-    BinHash,
-    (impl Into<BinHash>),
-    [Eq, Hash],
-    bin_hash::<LE>
-);
+/// A [`Kind::Hash`] value: a hash and its stored width.
+///
+/// A `Hash` value occupies 4 or 8 bytes in a file. The property defines the width. A reader
+/// returns each value with the width that the file stores. The writer writes each value with the
+/// width of the value.
+///
+/// # Examples
+///
+/// ```
+/// use ltk_hash::{BinHash, Hash as _, HashValue, HashWidth};
+/// use ltk_meta::{property::values, traits::PropertyExt as _};
+///
+/// let narrow = values::Hash::new(BinHash::hash_str("weapon"));
+/// assert_eq!(narrow.width(), HashWidth::W4);
+/// assert_eq!(narrow.size_no_header(), 4);
+///
+/// let wide = values::Hash::new(HashValue::wide(0x5d07_ca0d_22ff_9588));
+/// assert_eq!(wide.size_no_header(), 8);
+/// ```
+#[derive(Clone, Debug, PartialEq, Default, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct Hash {
+    pub value: HashValue,
+}
+
+impl Hash {
+    #[inline(always)]
+    #[must_use]
+    pub fn new(value: impl Into<HashValue>) -> Self {
+        Self {
+            value: value.into(),
+        }
+    }
+
+    /// Reads a `Hash` value of `width` bytes.
+    ///
+    /// # Errors
+    ///
+    /// Fails if `reader` returns an I/O error.
+    pub fn from_reader_with_width<R: std::io::Read + ?Sized>(
+        reader: &mut R,
+        width: HashWidth,
+    ) -> Result<Self, crate::Error> {
+        Ok(Self {
+            value: reader.read_hash_value::<LE>(width)?,
+        })
+    }
+}
+
+impl PropertyExt for Hash {
+    fn size_no_header(&self) -> usize {
+        self.value.width().bytes()
+    }
+}
+
+impl PropertyValueExt for Hash {
+    const KIND: Kind = Kind::Hash;
+}
+
+impl ReadProperty for Hash {
+    /// Reads a `Hash` value of 4 bytes.
+    ///
+    /// No declared size contains a value that is read on its own.
+    /// [`Hash::from_reader_with_width`] reads a value of a given width.
+    fn from_reader<R: std::io::Read + ?Sized>(
+        reader: &mut R,
+        _legacy: bool,
+    ) -> Result<Self, crate::Error> {
+        Self::from_reader_with_width(reader, HashWidth::W4)
+    }
+}
+
+impl WriteProperty for Hash {
+    fn to_writer<W: std::io::Write + std::io::Seek + ?Sized>(
+        &self,
+        writer: &mut W,
+        _legacy: bool,
+    ) -> Result<(), std::io::Error> {
+        writer.write_hash_value::<LE>(self.value)
+    }
+}
+
+impl<S: Into<HashValue>> From<S> for Hash {
+    fn from(value: S) -> Self {
+        Self::new(value)
+    }
+}
+
+impl AsRef<HashValue> for Hash {
+    fn as_ref(&self) -> &HashValue {
+        &self.value
+    }
+}
+
+impl std::ops::Deref for Hash {
+    type Target = HashValue;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
 impl_prim!(
     WadChunkLink,
     WadHash,

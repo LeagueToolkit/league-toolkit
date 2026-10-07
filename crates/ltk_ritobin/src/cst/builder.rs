@@ -3,7 +3,7 @@ use std::{
     iter::once,
 };
 
-use ltk_hash::{BinHash, WadHash};
+use ltk_hash::{BinHash, HashValue, WadHash};
 use ltk_meta::{
     path::PropertyPath, property::values, Bin, BinObject, BinOverride, PropertyKind, PropertyPatch,
     PropertyValueEnum,
@@ -168,6 +168,14 @@ impl<H: HashProvider> Builder<H> {
             None => self.spanned_hexlit(h),
         }
     }
+    /// Writes a `hash` value. Writes an 8-byte value as a hex literal of 16 digits. The hashtable
+    /// contains names for 4-byte FNV-1a hashes only.
+    fn hash_value_lit(&mut self, h: HashValue) -> Child {
+        match h.try_as_bin_hash() {
+            Some(h) => self.hash_hash_lit(h),
+            None => self.spanned_hexlit(h),
+        }
+    }
     fn hash_type_lit(&mut self, h: BinHash) -> Child {
         match self.hashes.lookup_type(h).map(|h| h.to_string()) {
             Some(h) => self.spanned_token(Tok::Name, h),
@@ -297,7 +305,8 @@ impl<H: HashProvider> Builder<H> {
             }
 
             // hash/hash-likes
-            PropertyValueEnum::Hash(h) => self.hash_hash_lit(**h),
+            PropertyValueEnum::Hash(h) => self.hash_value_lit(**h),
+
             PropertyValueEnum::WadChunkLink(h) => self.hash_wad_lit(**h),
             PropertyValueEnum::ObjectLink(h) => self.hash_hash_lit(**h),
 

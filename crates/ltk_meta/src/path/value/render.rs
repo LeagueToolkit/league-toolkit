@@ -228,7 +228,11 @@ impl ValuePath {
                     None
                 }
                 ValueSegment::Key(MapKey::Hash(hash)) => {
-                    let text = spell_hash(names, *hash);
+                    // `names` contains the plaintext of 4-byte FNV-1a hashes only. An 8-byte key
+                    // has no name.
+                    let text = hash
+                        .try_as_bin_hash()
+                        .and_then(|hash| spell_hash(names, hash));
                     let key = match &text {
                         Some(text) => Leaf::String(text),
                         None => Leaf::Hash(*hash),
@@ -283,7 +287,7 @@ fn decimal(key: &MapKey) -> Option<String> {
         MapKey::U32(v) => v.to_string(),
         MapKey::I64(v) => v.to_string(),
         MapKey::U64(v) => v.to_string(),
-        MapKey::Hash(v) => v.0.to_string(),
+        MapKey::Hash(v) => v.as_u64().to_string(),
         MapKey::File(v) => v.0.to_string(),
         MapKey::None
         | MapKey::Bool(_)

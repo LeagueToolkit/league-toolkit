@@ -122,7 +122,7 @@ fn what_only_the_base_holds_survives_and_new_keys_follow_the_base_in_edit_order(
         .collect();
     assert_eq!(
         keys,
-        [1, 2, 3, 9, 8].map(|key| MapKey::Hash(BinHash(key))),
+        [1, 2, 3, 9, 8].map(|key| MapKey::Hash(BinHash(key).into())),
         "base keys first, then the edit's new keys in its order"
     );
 
@@ -134,7 +134,10 @@ fn what_only_the_base_holds_survives_and_new_keys_follow_the_base_in_edit_order(
     assert_eq!(replaced.object_hash, BinHash(OBJECT));
     assert_eq!(
         replaced.at,
-        path([field("Lookup"), ValueSegment::Key(MapKey::Hash(BinHash(2)))])
+        path([
+            field("Lookup"),
+            ValueSegment::Key(MapKey::Hash(BinHash(2).into()))
+        ])
     );
     assert_eq!(replaced.was, text("b"));
     assert!(!replaced.mismatched);
@@ -393,12 +396,12 @@ fn a_mod_that_dropped_resolver_keys_gets_them_back_and_keeps_its_own_bindings() 
     for key in 0..20u32 {
         let value = if key == 3 { "mod" } else { "game" };
         assert!(
-            bindings.contains(&(MapKey::Hash(BinHash(key)), text(value))),
+            bindings.contains(&(MapKey::Hash(BinHash(key).into()), text(value))),
             "key {key}"
         );
     }
     for key in [100, 101] {
-        assert!(bindings.contains(&(MapKey::Hash(BinHash(key)), text("mod"))));
+        assert!(bindings.contains(&(MapKey::Hash(BinHash(key).into()), text("mod"))));
     }
     assert_eq!(report.keys_inserted, 2);
     assert_eq!(report.replaced.len(), 1);

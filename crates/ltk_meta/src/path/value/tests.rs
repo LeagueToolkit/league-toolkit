@@ -121,7 +121,7 @@ fn keys_and_values() -> Vec<(PropertyValueEnum, Option<MapKey>)> {
         ),
         (
             values::Hash::new(0x1e6b_a0c4u32).into(),
-            Some(MapKey::Hash(BinHash(0x1e6b_a0c4))),
+            Some(MapKey::Hash(BinHash(0x1e6b_a0c4).into())),
         ),
         (
             values::WadChunkLink::new(0x00c9_fd8f_1a2b_3c4du64).into(),
@@ -267,13 +267,15 @@ fn every_segment_renders_in_all_three_forms() {
             Ok("Position{\"weapon\"}".into()),
         ),
         (
-            Some(ValueSegment::Key(MapKey::Hash(BinHash(0x1e6b_a0c4)))),
+            Some(ValueSegment::Key(MapKey::Hash(BinHash(0x1e6b_a0c4).into()))),
             format!("{position}{{1e6ba0c4}}"),
             "Position{1e6ba0c4}".into(),
             Ok("Position{510369988}".into()),
         ),
         (
-            Some(ValueSegment::Key(MapKey::Hash(BinHash::hash_str("Weapon")))),
+            Some(ValueSegment::Key(MapKey::Hash(
+                BinHash::hash_str("Weapon").into(),
+            ))),
             format!("{position}{{{:08x}}}", BinHash::hash_str("Weapon")),
             "Position{\"Weapon\"}".into(),
             Ok(format!("Position{{{}}}", *BinHash::hash_str("Weapon"))),
@@ -431,9 +433,9 @@ fn segments_that_spell_no_property_path_are_nameless() {
 fn the_named_form_counts_every_field_and_hash_key() {
     let path: ValuePath = [
         ValueSegment::Field(BinHash::hash_str(POSITION)),
-        ValueSegment::Key(MapKey::Hash(BinHash::hash_str("Weapon"))),
+        ValueSegment::Key(MapKey::Hash(BinHash::hash_str("Weapon").into())),
         ValueSegment::Field(BinHash(0x0bad_0001)),
-        ValueSegment::Key(MapKey::Hash(BinHash(0x0bad_0002))),
+        ValueSegment::Key(MapKey::Hash(BinHash(0x0bad_0002).into())),
         ValueSegment::Index(4),
         ValueSegment::Key(MapKey::String("not counted".into())),
     ]
@@ -540,7 +542,7 @@ fn a_key_and_a_segment_display_as_the_hash_form_writes_them() {
         (MapKey::I32(-12), "-12"),
         (MapKey::F32(FloatBits::new(1.5)), "1.5"),
         (MapKey::String("a\"b".into()), r#""a\"b""#),
-        (MapKey::Hash(BinHash(0x1e6b_a0c4)), "1e6ba0c4"),
+        (MapKey::Hash(BinHash(0x1e6b_a0c4).into()), "1e6ba0c4"),
         (
             MapKey::File(WadHash(0x00c9_fd8f_1a2b_3c4d)),
             "00c9fd8f1a2b3c4d",

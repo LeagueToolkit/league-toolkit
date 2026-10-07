@@ -3,7 +3,7 @@
 use std::fmt;
 
 use glam::{Mat4, Vec2, Vec3, Vec4};
-use ltk_hash::{BinHash, WadHash};
+use ltk_hash::{BinHash, HashValue, WadHash};
 use ltk_primitives::Color;
 
 use crate::{path::MapKey, property::values, property::Kind, Error, PropertyValueEnum};
@@ -276,8 +276,8 @@ pub enum Leaf<'a> {
     Color(Color<u8>),
     /// [`Kind::String`].
     String(&'a str),
-    /// [`Kind::Hash`].
-    Hash(BinHash),
+    /// [`Kind::Hash`]. The value includes its stored width.
+    Hash(HashValue),
     /// [`Kind::WadChunkLink`].
     File(WadHash),
     /// [`Kind::ObjectLink`].
@@ -319,7 +319,8 @@ impl Leaf<'_> {
     ///
     /// An integer in decimal, a bool as `true` or `false`, a float in its shortest
     /// round-trip form, a string as a JSON string, a hash as lowercase zero-padded hex, a
-    /// vector, color or matrix as its components in parentheses, and `None` as nothing.
+    /// vector, color or matrix as its components in parentheses, and `None` as nothing. Writes
+    /// a `Hash` with 8 digits at width 4 and with 16 digits at width 8.
     pub(crate) fn write_key(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::None => Ok(()),
@@ -339,7 +340,8 @@ impl Leaf<'_> {
             Self::Matrix44(v) => write_tuple(f, &v.transpose().to_cols_array()),
             Self::Color(c) => write_tuple(f, &[c.r, c.g, c.b, c.a]),
             Self::String(s) => write_json_string(f, s),
-            Self::Hash(h) | Self::Link(h) => write!(f, "{h:08x}"),
+            Self::Hash(h) => write!(f, "{h}"),
+            Self::Link(h) => write!(f, "{h:08x}"),
             Self::File(h) => write!(f, "{h:016x}"),
         }
     }

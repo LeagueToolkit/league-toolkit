@@ -13,7 +13,7 @@ use std::{
     slice, vec,
 };
 
-use ltk_hash::{BinHash, WadHash};
+use ltk_hash::{BinHash, HashValue, WadHash};
 use ltk_primitives::Color;
 
 use crate::{
@@ -292,8 +292,8 @@ pub enum MapKey {
     Color(Color<u8>),
     /// [`Kind::String`](crate::PropertyKind::String).
     String(String),
-    /// [`Kind::Hash`](crate::PropertyKind::Hash).
-    Hash(BinHash),
+    /// [`Kind::Hash`](crate::PropertyKind::Hash). The value includes its stored width.
+    Hash(HashValue),
     /// [`Kind::WadChunkLink`](crate::PropertyKind::WadChunkLink).
     File(WadHash),
 }
@@ -309,7 +309,7 @@ pub enum MapKey {
 /// use ltk_meta::path::MapKey;
 ///
 /// assert_eq!(MapKey::String("weapon".into()).to_string(), r#""weapon""#);
-/// assert_eq!(MapKey::Hash(BinHash(0x1e6b_a0c4)).to_string(), "1e6ba0c4");
+/// assert_eq!(MapKey::Hash(BinHash(0x1e6b_a0c4).into()).to_string(), "1e6ba0c4");
 /// ```
 impl fmt::Display for MapKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

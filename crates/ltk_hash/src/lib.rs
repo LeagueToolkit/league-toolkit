@@ -1,6 +1,7 @@
 //! Other utilities (hashing, etc)
 
 mod impls;
+mod value;
 
 use std::{
     fmt::{Display, LowerHex},
@@ -12,6 +13,7 @@ use std::{
 
 pub use impls::elf;
 use impls::fnv1a;
+pub use value::{HashAlgorithm, HashValue, HashWidth, Hasher};
 
 use xxhash_rust::xxh64::xxh64;
 
@@ -171,6 +173,13 @@ pub trait ReadBytesExt: Read {
     fn read_wad_hash<O: ByteOrder>(&mut self) -> std::io::Result<WadHash> {
         Ok(self.read_u64::<O>()?.into())
     }
+    /// Reads a [`HashValue`] of `width` bytes.
+    fn read_hash_value<O: ByteOrder>(&mut self, width: HashWidth) -> std::io::Result<HashValue> {
+        Ok(match width {
+            HashWidth::W4 => HashValue::narrow(self.read_u32::<O>()?),
+            HashWidth::W8 => HashValue::wide(self.read_u64::<O>()?),
+        })
+    }
 }
 
 impl<R: Read + ?Sized> ReadBytesExt for R {}
@@ -180,6 +189,13 @@ pub trait WriteBytesExt: Write {
     }
     fn write_wad_hash<O: ByteOrder>(&mut self, hash: WadHash) -> std::io::Result<()> {
         self.write_u64::<O>(*hash)
+    }
+    /// Writes `hash` in `hash.width()` bytes.
+    fn write_hash_value<O: ByteOrder>(&mut self, hash: HashValue) -> std::io::Result<()> {
+        match hash.width() {
+            HashWidth::W4 => self.write_u32::<O>(hash.as_u32()),
+            HashWidth::W8 => self.write_u64::<O>(hash.as_u64()),
+        }
     }
 }
 

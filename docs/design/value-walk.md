@@ -239,7 +239,7 @@ pub enum Leaf<'a> {
     Vector2(Vec2), Vector3(Vec3), Vector4(Vec4), Matrix44(Mat4),
     Color(Color),
     String(&'a str),
-    Hash(BinHash),
+    Hash(HashValue),
     File(WadHash),
     Link(BinHash),
     Flag(bool),
@@ -386,7 +386,7 @@ pub enum MapKey {
     Matrix44([FloatBits; 16]),
     Color(Color<u8>),
     String(String),
-    Hash(BinHash),
+    Hash(HashValue),
     File(WadHash),
 }
 
@@ -528,7 +528,8 @@ field segment nowhere in the text. A `ValuePath` with no segments renders as the
 | `Key` of `None`                 | `{}`                | `{}`                                 | `Nameless`, `Key(Kind::None)`       |
 
 Hex is lowercase, zero-padded to the hash's width: eight digits for a `BinHash`, sixteen for a
-`WadHash`. A string key is written as a JSON string, escaped as `serde_json` would write it. An
+`WadHash`. A `Hash` key has eight digits if its width is 4 bytes. It has sixteen digits if its
+width is 8 bytes. A string key is written as a JSON string, escaped as `serde_json` would write it. An
 `F32` key is written in Rust's shortest round-trip form. A vector or color key is its components
 in parentheses, comma separated, and a matrix key is its sixteen components row by row, as the
 wire holds them; it is text for a human and nothing parses it.

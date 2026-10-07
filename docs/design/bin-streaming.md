@@ -96,6 +96,11 @@ Every term this document uses in a specific sense.
   `legacy: bool` per operation.
 - **latch** - the handle settling on legacy numbering for the rest of its life, after a kind byte
   fails to decode and the object re-walks cleanly the other way ([section 8](#s8)).
+- **hash width** - the number of bytes that a `Hash` value occupies in a file: 4 or 8. The type is
+  `HashWidth`. A `HashValue` contains the hash and its width. A **narrow** hash has 4 bytes. A
+  **wide** hash has 8 bytes.
+- **width record** - the offsets of the wide hashes of one buffered object. The type is
+  `HashWidths`. A cursor reads the width of a `Hash` from the record ([section 7.1](#s7.1)).
 
 **Writing**
 
@@ -117,6 +122,11 @@ Every term this document uses in a specific sense.
 - **Every complex value carries its byte size.** Objects, `Struct`/`Embedded`, containers and
   maps store a size ahead of their body; primitives have fixed widths and strings a length
   prefix. Skipping any unparsed value is therefore a seek, mirroring `MetaValue_skipByType`.
+- **A `Hash` occupies 4 or 8 bytes. The file does not store the width.** The kind byte is 17 at
+  both widths. The client reads the width from a helper of the property. The client finds the
+  helper through the class of the object. PBE 16.21 stores `StaticMaterialDef.name` in 8 bytes.
+  Each `Hash` is inside a region that declares its byte size. [Section 7.1](#s7.1) resolves the
+  width from those sizes.
 - **The client never verifies sizes on the parse path.** It trusts counts when parsing and
   reads sizes only to skip. `ltk_meta`'s eager reader measures every region and errors on
   mismatch. The stream takes the client's semantics ([section 7](#s7)).
@@ -386,7 +396,7 @@ pub enum ValueView<'a, M = NoMeta> {
     Vector2(Vec2), Vector3(Vec3), Vector4(Vec4), Matrix44(Mat4),
     Color(Color),
     String(&'a str),
-    Hash(BinHash),
+    Hash(HashValue),
     WadChunkLink(WadHash),
     ObjectLink(BinHash),
     BitBool(bool),
@@ -402,7 +412,8 @@ impl<'a, M: Default> ContainerView<'a, M> {
     pub fn item_kind(&self) -> PropertyKind;
     pub fn len(&self) -> u32;
     pub fn iter(&self) -> ContainerItems<'a, M>;
-    /// O(1) for fixed-width item kinds (the offset is arithmetic); a walk otherwise.
+    /// O(1) for fixed-width item kinds and for `Hash` (the offset is arithmetic); a walk
+    /// otherwise.
     pub fn get(&self, index: u32) -> Result<Option<ValueView<'a, M>>, Error>;
 }
 
@@ -623,6 +634,10 @@ their stored byte size, `Optional` by recursing into its zero-or-one element, `B
 one byte. Whole objects and whole patch records skip by their own size fields. No skip
 allocates or decodes value contents.
 
+A skip of a `Hash` advances by its width. Inside a buffered object, the cursor reads the width
+from the width record ([section 7.1](#s7.1)). At the file level, the sweep does not skip a single
+`Hash`. It skips a whole object by the size field of the object.
+
 At the file level a skip is a seek; inside a buffered object it is slice arithmetic over
 the view. Same rules, two costs, one implementation in the layout core ([section 9](#s9)).
 
@@ -656,6 +671,80 @@ sequential sweep is not trustworthy (the mismatch is the proof of that); random 
 through the already-harvested TOC rows remains valid, since those offsets tiled correctly
 up to the failure.
 
+### <a id="s7.1"></a>7.1 Hash width resolution
+
+A `Hash` value occupies 4 or 8 bytes. The file does not store the width ([section 3](#s3)). The
+reader resolves the width of each `Hash` of a buffered object from the sizes that the object
+declares (ADR-0022).
+
+**The first walk reads each `Hash` as 4 bytes.** It is the walk of [section 7](#s7). The reader
+walks an object without a wide hash once. The width record of such an object is empty.
+
+**The search runs if the first walk fails.** The search finds a width for each `Hash` such that
+each region ends at its declared size after its counts. The rule depends on the position of the
+value:
+
+| Position of the `Hash` | Width |
+| --- | --- |
+| Item of a `Container` or an `UnorderedContainer` | All items have the same width. The width is 4 if the body size is the count times 4. The width is 8 if the body size is the count times 8. |
+| Key or value of a `Map` | All keys have the same width. All values have the same width. The search walks the body with each combination of widths. It selects the combination with which the body ends at its declared size. |
+| Property of an object, a `Struct` or an `Embedded` | The search tries 4 bytes first and 8 bytes second. |
+| Item of an `Optional` that is a property | The same rule as for a property. |
+| Value of a `PTCH` record, or the item of an `Optional` that is the value of a record | 8 if the record size leaves 8 bytes for the `Hash`. 4 otherwise. |
+| A value that no declared size contains | 4. |
+
+Rules of the search:
+
+- The search resolves each region independently. The extent of a region does not depend on the
+  widths inside it. The search does not revisit a resolved region.
+- The search tries the `Hash` properties of one region in file order. It tries 4 bytes before 8
+  bytes, and it backtracks. The result is the first assignment with which the region and each
+  region inside it end at their declared sizes. The result is deterministic.
+- An empty container, an empty map and an absent optional contain no `Hash`. The search resolves
+  no width for them.
+- For a map, the search selects 4-byte keys and 4-byte values if the body ends at its declared
+  size with them. The first walk reads the same widths. Otherwise the search selects the one other
+  combination of key width and value width that is valid.
+- The reader fails with `Error::AmbiguousHashWidth` if 4-byte keys with 4-byte values are not
+  valid for a map and more than one other combination is valid. A map of `Hash` keys and `Hash`
+  values with 12 bytes per entry is the only case. It is valid with 4-byte keys and 8-byte values,
+  and with 8-byte keys and 4-byte values.
+- The search has a step limit that is proportional to the buffer size. One step is one property,
+  one item or one map entry. If the search reaches the limit, it finds no assignment.
+- If the search finds no assignment, the reader returns the error of the first walk.
+
+**The width record contains the result.** The record lists the offset of each wide hash of the
+buffered object in ascending order. A cursor has a reference to the record and the offset of its
+own slice. `cur.hash_width()` looks up the position of the cursor in the record. `skip_value`,
+`walk_value` and the `hash_value` leaf codec call `cur.hash_width()`. The owned decode and the
+views read the same record. They return the same `HashValue` for the same position.
+
+**The reader writes the record before it creates a view.** `BinStream::view_object` and
+`BinStream::read_object` resolve the widths in the step that settles the latch
+([section 8](#s8)). A view has a shared reference to the record. A view does not resolve a width.
+
+**An ambiguous result.** The reader reads a wide `Hash` property as 4 bytes if the bytes after
+the first 4 bytes of the hash are also a valid property. In that case the reader reads the upper 4
+bytes of the hash as a property name. It reads the low byte of the next name as a kind byte. The
+value of that kind must end at the end of the next property. The first walk and the search both
+try 4 bytes first. The first walk returns this result if the kind is not `Hash`. The search
+returns this result if the kind is `Hash`. It reads that `Hash` as 8 bytes. The reader reads the
+wide `Hash` keys of a map as 4 bytes if the body of the map also ends at its declared size with
+4-byte keys. This requires a value without a fixed width on the other side. The same applies to
+wide `Hash` values and a key without a fixed width. The written bytes equal the input bytes in
+each case. ADR-0022 describes the cost.
+
+**The standalone readers read to the declared end of a value.** `PropertyValueEnum::from_reader`
+and the `ReadProperty` impls of the self-sized kinds read the whole value before they return an
+error from inside the value. The search needs the whole value. They return an error of the header
+of the value without more reads.
+
+**A container has one hash width.** `Container::new`, `Container::push`, `Map::new` and
+`Map::push` fail with `Error::MismatchedHashWidths` on a `Hash` with a second width. A caller can
+change the width of an item in place. The writer fails with `io::ErrorKind::InvalidInput` on a
+container with two widths. The writer writes each `Hash` in the number of bytes of its width. The
+writer uses no other information.
+
 ## <a id="s8"></a>8. The legacy-numbering latch
 
 The eager reader detects legacy property-kind numbering by failing on a kind byte and
@@ -677,6 +766,13 @@ re-reading the whole object table with the legacy mapping. The stream latches in
 
 As today, the retry can reinterpret a genuinely desynced file as "legacy"; the latch does
 not widen that hazard, and a latched handle reports it (`fn numbering(&self) -> Numbering`).
+
+The width search of [section 7.1](#s7.1) runs before the retry. The first walk reads a byte of a
+wide hash as a kind byte. It fails with `Error::InvalidPropertyTypePrimitive`, as it does on a
+legacy file. The reader re-reads the object in legacy numbering only if the search finds no
+assignment. A handle reports `Numbering::Current` for a current-numbering file that contains wide
+hashes. The search does not run with the legacy numbering. A file with the legacy numbering
+contains no wide hash.
 
 Mechanically the latch is nothing new: `Kind::unpack(raw, legacy)` already centralizes the legacy
 fudging for every kind byte in the crate. What the stream adds is where the flag comes from - a
@@ -717,16 +813,20 @@ what the latch reports.
 
 **The numbering is cursor state, and every walk is a method.** Each layout operation has the cursor
 as its subject - `cur.skip_value(kind)`, `cur.walk_value(kind)`, `cur.walk_object()`,
-`cur.value_shape(kind)`, `cur.sized_region(..)`, `cur.take_value(kind)` - and the numbering never
+`cur.value_shape(kind)`, `cur.sized_region(..)`, `cur.sub_value(kind)` - and the numbering never
 varies within one cursor's life, because it is the context the bytes were written in rather than an
 argument to each operation. So a `Cursor` carries a [`Numbering`], and a slice and its numbering
-travel together where they cannot be paired up wrongly. `take_value(kind)` hands out a value's
-bytes in one call, which is what keeps the views from doing a note-the-position, skip, slice-back
-dance.
+travel together where they cannot be paired up wrongly. `sub_value(kind)` hands out a cursor over
+a value's bytes in one call, which is what keeps the views from doing a note-the-position, skip,
+slice-back dance. A cursor also has a reference to the width record of its buffer and the offset
+of its slice in that buffer. A sub-cursor has the same record and the offset of its own slice
+([section 7.1](#s7.1)).
 
 `Kind::fixed_width()` lives on `Kind` rather than in the module: it is a fact about a kind rather
 than about a position, which is the same sort of fact as `is_primitive`, `subtype_count` and
 `is_valid_map_key`. That leaves the layout module as exactly one type and one enum.
+`Kind::fixed_width()` returns `None` for `Kind::Hash`. The width of a `Hash` depends on its
+position. `cur.hash_width()` returns it.
 
 **Size checking happens in the walk, once.** The layout core's walk measures a sized region
 against what its counts consume and raises `Error::InvalidSize` from that one place
@@ -748,6 +848,12 @@ rules in one place rather than inventing a second set. Driving that probe with t
 than the skip is what preserves `Error::InvalidSize`: a declared size the counts disagree with
 still raises, instead of turning into an early EOF. `BinObject::from_reader` needs no probe, since
 the object's own size field bounds it.
+
+Both entry points resolve hash widths as the stream does ([section 7.1](#s7.1)). They walk with
+4-byte widths first. If that walk fails, they run the search on the bytes that they read. The
+`ReadProperty` impl of a self-sized kind resolves the widths of the hashes inside the value.
+`values::Hash::from_reader` reads 4 bytes. `values::Hash::from_reader_with_width` reads the given
+width.
 
 The fixed-width primitives keep their direct reader codecs. Routing them through the bridge would
 tighten their bounds - they read from a bare `io::Read` today - and allocate per leaf, for no
@@ -928,6 +1034,31 @@ fixed-width primitives' direct reader codecs - are pinned to each other by a uni
 cannot drift unnoticed ([section 9](#s9)), and a file written in legacy numbering reads identically
 through the stream and the eager path.
 
+`crates/ltk_meta/tests/hash_width.rs` tests hash widths ([section 7.1](#s7.1)):
+
+- One `StaticMaterialDef` of a PBE 16.21 skin bin is read. Its `name` equals the XXH3 hash of the
+  lowercased object path at 8 bytes. The written bytes equal the input bytes.
+- A wide hash is written and read back in each position: as a property before another property,
+  as the last property, inside an embed, inside a struct in a container, as a container item, as
+  a map key, as a map value, as the item of an optional and as the value of a `PTCH` record.
+- An object with hash properties of both widths is read with the correct width for each property.
+- The views and the eager reader return the same values. The handle reports `Numbering::Current`.
+- A property test generates trees with both widths in each position. Each tree is read back equal.
+- The reader fails with `AmbiguousHashWidth` on a map with 4-byte keys and 8-byte values. The
+  checked constructors fail with `MismatchedHashWidths` on a second width. The reader fails with
+  `InvalidSize` if no assignment of widths is valid for a declared size.
+- The ambiguous results of [section 7.1](#s7.1) have tests: a property that the first walk
+  reads, a property that the search reads, and the keys of a map.
+- The search fails at its step limit on an object with a wide hash container after 24 `Hash`
+  properties. The test has a time limit.
+- A standalone reader returns a header error after one read. It resolves a wide hash in a
+  buffered value without more reads.
+- `merge` replaces a map whole if the hash widths of its keys or of its values differ. It reports
+  `mismatched` for two `Hash` values with different widths.
+
+The corpus sweep counts the wide hashes per class and property. It also checks that the eager
+writer reproduces the bytes of each current-format chunk ([appendix D](#appendix-d)).
+
 A header the value model has no value for is pinned at both levels ([section 9](#s9)): over a
 hand-patched container item kind and map key kind, the walk and the shape peek each raise
 `InvalidNesting` and `InvalidKeyType`; over a file carrying such an object, `ObjectStream::view`
@@ -984,6 +1115,11 @@ rules append.
 | S24 | A `PTCH` stream's object cursors yield embedded objects only; `patches()` alone reads records. | One cursor interleaving objects and records. | The two are different content: objects are what the game loads, records are edits to a base it does not hold. A consumer walking content wants the first and never the second. | [section 5](#s5) |
 | S25 | `StructView` and `RawValue` implement the walk's `TreeNode` and `TreeValue`; `BinStream::walk` sweeps a file through a visitor with nothing materialised. | A walk over the owned tree with `read()` per object. | The views exist so a consumer pays for what it reads; a pass that decoded every object to visit it would pay for everything. | `value-walk.md` [section 3](value-walk.md#s3), [section 5](value-walk.md#s5); ADR-0014 |
 | S26 | A container, optional or map header is read by `cur.item_kind()` and `cur.key_kind()` in the layout core, which refuse a kind the value model has no value for: `InvalidNesting` and `InvalidKeyType`. The walk, the shape peek and both renderers read a header through them. | The same two checks written in each renderer, with the walk and the shape peek reading a header without them. | A header a renderer refuses and a walk accepts leaves `shape()` describing a value nothing can build. One reader of a header is one answer for it. | [section 9](#s9) |
+| S27 | A `Hash` value contains its width. The reader resolves the width from the sizes that the file declares. It walks with 4-byte widths first and runs a search if that walk fails. | A table from class and property to width that the caller passes. | The file stores no width and no build. The crate has no schema. | [section 7.1](#s7.1); ADR-0022 |
+| S28 | The resolved widths are a record of offsets that the cursor reads. The reader writes the record before it creates a view. | Each view resolves the widths of its own region. | The owned decode and the views read one record. A lookup that returns at the first match does not resolve the whole region. | [section 7.1](#s7.1); ADR-0022 |
+| S29 | The width search runs before the legacy-numbering retry. It does not run with the legacy numbering. | The retry runs first. | The first walk fails on a kind byte for a wide hash and for a legacy file. A legacy file contains no wide hash. | [section 8](#s8) |
+| S30 | All `Hash` items of a container have the same width. All `Hash` keys of a map have the same width, and all `Hash` values of a map have the same width. The checked constructors and the writer fail on a second width. | A width per item. | The reader computes one width per container from its size and its count. | [section 7.1](#s7.1) |
+
 
 ## <a id="appendix-a"></a>Appendix A. Corpus measurements
 
@@ -1069,3 +1205,27 @@ decompressed into memory before either path is timed.
 The delta path is 6.0x cheaper summed over the install, with one edited object per chunk. Its
 cost is the TOC harvest, the one object's decode and encode, and the copy of every other byte; the
 transcode's is a decode and an encode of every object.
+
+## <a id="appendix-d"></a>Appendix D. Hash width measurements, 2026-10-07
+
+The results of [section 7.1](#s7.1) on shipped files. The test
+`every_shipped_prop_streams_the_same_object_set` in `corpus.rs` produced them with a release
+build, on a PBE install of client 16.21.8255794 and on a live install of client 16.20.824.8524.
+
+| measurement | PBE 16.21 | live 16.20 |
+| --- | --- | --- |
+| archives swept | 393 | 393 |
+| `PROP` chunks | 50,276 | 50,016 |
+| objects | 466,563 | 462,567 |
+| properties viewed, shaped and decoded against the eager parse | 2,549,426 (all of them) | 2,528,316 (all of them) |
+| chunks for which the eager writer reproduced the input bytes | 50,276 (all of them) | 50,016 (all of them) |
+| chunks latching onto the legacy numbering | 0 | 0 |
+| `Hash` values of 8 bytes | 33,736 | 0 |
+
+Each 8-byte value is the `name` (`0x8d39bde6`) of a `StaticMaterialDef` (`0xff9d3409`). 33,572
+values are in a root object of that class. 164 values are in a `StaticMaterialDef` inside an
+object of class `0x45cd899f`. LeagueToolkit/LeagueToolkit#341 reports the same count for the same
+build.
+
+The other sweeps of [section 12](#s12) pass on the PBE install. An empty delta reproduces the
+bytes of all 50,276 chunks. The writer reproduces the bytes of all 235 `PTCH` chunks.

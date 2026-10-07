@@ -754,7 +754,7 @@ fn a_key_literal_converts_as_resolve_converts_it() {
 
     assert_eq!(
         MapKey::from_literal(&KeyLiteral::from("weapon"), Kind::Hash),
-        Some(MapKey::Hash(hash("weapon")))
+        Some(MapKey::Hash(hash("weapon").into()))
     );
     assert_eq!(
         MapKey::from_literal(&KeyLiteral::from("weapon"), Kind::String),

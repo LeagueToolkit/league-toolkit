@@ -326,7 +326,7 @@ mod tests {
 
         let mut path = ValuePath::new();
         path.push_field(lookup, BinHash(0xc1a5_0001));
-        path.push(ValueSegment::Key(MapKey::Hash(weapon)));
+        path.push(ValueSegment::Key(MapKey::Hash(weapon.into())));
 
         assert_eq!(path.to_named(&provider).text, r#"Lookup{"Weapon"}"#);
         assert_eq!(

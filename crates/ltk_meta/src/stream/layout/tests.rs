@@ -83,7 +83,7 @@ fn one_of_each() -> Vec<PropertyValueEnum> {
     ]
 }
 
-/// A skip's distance, a walk's distance, the bytes `take_value` hands back, the written bytes
+/// A skip's distance, a walk's distance, the bytes `sub_value` hands back, the written bytes
 /// and [`PropertyExt::size`] all have to agree, for every kind.
 #[test]
 fn skip_and_walk_distances_match_the_written_size() {
@@ -116,7 +116,9 @@ fn skip_and_walk_distances_match_the_written_size() {
 
         let mut cur = cursor(&bytes);
         assert_eq!(
-            cur.take_value(value.kind()).expect("the value is taken"),
+            cur.sub_value(value.kind())
+                .expect("the value is taken")
+                .rest(),
             bytes,
             "{:?}: the taken bytes are not the value's own",
             value.kind()

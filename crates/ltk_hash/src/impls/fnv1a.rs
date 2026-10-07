@@ -22,6 +22,16 @@ pub fn hash_lower(input: &str) -> u32 {
     hash
 }
 
+/// Returns the FNV-1a 32-bit hash of the bytes of `input`. Does not change the case of `input`.
+pub fn hash(input: &str) -> u32 {
+    let mut hash: u32 = 0x811c9dc5;
+    for &byte in input.as_bytes() {
+        hash ^= byte as u32;
+        hash = hash.wrapping_mul(0x01000193);
+    }
+    hash
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

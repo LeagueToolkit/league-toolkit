@@ -7,7 +7,10 @@ use crate::{
     Error, PropertyValueEnum, ValueSlot,
 };
 use byteorder::{WriteBytesExt, LE};
+use ltk_hash::HashWidth;
 use ltk_io_ext::{measure, window_at};
+
+use super::container::{check_hash_width, mixed_widths, track_hash_width};
 
 // FIXME (alan): do with hash here what we do with Eq
 impl Hash for PropertyValueEnum {
@@ -29,6 +32,18 @@ impl Hash for PropertyValueEnum {
     }
 }
 
+/// A list of entries whose keys have one [`Kind`] and whose values have one [`Kind`].
+///
+/// All [`Kind::Hash`] keys of a map have the same width. All `Hash` values of a map have the same
+/// width. A reader computes the widths from the size of the map and the number of its entries.
+/// [`Map::new`] and [`Map::push`] fail on a second width. [`Map::to_writer`] fails if the keys or
+/// the values contain two widths.
+///
+/// A reader fails with [`Error::AmbiguousHashWidth`] on a map with `Hash` keys of one width and
+/// `Hash` values of the other width. The size of the map is the same for both orders of the
+/// widths.
+///
+/// [`Map::to_writer`]: crate::traits::WriteProperty::to_writer
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, PartialEq, Debug, Default)]
 pub struct Map {
@@ -54,6 +69,26 @@ impl Map {
     #[must_use]
     pub fn entries(&self) -> &[(PropertyValueEnum, PropertyValueEnum)] {
         &self.entries
+    }
+
+    /// Returns the width of the [`Kind::Hash`] keys. Returns `None` if the keys are not `Hash`
+    /// values or if the map is empty.
+    #[must_use]
+    pub fn key_hash_width(&self) -> Option<HashWidth> {
+        match self.entries.first() {
+            Some((PropertyValueEnum::Hash(key), _)) => Some(key.width()),
+            _ => None,
+        }
+    }
+
+    /// Returns the width of the [`Kind::Hash`] values. Returns `None` if the values are not
+    /// `Hash` values or if the map is empty.
+    #[must_use]
+    pub fn value_hash_width(&self) -> Option<HashWidth> {
+        match self.entries.first() {
+            Some((_, PropertyValueEnum::Hash(value))) => Some(value.width()),
+            _ => None,
+        }
     }
 
     /// A mutable handle on the value of entry `index`, pinned to [`Map::value_kind`].
@@ -101,6 +136,8 @@ impl Map {
                 got: value.kind(),
             });
         }
+        check_hash_width(self.key_hash_width(), &key)?;
+        check_hash_width(self.value_hash_width(), &value)?;
         self.entries.push((key, value));
         Ok(())
     }
@@ -122,6 +159,9 @@ impl Map {
     /// `value_kind` is a container kind, or [`Error::MismatchedContainerTypes`] if an entry does
     /// not match the kind it was declared with.
     ///
+    /// Fails with [`Error::MismatchedHashWidths`] if two `Hash` keys have different widths or if
+    /// two `Hash` values have different widths.
+    ///
     /// The first two mirror what [`Map::from_reader`] rejects, so a map that constructs here is
     /// one this crate can read back.
     ///
@@ -137,6 +177,7 @@ impl Map {
         if value_kind.is_container() {
             return Err(Error::InvalidNesting(value_kind));
         }
+        let (mut key_hash_width, mut value_hash_width) = (None, None);
         for (k, v) in &entries {
             if k.kind() != key_kind {
                 return Err(Error::MismatchedContainerTypes {
@@ -150,6 +191,8 @@ impl Map {
                     got: v.kind(),
                 });
             }
+            track_hash_width(&mut key_hash_width, k)?;
+            track_hash_width(&mut value_hash_width, v)?;
         }
         Ok(Self {
             key_kind,
@@ -209,7 +252,10 @@ impl WriteProperty for Map {
         let (size, _) = measure(writer, |writer| {
             writer.write_u32::<LE>(self.entries.len() as _)?;
 
+            let (mut key_hash_width, mut value_hash_width) = (None, None);
             for (k, v) in self.entries.iter() {
+                track_hash_width(&mut key_hash_width, k).map_err(mixed_widths)?;
+                track_hash_width(&mut value_hash_width, v).map_err(mixed_widths)?;
                 k.to_writer(writer)?;
                 v.to_writer(writer)?;
             }

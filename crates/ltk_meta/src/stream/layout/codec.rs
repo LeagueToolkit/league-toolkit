@@ -5,7 +5,7 @@
 //! [`Error::IOError`] with [`std::io::ErrorKind::UnexpectedEof`] - when the slice ends first.
 
 use glam::{Mat4, Vec2, Vec3, Vec4};
-use ltk_hash::{BinHash, WadHash};
+use ltk_hash::{BinHash, HashValue, HashWidth, WadHash};
 use ltk_primitives::Color;
 
 use crate::{property::Kind, stream::layout::Cursor, Error};
@@ -165,6 +165,18 @@ impl Cursor<'_> {
     /// See [`Cursor::take`].
     pub fn bin_hash(&mut self) -> Result<BinHash, Error> {
         Ok(BinHash(self.u32()?))
+    }
+
+    /// Reads a [`Kind::Hash`] value of [`Cursor::hash_width`] bytes.
+    ///
+    /// # Errors
+    ///
+    /// See [`Cursor::take`].
+    pub fn hash_value(&mut self) -> Result<HashValue, Error> {
+        Ok(match self.hash_width() {
+            HashWidth::W4 => HashValue::narrow(self.u32()?),
+            HashWidth::W8 => HashValue::wide(self.u64()?),
+        })
     }
 
     /// Reads a [`WadHash`].

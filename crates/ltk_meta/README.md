@@ -173,6 +173,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 A view carries the numbering it was built under, so one handed out before the flip keeps reading the way it started.
 
+### Hash widths
+
+A `Hash` value occupies 4 or 8 bytes in a file. The file does not store the width. The reader resolves the width from the sizes that the file declares. Each reader returns a `values::Hash`. Its `HashValue` contains the hash and the width. The writer writes each value with the width of the value.
+
+```rust
+use ltk_hash::{HashAlgorithm, HashValue, HashWidth, Hasher};
+use ltk_meta::property::values;
+
+// A 4-byte hash: FNV-1a of the lowercased string.
+let narrow = values::Hash::new(Hasher::DEFAULT.hash_str("Weapon"));
+assert_eq!(narrow.width(), HashWidth::W4);
+
+// An 8-byte hash. The file does not store the hash function. A class dump contains it.
+let material = Hasher {
+    width: HashWidth::W8,
+    algorithm: HashAlgorithm::Xxh3,
+    lowercased: true,
+};
+let wide = values::Hash::new(material.hash_str("Characters/Zac/Skins/Skin31/Materials/ult"));
+assert_eq!(wide.value, HashValue::wide(0x5d07_ca0d_22ff_9588));
+assert_eq!(wide.as_u32(), 0x22ff_9588);
+```
+
+All `Hash` items of a container have the same width. All `Hash` keys of a map have the same width, and all `Hash` values of a map have the same width. `values::Hash::from_reader` reads a `Hash` on its own as 4 bytes. `values::Hash::from_reader_with_width` reads a `Hash` of a given width.
+
 ### Opening many objects at once
 
 `object(hash)` answers one question per seek. `objects_batch` takes the whole request up front, so a cold handle resolves it during one forward scan that stops at the last hit, and a warm one visits the rows in offset order. Yield order is file order; `missing()` reports the hashes the file does not hold.
