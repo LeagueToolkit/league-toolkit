@@ -37,10 +37,20 @@ pub fn stmt_or_list_item(p: &mut Parser) -> (MarkClosed, TreeKind) {
         }
         (LCurly, _, _) => {
             let m = block(p);
-            res = (p.close(m, TreeKind::ListItemBlock), TreeKind::ListItemBlock);
-            p.eat(Comma);
+            if p.at(Eq) {
+                // `{ 1, 0, -1 } = value`: a map entry keyed by a vector
+                let key = p.close(m, TreeKind::Block);
+                let key = p.open_before(key);
+                let key = p.close(key, TreeKind::EntryKey);
+                let entry = p.open_before(key);
+                p.advance();
+                res = (stmt_value(p, entry), TreeKind::Entry);
+            } else {
+                res = (p.close(m, TreeKind::ListItemBlock), TreeKind::ListItemBlock);
+                p.eat(Comma);
+            }
         }
-        (Name | HexLit | String | Number | True | False, _, _) => {
+        (Name | HexLit | String | Number | True | False | Null, _, _) => {
             let m = p.open();
             p.scope(TreeKind::Literal, |p| p.advance());
             p.eat(Comment);
@@ -76,6 +86,11 @@ pub fn stmt(p: &mut Parser) -> MarkClosed {
         p.expect(TokenKind::Eq);
     }
 
+    stmt_value(p, m)
+}
+
+/// The value of the entry `m` opens and its terminator, past the entry's `=`.
+fn stmt_value(p: &mut Parser, m: MarkOpened) -> MarkClosed {
     if !entry_value(p) {
         return p.close(m, TreeKind::Entry);
     }
@@ -143,6 +158,9 @@ pub fn entry_value(p: &mut Parser) -> bool {
                 return false;
             }
             (String | Number | HexLit | True | False | Null, _) => {
+                p.scope(TreeKind::Literal, |p| p.advance());
+            }
+            (Name, _) if p.at_float_word() => {
                 p.scope(TreeKind::Literal, |p| p.advance());
             }
             (LCurly, _) => {

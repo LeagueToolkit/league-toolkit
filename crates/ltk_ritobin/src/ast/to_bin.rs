@@ -77,7 +77,8 @@ impl Ast {
         self.prop_bin()
     }
 
-    /// Lowers the tree to a [`Bin`]: its `entries` and `linked` roots.
+    /// Lowers the tree to a [`Bin`]: its `version`, `entries` and `linked` roots. A file without
+    /// a `version` root is version 3.
     fn prop_bin(&self) -> Bin {
         let objects = self.bin_objects().collect::<Vec<_>>();
 
@@ -88,7 +89,11 @@ impl Ast {
             .map(|linked| linked.into_inner())
             .unwrap_or_default();
 
-        Bin::new(objects, dependencies)
+        let mut bin = Bin::new(objects, dependencies);
+        if let Some(version) = self.roots.version {
+            bin.version = version.value;
+        }
+        bin
     }
 
     /// Lowers the tree to a best-effort [`Bin`], along with its diagnostics.

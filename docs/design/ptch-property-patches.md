@@ -13,7 +13,7 @@ is the bug and gets edited. Two things it does not hold:
 
 The crate implements [section 4](#s4) to [section 12](#s12): reading, writing, the path language,
 resolution, apply, merge, `ValuePath` and diff. `ltk_ritobin` implements [section 15](#s15), ritobin
-text, short of byte parity with moonshadow's printer, tracked as #242. [section 13](#s13) and
+text. [section 13](#s13) and
 [section 14](#s14) (join, the per-record surface) are designed and not built, tracked as #223 and
 #239. `ValuePath` itself, and the walk that produces one, are specified in `value-walk.md`.
 
@@ -1186,6 +1186,8 @@ pub struct RootPatch {
 
 impl Print for BinOverride { /* .. */ }
 impl Print for BinFile { /* .. */ }
+impl PrintCanonical for BinOverride { /* .. */ }
+impl PrintCanonical for BinFile { /* .. */ }
 
 impl cst::builder::Builder<H> {
     /// The tree `Print for BinOverride` prints, and the text buffer its spans point into.
@@ -1237,9 +1239,10 @@ Each diagnostic points at the source span of what it names:
 
 A record value is type-checked as any property value is, with the same diagnostics.
 
-The printer's layout is `ltk_ritobin`'s own, not moonshadow's: hashes are not zero-padded, a map
-type prints as `map[hash, embed]`, an empty block as `{ }`, and a list of scalars on one line. Byte
-parity with moonshadow's printer (FR-6) is #242.
+`Print` prints a `PTCH` file in `ltk_ritobin`'s own layout, not moonshadow's: hashes are not
+zero-padded, a map type prints as `map[hash, embed]`, an empty block as `{ }`, and a list of scalars
+on one line. `PrintCanonical` prints it in moonshadow's layout, byte for byte past its first line
+(FR-6): the layout `ltk_ritobin::print::canonical` states, with the `deleted` root after `patches`.
 
 On #173's framing: the language is Riot's own `PropertyPathIterator` grammar (dotted members,
 `[i]`, `{k}`), not rapidjson's JSON Pointer (`/a/b/0`, RFC 6901). rapidjson is involved only in
@@ -1286,7 +1289,9 @@ Both come from `UI.wad.client` of client 16.16.804.9184.
 - One test per row of the diagnostic table in [section 15](#s15), each asserting the span, and
   that a record without a usable path or value is left out of the patch. A `patches` root on a
   `PROP` file reports `PatchOnlyRoot` only. A record with a parse error is in `Cst::errors`.
-- Golden files against moonshadow's printer are #242.
+- In `crates/ltk_ritobin/tests/cpp_ritobin.rs`, the golden pair `tests/data/ptch.bin` and
+  `ptch.rito`, moonshadow's text for it: the bin prints as that text past its first line through
+  `PrintCanonical`, and the text parses to a patch that writes the bin's bytes.
 
 **Merge, diff and join** (`crates/ltk_meta/tests/merge.rs`, `diff.rs`, generated pairs from
 `tests/common`):

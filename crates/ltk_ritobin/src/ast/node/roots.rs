@@ -84,7 +84,9 @@ impl Roots {
         }
     }
 
+    /// The roots every file has and this one lacks. A file below version 2 has no `linked` root.
     pub fn missing(&self) -> impl Iterator<Item = RootKind> + use<'_> {
+        let linkless = self.version.is_some_and(|v| v.value < 2);
         [
             RootKind::Version,
             RootKind::Type,
@@ -92,6 +94,7 @@ impl Roots {
             RootKind::Entries,
         ]
         .into_iter()
+        .filter(move |k| !(linkless && *k == RootKind::Linked))
         .filter(|k| !self.contains(*k))
     }
 }

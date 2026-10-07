@@ -121,30 +121,45 @@ pub(crate) fn unescape(input: &str) -> Result<String, InvalidEscape> {
     Ok(out)
 }
 
+/// The text of a string literal, without its quotes, as C++ ritobin's `str_quote` escapes it:
+/// `\t \n \r \b \f \\ \"`, `\xHH` for any other character below 0x20, and every other character as
+/// is.
 pub(crate) fn escape(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    // Writing to a `String` does not fail.
+    let _ = escape_into(&mut out, input);
+    out
+}
+
+/// Writes [`escape`]'s text to `out`.
+pub(crate) fn escape_into(
+    out: &mut (impl std::fmt::Write + ?Sized),
+    input: &str,
+) -> std::fmt::Result {
     const HEX: &[u8; 16] = b"0123456789abcdef";
 
-    let mut out = String::with_capacity(input.len());
-    for c in input.chars() {
-        match c {
-            '\t' => out.push_str("\\t"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\u{08}' => out.push_str("\\b"),
-            '\u{0C}' => out.push_str("\\f"),
-            '\\' => out.push_str("\\\\"),
-            '"' => out.push_str("\\\""),
-            c if (c as u32) < 0x20 => {
-                let b = c as u32;
-                out.push('\\');
-                out.push('x');
-                out.push(HEX[((b >> 4) & 0xF) as usize] as char);
-                out.push(HEX[(b & 0xF) as usize] as char);
+    let mut rest = input;
+    while let Some(i) = rest.find(|c: char| c < ' ' || c == '\\' || c == '"') {
+        out.write_str(&rest[..i])?;
+        // `find` matched an ASCII byte, so `i + 1` is a char boundary.
+        let b = rest.as_bytes()[i];
+        rest = &rest[i + 1..];
+        match b {
+            b'\t' => out.write_str("\\t")?,
+            b'\n' => out.write_str("\\n")?,
+            b'\r' => out.write_str("\\r")?,
+            0x08 => out.write_str("\\b")?,
+            0x0C => out.write_str("\\f")?,
+            b'\\' => out.write_str("\\\\")?,
+            b'"' => out.write_str("\\\"")?,
+            b => {
+                out.write_str("\\x")?;
+                out.write_char(HEX[usize::from(b >> 4)] as char)?;
+                out.write_char(HEX[usize::from(b & 0xF)] as char)?;
             }
-            c => out.push(c),
         }
     }
-    out
+    out.write_str(rest)
 }
 
 fn read_hex(bytes: &[u8], i: &mut usize, n: usize) -> Option<u32> {

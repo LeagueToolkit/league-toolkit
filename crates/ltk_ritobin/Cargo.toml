@@ -41,6 +41,7 @@ thiserror = { workspace = true }
 miette = { workspace = true }
 indexmap = { workspace = true }
 itertools = { workspace = true }
+ryu = { workspace = true }
 
 smallvec = "1"
 

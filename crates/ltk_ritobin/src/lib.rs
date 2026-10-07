@@ -130,7 +130,7 @@ pub use types::*;
 
 pub use cst::Cst;
 pub use cst::Node;
-pub use print::Print;
+pub use print::{Print, PrintCanonical};
 
 use crate::parse::Span;
 

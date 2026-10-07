@@ -1,4 +1,4 @@
-use std::{borrow::Cow, str::FromStr};
+use std::borrow::Cow;
 
 use ltk_hash::{BinHash, WadHash};
 use ltk_meta::PropertyKind;
@@ -7,9 +7,9 @@ use crate::{
     ast::{
         diagnostics::{Diagnostic, RitoTypeOrVirtual},
         hash::{HashedLiteral, Originally},
-        Value,
+        Object, Value,
     },
-    parse::{Span, Token, TokenKind},
+    parse::{tokenizer::is_float_word, Span, Token, TokenKind},
     RitoType, Spanned,
 };
 
@@ -30,17 +30,6 @@ impl Value {
             },
         })
     }
-}
-
-pub(crate) fn eval_hash<H: ltk_hash::Hash + FromStr>(
-    text: &str,
-    span: Span,
-) -> Result<HashedLiteral<H>, Diagnostic> {
-    // TODO: better errs here?
-    let src = text[span].strip_prefix("0x").ok_or(InvalidHash(span))?;
-    H::from_str(src)
-        .map_err(|_| InvalidHash(span))
-        .map(|value| HashedLiteral::new(span, Originally::HexLit, value))
 }
 
 fn parse_int<T: std::str::FromStr<Err = std::num::ParseIntError>>(
@@ -81,10 +70,25 @@ impl Value {
                     .map_err(|e| e.into_diagnostic(*span))?,
             )),
 
+            // `null` is the pointer with class hash 0 and no fields, and nothing else.
             Token {
                 kind: TokenKind::Null,
                 span,
-            } => Self::None(*span),
+            } => match kind_hint {
+                Some(hint) if hint.base == K::Struct => Self::Struct(Object {
+                    class_hash: HashedLiteral::default().with_span(*span),
+                    span: *span,
+                    properties: Vec::new(),
+                }),
+                hint => {
+                    return Err(TypeMismatch {
+                        span: *span,
+                        expected: hint.into(),
+                        expected_span: kind_hint_span,
+                        got: RitoType::simple(K::Struct).into(),
+                    })
+                }
+            },
 
             Token {
                 kind: TokenKind::True,
@@ -99,10 +103,11 @@ impl Value {
                 kind: TokenKind::HexLit,
                 span,
             } => Self::eval_unknown_hash(text, *span)?,
-            Token {
-                kind: TokenKind::Number,
-                span,
-            } => {
+            // A bare `inf` or `nan` is a `Name` token, and a number where a value stands.
+            Token { kind, span }
+                if *kind == TokenKind::Number
+                    || (*kind == TokenKind::Name && is_float_word(&text[span])) =>
+            {
                 let txt = &text[span];
                 let Some(kind_hint) = kind_hint else {
                     return Err(AmbiguousNumeric(*span));

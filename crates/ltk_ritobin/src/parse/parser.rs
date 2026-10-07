@@ -329,6 +329,13 @@ impl<'a> Parser<'a> {
             .map_or(TokenKind::Eof, |it| it.kind)
     }
 
+    /// Whether the current token is a bare `inf` or `nan`.
+    pub(crate) fn at_float_word(&self) -> bool {
+        self.tokens.get(self.pos).is_some_and(|t| {
+            t.kind == TokenKind::Name && super::tokenizer::is_float_word(&self.text[t.span])
+        })
+    }
+
     #[inline]
     pub(crate) fn at(&self, kind: TokenKind) -> bool {
         self.nth(0) == kind
