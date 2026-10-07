@@ -88,12 +88,17 @@ impl<A> Annotations<A> {
         }
     }
 
-    pub fn reduce<T, F>(&self, span: Span, initial: T, mut f: F) -> T
+    pub fn reduce<T, F>(&self, at: Span, initial: T, mut f: F) -> T
     where
         F: FnMut(T, &A) -> T,
     {
         let mut value = initial;
-        for annotation in self.nodes.iter().rev().filter(|n| n.span.intersects(&span)) {
+        for annotation in self
+            .nodes
+            .iter()
+            .rev()
+            .filter(|n| n.span.contains(at.start) && n.span.contains(at.end))
+        {
             value = f(value, annotation);
         }
         value
