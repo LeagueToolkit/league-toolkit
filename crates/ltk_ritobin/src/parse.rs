@@ -157,6 +157,7 @@ entries: map[hash, embed] = {
     #[test]
     fn inline_comment_into_eof() {
         assert_success(r#"mVelMultiplier: f32 = 0 # asd"#);
+        assert_fail(r#"mVelMultiplier: f32 = # asd"#);
     }
 
     #[ignore = "Nice to have"]

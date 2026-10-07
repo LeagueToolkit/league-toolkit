@@ -294,7 +294,10 @@ impl<'a> Parser<'a> {
 
     pub(crate) fn advance_with_error(&mut self, kind: ErrorKind, span: Option<Span>) {
         let m = self.open();
-        self.advance();
+        // open() eats comments, which can make us move to eof
+        if !self.eof() {
+            self.advance();
+        }
         self.events.push(Event::Error { kind, span });
         self.close(m, TreeKind::ErrorTree);
     }
