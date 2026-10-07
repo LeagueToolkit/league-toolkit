@@ -62,5 +62,7 @@ pretty_assertions.workspace = true
 proptest.workspace = true
 serde.workspace = true
 criterion.workspace = true
+
 ltk_ritobin = { path = ".", features = ["serde"] }
+span = { version = "0.1.0", path = "../span/", features = ["derive"] }
 
