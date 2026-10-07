@@ -363,6 +363,9 @@ impl<'a> Builder<'a> {
                             })
                         }) {
                         Ok(value) => {
+                            if let Some(anns) = (!ann_set.is_empty()).then(|| take(&mut ann_set)) {
+                                self.apply_annotations(anns, value.span());
+                            }
                             items.push(value);
                         }
                         Err(e) => self.push(e.default_span(node.span)),

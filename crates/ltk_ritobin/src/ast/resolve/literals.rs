@@ -263,6 +263,15 @@ impl Value {
                     None => {
                         return Err(E::AmbiguousNumeric(*span));
                     }
+                    None => {
+                        (parse_int::<u64>(&txt, K::U64, *span, |v, s| {
+                            Self::U64(Spanned::new(s, v))
+                        })
+                        .or(parse_int::<i64>(&txt, K::I64, *span, |v, s| {
+                            Self::I64(Spanned::new(s, v))
+                        }))
+                        .or(parse_f32(&txt, *span)))?
+                    }
                 }
             }
             token => return Err(E::UnexpectedToken(*token)),
