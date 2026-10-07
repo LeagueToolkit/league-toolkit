@@ -174,6 +174,7 @@ pub enum Diagnostic {
 
     InvalidEscape(#[from] Spanned<InvalidEscape>),
     AnnotationResolve(#[from] AnnotationResolveError),
+    TrailingAnnotations(Span),
     TypeMismatch(#[from] TypeMismatch),
     ValueEvalError(#[from] ValueEvalError),
 
@@ -369,6 +370,9 @@ impl Display for Diagnostic {
             MissingToken(kind) => write!(f, "Missing {kind}"),
 
             AnnotationResolve(err) => err.fmt(f),
+            TrailingAnnotations(_) => {
+                write!(f, "Trailing annotation(s) don't apply to anything!")
+            }
             ValueEvalError(err) => err.fmt(f),
 
             InvalidHash(_) => f.write_str("Invalid hash"),
@@ -521,6 +525,7 @@ impl Diagnostic {
             | UnexpectedFileKind { span, .. }
             | InvalidRootEntryType { key_span: span, .. } => Some(*span),
             AnnotationResolve(err) => err.span(),
+            TrailingAnnotations(span) => Some(*span),
             TypeMismatch(err) => Some(err.span),
             ValueEvalError(err) => Some(err.span()),
         }

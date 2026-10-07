@@ -75,6 +75,10 @@ impl<'a> Builder<'a> {
                 self.apply_annotations(anns, node.span);
             };
         }
+        if let Some((l, r)) = anns.first().zip(anns.last()) {
+            let span = l.span.cover(r.span);
+            self.push(D::TrailingAnnotations(span).unwrap());
+        }
         roots
     }
 

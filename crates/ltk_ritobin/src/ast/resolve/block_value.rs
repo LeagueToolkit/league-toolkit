@@ -234,6 +234,10 @@ impl<'a> Builder<'a> {
                 }
             }
         }
+        if let Some((l, r)) = ann_set.first().zip(ann_set.last()) {
+            let span = l.span.cover(r.span);
+            self.push(D::TrailingAnnotations(span).unwrap());
+        }
         properties
     }
 
@@ -317,6 +321,10 @@ impl<'a> Builder<'a> {
                 }
             }
         }
+        if let Some((l, r)) = ann_set.first().zip(ann_set.last()) {
+            let span = l.span.cover(r.span);
+            self.push(D::TrailingAnnotations(span).unwrap());
+        }
         entries
     }
 
@@ -388,6 +396,10 @@ impl<'a> Builder<'a> {
                     }
                 }
             }
+        }
+        if let Some((l, r)) = ann_set.first().zip(ann_set.last()) {
+            let span = l.span.cover(r.span);
+            self.push(D::TrailingAnnotations(span).unwrap());
         }
         items
     }
