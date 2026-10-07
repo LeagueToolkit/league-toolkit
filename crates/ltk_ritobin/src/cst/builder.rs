@@ -602,7 +602,9 @@ mod test {
         );
         let bin2 = partial2.bin;
 
-        pretty_assertions::assert_eq!(bin2, bin);
+        let bin = format!("{bin:#?}");
+        let bin2 = format!("{bin2:#?}");
+        pretty_assertions::assert_str_eq!(bin2, bin);
     }
 
     #[test]
@@ -635,6 +637,10 @@ mod test {
                         .property(0x66, values::Hash::new(123123))
                         .property(0x99, values::F32::new(-45.45345))
                         .property(0x98, values::F32::new(199999.))
+                        .property(0x97, values::F32::new(f32::NAN))
+                        .property(0x96, values::F32::new(-f32::NAN))
+                        .property(0x95, values::F32::new(f32::INFINITY))
+                        .property(0x94, values::F32::new(f32::NEG_INFINITY))
                         .build(),
                 )
                 .build(),
