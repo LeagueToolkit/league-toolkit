@@ -18,8 +18,8 @@ pub use tokenizer::{Token, TokenKind};
 
 pub mod impls;
 
-mod span;
-pub use span::Span;
+#[deprecated(note = "use ltk_ritobin::Span instead, or the span crate directly")]
+pub use crate::Span;
 
 use crate::cst;
 

@@ -12,7 +12,9 @@ use ltk_meta::{
 use ltk_primitives::Color;
 use ltk_ritobin::{
     ast::{
-        diagnostics::{Diagnostic, DiagnosticWithSpan, PatchField, RitoTypeOrVirtual},
+        diagnostics::{
+            Diagnostic, DiagnosticWithSpan, PatchField, RitoTypeOrVirtual, TypeMismatch,
+        },
         node::root::{FileKind, RootKind},
     },
     print::Print as _,
@@ -355,10 +357,10 @@ fn a_path_that_is_not_a_string_is_diagnosed_and_left_out() {
     assert!(
         matches!(
             diagnostic,
-            Diagnostic::TypeMismatch {
+            Diagnostic::TypeMismatch(TypeMismatch {
                 got: RitoTypeOrVirtual::RitoType(got),
                 ..
-            } if got.base == PropertyKind::Hash
+            }) if got.base == PropertyKind::Hash
         ),
         "{diagnostic:#?}"
     );

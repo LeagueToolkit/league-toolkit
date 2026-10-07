@@ -3,7 +3,7 @@ use std::iter::{empty, once};
 use crate::ast::{
     node::{
         root::{Root, RootValue},
-        NodeRef, SubNodeRef,
+        MapEntry, NodeRef, SubNodeRef,
     },
     Object, Property, RootEntry, Value,
 };
@@ -93,11 +93,13 @@ impl Value {
             Value::Container { items, .. } | Value::UnorderedContainer { items, .. } => {
                 Box::new(items.iter().map(NodeRef::Value))
             }
-            Value::Map { entries, .. } => {
-                Box::new(entries.iter().flat_map(|(k, v)| {
+            Value::Map(map) => Box::new(map.iter().flat_map(
+                |MapEntry {
+                     key: k, value: v, ..
+                 }| {
                     once(NodeRef::Value(k)).chain(v.as_ref().map(NodeRef::Value))
-                }))
-            }
+                },
+            )),
             Value::Optional {
                 value: Some(inner), ..
             } => Box::new(std::iter::once(NodeRef::Value(inner))),

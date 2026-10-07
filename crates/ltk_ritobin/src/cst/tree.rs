@@ -11,9 +11,10 @@ use crate::{
     parse::{
         impls,
         tokenizer::{self, Token},
-        Error, ErrorPropagation, Parser, Span, TokenKind,
+        Error, ErrorPropagation, Parser, TokenKind,
     },
 };
+use span::Span;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

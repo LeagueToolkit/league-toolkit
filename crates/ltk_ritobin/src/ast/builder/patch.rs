@@ -3,10 +3,11 @@ use ltk_meta::{path::PropertyPath, PropertyKind};
 
 use crate::{
     ast::{
-        diagnostics::{Diagnostic as D, PatchField},
+        diagnostics::{Diagnostic as D, PatchField, TypeMismatch},
         node::{
             root::{FileKind, RootKind, RootValue},
             roots::Roots,
+            MapEntry,
         },
         Property, RootPatch, Value,
     },
@@ -50,14 +51,15 @@ impl Builder<'_> {
         let Some(patches) = roots.patches.as_mut() else {
             return;
         };
-        let Some(Some(RootValue::Value(Value::Map { entries, .. }))) =
+        let Some(Some(RootValue::Value(Value::Map(map)))) =
             roots.all.get(patches.idx).map(|root| &root.value)
         else {
             return;
         };
-        patches.value = entries
+        patches.value = map
+            .entries
             .iter()
-            .filter_map(|(key, value)| self.resolve_patch(key, value.as_ref()))
+            .filter_map(|MapEntry { key, value, .. }| self.resolve_patch(key, value.as_ref()))
             .collect();
     }
 
@@ -172,15 +174,15 @@ impl Builder<'_> {
             // an unresolved value carries its own diagnostic
             value if !is_resolved(value) => None,
             value => {
-                self.push(
-                    D::TypeMismatch {
+                self.push(D::unwrap(
+                    TypeMismatch {
                         span: value.span(),
                         expected: RitoType::simple(PropertyKind::String).into(),
                         expected_span: None,
                         got: value.rito_type().into(),
                     }
-                    .unwrap(),
-                );
+                    .into(),
+                ));
                 None
             }
         }

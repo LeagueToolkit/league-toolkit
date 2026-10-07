@@ -112,10 +112,18 @@
 //! assert_eq!(patch.patches.len(), 1);
 //! ```
 
-use std::ops::{Deref, DerefMut};
+use std::{
+    fmt::{self, Display},
+    ops::{Deref, DerefMut},
+};
 
 #[allow(unused, reason = "for module level doc link")]
 use ltk_meta::Bin;
+
+pub use span::Span;
+pub mod span {
+    pub use span::*;
+}
 
 pub mod ast;
 pub mod cst;
@@ -132,8 +140,6 @@ pub use cst::Cst;
 pub use cst::Node;
 pub use print::Print;
 
-use crate::parse::Span;
-
 pub trait SpannedExt {
     fn with_span(self, span: Span) -> Spanned<Self>
     where
@@ -147,9 +153,16 @@ impl<T> SpannedExt for T {
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "span_print", derive(span::DebugSpans))]
 pub struct Spanned<T> {
     pub span: Span,
     pub value: T,
+}
+
+impl<T: Display> Display for Spanned<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.value.fmt(f)
+    }
 }
 
 impl<T> Spanned<T> {

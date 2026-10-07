@@ -1,15 +1,14 @@
 use crate::{
     ast::{
-        diagnostics::Diagnostic as D,
+        diagnostics::{Diagnostic as D, TypeMismatch},
         node::{
             root::{KnownRoot, Root, RootKind, RootValue},
             roots::Roots,
-            TypeExpr,
+            MapEntry, TypeExpr,
         },
         RootEntry, Value,
     },
     cst::Kind,
-    parse::Span,
     Node, Spanned, SpannedExt,
 };
 
@@ -17,6 +16,7 @@ use super::*;
 
 use ltk_hash::BinHash;
 use ltk_meta::PropertyKind::{self};
+use span::Span;
 
 #[derive(Debug, Clone)]
 pub struct RawRootProperty {
@@ -94,15 +94,15 @@ impl<'a> Builder<'a> {
 
         if let Some(RootValue::Value(value)) = root.value.as_ref() {
             if let Some(got) = value.rito_type().filter(|got| *got != expected_type) {
-                self.push(
-                    D::TypeMismatch {
+                self.push(D::unwrap(
+                    TypeMismatch {
                         span: value.span(),
                         expected: expected_type.into(),
                         expected_span: None,
                         got: got.into(),
                     }
-                    .unwrap(),
-                );
+                    .into(),
+                ));
                 return false;
             }
         }
@@ -252,17 +252,20 @@ fn deleted_hashes(items: &[Value]) -> Vec<BinHash> {
 /// Returns `false` for any other value, and leaves it in place to navigate and diagnose.
 fn resolve_entries(root: &mut Root) -> bool {
     match root.value.take() {
-        Some(RootValue::Value(Value::Map {
-            entries: map, span, ..
-        })) => {
+        Some(RootValue::Value(Value::Map(map))) => {
+            let span = map.span;
             let items = map
                 .into_iter()
-                .filter_map(|(k, v)| match (k, v) {
-                    (Value::Hash(path_hash), Some(Value::Embedded(object))) => {
-                        Some(RootEntry { path_hash, object })
-                    }
-                    _ => None,
-                })
+                .filter_map(
+                    |MapEntry {
+                         key: k, value: v, ..
+                     }| match (k, v) {
+                        (Value::Hash(path_hash), Some(Value::Embedded(object))) => {
+                            Some(RootEntry { path_hash, object })
+                        }
+                        _ => None,
+                    },
+                )
                 .collect();
             root.value = Some(RootValue::Entries(Spanned::new(span, items)));
             true

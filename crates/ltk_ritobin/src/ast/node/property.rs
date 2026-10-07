@@ -2,11 +2,12 @@ use ltk_hash::BinHash;
 
 use crate::{
     ast::{diagnostics::RitoTypeOrVirtual, hash::HashedLiteral, node::Value},
-    parse::Span,
     RitoType, Spanned,
 };
+use span::Span;
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "span_print", derive(span::DebugSpans))]
 pub struct Property {
     pub name: HashedLiteral<BinHash>,
     pub type_expr: Spanned<Option<TypeExpr>>,

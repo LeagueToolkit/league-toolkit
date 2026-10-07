@@ -1,6 +1,6 @@
 use std::ops::ControlFlow::{self};
 
-use crate::ast::{Ast, Object, Property, RootEntry, Value};
+use crate::ast::{node::MapEntry, Ast, Object, Property, RootEntry, Value};
 
 #[allow(unused_variables)]
 /// [Visitor pattern](https://rust-unofficial.github.io/patterns/patterns/behavioural/visitor.html)
@@ -187,18 +187,20 @@ fn walk_value<V: Visitor>(visitor: &mut V, value: &Value) -> ExitFlow {
             Value::Container { items, .. } | Value::UnorderedContainer { items, .. } => {
                 walk_all(v, items, walk_value)
             }
-            Value::Map { entries, .. } => walk_all(v, entries, |v, (key, value)| {
-                match walk_value(v, key)? {
-                    Continue::Siblings => {}
-                    // the key's exit pruned the entry's remaining sibling (its value) and,
-                    // transitively, the rest of the map's entries
-                    Continue::Parent => return Continue::Parent.into(),
-                }
-                match value {
-                    Some(value) => walk_value(v, value),
-                    None => Continue::Siblings.into(),
-                }
-            }),
+            Value::Map(map) => {
+                walk_all(v, &map.entries, |v, MapEntry { key, value, .. }| {
+                    match walk_value(v, key)? {
+                        Continue::Siblings => {}
+                        // the key's exit pruned the entry's remaining sibling (its value) and,
+                        // transitively, the rest of the map's entries
+                        Continue::Parent => return Continue::Parent.into(),
+                    }
+                    match value {
+                        Some(value) => walk_value(v, value),
+                        None => Continue::Siblings.into(),
+                    }
+                })
+            }
             Value::Optional {
                 value: Some(inner), ..
             } => walk_value(v, inner).map_continue(|_| ()),

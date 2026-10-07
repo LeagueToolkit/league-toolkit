@@ -8,9 +8,10 @@ use crate::{
         Value,
     },
     cst::Kind,
-    parse::{Span, Token},
+    parse::Token,
     Node, RitoType,
 };
+use span::Span;
 
 impl<'a> Builder<'a> {
     pub(crate) fn resolve_literal(
@@ -23,7 +24,7 @@ impl<'a> Builder<'a> {
         match Value::eval(text, token, kind_hint, kind_hint_span) {
             Ok(value) => value,
             Err(e) => {
-                self.push(e.default_span(token.span));
+                self.push(Diagnostic::from(e).default_span(token.span));
                 kind_hint
                     .map(|k| Value::Unresolved {
                         span: token.span,

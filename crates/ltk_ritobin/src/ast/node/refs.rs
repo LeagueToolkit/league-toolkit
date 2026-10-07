@@ -1,16 +1,12 @@
 use ltk_hash::BinHash;
 
-use crate::{
-    ast::{
-        hash::HashedLiteral,
-        node::{root::Root, NodeExt, NodeKind},
-        query::{
-            AstObjectDetail, AstPropertyDetail, AstRootDetail, AstRootEntryDetail, NodeDetail,
-        },
-        Object, Property, RootEntry, Value,
-    },
-    parse::Span,
+use crate::ast::{
+    hash::HashedLiteral,
+    node::{root::Root, NodeExt, NodeKind},
+    query::{AstObjectDetail, AstPropertyDetail, AstRootDetail, AstRootEntryDetail, NodeDetail},
+    Object, Property, RootEntry, Value,
 };
+use span::Span;
 
 /// A reference to a node in an [`Ast`].
 #[derive(Debug, Clone, Copy)]

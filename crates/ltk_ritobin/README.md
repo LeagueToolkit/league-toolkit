@@ -62,7 +62,7 @@ See [`examples/bin_to_rito.rs`](examples/bin_to_rito.rs) and [`examples/rito_to_
 
 ## Editor / LSP features
 
-- **Spans everywhere.** Every token and tree node carries a `parse::Span { start: u32, end: u32 }`, sufficient for LSP diagnostics, semantic tokens, and go-to-definition.
+- **Spans everywhere.** Every token and tree node carries a `Span { start: u32, end: u32 }`, sufficient for LSP diagnostics, semantic tokens, and go-to-definition.
 - **Visitor API.** `cst::visitor::Visitor` (with `enter_tree` / `exit_tree` / `visit_token`) walks a `Cst` for hover, find-references, semantic highlighting, and similar features.
 - **Hash resolution.** The `HashProvider` trait (with the ready-made `HashMapProvider`) lets tooling resolve hashes back to source names, both for printing and for surfacing readable identifiers in editor UI.
 - **Configurable printer.** [`print::PrintConfig`] and `print::WrapConfig` control indent size, line width, and whether lists / structs may be inlined. Defaults: 4-space indent, 120-column wrap, inline lists, block-form structs.
@@ -75,7 +75,7 @@ If you're building tooling on top of this crate, [`ritobin-lsp`](https://github.
 - **Entry points**: `Cst::parse`, `Cst::build_bin`
 - **Printing**: `Print` trait (implemented for `ltk_meta::Bin`), `print::PrintConfig`, `print::WrapConfig`, `print::PrintError`
 - **Hashes**: `HashProvider` trait, `HashMapProvider`
-- **Parse errors**: `parse::Error`, `parse::ErrorKind`, `parse::Span`, `parse::ErrorPropagation`
+- **Parse errors**: `parse::Error`, `parse::ErrorKind`, `parse::ErrorPropagation`
 - **Tree walking**: `cst::visitor::Visitor`
 - **Modules**: `cst`, `parse`, `print`, `typecheck`, `types`, `hashes`
 
