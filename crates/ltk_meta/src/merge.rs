@@ -3,7 +3,7 @@
 use std::{collections::HashMap, fmt, mem};
 
 use indexmap::IndexMap;
-use ltk_hash::BinHash;
+use ltk_hash::{BinHash, HashWidth};
 
 use crate::{
     path::{MapKey, ValuePath},
@@ -110,6 +110,10 @@ pub struct Replaced {
     /// Whether the two sides held different shapes: a different kind, a container, optional or
     /// map declaring different kinds, or a `Struct` or `Embedded` of a different class.
     ///
+    /// Two `Hash` values with different widths have different shapes. The same applies to the
+    /// `Hash` items of two containers or two optionals, and to the `Hash` keys or the `Hash`
+    /// values of two maps.
+    ///
     /// The client compares a value's tag with the property's registered tag by exact equality,
     /// and discards a value whose tag differs with no error. Riot changes a property's type in
     /// place, and a mod value that predates the change mismatches the game's value here.
@@ -198,7 +202,7 @@ pub(crate) fn combines(base: &values::Struct, edited: &values::Struct) -> bool {
 }
 
 /// Whether two values differ in shape: a `Declaration` field other than the count. A
-/// pointer's class counts.
+/// pointer's class counts. A hash width counts.
 fn shapes_differ(base: &PropertyValueEnum, edited: &PropertyValueEnum) -> bool {
     let shape = |value| {
         let declaration = walk::owned::declaration(value);
@@ -209,7 +213,40 @@ fn shapes_differ(base: &PropertyValueEnum, edited: &PropertyValueEnum) -> bool {
             declaration.class,
         )
     };
-    shape(base) != shape(edited)
+    shape(base) != shape(edited) || hash_widths_differ(hash_widths(base), hash_widths(edited))
+}
+
+/// Returns the hash widths of `value`. The first width is the width of a `Hash` value, of the
+/// `Hash` items of a container or an optional, or of the `Hash` keys of a map. The second width
+/// is the width of the `Hash` values of a map. A width is `None` if `value` has no `Hash` value
+/// in that position.
+fn hash_widths(value: &PropertyValueEnum) -> [Option<HashWidth>; 2] {
+    use PropertyValueEnum as V;
+    match value {
+        V::Hash(hash) => [Some(hash.width()), None],
+        V::Container(container) | V::UnorderedContainer(values::UnorderedContainer(container)) => {
+            [container.hash_width(), None]
+        }
+        V::Optional(optional) => match optional.value() {
+            Some(V::Hash(hash)) => [Some(hash.width()), None],
+            _ => [None, None],
+        },
+        V::Map(map) => map_hash_widths(map),
+        _ => [None, None],
+    }
+}
+
+/// Returns the width of the `Hash` keys and the width of the `Hash` values of `map`.
+fn map_hash_widths(map: &values::Map) -> [Option<HashWidth>; 2] {
+    [map.key_hash_width(), map.value_hash_width()]
+}
+
+/// Returns `true` if `base` and `edited` have two different widths in the same position. A
+/// position that is `None` on one side does not differ.
+fn hash_widths_differ(base: [Option<HashWidth>; 2], edited: [Option<HashWidth>; 2]) -> bool {
+    base.into_iter()
+        .zip(edited)
+        .any(|widths| matches!(widths, (Some(base), Some(edited)) if base != edited))
 }
 
 /// The key of every entry of `map`, by position of its first occurrence. `None` when a key does
@@ -293,8 +330,12 @@ impl<'e> Merger<'e> {
             {
                 return self.properties(&mut b.properties, &e.properties, e.class_hash);
             }
+            // `Map::push` fails on a second hash width. A map with two hash widths is replaced
+            // whole.
             (V::Map(b), V::Map(e))
-                if b.key_kind() == e.key_kind() && b.value_kind() == e.value_kind() =>
+                if b.key_kind() == e.key_kind()
+                    && b.value_kind() == e.value_kind()
+                    && !hash_widths_differ(map_hash_widths(b), map_hash_widths(e)) =>
             {
                 if self.map(b, e) {
                     return;
@@ -339,7 +380,7 @@ impl<'e> Merger<'e> {
                 None => {
                     index.insert(map_key, base.entries().len());
                     base.push(key.clone(), value.clone())
-                        .expect("map_keys checked the entry against the kinds both maps declare");
+                        .expect("the kinds and the hash widths of both maps are equal");
                     self.report.keys_inserted += 1;
                 }
             }

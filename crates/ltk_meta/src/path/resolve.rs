@@ -3,7 +3,7 @@
 use std::fmt;
 
 use indexmap::IndexMap;
-use ltk_hash::{BinHash, Hash as _, WadHash};
+use ltk_hash::{BinHash, Hash as _, HashValue, HashWidth, WadHash};
 
 use crate::{
     path::{KeyLiteral, MapKey, PropertyPath, Segment, Subscript, ValuePath, ValueSegment},
@@ -298,8 +298,8 @@ fn slot_for(
             }),
         },
         (V::Map(map), Subscript::Key(literal)) => {
-            let wanted = key_as(map.key_kind(), literal)
-                .ok_or(ResolveErrorKind::InvalidKey(map.key_kind()))?;
+            let wanted =
+                key_in(map, literal).ok_or(ResolveErrorKind::InvalidKey(map.key_kind()))?;
             map.entries()
                 .iter()
                 .position(|(key, _)| key_eq(key, &wanted))
@@ -336,7 +336,24 @@ fn take_mut(value: &mut PropertyValueEnum, slot: Slot) -> ValueSlot<'_> {
     }
 }
 
-/// The key `literal` selects, as a value of `kind`.
+/// Returns the key that `literal` selects in `map`. Returns `None` if `literal` does not convert
+/// to the key kind of `map`.
+///
+/// If the `Hash` keys of `map` are 8 bytes wide, converts a number literal to the raw value of the
+/// key and returns `None` for a string literal. The file does not store the hash function of the
+/// keys.
+fn key_in(map: &values::Map, literal: &KeyLiteral<'_>) -> Option<PropertyValueEnum> {
+    match (map.key_hash_width(), literal) {
+        (Some(HashWidth::W8), KeyLiteral::Number(text)) => {
+            Some(values::Hash::new(HashValue::wide(text.parse().ok()?)).into())
+        }
+        (Some(HashWidth::W8), _) => None,
+        _ => key_as(map.key_kind(), literal),
+    }
+}
+
+/// Returns the key that `literal` selects, as a value of `kind`. Returns a `Hash` key at
+/// width 4.
 ///
 /// The client parses the brace text as JSON and converts the result to the map's key type. A
 /// number is written into an integer or float key, a string is taken as text for a string key and
@@ -855,7 +872,7 @@ impl MapKey {
     /// let weapon = KeyLiteral::from("weapon");
     /// assert_eq!(
     ///     MapKey::from_literal(&weapon, Kind::Hash),
-    ///     Some(MapKey::Hash(BinHash::hash_str("weapon")))
+    ///     Some(MapKey::Hash(BinHash::hash_str("weapon").into()))
     /// );
     /// assert_eq!(MapKey::from_literal(&weapon, Kind::U32), None);
     /// ```

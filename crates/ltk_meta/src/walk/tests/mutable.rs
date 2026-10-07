@@ -253,7 +253,7 @@ fn a_key_in_the_trail_reads_as_the_trees_own_key() {
     assert_eq!(
         keys.0,
         [
-            format!("{:?}", Some(Leaf::Hash(BinHash(KEY_A)))),
+            format!("{:?}", Some(Leaf::Hash(BinHash(KEY_A).into()))),
             format!("{:?}", Some(Leaf::String("k"))),
         ]
     );

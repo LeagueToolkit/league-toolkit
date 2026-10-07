@@ -21,7 +21,7 @@ use ltk_hash::BinHash;
 
 use crate::{
     property::{values, Kind},
-    stream::layout::{Cursor, Numbering},
+    stream::layout::{resolve, Cursor, HashWidths, Numbering},
     BinObject, Error, PropertyValueEnum,
 };
 
@@ -103,7 +103,7 @@ pub(crate) fn read_value(cur: &mut Cursor<'_>, kind: Kind) -> Result<PropertyVal
         K::Matrix44 => values::Matrix44::new(cur.mat4_row_major()?).into(),
         K::Color => values::Color::new(cur.color_u8()?).into(),
         K::String => read_string(cur)?.into(),
-        K::Hash => values::Hash::new(cur.bin_hash()?).into(),
+        K::Hash => values::Hash::new(cur.hash_value()?).into(),
         K::WadChunkLink => values::WadChunkLink::new(cur.wad_hash()?).into(),
         K::ObjectLink => values::ObjectLink::new(cur.bin_hash()?).into(),
         K::Container => read_container(cur)?.into(),
@@ -230,14 +230,25 @@ pub(crate) fn read_object_from<R: io::Read + io::Seek + ?Sized>(
     let mut body = Vec::new();
     fill_to(reader, &mut body, declared)?;
 
-    let mut cur = Cursor::new(&body, numbering);
-    let object = read_object_body(&mut cur, class_hash)?;
+    let search = |body: &[u8], widths: &mut HashWidths| match body.len() == declared {
+        true => resolve::search_object_body(body, widths),
+        false => resolve::Resolution::Unresolved,
+    };
+    resolve::with_resolved_widths(
+        &body,
+        numbering,
+        &mut HashWidths::new(),
+        search,
+        |mut cur| {
+            let object = read_object_body(&mut cur, class_hash)?;
 
-    let consumed = cur.position();
-    match consumed == declared {
-        true => Ok(object),
-        false => Err(Error::InvalidSize(declared as u64, consumed as u64)),
-    }
+            let consumed = cur.position();
+            match consumed == declared {
+                true => Ok(object),
+                false => Err(Error::InvalidSize(declared as u64, consumed as u64)),
+            }
+        },
+    )
 }
 
 /// Decodes one value of `kind` from `reader`, leaving it immediately past that value.
@@ -259,6 +270,45 @@ pub(crate) fn read_value_from<R: io::Read + io::Seek + ?Sized>(
     read_from(reader, kind, numbering, |cur| read_value(cur, kind))
 }
 
+/// Decodes one value of `kind` that occupies `len` bytes of `reader`. Leaves `reader` immediately
+/// after the value.
+///
+/// Reads a `Hash` value as 8 bytes if `len` is 8. Reads the `Hash` item of an optional as 8 bytes
+/// if `len` is 10. A `PTCH` record declares `len` for its value. No other declared size contains
+/// these two values. Reads every other value with [`read_value_from`] and does not check `len`.
+///
+/// # Errors
+///
+/// See [`read_value_from`].
+pub(crate) fn read_value_of_len<R: io::Read + io::Seek + ?Sized>(
+    reader: &mut R,
+    kind: Kind,
+    numbering: Numbering,
+    len: u64,
+) -> Result<PropertyValueEnum, Error> {
+    // `hash_at` is the offset of the `Hash` in a value that contains an 8-byte `Hash`.
+    let hash_at = match (kind, len) {
+        (Kind::Hash, 8) => 0,
+        (Kind::Optional, 10) => 2,
+        _ => return read_value_from(reader, kind, numbering),
+    };
+
+    let mut bytes = [0; 10];
+    let bytes = &mut bytes[..len as usize];
+    reader.read_exact(bytes)?;
+
+    let holds_hash = kind == Kind::Hash
+        || (Kind::unpack(bytes[0], numbering.is_legacy()).ok() == Some(Kind::Hash)
+            && bytes[1] != 0);
+    if !holds_hash {
+        reader.seek(io::SeekFrom::Current(-(len as i64)))?;
+        return read_value_from(reader, kind, numbering);
+    }
+
+    let widths = HashWidths::wide_at(hash_at);
+    read_value(&mut Cursor::with_widths(bytes, numbering, &widths), kind)
+}
+
 /// Gathers one value of `kind` from `reader` and hands its exact bytes to `decode`.
 ///
 /// See [`read_value_from`]; this is the same bridge for a caller that wants one concrete value
@@ -278,7 +328,8 @@ where
     F: FnOnce(&mut Cursor<'_>) -> Result<T, Error>,
 {
     let mut buf = Vec::new();
-    let extent = fill_value(reader, kind, numbering, &mut buf)?;
+    let mut widths = HashWidths::new();
+    let extent = fill_value(reader, kind, numbering, &mut buf, &mut widths)?;
 
     // A fixed-width kind is read to the byte, so most values need no winding at all.
     let over_read = buf.len() - extent;
@@ -286,33 +337,65 @@ where
         reader.seek(io::SeekFrom::Current(-(over_read as i64)))?;
     }
 
-    decode(&mut Cursor::new(&buf[..extent], numbering))
+    decode(&mut Cursor::with_widths(&buf[..extent], numbering, &widths))
 }
 
 /// Grows `buf` from `reader` until one value of `kind` fits, returning that value's length.
+///
+/// Writes the offsets of the 8-byte `Hash` values of the value to `widths`. Reads a `Hash` value
+/// as 4 bytes if no declared size contains it.
+///
+/// Reads to the declared end of the value before it returns an error from inside the value. The
+/// width search needs the whole value. Returns an error of the header of the value without more
+/// reads.
 fn fill_value<R: io::Read + io::Seek + ?Sized>(
     reader: &mut R,
     kind: Kind,
     numbering: Numbering,
     buf: &mut Vec<u8>,
+    widths: &mut HashWidths,
 ) -> Result<usize, Error> {
     // A fixed-width kind needs exactly its width and never probes; everything else guesses.
-    let mut want = kind.fixed_width().unwrap_or(PROBE);
+    let mut want = match kind {
+        Kind::Hash => 4,
+        kind => kind.fixed_width().unwrap_or(PROBE),
+    };
     loop {
         fill_to(reader, buf, want)?;
         let exhausted = buf.len() < want;
 
         let mut cur = Cursor::new(buf.as_slice(), numbering);
-        match cur.walk_value(kind) {
+        let error = match cur.walk_value(kind) {
             Ok(()) => return Ok(cur.position()),
-            // The probe was too small — unless the source had nothing more to give, in which
-            // case the value really is truncated and the walk's error is the right one.
-            Err(error @ Error::IOError(_)) => match exhausted {
-                true => return Err(error),
-                false => want = want.saturating_mul(2),
-            },
-            Err(error) => return Err(error),
+            Err(error) => error,
+        };
+
+        // `skip_value` reads only the declared sizes. It fails with an end-of-slice error if the
+        // value ends after `buf`. If `skip_value` does not fail with that error, `buf` contains
+        // the whole value. In that case more bytes do not change the result of the walk.
+        let partial = matches!(
+            Cursor::new(buf.as_slice(), numbering).skip_value(kind),
+            Err(Error::IOError(_))
+        );
+        if partial && !exhausted {
+            // The header of the value precedes each `Hash` value. An error in the header is not
+            // an effect of an 8-byte `Hash`. More bytes do not remove the error.
+            let header = Cursor::new(buf.as_slice(), numbering).value_shape(kind);
+            if matches!(header, Err(ref header) if !matches!(header, Error::IOError(_))) {
+                return Err(error);
+            }
+            want = want.saturating_mul(2);
+            continue;
         }
+
+        if !numbering.is_legacy() {
+            match resolve::search_value(buf, kind, widths) {
+                resolve::Resolution::Resolved { end } => return Ok(end),
+                resolve::Resolution::Ambiguous => return Err(Error::AmbiguousHashWidth),
+                resolve::Resolution::Unresolved => {}
+            }
+        }
+        return Err(error);
     }
 }
 

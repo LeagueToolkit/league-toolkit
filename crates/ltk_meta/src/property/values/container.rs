@@ -7,10 +7,68 @@ use crate::{
     Error, PropertyValueEnum, ValueSlot,
 };
 use byteorder::{WriteBytesExt, LE};
+use ltk_hash::HashWidth;
 use ltk_io_ext::{measure, window_at};
 
 mod item;
 pub use item::ContainerItem;
+
+/// Returns the width of `value` if `value` is a [`Kind::Hash`] value. Returns `None` otherwise.
+fn hash_width_of(value: &PropertyValueEnum) -> Option<HashWidth> {
+    match value {
+        PropertyValueEnum::Hash(hash) => Some(hash.width()),
+        _ => None,
+    }
+}
+
+/// Checks the width of `value` against `expected`. Sets `expected` to the width of `value` if
+/// `expected` is `None`. Does not check a `value` that is not a `Hash`.
+///
+/// # Errors
+///
+/// Fails with [`Error::MismatchedHashWidths`] if `value` is a `Hash` and its width is not
+/// `expected`.
+pub(crate) fn track_hash_width(
+    expected: &mut Option<HashWidth>,
+    value: &PropertyValueEnum,
+) -> Result<(), Error> {
+    let Some(got) = hash_width_of(value) else {
+        return Ok(());
+    };
+    match *expected {
+        None => *expected = Some(got),
+        Some(expected) if expected != got => {
+            return Err(Error::MismatchedHashWidths { expected, got })
+        }
+        Some(_) => {}
+    }
+    Ok(())
+}
+
+/// Checks the width of `value` against `expected`. Does not check a `value` that is not a `Hash`.
+/// Does not check any `value` if `expected` is `None`.
+///
+/// # Errors
+///
+/// Fails with [`Error::MismatchedHashWidths`] if `value` is a `Hash` and its width is not
+/// `expected`.
+pub(crate) fn check_hash_width(
+    expected: Option<HashWidth>,
+    value: &PropertyValueEnum,
+) -> Result<(), Error> {
+    match (expected, hash_width_of(value)) {
+        (Some(expected), Some(got)) if expected != got => {
+            Err(Error::MismatchedHashWidths { expected, got })
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Converts `error` to the [`io::Error`] that a writer returns for a container or a map side with
+/// two `Hash` widths.
+pub(crate) fn mixed_widths(error: Error) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidInput, error.to_string())
+}
 
 /// A list of values that all have the same [`Kind`].
 ///
@@ -20,6 +78,13 @@ pub use item::ContainerItem;
 ///
 /// The format has no nested containers, so a container, option or map cannot be an item. The
 /// checked constructors reject those kinds, and [`ContainerItem`] excludes them at compile time.
+///
+/// All [`Kind::Hash`] items of a container have the same width. A reader computes the width from
+/// the size of the container and the number of its items. [`Container::new`] and
+/// [`Container::push`] fail on a second width. [`Container::to_writer`] fails if the container
+/// contains two widths.
+///
+/// [`Container::to_writer`]: crate::traits::WriteProperty::to_writer
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Container {
@@ -43,10 +108,13 @@ impl Container {
     ///
     /// [`Error::InvalidNesting`] if `item_kind` is itself a container kind, or
     /// [`Error::MismatchedContainerTypes`] if an item is not `item_kind`.
+    ///
+    /// Fails with [`Error::MismatchedHashWidths`] if two `Hash` items have different widths.
     pub fn new(item_kind: Kind, items: Vec<PropertyValueEnum>) -> Result<Self, Error> {
         if item_kind.is_container() {
             return Err(Error::InvalidNesting(item_kind));
         }
+        let mut hash_width = None;
         for item in &items {
             if item.kind() != item_kind {
                 return Err(Error::MismatchedContainerTypes {
@@ -54,9 +122,17 @@ impl Container {
                     got: item.kind(),
                 });
             }
+            track_hash_width(&mut hash_width, item)?;
         }
 
         Ok(Self { item_kind, items })
+    }
+
+    /// Returns the width of the [`Kind::Hash`] items. Returns `None` if the items are not `Hash`
+    /// values or if the container is empty.
+    #[must_use]
+    pub fn hash_width(&self) -> Option<HashWidth> {
+        self.items.first().and_then(hash_width_of)
     }
 
     /// The kind every item in this container has.
@@ -120,6 +196,9 @@ impl Container {
     /// # Errors
     ///
     /// [`Error::MismatchedContainerTypes`] if `value` is not [`Container::item_kind`].
+    ///
+    /// Fails with [`Error::MismatchedHashWidths`] if `value` is a `Hash` and its width differs
+    /// from the width of the items.
     pub fn push(&mut self, value: PropertyValueEnum) -> Result<(), Error> {
         if value.kind() != self.item_kind {
             return Err(Error::MismatchedContainerTypes {
@@ -127,6 +206,7 @@ impl Container {
                 got: value.kind(),
             });
         }
+        check_hash_width(self.hash_width(), &value)?;
 
         self.items.push(value);
         Ok(())
@@ -213,14 +293,15 @@ impl WriteProperty for Container {
         if legacy {
             unimplemented!("legacy container writing");
         }
-
         writer.write_property_kind(self.item_kind)?;
         let size_pos = writer.stream_position()?;
         writer.write_u32::<LE>(0)?;
 
         let (size, _) = measure(writer, |writer| {
             writer.write_u32::<LE>(self.items.len() as _)?;
+            let mut hash_width = None;
             for item in &self.items {
+                track_hash_width(&mut hash_width, item).map_err(mixed_widths)?;
                 item.to_writer(writer)?;
             }
             Ok::<_, io::Error>(())

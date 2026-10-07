@@ -1,4 +1,4 @@
-use ltk_hash::BinHash;
+use ltk_hash::{BinHash, HashWidth};
 use miette::Diagnostic;
 
 use super::property::Kind;
@@ -40,6 +40,20 @@ pub enum Error {
     EmptyContainer,
     #[error("Mismatched types - expected {expected:?}, got {got:?}")]
     MismatchedContainerTypes { expected: Kind, got: Kind },
+    #[error(
+        "A hash value has a width of {} bytes. The other hash values of its container or map side \
+         have a width of {} bytes. Use the same width for all hash items of a container, all hash \
+         keys of a map and all hash values of a map",
+        got.bytes(),
+        expected.bytes()
+    )]
+    MismatchedHashWidths { expected: HashWidth, got: HashWidth },
+    #[error(
+        "Cannot resolve the hash widths of a map. Its size is valid for 4-byte keys with 8-byte \
+         values and for 8-byte keys with 4-byte values. Write the hash keys and the hash values of \
+         the map with the same width"
+    )]
+    AmbiguousHashWidth,
 
     #[error(
         "Cannot write a delta over a bin read with the legacy property kind numbering. \

@@ -8,7 +8,7 @@
 use std::fmt;
 
 use glam::{Mat4, Vec2, Vec3, Vec4};
-use ltk_hash::{BinHash, WadHash};
+use ltk_hash::{BinHash, HashValue, WadHash};
 use ltk_primitives::Color;
 
 use crate::{
@@ -60,8 +60,8 @@ pub enum ValueView<'a> {
     Color(Color<u8>),
     /// [`Kind::String`], borrowed from the buffered object.
     String(&'a str),
-    /// [`Kind::Hash`].
-    Hash(BinHash),
+    /// [`Kind::Hash`]. The value includes its stored width.
+    Hash(HashValue),
     /// [`Kind::WadChunkLink`].
     WadChunkLink(WadHash),
     /// [`Kind::ObjectLink`].
@@ -112,7 +112,7 @@ impl<'a> ValueView<'a> {
             K::Matrix44 => Self::Matrix44(cur.mat4_row_major()?),
             K::Color => Self::Color(cur.color_u8()?),
             K::String => Self::String(cur.str_u16()?),
-            K::Hash => Self::Hash(cur.bin_hash()?),
+            K::Hash => Self::Hash(cur.hash_value()?),
             K::WadChunkLink => Self::WadChunkLink(cur.wad_hash()?),
             K::ObjectLink => Self::ObjectLink(cur.bin_hash()?),
             K::Container => Self::Container(ContainerView::read(cur)?),
@@ -211,7 +211,7 @@ impl<'a> ContainerView<'a> {
         let item_kind = cur.item_kind()?;
 
         let size = cur.u32()? as usize;
-        let mut items = Cursor::new(cur.take(size)?, cur.numbering());
+        let mut items = cur.sub(size)?;
         let len = items.u32()?;
 
         Ok(Self {
@@ -277,7 +277,12 @@ impl<'a> ContainerView<'a> {
         }
 
         let mut cur = self.items;
-        match self.item_kind.fixed_width() {
+        // All `Hash` items of one container have the same width. `cur` is at the first item.
+        let width = match self.item_kind {
+            Kind::Hash => Some(cur.hash_width().bytes()),
+            kind => kind.fixed_width(),
+        };
+        match width {
             // Saturating is safe because `skip` refuses a distance it cannot add to its own
             // position: an offset too large to represent lands on the end-of-slice error a
             // walk to it would have raised, rather than wrapping around to a real position.
@@ -458,7 +463,7 @@ impl<'a> MapView<'a> {
         let value_kind = cur.item_kind()?;
 
         let size = cur.u32()? as usize;
-        let mut entries = Cursor::new(cur.take(size)?, cur.numbering());
+        let mut entries = cur.sub(size)?;
         let len = entries.u32()?;
 
         Ok(Self {
@@ -608,7 +613,7 @@ impl<'a> OptionalView<'a> {
         let item_kind = cur.item_kind()?;
 
         let value = match cur.bool()? {
-            true => Some(Cursor::new(cur.take_value(item_kind)?, cur.numbering())),
+            true => Some(cur.sub_value(item_kind)?),
             false => None,
         };
 
@@ -683,7 +688,7 @@ impl<'a> StructView<'a> {
         }
 
         let size = cur.u32()? as usize;
-        let mut properties = Cursor::new(cur.take(size)?, cur.numbering());
+        let mut properties = cur.sub(size)?;
         let property_count = properties.u16()?;
 
         Ok(Self {

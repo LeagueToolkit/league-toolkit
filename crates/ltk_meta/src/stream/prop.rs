@@ -11,7 +11,7 @@ use ltk_io_ext::ReaderExt as _;
 
 use crate::{
     stream::{
-        layout::{Cursor, Numbering},
+        layout::{resolve, Cursor, HashWidths, Numbering},
         owned, BatchObjects, BinToc, Entries, NoCache, ObjectCache, ObjectEntry, ObjectStream,
         Objects,
     },
@@ -49,6 +49,9 @@ pub struct BinStream<R: io::Read + io::Seek> {
     toc: BinToc,
     /// One object's declared byte range, reused across descents.
     buffer: Vec<u8>,
+    /// The offsets of the 8-byte `Hash` values of the buffered object. The allocation is reused
+    /// for each object.
+    widths: HashWidths,
     /// The kind-numbering latch. Mounting starts in the current numbering, and the first
     /// object whose kind bytes only make sense in the old one flips it for good.
     numbering: Numbering,
@@ -126,6 +129,7 @@ impl<R: io::Read + io::Seek> BinStream<R> {
             objects_start,
             toc: BinToc::default(),
             buffer: Vec::new(),
+            widths: HashWidths::new(),
             numbering: Numbering::Current,
             cache: Box::new(NoCache),
         })
@@ -411,13 +415,21 @@ impl<R: io::Read + io::Seek> BinStream<R> {
         }
     }
 
-    /// A cursor over the buffered object, under the handle's numbering.
+    /// Returns a cursor over the buffered object. The cursor uses the numbering of the handle and
+    /// the widths that the last [`BinStream::settle`] resolved.
     fn buffered(&self) -> Cursor<'_> {
-        Cursor::new(&self.buffer, self.numbering)
+        Cursor::with_widths(&self.buffer, self.numbering, &self.widths)
     }
 
-    /// Runs `attempt` over the buffered object, latching onto the legacy numbering if that is
-    /// the only one the bytes make sense under.
+    /// Runs `attempt` over the buffered object. Resolves the widths of its `Hash` values. Latches
+    /// onto the legacy numbering if the object is valid only with that numbering.
+    ///
+    /// The first run reads each `Hash` value as 4 bytes. If the first run fails, the width search
+    /// runs on the buffered bytes. `attempt` then runs again with the resolved widths. An object
+    /// without an 8-byte `Hash` is walked once.
+    ///
+    /// The width search runs before the numbering retry. An 8-byte `Hash` that is read as 4 bytes
+    /// fails on a kind byte, as a legacy file does.
     ///
     /// Only a kind byte can mean "this file uses the old numbering", and only if the handle
     /// has not already settled the question. The retry costs no I/O - the bytes are already in
@@ -427,7 +439,14 @@ impl<R: io::Read + io::Seek> BinStream<R> {
         path_hash: BinHash,
         attempt: impl Fn(Cursor<'_>) -> Result<T, Error>,
     ) -> Result<T, Error> {
-        let error = match attempt(self.buffered()) {
+        let resolved = resolve::with_resolved_widths(
+            &self.buffer,
+            self.numbering,
+            &mut self.widths,
+            resolve::search_object,
+            &attempt,
+        );
+        let error = match resolved {
             Ok(value) => return Ok(value),
             Err(error @ Error::InvalidPropertyTypePrimitive(_)) if !self.numbering.is_legacy() => {
                 error

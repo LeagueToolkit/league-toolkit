@@ -7,9 +7,10 @@ use ltk_io_ext::{measure, ReaderExt as _};
 use crate::{
     data_override::{BinOverride, PropertyPatch},
     path::PropertyPath,
+    stream::{layout::Numbering, owned},
     traits::ReaderExt as _,
     tree::read::read_objects,
-    BinKind, Error, PropertyValueEnum,
+    BinKind, Error,
 };
 
 /// The only `PTCH` container version the client accepts.
@@ -117,9 +118,15 @@ fn read_patch<R: io::Read + io::Seek + ?Sized>(
     let size = reader.read_u32::<LE>()?;
 
     let (real_size, patch) = measure(reader, |reader| {
+        let start = reader.stream_position()?;
         let kind = reader.read_property_kind(false)?;
         let path = read_path(reader, index, object_hash)?;
-        let value = PropertyValueEnum::from_reader(reader, kind, false)?;
+
+        // `size` is the only declared size that contains a `Hash` value of a record.
+        // `read_value_of_len` computes the width of that value from `value_len`.
+        let header = reader.stream_position()? - start;
+        let value_len = u64::from(size).saturating_sub(header);
+        let value = owned::read_value_of_len(reader, kind, Numbering::Current, value_len)?;
 
         Ok::<_, Error>(PropertyPatch {
             object_hash,

@@ -454,6 +454,9 @@ struct StreamCounts {
     viewed: usize,
     batched: usize,
     legacy_chunks: usize,
+    wide_hashes: usize,
+    /// The number of 8-byte `Hash` values per class and property.
+    wide_hash_sites: HashMap<(BinHash, BinHash), usize>,
 }
 
 impl fmt::Display for StreamCounts {
@@ -471,11 +474,61 @@ impl fmt::Display for StreamCounts {
             self.viewed
         )?;
         writeln!(f, "{} objects opened through a batch", self.batched)?;
-        write!(
+        writeln!(
             f,
             "{} chunks latched onto the legacy kind numbering",
             self.legacy_chunks
-        )
+        )?;
+        write!(f, "{} hash values of 8 bytes", self.wide_hashes)?;
+
+        let mut sites: Vec<_> = self.wide_hash_sites.iter().collect();
+        sites.sort();
+        for ((class, property), count) in sites {
+            write!(f, "\n  class {class:08x} property {property:08x}: {count}")?;
+        }
+        Ok(())
+    }
+}
+
+/// Counts the 8-byte `Hash` values in `value` per class and property. `value` is property `name`
+/// of an object or a struct of `class`. A value in a nested struct is counted with the class of
+/// that struct.
+fn count_wide_hashes(
+    class: BinHash,
+    name: BinHash,
+    value: &PropertyValueEnum,
+    sites: &mut HashMap<(BinHash, BinHash), usize>,
+) {
+    use PropertyValueEnum as P;
+    let mut count_struct = |s: &ltk_meta::property::values::Struct| {
+        for (name, value) in &s.properties {
+            count_wide_hashes(s.class_hash, *name, value, sites);
+        }
+    };
+    match value {
+        P::Struct(s) => count_struct(s),
+        P::Embedded(e) => count_struct(&e.0),
+        P::Hash(h) if h.width() == ltk_hash::HashWidth::W8 => {
+            *sites.entry((class, name)).or_default() += 1;
+        }
+        P::Container(c)
+        | P::UnorderedContainer(ltk_meta::property::values::UnorderedContainer(c)) => {
+            for item in c.items() {
+                count_wide_hashes(class, name, item, sites);
+            }
+        }
+        P::Optional(o) => {
+            if let Some(item) = o.value() {
+                count_wide_hashes(class, name, item, sites);
+            }
+        }
+        P::Map(m) => {
+            for (key, value) in m.entries() {
+                count_wide_hashes(class, name, key, sites);
+                count_wide_hashes(class, name, value, sites);
+            }
+        }
+        _ => {}
     }
 }
 
@@ -540,6 +593,30 @@ fn check_stream_parity(wad_path: &Path, data: &[u8], counts: &mut StreamCounts) 
             entry.path_hash
         );
         counts.properties += object.properties.len();
+
+        for (name_hash, value) in &object.properties {
+            count_wide_hashes(
+                object.class_hash,
+                *name_hash,
+                value,
+                &mut counts.wide_hash_sites,
+            );
+        }
+    }
+    counts.wide_hashes = counts.wide_hash_sites.values().sum();
+
+    // `to_writer` writes each `Hash` with the width that the reader resolved. The written bytes
+    // of a version 3 file equal the input bytes.
+    if eager.version == 3 {
+        let mut written = Cursor::new(Vec::with_capacity(data.len()));
+        eager
+            .to_writer(&mut written)
+            .unwrap_or_else(|e| panic!("{}: the bin did not write: {e}", context()));
+        assert!(
+            written.into_inner() == data,
+            "{}: the written bytes differ from the input bytes",
+            context()
+        );
     }
 
     // The sweep populated the TOC; asking for it (or sweeping again) reads nothing more.

@@ -161,6 +161,9 @@ impl Kind {
     /// is either self-sized or - in [`Kind::Optional`]'s case - as wide as what it holds.
     /// [`Kind::None`] occupies no bytes at all, so it is `Some(0)` rather than `None`.
     ///
+    /// Returns `None` for [`Kind::Hash`]. A `Hash` value occupies 4 or 8 bytes.
+    /// [`HashValue::width`](ltk_hash::HashValue::width) returns the width of one value.
+    ///
     /// # Examples
     ///
     /// ```
@@ -169,6 +172,7 @@ impl Kind {
     /// assert_eq!(PropertyKind::Vector3.fixed_width(), Some(12));
     /// assert_eq!(PropertyKind::None.fixed_width(), Some(0));
     /// assert_eq!(PropertyKind::String.fixed_width(), None);
+    /// assert_eq!(PropertyKind::Hash.fixed_width(), None);
     /// ```
     #[must_use]
     pub fn fixed_width(&self) -> Option<usize> {
@@ -177,12 +181,13 @@ impl Kind {
             K::None => Some(0),
             K::Bool | K::I8 | K::U8 | K::BitBool => Some(1),
             K::I16 | K::U16 => Some(2),
-            K::I32 | K::U32 | K::F32 | K::Color | K::Hash | K::ObjectLink => Some(4),
+            K::I32 | K::U32 | K::F32 | K::Color | K::ObjectLink => Some(4),
             K::I64 | K::U64 | K::Vector2 | K::WadChunkLink => Some(8),
             K::Vector3 => Some(12),
             K::Vector4 => Some(16),
             K::Matrix44 => Some(64),
             K::String
+            | K::Hash
             | K::Container
             | K::UnorderedContainer
             | K::Struct

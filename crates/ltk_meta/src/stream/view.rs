@@ -338,12 +338,12 @@ impl fmt::Debug for Properties<'_> {
 fn read_property<'a>(cur: &mut Cursor<'a>) -> Result<PropertyView<'a>, Error> {
     let name_hash = cur.bin_hash()?;
     let kind = cur.kind()?;
-    let value = cur.take_value(kind)?;
+    let value = cur.sub_value(kind)?;
 
     Ok(PropertyView {
         name_hash,
         kind,
-        value: Cursor::new(value, cur.numbering()),
+        value,
     })
 }
 
