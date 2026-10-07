@@ -1,5 +1,4 @@
 use itertools::{Either, Itertools};
-use ltk_meta::PropertyKind;
 
 use smallvec::{smallvec, SmallVec};
 
@@ -14,8 +13,10 @@ use crate::{
     cst::{ChildrenExt as _, Kind as CstKind},
     escaping,
     parse::{Span, TokenKind},
-    Node, RitoType,
+    Node,
 };
+
+use super::literals::ExpectedType;
 
 #[derive(Debug, thiserror::Error, Clone, Copy)]
 pub enum AnnotationResolveError {
@@ -60,7 +61,7 @@ impl<'a> Builder<'a> {
                     .iter()
                     .filter_map(|n| n.tree(self.cst))
                     .filter(|n| n.kind == CstKind::AnnotationArg))
-                .filter_map(|n| self.try_resolve_arg(None, n).transpose())
+                .filter_map(|n| self.try_resolve_arg(n).transpose())
             })
             .map(|args| {
                 let (args, arg_errs): (Vec<Argument>, SmallVec<[_; 1]>) =
@@ -83,11 +84,7 @@ impl<'a> Builder<'a> {
         }))
     }
 
-    fn try_resolve_arg(
-        &self,
-        type_hint: Option<RitoType>,
-        arg: &Node,
-    ) -> Result<Option<Argument>, AnnotationResolveError> {
+    fn try_resolve_arg(&self, arg: &Node) -> Result<Option<Argument>, AnnotationResolveError> {
         let children = arg.children.get(self.cst);
 
         let Some(name) = children
@@ -108,12 +105,7 @@ impl<'a> Builder<'a> {
                 .and_then(|c| c.token(self.cst))
                 .ok_or(AnnotationResolveError::MissingArgValue)?;
 
-            let value = Value::eval(
-                self.text,
-                token,
-                type_hint.or(Some(RitoType::simple(PropertyKind::I64))),
-                None,
-            )?;
+            let value = Value::eval(self.text, token, Some(ExpectedType::Any), None)?;
             Ok(Some(Argument::Named {
                 name: name.span,
                 value,

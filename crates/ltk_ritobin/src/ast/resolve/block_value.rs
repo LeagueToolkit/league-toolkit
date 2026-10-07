@@ -7,6 +7,7 @@ use crate::{
         builder::Builder,
         diagnostics::{Diagnostic as D, MaybeSpanDiag, TypeMismatch},
         node::{Map, MapEntry},
+        resolve::literals::ExpectedType,
         Property, Value,
     },
     cst::Kind,
@@ -122,7 +123,11 @@ impl<'a> Builder<'a> {
                     match node.kind {
                         Kind::Comment => continue,
                         Kind::ListItem => {
-                            match self.resolve_value(node, Some(item_hint), hint_span) {
+                            match self.resolve_value(
+                                node,
+                                Some(ExpectedType::from(item_hint)),
+                                hint_span,
+                            ) {
                                 Ok(v) => match v.try_coerce_to(item_kind) {
                                     Ok(coerced) => value = Some(coerced),
                                     Err(v) => self.push(D::unwrap(
@@ -329,7 +334,7 @@ impl<'a> Builder<'a> {
                 }
                 Kind::ListItem => {
                     match self
-                        .resolve_value(node, Some(item_hint), hint_span)
+                        .resolve_value(node, Some(ExpectedType::from(item_hint)), hint_span)
                         .and_then(|value| {
                             value.try_coerce_to(item_kind).map_err(|value| {
                                 TypeMismatch {

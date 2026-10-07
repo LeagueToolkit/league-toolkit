@@ -11,7 +11,7 @@ use crate::{
     },
     escaping,
     parse::{Token, TokenKind},
-    RitoType, Spanned, SpannedExt,
+    RitoType, RitobinName, Spanned, SpannedExt,
 };
 use span::Span;
 
@@ -65,7 +65,7 @@ impl Display for ParseNumericError {
         write!(
             f,
             "Could not parse {} - {reason}",
-            RitoType::simple(self.expected)
+            self.expected.to_rito_name()
         )
     }
 }
@@ -126,6 +126,28 @@ impl ValueEvalError {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExpectedType {
+    /// Allows ambiguous numerics, numeric will try resolve as u64, i64 & f32, in that order.
+    Any,
+    Exact(RitoType),
+}
+
+impl Display for ExpectedType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Any => f.write_str("numeric"),
+            Self::Exact(r) => r.fmt(f),
+        }
+    }
+}
+
+impl From<RitoType> for ExpectedType {
+    fn from(value: RitoType) -> Self {
+        Self::Exact(value)
+    }
+}
+
 impl Value {
     /// Evaluate a literal token into a value
     ///
@@ -135,8 +157,8 @@ impl Value {
     pub(crate) fn eval(
         text: &str,
         token: &Token,
-        numeric_type: Option<RitoType>,
-        numeric_type_span: Option<Span>,
+        expected_type: Option<ExpectedType>,
+        expected_type_span: Option<Span>,
     ) -> Result<Self, ValueEvalError> {
         use PropertyKind as K;
         Ok(match token {
@@ -172,63 +194,64 @@ impl Value {
                 span,
             } => {
                 let txt = &text[span];
-                // let Some(kind_hint) = numeric_hint else {
-                //     return Err(E::AmbiguousNumeric(*span));
-                // };
 
                 let txt = match txt.contains('_') {
                     true => Cow::Owned(txt.replace('_', "")),
                     false => Cow::Borrowed(txt),
                 };
 
-                let numeric_hint = numeric_type.map(|h| match h.base {
-                    K::Optional => h.value_subtype().unwrap_or(h.base),
-                    base => base,
-                });
-
-                match numeric_hint {
-                    Some(h @ K::U8) => {
-                        parse_int::<u8>(&txt, h, *span, |v, s| Self::U8(Spanned::new(s, v)))?
-                    }
-                    Some(h @ K::U16) => {
-                        parse_int::<u16>(&txt, h, *span, |v, s| Self::U16(Spanned::new(s, v)))?
-                    }
-                    Some(h @ K::U32) => {
-                        parse_int::<u32>(&txt, h, *span, |v, s| Self::U32(Spanned::new(s, v)))?
-                    }
-                    Some(h @ K::U64) => {
-                        parse_int::<u64>(&txt, h, *span, |v, s| Self::U64(Spanned::new(s, v)))?
-                    }
-                    Some(h @ K::I8) => {
-                        parse_int::<i8>(&txt, h, *span, |v, s| Self::I8(Spanned::new(s, v)))?
-                    }
-                    Some(h @ K::I16) => {
-                        parse_int::<i16>(&txt, h, *span, |v, s| Self::I16(Spanned::new(s, v)))?
-                    }
-                    Some(h @ K::I32) => {
-                        parse_int::<i32>(&txt, h, *span, |v, s| Self::I32(Spanned::new(s, v)))?
-                    }
-                    Some(h @ K::I64) => {
-                        parse_int::<i64>(&txt, h, *span, |v, s| Self::I64(Spanned::new(s, v)))?
-                    }
-                    Some(h @ K::F32) => Self::F32(Spanned::new(
-                        *span,
-                        txt.parse().map_err(|_| ParseNumericError {
-                            expected: h,
-                            error: None,
-                            span: *span,
-                        })?,
-                    )),
-                    Some(numeric_hint) => {
-                        return Err(TypeMismatch {
-                            span: *span,
-                            expected: RitoType::simple(numeric_hint).into(),
-                            expected_span: numeric_type_span,
-                            got: RitoTypeOrVirtual::numeric(),
+                use ExpectedType as H;
+                match expected_type {
+                    Some(H::Exact(h)) => {
+                        let h = match h.base {
+                            K::Optional => h.subtypes[0].ok_or(E::AmbiguousNumeric(*span))?,
+                            base => base,
+                        };
+                        match h {
+                            K::U8 => parse_int::<u8>(&txt, h, *span, |v, s| {
+                                Self::U8(Spanned::new(s, v))
+                            })?,
+                            K::U16 => parse_int::<u16>(&txt, h, *span, |v, s| {
+                                Self::U16(Spanned::new(s, v))
+                            })?,
+                            K::U32 => parse_int::<u32>(&txt, h, *span, |v, s| {
+                                Self::U32(Spanned::new(s, v))
+                            })?,
+                            K::U64 => parse_int::<u64>(&txt, h, *span, |v, s| {
+                                Self::U64(Spanned::new(s, v))
+                            })?,
+                            K::I8 => parse_int::<i8>(&txt, h, *span, |v, s| {
+                                Self::I8(Spanned::new(s, v))
+                            })?,
+                            K::I16 => parse_int::<i16>(&txt, h, *span, |v, s| {
+                                Self::I16(Spanned::new(s, v))
+                            })?,
+                            K::I32 => parse_int::<i32>(&txt, h, *span, |v, s| {
+                                Self::I32(Spanned::new(s, v))
+                            })?,
+                            K::I64 => parse_int::<i64>(&txt, h, *span, |v, s| {
+                                Self::I64(Spanned::new(s, v))
+                            })?,
+                            K::F32 => Self::F32(Spanned::new(
+                                *span,
+                                txt.parse().map_err(|_| ParseNumericError {
+                                    expected: h,
+                                    error: None,
+                                    span: *span,
+                                })?,
+                            )),
+                            expected => {
+                                return Err(TypeMismatch {
+                                    span: *span,
+                                    expected: RitoType::simple(expected).into(),
+                                    expected_span: expected_type_span,
+                                    got: RitoTypeOrVirtual::numeric(),
+                                }
+                                .into());
+                            }
                         }
-                        .into());
                     }
-                    None => {
+                    Some(H::Any) => {
                         (parse_int::<u64>(&txt, K::U64, *span, |v, s| {
                             Self::U64(Spanned::new(s, v))
                         })
@@ -236,6 +259,9 @@ impl Value {
                             Self::I64(Spanned::new(s, v))
                         }))
                         .or(parse_f32(&txt, *span)))?
+                    }
+                    None => {
+                        return Err(E::AmbiguousNumeric(*span));
                     }
                 }
             }
