@@ -29,7 +29,7 @@ impl PartialBin {
     }
 }
 
-impl Ast {
+impl<A> Ast<A> {
     fn bin_objects(&self) -> impl Iterator<Item = BinObject> + '_ {
         self.root_entries().map(|RootEntry { path_hash, object }| {
             let struct_val = object.to_bin_value();
