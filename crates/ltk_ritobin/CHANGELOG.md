@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_ritobin-v0.9.0...ltk_ritobin-v0.10.0) - 2026-10-07
+
+### Added
+
+- *(ltk_meta)* [**breaking**] read 8-byte hash values
+- feat!(ltk_ritobin): extract span to crate, custom Debug trait for span resolution
+- *(ltk_mapgeo)* add nvr reader
+
+### Fixed
+
+- *(ltk_ritobin)* replace span crates with ltk_ritobin_derive
+- *(ltk_ritobin)* enforce span crate derive feature, for ritobin tests
+- *(ltk_ritobin)* transparent Display impl for Spanned<T>
+- *(ltk_ritobin)* comment at eof edgecase
+
+### Other
+
+- Merge pull request #277 from LeagueToolkit/feat/hash-width
+- refactor!(ltk_ritobin): extract ast map value to own struct
+- *(ltk_ritobin)* cleaner ast diagnostics
+
 ## [0.9.0](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_ritobin-v0.8.4...ltk_ritobin-v0.9.0) - 2026-09-25
 
 ### Added
