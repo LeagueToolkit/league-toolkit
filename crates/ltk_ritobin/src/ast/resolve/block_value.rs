@@ -1,5 +1,6 @@
 use ltk_meta::PropertyKind;
 
+use crate::span::Span;
 use crate::{
     ast::{
         builder::Builder,
@@ -10,7 +11,6 @@ use crate::{
     cst::Kind,
     Node, RitoType,
 };
-use span::Span;
 
 impl<'a> Builder<'a> {
     /// Attempt to resolve a `Block`/`ListItemBlock` node to a value

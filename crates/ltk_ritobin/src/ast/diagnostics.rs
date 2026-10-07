@@ -1,8 +1,8 @@
 use std::fmt::Display;
 
+use crate::span::Span;
 use ltk_hash::{BinHash, Hash as _};
 use ltk_meta::{path::PropertyPathError, PropertyKind};
-use span::Span;
 
 use crate::{
     ast::{
@@ -539,7 +539,7 @@ impl Diagnostic {
 }
 
 #[derive(Debug, Clone, Copy)]
-#[cfg_attr(feature = "span_print", derive(span::DebugSpans))]
+#[cfg_attr(feature = "span_print", derive(crate::span::DebugSpans))]
 pub struct DiagnosticWithSpan {
     pub diagnostic: Diagnostic,
     pub span: Span,

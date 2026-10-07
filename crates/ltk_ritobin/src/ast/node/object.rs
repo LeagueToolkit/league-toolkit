@@ -1,10 +1,10 @@
 use ltk_hash::BinHash;
 
 use crate::ast::{hash::HashedLiteral, node::Property};
-use span::Span;
+use crate::span::Span;
 
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "span_print", derive(span::DebugSpans))]
+#[cfg_attr(feature = "span_print", derive(crate::span::DebugSpans))]
 pub struct Object {
     pub class_hash: HashedLiteral<BinHash>,
     /// The entire `ClassName { .. }` span

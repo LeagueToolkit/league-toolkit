@@ -57,7 +57,7 @@ fn derive(input: &DeriveInput) -> syn::Result<TokenStream2> {
     };
 
     Ok(quote! {
-        impl #impl_generics ::span::debug::DebugSpans
+        impl #impl_generics ::ltk_ritobin::span::debug::DebugSpans
             for #name #ty_generics #where_clause
         {
             fn fmt(
@@ -66,7 +66,7 @@ fn derive(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 f: &mut ::std::fmt::Formatter<'_>,
             ) -> ::std::fmt::Result {
                 #[allow(unused_imports)]
-                use ::span::debug::__private::{DebugField as _, SpannedField as _};
+                use ::ltk_ritobin::span::debug::__private::{DebugField as _, SpannedField as _};
                 #body
             }
         }
@@ -257,15 +257,15 @@ fn derive_enum(data: &DataEnum) -> TokenStream2 {
 fn debug_value(value: TokenStream2, ty: &Type) -> TokenStream2 {
     if is_spanned(ty) {
         quote! {
-            &::span::debug::__private::spanned(
+            &::ltk_ritobin::span::debug::__private::spanned(
                 (#value).span,
-                (&::span::debug::__private::Probe(&(#value).value, text)).dbg_field(),
+                (&::ltk_ritobin::span::debug::__private::Probe(&(#value).value, text)).dbg_field(),
                 text,
             )
         }
     } else {
         quote! {
-            &(&::span::debug::__private::Probe(&#value, text)).dbg_field()
+            &(&::ltk_ritobin::span::debug::__private::Probe(&#value, text)).dbg_field()
         }
     }
 }

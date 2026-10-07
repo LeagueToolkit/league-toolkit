@@ -120,10 +120,11 @@ use std::{
 #[allow(unused, reason = "for module level doc link")]
 use ltk_meta::Bin;
 
+// The `DebugSpans` derive emits `::ltk_ritobin::span` paths.
+extern crate self as ltk_ritobin;
+
+pub mod span;
 pub use span::Span;
-pub mod span {
-    pub use span::*;
-}
 
 pub mod ast;
 pub mod cst;

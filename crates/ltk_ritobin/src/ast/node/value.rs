@@ -8,14 +8,14 @@ use ltk_primitives::Color;
 mod coerce;
 pub use coerce::CanCoerce;
 
+use crate::span::Span;
 use crate::{
     ast::{hash::HashedLiteral, Object},
     RitoType, RitobinName, Spanned,
 };
-use span::Span;
 
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "span_print", derive(span::DebugSpans))]
+#[cfg_attr(feature = "span_print", derive(crate::span::DebugSpans))]
 pub enum Value {
     Unresolved {
         span: Span,

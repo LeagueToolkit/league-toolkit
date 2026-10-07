@@ -6,7 +6,7 @@ use crate::ast::{
     query::{AstObjectDetail, AstPropertyDetail, AstRootDetail, AstRootEntryDetail, NodeDetail},
     Object, Property, RootEntry, Value,
 };
-use span::Span;
+use crate::span::Span;
 
 /// A reference to a node in an [`Ast`].
 #[derive(Debug, Clone, Copy)]

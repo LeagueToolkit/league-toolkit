@@ -1,5 +1,6 @@
 use ltk_meta::PropertyKind;
 
+use crate::span::Span;
 use crate::{
     ast::{
         builder::Builder,
@@ -10,7 +11,6 @@ use crate::{
     parse::TokenKind,
     Node, RitoType, RitobinName as _,
 };
-use span::Span;
 
 impl<'a> Builder<'a> {
     pub fn resolve_type_expr(&mut self, tree: &Node) -> Option<TypeExpr> {

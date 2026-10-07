@@ -1,5 +1,6 @@
 use ltk_meta::PropertyKind;
 
+use crate::span::Span;
 use crate::{
     ast::{
         builder::Builder,
@@ -15,7 +16,6 @@ use crate::{
     parse::{Token, TokenKind},
     Node, RitoType, Spanned, SpannedExt,
 };
-use span::Span;
 
 pub struct RawEntry {
     pub key: Value,
