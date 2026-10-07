@@ -62,18 +62,23 @@ impl<'a> Builder<'a> {
                 continue;
             };
 
-            if node.kind == Kind::Annotation {
-                if let Some(ann) = self.resolve_annotation(node) {
-                    anns.push(ann);
+            match node.kind {
+                Kind::Comment => continue,
+                Kind::Annotation => {
+                    if let Some(ann) = self.resolve_annotation(node) {
+                        anns.push(ann);
+                    }
+                    continue;
                 }
-                continue;
+                _ => {}
             }
+
             if let Some(root) = self.resolve_root(node, roots.len()) {
-                if let Some(anns) = (!anns.is_empty()).then(|| take(&mut anns)) {
-                    self.apply_annotations(anns, root.span());
-                };
                 roots.push(root);
             }
+            if let Some(anns) = (!anns.is_empty()).then(|| take(&mut anns)) {
+                self.apply_annotations(anns, node.span);
+            };
         }
         roots
     }
