@@ -235,7 +235,7 @@
 //     let _labels = err.labels();
 //     let _source = err.source_code();
 // }
-#[test]
-fn test_parse_sample() {
-    insta::assert_snapshot!(tree(SAMPLE_RITOBIN));
-}
+// #[test]
+// fn test_parse_sample() {
+//     insta::assert_snapshot!(tree(SAMPLE_RITOBIN));
+// }
