@@ -195,6 +195,19 @@ impl<H: HashProvider> Builder<H> {
             None => self.spanned_hexlit(h),
         }
     }
+    /// Writes a `link` value. A link stores the path hash of an object, so the name is looked up
+    /// in the entry table first. Falls back to the hash table.
+    fn hash_link_lit(&mut self, h: BinHash) -> Child {
+        let name = self
+            .hashes
+            .lookup_entry(h)
+            .or_else(|| self.hashes.lookup_hash(h))
+            .map(|h| format!("\"{h}\""));
+        match name {
+            Some(h) => self.spanned_token(Tok::String, h),
+            None => self.spanned_hexlit(h),
+        }
+    }
     fn hash_wad_lit(&mut self, h: WadHash) -> Child {
         match self.hashes.lookup_wad(h).map(|h| format!("\"{h}\"")) {
             Some(h) => self.spanned_token(Tok::String, h),
@@ -309,7 +322,7 @@ impl<H: HashProvider> Builder<H> {
             PropertyValueEnum::Hash(h) => self.hash_value_lit(**h),
 
             PropertyValueEnum::WadChunkLink(h) => self.hash_wad_lit(**h),
-            PropertyValueEnum::ObjectLink(h) => self.hash_hash_lit(**h),
+            PropertyValueEnum::ObjectLink(h) => self.hash_link_lit(**h),
 
             PropertyValueEnum::Container(container)
             | PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(container)) => {
@@ -575,7 +588,7 @@ mod test {
     use ltk_meta::{property::values, Bin, BinObject};
 
     use super::*;
-    use crate::print::CstPrinter;
+    use crate::{print::CstPrinter, HashMapProvider};
 
     // bin -> cst -> txt -> cst -> bin
     fn roundtrip(bin: Bin) {
@@ -725,6 +738,54 @@ mod test {
                 )
                 .build(),
         );
+    }
+
+    /// Prints a bin with one object that has one property with the value `value`.
+    fn print_value(hashes: &HashMapProvider, value: impl Into<PropertyValueEnum>) -> String {
+        let bin = Bin::builder()
+            .object(
+                BinObject::builder(0xDEADBEEF, 0x12344321)
+                    .property(0x1, value)
+                    .build(),
+            )
+            .build();
+        let (cst, buf) = Builder::new().with_hashes(hashes).build(&bin);
+
+        let mut str = String::new();
+        CstPrinter::new(&buf, &mut str, Default::default())
+            .print(&cst)
+            .unwrap();
+        str
+    }
+
+    #[test]
+    fn link_prints_name_from_entry_table() {
+        let mut hashes = HashMapProvider::new();
+        hashes.insert_entry(0x58a7d43d, "Characters/Rengar/CAC/Rengar_Base");
+
+        let text = print_value(&hashes, values::ObjectLink::new(0x58a7d43d));
+        assert!(
+            text.contains(r#"link = "Characters/Rengar/CAC/Rengar_Base""#),
+            "{text}"
+        );
+
+        // A `hash` value is not an object path. The entry table is not used for it.
+        let text = print_value(&hashes, values::Hash::new(0x58a7d43d));
+        assert!(text.contains("hash = 0x58a7d43d"), "{text}");
+    }
+
+    #[test]
+    fn link_falls_back_to_hash_table() {
+        let mut hashes = HashMapProvider::new();
+        hashes.insert_hash(0x1, "hash table");
+        hashes.insert_hash(0x2, "hash table");
+        hashes.insert_entry(0x2, "entry table");
+
+        let text = print_value(&hashes, values::ObjectLink::new(0x1));
+        assert!(text.contains(r#"link = "hash table""#), "{text}");
+
+        let text = print_value(&hashes, values::ObjectLink::new(0x2));
+        assert!(text.contains(r#"link = "entry table""#), "{text}");
     }
 
     #[test]

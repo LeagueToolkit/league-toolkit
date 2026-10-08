@@ -19,6 +19,8 @@ use ltk_hash::{BinHash, WadHash};
 #[allow(unused)]
 pub trait HashProvider {
     /// Look up a bin entry path hash (root object paths like "Characters/Aatrox/Skins/Skin0").
+    ///
+    /// Also used for the value of a `link` property, which stores the path hash of an object.
     fn lookup_entry(&self, hash: BinHash) -> Option<Cow<'_, str>> {
         None
     }
@@ -29,6 +31,8 @@ pub trait HashProvider {
     }
 
     /// Look up a bin hash value (hash property type values).
+    ///
+    /// Also used for the value of a `link` property if `lookup_entry` returns `None`.
     fn lookup_hash(&self, hash: BinHash) -> Option<Cow<'_, str>> {
         None
     }
