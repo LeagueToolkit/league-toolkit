@@ -30,14 +30,26 @@ impl<'a> Builder<'a> {
         parent_value_kind: Option<RitoType>,
         parent_type_span: Option<Span>,
     ) -> Result<Value, Diagnostic> {
-        let token = key_node
+        use Diagnostic as D;
+        let node = key_node
             .children
             .get(self.cst)
             .first()
-            .ok_or(Diagnostic::InvalidHash(key_node.span))?
-            .token(self.cst);
+            .ok_or(D::InvalidHash(key_node.span))?;
 
-        Ok(match token {
+        if let Some(block) = node
+            .tree(self.cst)
+            .filter(|tree| tree.kind == Kind::BlockKey)
+        {
+            let key_kind = parent_value_kind
+                .and_then(|k| k.subtypes[0])
+                .ok_or(D::InvalidHash(key_node.span))?;
+            return self
+                .resolve_block_value(block, RitoType::simple(key_kind), parent_type_span)
+                .map_err(|e| e.diagnostic);
+        }
+
+        Ok(match node.token(self.cst) {
             Some(Token {
                 kind: TokenKind::Name,
                 span,
@@ -75,7 +87,7 @@ impl<'a> Builder<'a> {
                 parent_type_span,
             ),
             // TODO: change this error
-            None => return Err(Diagnostic::InvalidHash(key_node.span)),
+            None => return Err(D::InvalidHash(key_node.span)),
         })
     }
 
