@@ -19,7 +19,7 @@ glam = { workspace = true }
 
 serde = { workspace = true, optional = true }
 
-ltk_hash = { version = "0.5.0", path = "../ltk_hash" }
+ltk_hash = { version = "0.5.1", path = "../ltk_hash" }
 
 [dev-dependencies]
 serde_json = { workspace = true }
