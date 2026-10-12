@@ -1,3 +1,5 @@
+use std::mem::take;
+
 use ltk_meta::PropertyKind;
 
 use crate::span::Span;
@@ -6,6 +8,7 @@ use crate::{
         builder::Builder,
         diagnostics::{Diagnostic as D, MaybeSpanDiag, TypeMismatch},
         node::{Map, MapEntry},
+        resolve::literals::ExpectedType,
         Property, Value,
     },
     cst::Kind,
@@ -120,7 +123,11 @@ impl<'a> Builder<'a> {
                     match node.kind {
                         Kind::Comment => continue,
                         Kind::ListItem => {
-                            match self.resolve_value(node, Some(item_hint), hint_span) {
+                            match self.resolve_value(
+                                node,
+                                Some(ExpectedType::from(item_hint)),
+                                hint_span,
+                            ) {
                                 Ok(v) => match v.try_coerce_to(item_kind) {
                                     Ok(coerced) => value = Some(coerced),
                                     Err(v) => self.push(D::unwrap(
@@ -173,41 +180,63 @@ impl<'a> Builder<'a> {
         hint: RitoType,
     ) -> Vec<Property> {
         let mut properties = Vec::new();
+        let mut ann_set = vec![];
         for child in block.children.get(self.cst).iter() {
             let Some(node) = child.tree(self.cst) else {
                 continue;
             };
             match node.kind {
-                Kind::Comment => continue,
-                Kind::Entry => match self.resolve_entry(node, Some(hint), None) {
-                    Ok(entry) => match entry.key.try_coerce_to(PropertyKind::Hash) {
-                        Ok(Value::Hash(hash)) => properties.push(Property {
-                            name: hash,
-                            type_expr: entry.type_expr,
-                            value: entry.value,
-                        }),
-                        Ok(value) | Err(value) => self.push(D::unwrap(
-                            TypeMismatch {
-                                span: value.span(),
-                                expected: RitoType::simple(PropertyKind::Hash).into(),
-                                expected_span: None,
-                                got: value.rito_type().into(),
-                            }
-                            .into(),
-                        )),
-                    },
-                    Err(e) => self.push(e.fallback(node.span)),
-                },
-                Kind::ListItem | Kind::ListItemBlock => self.push(
-                    D::UnexpectedItem {
-                        span: node.trimmed_span(self.cst),
-                        parent: hint,
-                        expected: crate::ItemShape::Entry,
+                Kind::Comment => {}
+                Kind::Annotation => {
+                    if let Some(ann) = self.resolve_annotation(node) {
+                        ann_set.push(ann);
                     }
-                    .unwrap(),
-                ),
-                _ => {}
+                }
+                Kind::Entry => {
+                    match self.resolve_entry(node, Some(hint), None) {
+                        Ok(entry) => match entry.key.try_coerce_to(PropertyKind::Hash) {
+                            Ok(Value::Hash(hash)) => {
+                                let property = Property {
+                                    name: hash,
+                                    type_expr: entry.type_expr,
+                                    value: entry.value,
+                                };
+                                properties.push(property);
+                            }
+                            Ok(value) | Err(value) => self.push(D::unwrap(
+                                TypeMismatch {
+                                    span: value.span(),
+                                    expected: RitoType::simple(PropertyKind::Hash).into(),
+                                    expected_span: None,
+                                    got: value.rito_type().into(),
+                                }
+                                .into(),
+                            )),
+                        },
+                        Err(e) => self.push(e.fallback(node.span)),
+                    }
+                    if let Some(anns) = (!ann_set.is_empty()).then(|| take(&mut ann_set)) {
+                        self.apply_annotations(anns, node.span);
+                    }
+                }
+                _ => {
+                    self.push(
+                        D::UnexpectedItem {
+                            span: node.trimmed_span(self.cst),
+                            parent: hint,
+                            expected: crate::ItemShape::Entry,
+                        }
+                        .unwrap(),
+                    );
+                    if let Some(anns) = (!ann_set.is_empty()).then(|| take(&mut ann_set)) {
+                        self.apply_annotations(anns, node.span);
+                    }
+                }
             }
+        }
+        if let Some((l, r)) = ann_set.first().zip(ann_set.last()) {
+            let span = l.span.cover(r.span);
+            self.push(D::TrailingAnnotations(span).unwrap());
         }
         properties
     }
@@ -221,58 +250,80 @@ impl<'a> Builder<'a> {
     ) -> Vec<MapEntry> {
         let hint = RitoType::map(key_kind, value_kind);
         let mut entries = Vec::new();
+        let mut ann_set = vec![];
         for child in block.children.get(self.cst).iter() {
             let Some(node) = child.tree(self.cst) else {
                 continue;
             };
             match node.kind {
-                Kind::Comment => continue,
-                Kind::Entry => match self.resolve_entry(node, Some(hint), hint_span) {
-                    Ok(entry) => match entry.key.try_coerce_to(key_kind) {
-                        Ok(key) => {
-                            match entry.value.as_ref() {
-                                Some(value) if value.kind().is_some_and(|k| k != value_kind) => {
-                                    self.push(D::unwrap(
-                                        TypeMismatch {
-                                            span: value.span(),
-                                            expected: RitoType::simple(value_kind).into(),
-                                            expected_span: hint_span,
-                                            got: value.rito_type().into(),
-                                        }
-                                        .into(),
-                                    ));
-                                }
-                                _ => {
-                                    // reporting the error for not having a value should be handled already
-                                }
-                            }
-                            entries.push(MapEntry {
-                                key,
-                                value: entry.value,
-                            });
-                        }
-                        Err(key) => self.push(D::unwrap(
-                            TypeMismatch {
-                                span: key.span(),
-                                expected: RitoType::simple(key_kind).into(),
-                                expected_span: hint_span,
-                                got: key.rito_type().into(),
-                            }
-                            .into(),
-                        )),
-                    },
-                    Err(e) => self.push(e.fallback(node.span)),
-                },
-                Kind::ListItem | Kind::ListItemBlock => self.push(
-                    D::UnexpectedItem {
-                        span: node.trimmed_span(self.cst),
-                        parent: hint,
-                        expected: crate::ItemShape::Entry,
+                Kind::Comment => {}
+                Kind::Annotation => {
+                    if let Some(ann) = self.resolve_annotation(node) {
+                        ann_set.push(ann);
                     }
-                    .unwrap(),
-                ),
-                _ => {}
+                }
+                Kind::Entry => {
+                    match self.resolve_entry(node, Some(hint), hint_span) {
+                        Ok(entry) => match entry.key.try_coerce_to(key_kind) {
+                            Ok(key) => {
+                                match entry.value.as_ref() {
+                                    Some(value)
+                                        if value.kind().is_some_and(|k| k != value_kind) =>
+                                    {
+                                        self.push(D::unwrap(
+                                            TypeMismatch {
+                                                span: value.span(),
+                                                expected: RitoType::simple(value_kind).into(),
+                                                expected_span: hint_span,
+                                                got: value.rito_type().into(),
+                                            }
+                                            .into(),
+                                        ));
+                                    }
+                                    _ => {
+                                        // reporting the error for not having a value should be handled already
+                                    }
+                                }
+                                entries.push(MapEntry {
+                                    key,
+                                    value: entry.value,
+                                });
+                            }
+                            Err(key) => self.push(D::unwrap(
+                                TypeMismatch {
+                                    span: key.span(),
+                                    expected: RitoType::simple(key_kind).into(),
+                                    expected_span: hint_span,
+                                    got: key.rito_type().into(),
+                                }
+                                .into(),
+                            )),
+                        },
+                        Err(e) => self.push(e.fallback(node.span)),
+                    }
+
+                    if let Some(anns) = (!ann_set.is_empty()).then(|| take(&mut ann_set)) {
+                        self.apply_annotations(anns, node.span);
+                    }
+                }
+                _ => {
+                    self.push(
+                        D::UnexpectedItem {
+                            span: node.trimmed_span(self.cst),
+                            parent: hint,
+                            expected: crate::ItemShape::Entry,
+                        }
+                        .unwrap(),
+                    );
+                    if let Some(anns) = (!ann_set.is_empty()).then(|| take(&mut ann_set)) {
+                        self.apply_annotations(anns, node.span);
+                    }
+                }
             }
+        }
+        if let Some((l, r)) = ann_set.first().zip(ann_set.last()) {
+            let span = l.span.cover(r.span);
+            self.push(D::TrailingAnnotations(span).unwrap());
         }
         entries
     }
@@ -285,15 +336,21 @@ impl<'a> Builder<'a> {
     ) -> Vec<Value> {
         let item_hint = RitoType::simple(item_kind);
         let mut items = Vec::new();
+        let mut ann_set = vec![];
         for child in block.children.get(self.cst).iter() {
             let Some(node) = child.tree(self.cst) else {
                 continue;
             };
             match node.kind {
-                Kind::Comment => continue,
+                Kind::Comment => {}
+                Kind::Annotation => {
+                    if let Some(ann) = self.resolve_annotation(node) {
+                        ann_set.push(ann);
+                    }
+                }
                 Kind::ListItem => {
                     match self
-                        .resolve_value(node, Some(item_hint), hint_span)
+                        .resolve_value(node, Some(ExpectedType::from(item_hint)), hint_span)
                         .and_then(|value| {
                             value.try_coerce_to(item_kind).map_err(|value| {
                                 TypeMismatch {
@@ -310,23 +367,39 @@ impl<'a> Builder<'a> {
                         }
                         Err(e) => self.push(e.default_span(node.span)),
                     }
+                    if let Some(anns) = (!ann_set.is_empty()).then(|| take(&mut ann_set)) {
+                        self.apply_annotations(anns, node.span);
+                    }
                 }
                 Kind::ListItemBlock => {
                     match self.resolve_list_item_block(node, item_hint, hint_span) {
-                        Ok(v) => items.push(v),
+                        Ok(v) => {
+                            items.push(v);
+                        }
                         Err(e) => self.push(e.fallback(node.span)),
                     }
-                }
-                Kind::Entry => self.push(
-                    D::UnexpectedItem {
-                        span: node.trimmed_span(self.cst),
-                        parent: RitoType::container(item_kind),
-                        expected: crate::ItemShape::Value,
+                    if let Some(anns) = (!ann_set.is_empty()).then(|| take(&mut ann_set)) {
+                        self.apply_annotations(anns, node.span);
                     }
-                    .unwrap(),
-                ),
-                _ => {}
+                }
+                _ => {
+                    self.push(
+                        D::UnexpectedItem {
+                            span: node.trimmed_span(self.cst),
+                            parent: RitoType::container(item_kind),
+                            expected: crate::ItemShape::Value,
+                        }
+                        .unwrap(),
+                    );
+                    if let Some(anns) = (!ann_set.is_empty()).then(|| take(&mut ann_set)) {
+                        self.apply_annotations(anns, node.span);
+                    }
+                }
             }
+        }
+        if let Some((l, r)) = ann_set.first().zip(ann_set.last()) {
+            let span = l.span.cover(r.span);
+            self.push(D::TrailingAnnotations(span).unwrap());
         }
         items
     }

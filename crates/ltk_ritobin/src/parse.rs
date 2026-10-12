@@ -121,6 +121,43 @@ entries: map[hash, embed] = {
     }
 
     #[test]
+    fn annotations_simple() {
+        assert_success(
+            r#"
+@foo(bar = 1, rest = "not", fly, fall = false)
+prop: u32 = 0
+        "#,
+        );
+    }
+    #[test]
+    fn annotations_complex() {
+        assert_success(
+            r#"
+#PROP_text
+type: string = "my_str" # inline comment
+version: u32 = 3
+@foo(bar = 1, rest = "not", fly, fall = false)
+linked: list[string] = { }
+entries: map[hash, embed] = {
+    @bar(foo = 1, rest = "yet", fly, fall = true)
+    "foo" = Bar {
+        a = 5 # 23
+        # asdasd
+    }
+}
+        "#,
+        );
+    }
+    #[test]
+    fn annotation_edgecases() {
+        assert_fail("@(a");
+        assert_fail("@(");
+        assert_fail("@a(");
+        assert_fail("@");
+        assert_fail("@()");
+    }
+
+    #[test]
     fn inline_block_spans() {
         let text = "a: list[pointer] = { B { x: f32 = 1 } }";
         let cst = assert_success(text);

@@ -25,6 +25,9 @@ pub fn stmt_or_list_item(p: &mut Parser) -> (MarkClosed, TreeKind) {
             });
             res = (m, TreeKind::Comment);
         }
+        (At, _, _) => {
+            res = (annotation(p), TreeKind::Annotation);
+        }
         (Name | HexLit, LCurly, _) => {
             let m = p.open();
             p.advance();
@@ -55,6 +58,36 @@ pub fn stmt_or_list_item(p: &mut Parser) -> (MarkClosed, TreeKind) {
     while p.eat(Newline) {}
 
     res
+}
+
+pub fn annotation(p: &mut Parser) -> MarkClosed {
+    p.scope(TreeKind::Annotation, |p| {
+        p.expect(At);
+        p.expect(Name);
+        if p.at(LParen) {
+            p.scope(TreeKind::AnnotationArgList, |p| {
+                // "name", "name = true", "name = 2"
+                p.advance();
+                while p.at_any(&[RParen, Eof, Newline]).is_none() {
+                    p.scope(TreeKind::AnnotationArg, |p| {
+                        p.expect(Name);
+                        if p.at(Eq) {
+                            p.advance();
+                            p.expect_any(&[String, Number, HexLit, True, False, Null]);
+                        }
+                    });
+                    while p.at(Comma) {
+                        p.advance();
+                    }
+                    while p.at_any(&[RParen, Name, Eof, Newline]).is_none() {
+                        p.advance_with_error(ErrorKind::Unexpected { token: p.nth(0) }, None);
+                    }
+                }
+            });
+            p.expect(RParen);
+        }
+    })
+    .1
 }
 
 pub fn stmt(p: &mut Parser) -> MarkClosed {

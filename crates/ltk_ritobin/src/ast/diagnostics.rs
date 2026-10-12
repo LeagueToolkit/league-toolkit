@@ -7,7 +7,7 @@ use ltk_meta::{path::PropertyPathError, PropertyKind};
 use crate::{
     ast::{
         node::root::{FileKind, RootKind},
-        resolve::literals::ValueEvalError,
+        resolve::{literals::ValueEvalError, AnnotationResolveError},
     },
     cst,
     escaping::InvalidEscape,
@@ -173,6 +173,8 @@ pub enum Diagnostic {
     InvalidHash(Span),
 
     InvalidEscape(#[from] Spanned<InvalidEscape>),
+    AnnotationResolve(#[from] AnnotationResolveError),
+    TrailingAnnotations(Span),
     TypeMismatch(#[from] TypeMismatch),
     ValueEvalError(#[from] ValueEvalError),
 
@@ -352,7 +354,7 @@ impl Display for Diagnostic {
         match self {
             CustomSpan(msg, _) => f.write_str(msg),
 
-            Self::InvalidEscape { .. } => write!(f, "Invalid escape character"),
+            InvalidEscape { .. } => write!(f, "Invalid escape character"),
             UnexpectedTree {
                 tree,
                 expected: Some(expected),
@@ -367,7 +369,11 @@ impl Display for Diagnostic {
             EmptyTree(kind) => write!(f, "Empty {kind}"),
             MissingToken(kind) => write!(f, "Missing {kind}"),
 
-            Self::ValueEvalError(err) => err.fmt(f),
+            AnnotationResolve(err) => err.fmt(f),
+            TrailingAnnotations(_) => {
+                write!(f, "Trailing annotation(s) don't apply to anything!")
+            }
+            ValueEvalError(err) => err.fmt(f),
 
             InvalidHash(_) => f.write_str("Invalid hash"),
             UnknownType(_) => f.write_str("Unknown type"),
@@ -518,8 +524,10 @@ impl Diagnostic {
             | InvalidPropertyPath { span, .. }
             | UnexpectedFileKind { span, .. }
             | InvalidRootEntryType { key_span: span, .. } => Some(*span),
+            AnnotationResolve(err) => err.span(),
+            TrailingAnnotations(span) => Some(*span),
             TypeMismatch(err) => Some(err.span),
-            Self::ValueEvalError(err) => Some(err.span()),
+            ValueEvalError(err) => Some(err.span()),
         }
     }
 

@@ -9,7 +9,7 @@ use crate::{
             MaybeSpanDiag, TypeMismatch,
         },
         node::TypeExpr,
-        resolve::literals::{self, ValueEvalError::InvalidHash},
+        resolve::literals::{self, ExpectedType},
         Value,
     },
     cst::{ChildrenExt as _, Kind},
@@ -71,7 +71,8 @@ impl<'a> Builder<'a> {
                 token,
                 parent_value_kind
                     .and_then(|k| k.subtypes[0])
-                    .map(RitoType::simple),
+                    .map(RitoType::simple)
+                    .map(ExpectedType::Exact),
                 parent_type_span,
             ),
             // TODO: change this error
@@ -109,7 +110,9 @@ impl<'a> Builder<'a> {
 
         let value = match self.resolve_value(
             value_node,
-            desired_kind.and_then(|k| k.as_resolved()),
+            desired_kind
+                .and_then(|k| k.as_resolved())
+                .map(ExpectedType::from),
             type_span,
         ) {
             Ok(v) => Some(v),

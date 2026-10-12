@@ -11,6 +11,8 @@ use crate::{
     RitoType, Spanned,
 };
 
+use super::literals::ExpectedType;
+
 struct ListIter<'a, 'b, 'c> {
     ctx: &'a mut Builder<'b>,
     children: std::slice::Iter<'c, Child>,
@@ -106,7 +108,11 @@ impl<'a> Builder<'a> {
         expected: PropertyKind,
         hint_span: Option<Span>,
     ) -> Result<Value, D> {
-        self.resolve_value(node, Some(RitoType::simple(expected)), hint_span)
+        self.resolve_value(
+            node,
+            Some(ExpectedType::Exact(RitoType::simple(expected))),
+            hint_span,
+        )
     }
 
     pub(crate) fn resolve_listlike_fallable(
