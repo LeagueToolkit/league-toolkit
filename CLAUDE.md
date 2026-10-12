@@ -67,7 +67,7 @@ GitHub issues are rendered from the ticket files in `.scratch/*/issues/` (frontm
 
 ## Project Overview
 
-League Toolkit is a Rust workspace for parsing, editing, and writing League of Legends file formats. It consists of 13 individual `ltk_*` crates plus one umbrella `league-toolkit` crate that re-exports them via feature flags.
+League Toolkit is a Rust workspace for parsing, editing, and writing League of Legends file formats. It consists of 15 individual `ltk_*` crates plus one umbrella `league-toolkit` crate that re-exports them via feature flags.
 
 **Consumers.** [LTK Manager](https://github.com/LeagueToolkit/ltk-manager) is the desktop app
 where end users interact with this code, and the main consumer of these crates, alongside
@@ -107,7 +107,7 @@ All crates live under `crates/`. The dependency graph flows upward:
 
 - **Foundation**: `ltk_hash`, `ltk_primitives` (no internal deps)
 - **I/O layer**: `ltk_io_ext` (depends on `ltk_primitives`)
-- **Format crates**: `ltk_wad`, `ltk_texture`, `ltk_mesh`, `ltk_anim`, `ltk_meta`, `ltk_file` (depend on foundation + I/O)
+- **Format crates**: `ltk_wad`, `ltk_texture`, `ltk_mesh`, `ltk_anim`, `ltk_meta`, `ltk_file`, `ltk_ini` (depend on foundation + I/O)
 - **Higher-level**: `ltk_mapgeo` (depends on `ltk_mesh`), `ltk_ritobin` (depends on `ltk_meta`), `ltk_shader` (depends on `ltk_wad`)
 - **Umbrella**: `league-toolkit` re-exports everything behind feature flags
 

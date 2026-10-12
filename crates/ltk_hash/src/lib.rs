@@ -13,6 +13,7 @@ use std::{
 
 pub use impls::elf;
 use impls::fnv1a;
+pub use impls::sdbm;
 pub use value::{HashAlgorithm, HashValue, HashWidth, Hasher};
 
 use xxhash_rust::xxh64::xxh64;
@@ -165,6 +166,95 @@ impl DerefMut for BinHash {
     }
 }
 
+/// The key of a value in an inibin file - case insensitive
+///
+/// The key is the SDBM hash of the section name, the `*` character and the property name.
+///
+/// ```
+/// use ltk_hash::{Hash as _, IniHash};
+///
+/// let key = IniHash::new("System", "GroupPart1");
+/// assert_eq!(key, IniHash(0x0616933a));
+/// assert_eq!(key, IniHash::hash_str("system*grouppart1"));
+/// ```
+#[repr(transparent)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, std::hash::Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct IniHash(pub u32);
+
+impl Hash for IniHash {
+    fn hash_str(src: impl AsRef<str>) -> Self {
+        Self(sdbm::hash_lower(src.as_ref()))
+    }
+}
+
+impl Display for IniHash {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        LowerHex::fmt(self, f)
+    }
+}
+impl LowerHex for IniHash {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        LowerHex::fmt(&self.0, f)
+    }
+}
+impl FromStr for IniHash {
+    type Err = ParseIntError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::from_str_radix(s, 16)
+    }
+}
+impl IniHash {
+    /// Returns the key of the property `name` in the section `section`.
+    pub const fn new(section: &str, name: &str) -> Self {
+        let hash = sdbm::hash_lower(section);
+        let hash = sdbm::hash_lower_from(hash, "*");
+        Self(sdbm::hash_lower_from(hash, name))
+    }
+
+    pub const fn from_str_radix(src: &str, radix: u32) -> Result<Self, ParseIntError> {
+        match u32::from_str_radix(src, radix) {
+            Ok(v) => Ok(Self(v)),
+            Err(e) => Err(e),
+        }
+    }
+}
+
+impl From<&str> for IniHash {
+    fn from(value: &str) -> Self {
+        Self::hash_str(value)
+    }
+}
+
+impl From<u32> for IniHash {
+    fn from(value: u32) -> Self {
+        Self(value)
+    }
+}
+impl AsRef<u32> for IniHash {
+    fn as_ref(&self) -> &u32 {
+        &self.0
+    }
+}
+impl AsMut<u32> for IniHash {
+    fn as_mut(&mut self) -> &mut u32 {
+        &mut self.0
+    }
+}
+impl Deref for IniHash {
+    type Target = u32;
+
+    fn deref(&self) -> &Self::Target {
+        self.as_ref()
+    }
+}
+impl DerefMut for IniHash {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.as_mut()
+    }
+}
+
 use byteorder::{ByteOrder, ReadBytesExt as _, WriteBytesExt as _};
 pub trait ReadBytesExt: Read {
     fn read_bin_hash<O: ByteOrder>(&mut self) -> std::io::Result<BinHash> {
@@ -172,6 +262,9 @@ pub trait ReadBytesExt: Read {
     }
     fn read_wad_hash<O: ByteOrder>(&mut self) -> std::io::Result<WadHash> {
         Ok(self.read_u64::<O>()?.into())
+    }
+    fn read_ini_hash<O: ByteOrder>(&mut self) -> std::io::Result<IniHash> {
+        Ok(self.read_u32::<O>()?.into())
     }
     /// Reads a [`HashValue`] of `width` bytes.
     fn read_hash_value<O: ByteOrder>(&mut self, width: HashWidth) -> std::io::Result<HashValue> {
@@ -189,6 +282,9 @@ pub trait WriteBytesExt: Write {
     }
     fn write_wad_hash<O: ByteOrder>(&mut self, hash: WadHash) -> std::io::Result<()> {
         self.write_u64::<O>(*hash)
+    }
+    fn write_ini_hash<O: ByteOrder>(&mut self, hash: IniHash) -> std::io::Result<()> {
+        self.write_u32::<O>(*hash)
     }
     /// Writes `hash` in `hash.width()` bytes.
     fn write_hash_value<O: ByteOrder>(&mut self, hash: HashValue) -> std::io::Result<()> {
