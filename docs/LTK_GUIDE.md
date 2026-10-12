@@ -687,6 +687,55 @@ asset.to_writer(&mut out)?;
 
 ---
 
+### `ltk_ini` - Binary Ini Files
+
+**Purpose**: Read, edit and write `.inibin`, `.troybin` and `.cfgbin` files. The three extensions
+have the same format. Each file is the compiled form of an ini text file of the legacy data
+system. `docs/design/inibin.md` is the spec.
+
+**Key Types**:
+- `Inibin` - The values of a file. A map from key to value in ascending key order
+- `Section` / `SectionMut` - Views that access the values of one section by property name
+- `Value` - One value. It has one variant for each of the 14 storage types
+- `ValueKind` - The storage type of a value
+- `IniHash` - A key, re-exported from `ltk_hash`
+
+**Example**:
+```rust
+use std::fs::File;
+use ltk_ini::{Inibin, Value};
+
+let mut troybin = Inibin::from_reader(&mut File::open("flash.troybin")?)?;
+
+// Read. A typed getter returns the value that the client reads. `p-life` is an
+// F32 in one file and a Fixed (one fixed-point byte) in another file.
+if let Some(emitter) = troybin.section("System").get_str("GroupPart0") {
+    let life = troybin.section(emitter).get_f32("p-life").unwrap_or(1.0);
+    println!("{emitter}: p-life = {life}");
+}
+
+// Edit
+let mut flash = troybin.section_mut("Flash");
+flash.insert("p-life", 2.5);
+flash.insert("p-rgba", Value::compact_vec4(glam::vec4(1.0, 1.0, 1.0, 0.5)));
+flash.remove("p-trailmode");
+
+troybin.to_writer(&mut File::create("flash.troybin")?)?;
+```
+
+**Keys**: A file stores the hash of each pair of section name and property name. The file does
+not store the names, and the sections of a file cannot be listed. `IniHash::new(section, name)`
+returns the key. The methods of `Inibin` take a key (`inibin.get(0x0616933a)`). Use them if only
+the hash is known.
+
+**Storage types**: The ini compiler of the game stores each value in the smallest storage type
+that can store it. `1` is a `Bool`, `1.5` is a `Fixed` and some vectors are a `String`. Read a
+value with the typed getters (`get_f32`, `get_i32`, `get_bool`, `get_vec3`, ...) or the `to_*`
+methods of `Value`. Match on `Value` only to inspect the storage type. `From` keeps the Rust type
+(`2.5` is an `F32`). The `Value::compact_*` constructors select the smallest storage type.
+
+---
+
 ### `ltk_file` - File Type Detection
 
 **Purpose**: Identify League file types from magic bytes or extensions.
@@ -727,6 +776,8 @@ always decide: `.bin` is both `PropertyBin` (`PROP`) and `PropertyBinOverride` (
 
 **Functions**:
 - `fnv1a::hash_lower(input)` → `u32` - FNV-1a hash of lowercase string (used for bin property/object hashes)
+- `sdbm::hash_lower(input)` → `u32` - SDBM hash of a string, with ASCII uppercase letters converted to lowercase (used for inibin keys)
+- `IniHash::new(section, name)` → `IniHash` - The key of an inibin value
 - `elf::elf(input)` → `usize` - ELF hash
 
 **Example**:
@@ -854,6 +905,7 @@ use glam::{Vec2, Vec3, Vec4, Mat4, Quat};
 | `.dds` | `ltk_texture` | `Dds` | DirectDraw Surface |
 | `.mapgeo` | `ltk_mapgeo` | `EnvironmentAsset` | Map geometry |
 | `.nvr` | `ltk_mapgeo` | `nvr::SimpleEnvironment` | Legacy map geometry (read-only) |
+| `.inibin` / `.troybin` / `.cfgbin` | `ltk_ini` | `Inibin` | Binary ini file of the legacy data system |
 
 ---
 
@@ -864,6 +916,7 @@ use glam::{Vec2, Vec3, Vec4, Mat4, Quat};
 | WAD path hashes | XXHash64 | 64-bit | (external) |
 | Bin object/property hashes | FNV-1a (lowercase) | 32-bit | `ltk_hash` |
 | String table hashes | ELF hash | varies | `ltk_hash` |
+| Inibin keys | SDBM (ASCII lowercase) of `section*name` | 32-bit | `ltk_hash` |
 
 ---
 

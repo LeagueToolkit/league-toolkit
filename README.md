@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](#license)
 
 Rust libraries for reading, editing and writing League of Legends file formats - WAD archives,
-property bins, textures, meshes, animations, map geometry and string tables.
+property bins, textures, meshes, animations, map geometry, string tables and binary ini files.
 
 [Documentation](https://docs.rs/league-toolkit) - [Guide](docs/LTK_GUIDE.md) -
 [Changelog](CHANGELOG.md)
@@ -28,10 +28,11 @@ installers - these crates read and write what the game ships. Building mods on t
 | [`ltk_anim`](crates/ltk_anim)             | [![crates.io](https://img.shields.io/crates/v/ltk_anim.svg)](https://crates.io/crates/ltk_anim)              | `.skl`, `.anm`          | Skeletons, joints and animations                                                |
 | [`ltk_mapgeo`](crates/ltk_mapgeo)         | [![crates.io](https://img.shields.io/crates/v/ltk_mapgeo.svg)](https://crates.io/crates/ltk_mapgeo)          | `.mapgeo`, `.nvr`       | Map environment geometry                                                        |
 | [`ltk_rst`](crates/ltk_rst)               | [![crates.io](https://img.shields.io/crates/v/ltk_rst.svg)](https://crates.io/crates/ltk_rst)                | `.stringtable`          | Riot String Tables: localized strings keyed by hash                             |
+| [`ltk_ini`](crates/ltk_ini)               | [![crates.io](https://img.shields.io/crates/v/ltk_ini.svg)](https://crates.io/crates/ltk_ini)                | `.inibin`, `.troybin`   | Binary ini files of the legacy data system: read, edit and write values by section and property name |
 | [`ltk_ritobin`](crates/ltk_ritobin)       | [![crates.io](https://img.shields.io/crates/v/ltk_ritobin.svg)](https://crates.io/crates/ltk_ritobin)        | ritobin text            | The human-readable bin dialect: parse, print, round-trip                        |
 | [`ltk_shader`](crates/ltk_shader)         | [![crates.io](https://img.shields.io/crates/v/ltk_shader.svg)](https://crates.io/crates/ltk_shader)          | -                       | Shader table of contents, defines and loading                                   |
 | [`ltk_file`](crates/ltk_file)             | [![crates.io](https://img.shields.io/crates/v/ltk_file.svg)](https://crates.io/crates/ltk_file)              | -                       | File kind detection from magic bytes (`LeagueFileKind`)                         |
-| [`ltk_hash`](crates/ltk_hash)             | [![crates.io](https://img.shields.io/crates/v/ltk_hash.svg)](https://crates.io/crates/ltk_hash)              | -                       | The hashes the formats key on: xxh64 for WAD paths, FNV-1a for bin names, ELF   |
+| [`ltk_hash`](crates/ltk_hash)             | [![crates.io](https://img.shields.io/crates/v/ltk_hash.svg)](https://crates.io/crates/ltk_hash)              | -                       | The hashes the formats key on: xxh64 for WAD paths, FNV-1a for bin names, SDBM for ini keys, ELF |
 | [`ltk_primitives`](crates/ltk_primitives) | [![crates.io](https://img.shields.io/crates/v/ltk_primitives.svg)](https://crates.io/crates/ltk_primitives)  | -                       | Geometry shared by the mesh and map crates: `AABB`, `Sphere`, `Color`           |
 | [`ltk_io_ext`](crates/ltk_io_ext)         | [![crates.io](https://img.shields.io/crates/v/ltk_io_ext.svg)](https://crates.io/crates/ltk_io_ext)          | -                       | Reader and writer extensions the format crates share                            |
 
@@ -79,7 +80,8 @@ dependencies; the umbrella crate does not re-export them.
 | `texture`    | `ltk_texture`                                                                         | yes     |
 | `wad`        | `ltk_wad`                                                                             | yes     |
 | `rst`        | `ltk_rst`                                                                             | no      |
-| `serde`      | `Serialize` and `Deserialize` on `ltk_wad`, `ltk_file`, `ltk_meta` and `ltk_rst` types | no      |
+| `ini`        | `ltk_ini`                                                                             | no      |
+| `serde`      | `Serialize` and `Deserialize` on `ltk_wad`, `ltk_file`, `ltk_meta`, `ltk_rst` and `ltk_ini` types | no |
 
 For a minimal build, turn the defaults off and opt in:
 
@@ -242,6 +244,7 @@ league-toolkit
 |   |-- ltk_anim          # skeletons and animations
 |   |-- ltk_mapgeo        # map geometry
 |   |-- ltk_rst           # string tables
+|   |-- ltk_ini           # binary ini files
 |   |-- ltk_shader        # shaders
 |   |-- ltk_file          # file kind detection
 |   |-- ltk_hash          # hashes

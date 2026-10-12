@@ -1,0 +1,27 @@
+[package]
+name = "ltk_ini"
+version = "0.1.0"
+edition = "2021"
+description = "Inibin and troybin reading/writing for League Toolkit"
+license = "Apache-2.0"
+readme = "../../README.md"
+
+[lints]
+workspace = true
+
+[features]
+serde = ["dep:serde", "ltk_hash/serde", "glam/serde"]
+
+[dependencies]
+thiserror = { workspace = true }
+byteorder = { workspace = true }
+glam = { workspace = true }
+
+serde = { workspace = true, optional = true }
+
+ltk_hash = { version = "0.5.0", path = "../ltk_hash" }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+ltk_ini = { path = ".", features = ["serde"] }

@@ -24,3 +24,6 @@ pub use ltk_hash as hash;
 
 #[cfg(feature = "rst")]
 pub use ltk_rst as rst;
+
+#[cfg(feature = "ini")]
+pub use ltk_ini as ini;
