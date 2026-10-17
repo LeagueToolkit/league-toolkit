@@ -2,8 +2,10 @@
 
 use std::io::Cursor;
 
+use glam::Vec2;
 use ltk_mapgeo::{
-    BucketedGeometry, EnvironmentAsset, EnvironmentVisibility, WriteError, WRITE_VERSION,
+    sampler, BucketedGeometry, EnvironmentAsset, EnvironmentAssetChannel, EnvironmentVisibility,
+    MeshTextureOverride, WriteError, WRITE_VERSION,
 };
 
 mod common;
@@ -81,6 +83,60 @@ fn a_disabled_scene_graph_is_rejected() {
         asset.to_writer(&mut Vec::new()),
         Err(WriteError::DisabledSceneGraph { index: 0 })
     ));
+}
+
+#[test]
+fn baked_paint_texture_is_written_as_diffuse_override() {
+    let mut asset = brawl();
+    let mesh = asset
+        .meshes()
+        .iter()
+        .position(|m| m.texture_overrides().is_empty())
+        .unwrap();
+    let texture = "ASSETS/Maps/BakedPaint/Maps/MapGeometry/Map12/Base/0.tex";
+    let channel =
+        EnvironmentAssetChannel::new(texture.into(), Vec2::new(0.5, 0.25), Vec2::new(0.125, 0.5));
+    asset.meshes_mut()[mesh].set_baked_paint(channel.clone());
+
+    let back = read(&write(&asset));
+
+    let written = &back.meshes()[mesh];
+    assert_eq!(
+        written.texture_overrides(),
+        [MeshTextureOverride::new(sampler::DIFFUSE, texture.into())]
+    );
+    assert_eq!(written.baked_paint().scale(), channel.scale());
+    assert_eq!(written.baked_paint().offset(), channel.offset());
+    assert_eq!(
+        written.resolve_diffuse_texture("diffuse.tex"),
+        asset.meshes()[mesh].resolve_diffuse_texture("diffuse.tex")
+    );
+}
+
+#[test]
+fn baked_paint_texture_yields_to_diffuse_override() {
+    let mut asset = brawl();
+    let override_texture = "ASSETS/Maps/BakedPaint/override.tex";
+    let m = &mut asset.meshes_mut()[0];
+    m.set_texture_overrides(vec![MeshTextureOverride::new(
+        sampler::DIFFUSE,
+        override_texture.into(),
+    )]);
+    m.set_baked_paint(EnvironmentAssetChannel::new(
+        "ASSETS/Maps/BakedPaint/channel.tex".into(),
+        Vec2::ONE,
+        Vec2::ZERO,
+    ));
+
+    let back = read(&write(&asset));
+
+    assert_eq!(
+        back.meshes()[0].texture_overrides(),
+        [MeshTextureOverride::new(
+            sampler::DIFFUSE,
+            override_texture.into()
+        )]
+    );
 }
 
 #[test]

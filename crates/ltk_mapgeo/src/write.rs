@@ -10,7 +10,7 @@ use ltk_io_ext::WriterExt;
 use ltk_mesh::mem::VertexBufferDescription;
 
 use crate::{
-    scene_graph::BucketedGeometryFlags, BucketedGeometry, EnvironmentAsset,
+    sampler, scene_graph::BucketedGeometryFlags, BucketedGeometry, EnvironmentAsset,
     EnvironmentAssetChannel, EnvironmentMesh, EnvironmentSubmesh, GeometryBucket, PlanarReflector,
     WriteError, MAGIC,
 };
@@ -34,8 +34,9 @@ impl EnvironmentAsset {
     /// meshes may be added, removed or changed freely. Scene graphs are written as they are;
     /// re-bake them with [`EnvironmentAsset::bake_scene_graphs`] after changing geometry.
     ///
-    /// Fields that version 18 does not store are dropped: mesh names, spherical harmonics, point
-    /// lights, and the texture of the baked paint channel.
+    /// Fields that version 18 does not store are dropped: mesh names, spherical harmonics and
+    /// point lights. The texture of a baked paint channel, which versions 12 to 16 store, is
+    /// written as the [`sampler::DIFFUSE`] texture override, unless the mesh has one.
     ///
     /// # Errors
     ///
@@ -330,7 +331,19 @@ impl EnvironmentMesh {
 
         write_channel(writer, self.baked_light())?;
         write_channel(writer, self.stationary_light())?;
-        write_count(writer, self.texture_overrides().len(), "texture overrides")?;
+        // Versions 12 to 16 store the baked paint texture in its channel, version 17 and later
+        // as the diffuse sampler override.
+        let baked_paint = Some(self.baked_paint().texture())
+            .filter(|t| !t.is_empty() && self.find_texture_override(sampler::DIFFUSE).is_none());
+        write_count(
+            writer,
+            self.texture_overrides().len() + usize::from(baked_paint.is_some()),
+            "texture overrides",
+        )?;
+        if let Some(texture) = baked_paint {
+            writer.write_u32::<LE>(sampler::DIFFUSE)?;
+            write_string(writer, texture)?;
+        }
         for o in self.texture_overrides() {
             writer.write_u32::<LE>(o.sampler_index())?;
             write_string(writer, o.texture())?;
