@@ -168,6 +168,10 @@ pub enum Diagnostic {
 
     MissingToken(TokenKind),
     UnknownType(Span),
+    /// The first type argument of `hash` is not a hash function
+    UnknownHashFunction(Span),
+    /// The second type argument of `hash` is not a hash width
+    UnknownHashWidth(Span),
     MissingType(Span),
 
     InvalidHash(Span),
@@ -371,6 +375,10 @@ impl Display for Diagnostic {
 
             InvalidHash(_) => f.write_str("Invalid hash"),
             UnknownType(_) => f.write_str("Unknown type"),
+            UnknownHashFunction(_) => {
+                f.write_str("Unknown hash function - expected fnv1a, xxh64 or xxh3")
+            }
+            UnknownHashWidth(_) => f.write_str("Unknown hash width - expected u32 or u64"),
             MissingType(_) => {
                 f.write_str("Missing type - entries are written 'name: type = value'")
             }
@@ -490,6 +498,8 @@ impl Diagnostic {
                 (span.start + value.index as u32 + 1).min(span.end),
             )),
             UnknownType(span)
+            | UnknownHashFunction(span)
+            | UnknownHashWidth(span)
             | UnknownRoot { span }
             | InvalidHash(span)
             | UnexpectedTree { span, .. }
