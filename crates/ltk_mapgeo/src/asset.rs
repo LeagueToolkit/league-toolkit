@@ -40,7 +40,7 @@ pub struct EnvironmentAsset {
     shader_texture_overrides: Vec<ShaderTextureOverride>,
 
     /// Environment meshes (renderable geometry)
-    meshes: Vec<EnvironmentMesh>,
+    pub(crate) meshes: Vec<EnvironmentMesh>,
 
     /// Bucketed geometry scene graphs (spatial acceleration)
     scene_graphs: Vec<BucketedGeometry>,
@@ -49,10 +49,10 @@ pub struct EnvironmentAsset {
     planar_reflectors: Vec<PlanarReflector>,
 
     /// Shared vertex buffers (meshes reference by index)
-    vertex_buffers: Vec<VertexBuffer>,
+    pub(crate) vertex_buffers: Vec<VertexBuffer>,
 
     /// Shared index buffers (meshes reference by index)
-    index_buffers: Vec<IndexBuffer<u16>>,
+    pub(crate) index_buffers: Vec<IndexBuffer<u16>>,
 
     /// The vertex declaration table as read, which the writer keeps the order of
     pub(crate) vertex_declarations: Vec<VertexBufferDescription>,
