@@ -241,7 +241,7 @@ fn deleted_hashes(items: &[Value]) -> Vec<BinHash> {
     items
         .iter()
         .filter_map(|item| match item {
-            Value::Hash(hash) => Some(hash.value),
+            Value::Hash(hash) => hash.value.try_as_bin_hash(),
             _ => None,
         })
         .collect()
@@ -261,7 +261,10 @@ fn resolve_entries(root: &mut Root) -> bool {
                          key: k, value: v, ..
                      }| match (k, v) {
                         (Value::Hash(path_hash), Some(Value::Embedded(object))) => {
-                            Some(RootEntry { path_hash, object })
+                            Some(RootEntry {
+                                path_hash: path_hash.try_as_bin_hash()?,
+                                object,
+                            })
                         }
                         _ => None,
                     },

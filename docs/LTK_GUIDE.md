@@ -618,6 +618,22 @@ let output = write(&tree)?;
 
 Useful for debugging, diffing, or hand-editing bin data.
 
+**Hash types**: The type `hash[width,algorithm]` gives the stored width and the hash function
+of a `hash` value. `width` is `u32` (4 bytes) or `u64` (8 bytes). `algorithm` is `fnv1a`, `xxh64`
+or `xxh3`. `hash` is `hash[u32,fnv1a]`. A `hash` type argument takes the same form.
+
+```text
+name: hash[u64,xxh3] = "Characters/Zac/Skins/Skin31/Materials/ult"
+keys: list[hash[u64,xxh3]] = { 0x5d07ca0d22ff9588 }
+```
+
+- A string in a `hash` position is the hash of the lowercased string under the function of the
+  type.
+- A hex literal takes the width of the type. A literal above `u32::MAX` in a `u32` hash is a type
+  mismatch.
+- A bin file does not store the hash function. The printer writes `hash[u64, xxh3]` for an 8-byte
+  value and `hash` for a 4-byte value. Every 8-byte hasher in the class dumps of 16.21 is XXH3.
+
 ---
 
 ### `ltk_mapgeo` - Map Geometry

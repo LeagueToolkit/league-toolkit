@@ -149,6 +149,17 @@ mod test {
     }
 
     #[test]
+    fn hash_type_arguments() {
+        assert_pretty(
+            r#"a: hash [u64,xxh3] = 0x1
+b: map[ hash[u64 ,xxh3],hash[ u32,fnv1a ] ] = {}"#,
+            r#"a: hash[u64, xxh3] = 0x1
+b: map[hash[u64, xxh3], hash[u32, fnv1a]] = { }"#,
+            PrintConfig::default(),
+        );
+    }
+
+    #[test]
     fn simple_list() {
         assert_pretty(
             r#" b  :  list [ i8, ] = {  3, 6 1 }"#,

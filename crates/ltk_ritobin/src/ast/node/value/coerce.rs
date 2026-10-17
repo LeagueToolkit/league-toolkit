@@ -1,4 +1,4 @@
-use ltk_hash::{BinHash, Hash as _, WadHash};
+use ltk_hash::{BinHash, Hash as _, HashValue, Hasher, WadHash};
 use ltk_meta::PropertyKind;
 
 use crate::{
@@ -45,15 +45,22 @@ impl CanCoerce for RitoType {
 }
 
 impl Value {
-    pub fn coerce_to(self, to: PropertyKind) -> Self {
+    pub fn coerce_to(self, to: impl Into<RitoType>) -> Self {
         match self.try_coerce_to(to) {
             Ok(v) => v,
             Err(v) => v,
         }
     }
 
-    pub fn try_coerce_to(self, to: PropertyKind) -> Result<Self, Self> {
-        Ok(match to {
+    /// Converts the value to the base kind of `to`. A `hash` value takes the width of the
+    /// hasher of `to`. A string in a `hash` position is hashed with the hasher of `to`.
+    ///
+    /// # Errors
+    /// Returns the value unchanged if it does not convert.
+    pub fn try_coerce_to(self, to: impl Into<RitoType>) -> Result<Self, Self> {
+        let to = to.into();
+        Ok(match to.base {
+            PropertyKind::Hash => return self.try_coerce_to_hash(to.hasher()),
             to if self.kind().is_some_and(|k| k == to) => self,
             // Unknown values can be coerced into any value (as an unresolved variant)
             to if self.kind().is_none() => Self::Unresolved {
@@ -67,16 +74,11 @@ impl Value {
                 value: Some(Ptr::new(self)),
             },
 
-            PropertyKind::Hash => match self {
-                Self::String(str) => Self::Hash(HashedLiteral::new(
-                    str.span,
-                    Originally::String,
-                    BinHash::hash_str(&str),
-                )),
-                _ => return Err(self),
-            },
             PropertyKind::ObjectLink => match self {
-                Self::Hash(hash) => Self::ObjectLink(hash),
+                Self::Hash(hash) => match hash.try_as_bin_hash() {
+                    Some(hash) => Self::ObjectLink(hash),
+                    None => return Err(self),
+                },
                 Self::String(str) => Self::ObjectLink(HashedLiteral::new(
                     str.span,
                     Originally::String,
@@ -86,7 +88,7 @@ impl Value {
             },
             PropertyKind::WadChunkLink => match self {
                 Self::Hash(hash) => {
-                    Self::WadChunkLink(hash.with_value(WadHash((*hash.value).into())))
+                    Self::WadChunkLink(hash.with_value(WadHash(hash.value.as_u64())))
                 }
                 Self::String(str) => Self::WadChunkLink(HashedLiteral::new(
                     str.span,
@@ -104,6 +106,55 @@ impl Value {
                 _ => return Err(self),
             },
             _ => return Err(self),
+        })
+    }
+
+    /// Converts the value to a 4-byte hash literal of [`Hasher::DEFAULT`].
+    ///
+    /// # Errors
+    /// Returns the value if it does not convert.
+    pub fn try_coerce_to_bin_hash(self) -> Result<HashedLiteral<BinHash>, Self> {
+        match self.try_coerce_to(PropertyKind::Hash)? {
+            Self::Hash(hash) => hash.try_as_bin_hash().ok_or(Self::Hash(hash)),
+            other => Err(other),
+        }
+    }
+
+    /// Converts the value to a `hash` value of `hasher`.
+    ///
+    /// A hex literal takes the width of `hasher`. A string is hashed with `hasher`.
+    ///
+    /// # Errors
+    /// Returns the value unchanged if it is not a hash literal or a string, or if the literal
+    /// does not fit in the width of `hasher`.
+    fn try_coerce_to_hash(self, hasher: Hasher) -> Result<Self, Self> {
+        let literal = match &self {
+            Self::Hash(hash) => Some(hash.value.as_u64()),
+            Self::WadChunkLink(hash) if hash.was_hash() => Some(*hash.value),
+            _ => None,
+        };
+        if let Some(literal) = literal {
+            return match (HashValue::try_with_width(literal, hasher.width), self) {
+                (Some(value), Self::Hash(hash)) => Ok(Self::Hash(hash.with_value(value))),
+                (Some(value), Self::WadChunkLink(hash)) => Ok(Self::Hash(hash.with_value(value))),
+                (_, this) => Err(this),
+            };
+        }
+        Ok(match self {
+            Self::String(str) => Self::Hash(HashedLiteral::new(
+                str.span,
+                Originally::String,
+                hasher.hash_str(&str),
+            )),
+            Self::Unknown(span) => Self::Unresolved {
+                span,
+                kind: PropertyKind::Hash,
+            },
+            this @ Self::Unresolved {
+                kind: PropertyKind::Hash,
+                ..
+            } => this,
+            this => return Err(this),
         })
     }
 }

@@ -1,3 +1,4 @@
+use ltk_hash::Hasher;
 use ltk_meta::PropertyKind;
 
 use crate::span::Span;
@@ -8,8 +9,9 @@ use crate::{
         node::TypeExpr,
     },
     cst::{ChildrenExt as _, Kind},
+    hash_algorithm_from_name, hash_width_from_name,
     parse::TokenKind,
-    Node, RitoType, RitobinName as _,
+    rito_hasher, Node, RitoType, RitobinName as _,
 };
 
 impl<'a> Builder<'a> {
@@ -36,7 +38,16 @@ impl<'a> Builder<'a> {
         let base =
             PropertyKind::from_rito_name(&self.text[base.span]).ok_or(UnknownType(base.span))?;
 
-        let subtypes = match children.find_tree(self.cst, Kind::TypeArgList) {
+        let args = children.find_tree(self.cst, Kind::TypeArgList);
+        if base == PropertyKind::Hash {
+            return Ok(RitoType::hash(match args {
+                Some(args) => self.resolve_hasher(args)?,
+                None => Hasher::DEFAULT,
+            }));
+        }
+
+        let mut hashers = [Hasher::DEFAULT; 2];
+        let subtypes = match args {
             Some(subtypes_node) => {
                 let subtypes_span = subtypes_node.span;
                 let expected = base.subtype_count();
@@ -48,14 +59,16 @@ impl<'a> Builder<'a> {
                     });
                 }
 
-                let subtypes = subtypes_node
-                    .children
-                    .get(self.cst)
-                    .iter()
-                    .filter_map(|c| c.tree(self.cst).filter(|t| t.kind == Kind::TypeArg))
+                let subtypes = self
+                    .type_args(subtypes_node)
+                    .into_iter()
                     .enumerate()
                     .map(|(i, t)| {
-                        let resolved = PropertyKind::from_rito_name(&self.text[t.span]);
+                        let arg = t.children.get(self.cst);
+                        let name_span = arg
+                            .find_token(self.cst, TokenKind::Name)
+                            .map_or(t.span, |name| name.span);
+                        let resolved = PropertyKind::from_rito_name(&self.text[name_span]);
                         match resolved {
                             None => self.push(UnknownType(t.span).unwrap()),
                             Some(kind) if kind.is_container() => {
@@ -81,6 +94,23 @@ impl<'a> Builder<'a> {
                                 );
                             }
                             Some(_) => {}
+                        }
+                        if let Some(nested) = arg.find_tree(self.cst, Kind::TypeArgList) {
+                            match resolved {
+                                Some(PropertyKind::Hash) => match self.resolve_hasher(nested) {
+                                    Ok(hasher) if i < hashers.len() => hashers[i] = hasher,
+                                    Ok(_) => {}
+                                    Err(e) => self.push(e.default_span(nested.span)),
+                                },
+                                Some(_) => self.push(
+                                    UnexpectedSubtypes {
+                                        span: nested.span,
+                                        base_type: name_span,
+                                    }
+                                    .unwrap(),
+                                ),
+                                None => {}
+                            }
                         }
                         (resolved, t.span)
                     })
@@ -112,6 +142,44 @@ impl<'a> Builder<'a> {
             None => [None, None],
         };
 
-        Ok(RitoType { base, subtypes })
+        let mut rito = RitoType::new(base, subtypes);
+        rito.hashers[1..].copy_from_slice(&hashers);
+        Ok(rito)
+    }
+
+    /// Returns the `TypeArg` nodes of a `TypeArgList` node.
+    fn type_args(&self, list: &Node) -> Vec<&'a Node> {
+        let cst = self.cst;
+        list.children
+            .get(cst)
+            .iter()
+            .filter_map(|c| c.tree(cst).filter(|t| t.kind == Kind::TypeArg))
+            .collect()
+    }
+
+    /// Resolves the type arguments `[width,algorithm]` of a `hash` type to a hasher.
+    ///
+    /// # Errors
+    /// Fails if the list does not have 2 arguments, if the first argument is not `u32` or `u64`,
+    /// or if the second argument is not `fnv1a`, `xxh64` or `xxh3`.
+    fn resolve_hasher(&self, list: &Node) -> Result<Hasher, Diagnostic> {
+        let args = self.type_args(list);
+        let [width, algorithm] = args[..] else {
+            let span = match args.get(2..) {
+                Some([first, .., last]) => Span::new(first.span.start, last.span.end),
+                Some([only]) => only.span,
+                _ => args.last().map_or(list.span, |arg| arg.span),
+            };
+            return Err(SubtypeCountMismatch {
+                span,
+                got: args.len() as u8,
+                expected: 2,
+            });
+        };
+        let width =
+            hash_width_from_name(&self.text[width.span]).ok_or(UnknownHashWidth(width.span))?;
+        let algorithm = hash_algorithm_from_name(&self.text[algorithm.span])
+            .ok_or(UnknownHashFunction(algorithm.span))?;
+        Ok(rito_hasher(width, algorithm))
     }
 }

@@ -1,5 +1,6 @@
 //! Type name mappings for ritobin format.
 
+use ltk_hash::{HashAlgorithm, HashWidth, Hasher};
 use ltk_meta::{property::values, PropertyKind, PropertyValueEnum};
 use std::fmt::Display;
 
@@ -82,24 +83,124 @@ impl RitobinName for PropertyKind {
     }
 }
 
+/// Returns the ritobin name of a hash algorithm: `fnv1a`, `xxh64` or `xxh3`.
+pub const fn hash_algorithm_name(algorithm: HashAlgorithm) -> &'static str {
+    match algorithm {
+        HashAlgorithm::Fnv1a32 => "fnv1a",
+        HashAlgorithm::Xxh64 => "xxh64",
+        HashAlgorithm::Xxh3 => "xxh3",
+        _ => "unknown",
+    }
+}
+
+/// Returns the hash algorithm of a ritobin name. Returns `None` if `name` is not `fnv1a`,
+/// `xxh64` or `xxh3`.
+pub fn hash_algorithm_from_name(name: &str) -> Option<HashAlgorithm> {
+    match name {
+        "fnv1a" => Some(HashAlgorithm::Fnv1a32),
+        "xxh64" => Some(HashAlgorithm::Xxh64),
+        "xxh3" => Some(HashAlgorithm::Xxh3),
+        _ => None,
+    }
+}
+
+/// Returns the ritobin name of a hash width: `u32` or `u64`.
+pub const fn hash_width_name(width: HashWidth) -> &'static str {
+    match width {
+        HashWidth::W4 => "u32",
+        HashWidth::W8 => "u64",
+    }
+}
+
+/// Returns the hash width of a ritobin name. Returns `None` if `name` is not `u32` or `u64`.
+pub fn hash_width_from_name(name: &str) -> Option<HashWidth> {
+    match name {
+        "u32" => Some(HashWidth::W4),
+        "u64" => Some(HashWidth::W8),
+        _ => None,
+    }
+}
+
+/// Returns the hasher of the type `hash[width,algorithm]`.
+///
+/// The hasher lowercases the string. Every hasher in the class dumps of 16.21 lowercases the
+/// string.
+pub const fn rito_hasher(width: HashWidth, algorithm: HashAlgorithm) -> Hasher {
+    Hasher {
+        width,
+        algorithm,
+        lowercased: true,
+    }
+}
+
+/// Returns the hasher that the printer writes for a `hash` value of `width`.
+///
+/// A bin file does not store the hash function. Returns [`Hasher::DEFAULT`] for width 4 and
+/// XXH3 for width 8. Every 8-byte hasher in the class dumps of 16.21 is XXH3.
+pub const fn hasher_for_width(width: HashWidth) -> Hasher {
+    match width {
+        HashWidth::W4 => Hasher::DEFAULT,
+        HashWidth::W8 => rito_hasher(HashWidth::W8, HashAlgorithm::Xxh3),
+    }
+}
+
 /// Ritobin type representation for parsing.
+///
+/// The type `hash[width,algorithm]` gives the stored width and the hash function of a `hash`,
+/// for example `hash[u64,xxh3]`. The type `hash` is `hash[u32,fnv1a]`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RitoType {
     pub base: PropertyKind,
     pub subtypes: [Option<PropertyKind>; 2],
+    /// The hashers of the base and of the two subtypes, in that order. A slot that is not
+    /// `hash` holds [`Hasher::DEFAULT`].
+    pub hashers: [Hasher; 3],
+}
+
+impl From<PropertyKind> for RitoType {
+    fn from(kind: PropertyKind) -> Self {
+        Self::simple(kind)
+    }
+}
+
+/// Writes the ritobin name of `kind`. Writes `hash[width,algorithm]` if `kind` is `hash` and
+/// `hasher` is not [`Hasher::DEFAULT`].
+fn fmt_kind(
+    f: &mut std::fmt::Formatter<'_>,
+    kind: PropertyKind,
+    hasher: Hasher,
+) -> std::fmt::Result {
+    f.write_str(kind.to_rito_name())?;
+    if kind == PropertyKind::Hash && hasher != Hasher::DEFAULT {
+        write!(
+            f,
+            "[{},{}]",
+            hash_width_name(hasher.width),
+            hash_algorithm_name(hasher.algorithm)
+        )?;
+    }
+    Ok(())
 }
 
 impl Display for RitoType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let base = self.base.to_rito_name();
+        fmt_kind(f, self.base, self.hashers[0])?;
 
         match self.subtypes {
-            [None, None] => f.write_str(base),
-            [Some(a), None] => write!(f, "{base}[{}]", a.to_rito_name()),
-            [Some(a), Some(b)] => {
-                write!(f, "{base}[{},{}]", a.to_rito_name(), b.to_rito_name())
+            [None, None] => Ok(()),
+            [Some(a), None] => {
+                f.write_str("[")?;
+                fmt_kind(f, a, self.hashers[1])?;
+                f.write_str("]")
             }
-            _ => write!(f, "{base}[!!]"),
+            [Some(a), Some(b)] => {
+                f.write_str("[")?;
+                fmt_kind(f, a, self.hashers[1])?;
+                f.write_str(",")?;
+                fmt_kind(f, b, self.hashers[2])?;
+                f.write_str("]")
+            }
+            _ => f.write_str("[!!]"),
         }
     }
 }
@@ -155,23 +256,52 @@ pub enum ConstructError {
 
 impl RitoType {
     pub const fn simple(kind: PropertyKind) -> Self {
-        Self {
-            base: kind,
-            subtypes: [None, None],
-        }
+        Self::new(kind, [None, None])
+    }
+
+    /// Returns the type `hash` with `hasher`.
+    pub const fn hash(hasher: Hasher) -> Self {
+        let mut rito = Self::simple(PropertyKind::Hash);
+        rito.hashers[0] = hasher;
+        rito
     }
 
     pub const fn single(base: PropertyKind, sub: PropertyKind) -> Option<Self> {
         if base.subtype_count() != 1 {
             return None;
         }
-        Some(Self {
-            base,
-            subtypes: [Some(sub), None],
-        })
+        Some(Self::new(base, [Some(sub), None]))
     }
+
+    /// Returns the type with [`Hasher::DEFAULT`] in each slot.
     pub const fn new(base: PropertyKind, subtypes: [Option<PropertyKind>; 2]) -> Self {
-        Self { base, subtypes }
+        Self {
+            base,
+            subtypes,
+            hashers: [Hasher::DEFAULT; 3],
+        }
+    }
+
+    /// Returns the hasher of the base. Returns [`Hasher::DEFAULT`] if the base is not `hash`.
+    pub const fn hasher(&self) -> Hasher {
+        self.hashers[0]
+    }
+
+    /// Returns the type of subtype `idx`, with the hasher of the subtype. Returns `none` if the
+    /// subtype is missing.
+    pub const fn item(&self, idx: usize) -> Self {
+        let kind = match self.subtypes[idx] {
+            Some(kind) => kind,
+            None => PropertyKind::None,
+        };
+        let mut rito = Self::simple(kind);
+        rito.hashers[0] = self.hashers[idx + 1];
+        rito
+    }
+
+    /// Returns the type with [`Hasher::DEFAULT`] in each slot.
+    pub const fn without_hashers(self) -> Self {
+        Self::new(self.base, self.subtypes)
     }
 
     pub const fn try_new(
@@ -197,10 +327,7 @@ impl RitoType {
                     if !sub.is_primitive() {
                         return Err(NonPrimitiveContainer { got: sub });
                     }
-                    Ok(RitoType {
-                        base,
-                        subtypes: [Some(sub), None],
-                    })
+                    Ok(RitoType::new(base, [Some(sub), None]))
                 }
                 [None, None] => Err(BadSubtypeCount {
                     got: 0,
@@ -227,7 +354,7 @@ impl RitoType {
                     if b.is_container() {
                         return Err(BadMapValue { got: b });
                     }
-                    Ok(RitoType { base, subtypes })
+                    Ok(RitoType::new(base, subtypes))
                 }
             },
             _ => unreachable!(),
@@ -235,17 +362,11 @@ impl RitoType {
     }
 
     pub fn container(value: PropertyKind) -> Self {
-        Self {
-            base: PropertyKind::Container,
-            subtypes: [Some(value), None],
-        }
+        Self::new(PropertyKind::Container, [Some(value), None])
     }
 
     pub fn map(key: PropertyKind, value: PropertyKind) -> Self {
-        Self {
-            base: PropertyKind::Map,
-            subtypes: [Some(key), Some(value)],
-        }
+        Self::new(PropertyKind::Map, [Some(key), Some(value)])
     }
 
     pub fn subtype(&self, idx: usize) -> PropertyKind {
@@ -254,6 +375,15 @@ impl RitoType {
 
     pub fn value_subtype(&self) -> Option<PropertyKind> {
         self.subtypes[1].or(self.subtypes[0])
+    }
+
+    /// Returns the type of [`Self::value_subtype`], with its hasher.
+    pub fn value_item(&self) -> Option<Self> {
+        match self.subtypes {
+            [_, Some(_)] => Some(self.item(1)),
+            [Some(_), None] => Some(self.item(0)),
+            [None, None] => None,
+        }
     }
 
     /// Whether this type's `{ .. }` block holds entries or bare values.
@@ -293,6 +423,9 @@ impl RitoType {
             PropertyKind::Optional => PropertyValueEnum::Optional(
                 values::Optional::empty(self.subtype(0)).unwrap_or_default(),
             ),
+            PropertyKind::Hash => {
+                PropertyValueEnum::Hash(values::Hash::new(self.hasher().from_hash(0)))
+            }
 
             _ => self.base.default_value(),
         }
@@ -320,19 +453,36 @@ impl Display for ItemShape {
 }
 
 pub trait PropertyValueExt {
+    /// Returns the type of the value. Each `hash` slot holds the hasher that
+    /// [`hasher_for_width`] returns for the width of its values.
     fn rito_type(&self) -> RitoType;
 }
 impl PropertyValueExt for PropertyValueEnum {
     fn rito_type(&self) -> RitoType {
-        let base = self.kind();
-        let subtypes = match self {
-            PropertyValueEnum::Map(map) => [Some(map.key_kind()), Some(map.value_kind())],
+        let hasher = |width: Option<HashWidth>| hasher_for_width(width.unwrap_or_default());
+        match self {
+            PropertyValueEnum::Hash(hash) => RitoType::hash(hasher(Some(hash.width()))),
+            PropertyValueEnum::Map(map) => {
+                let mut rito = RitoType::map(map.key_kind(), map.value_kind());
+                rito.hashers[1] = hasher(map.key_hash_width());
+                rito.hashers[2] = hasher(map.value_hash_width());
+                rito
+            }
             PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(container))
-            | PropertyValueEnum::Container(container) => [Some(container.item_kind()), None],
-            PropertyValueEnum::Optional(optional) => [Some(optional.item_kind()), None],
+            | PropertyValueEnum::Container(container) => {
+                let mut rito = RitoType::new(self.kind(), [Some(container.item_kind()), None]);
+                rito.hashers[1] = hasher(container.hash_width());
+                rito
+            }
+            PropertyValueEnum::Optional(optional) => {
+                let mut rito = RitoType::new(self.kind(), [Some(optional.item_kind()), None]);
+                if let Some(PropertyValueEnum::Hash(hash)) = optional.value() {
+                    rito.hashers[1] = hasher(Some(hash.width()));
+                }
+                rito
+            }
 
-            _ => [None, None],
-        };
-        RitoType { base, subtypes }
+            _ => RitoType::simple(self.kind()),
+        }
     }
 }

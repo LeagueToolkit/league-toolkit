@@ -1,11 +1,13 @@
 use std::fmt::Display;
 
+use ltk_hash::{BinHash, HashValue};
+
 use crate::span::Span;
 use crate::Spanned;
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "span_print", derive(crate::span::DebugSpans))]
-pub struct HashedLiteral<H: ltk_hash::Hash> {
+pub struct HashedLiteral<H> {
     pub value: H,
     /// What this hash was originally, before being coerced to a hash
     pub originally: Spanned<Originally>,
@@ -24,7 +26,7 @@ pub enum Originally {
     Name,
 }
 
-impl<H: ltk_hash::Hash> HashedLiteral<H> {
+impl<H> HashedLiteral<H> {
     #[inline(always)]
     #[must_use]
     pub fn new(span: Span, originally: Originally, value: H) -> Self {
@@ -43,7 +45,7 @@ impl<H: ltk_hash::Hash> HashedLiteral<H> {
 
     #[inline(always)]
     #[must_use]
-    pub fn with_value<NewHash: ltk_hash::Hash>(self, value: NewHash) -> HashedLiteral<NewHash> {
+    pub fn with_value<NewHash>(self, value: NewHash) -> HashedLiteral<NewHash> {
         HashedLiteral {
             value,
             originally: self.originally,
@@ -84,7 +86,17 @@ impl<H: ltk_hash::Hash> HashedLiteral<H> {
     }
 }
 
-impl<H: ltk_hash::Hash + Display> Display for HashedLiteral<H> {
+impl HashedLiteral<HashValue> {
+    /// Returns the literal with a [`BinHash`] value. Returns `None` if the width is 8.
+    #[inline(always)]
+    #[must_use]
+    pub fn try_as_bin_hash(self) -> Option<HashedLiteral<BinHash>> {
+        let value = self.value.try_as_bin_hash()?;
+        Some(self.with_value(value))
+    }
+}
+
+impl<H: Display> Display for HashedLiteral<H> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "0x{}", self.value)
     }

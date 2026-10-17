@@ -31,7 +31,7 @@ impl<'a> Builder<'a> {
                 kind: TokenKind::HexLit,
                 span,
             } => match Value::eval_unknown_hash(self.text, *span)? {
-                Value::Hash(hash) => Ok(hash),
+                Value::Hash(hash) => hash.try_as_bin_hash().ok_or(D::InvalidHash(hash.span())),
                 value => Err(TypeMismatch {
                     span: value.span(),
                     expected: RitoType::simple(PropertyKind::Hash).into(),

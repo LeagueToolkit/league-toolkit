@@ -165,22 +165,28 @@ pub fn entry_value(p: &mut Parser) -> bool {
 pub fn type_expr(p: &mut Parser) {
     p.scope(TreeKind::TypeExpr, |p| {
         p.expect(TokenKind::Name);
-        if p.eat(TokenKind::LBrack) {
-            p.scope(TreeKind::TypeArgList, |p| {
-                while !p.at(TokenKind::RBrack) && !p.eof() {
-                    if p.at(TokenKind::Name) {
-                        expr_type_arg(p);
-                    } else {
-                        break;
-                    }
-                }
-            });
-            while !p.at(TokenKind::RBrack) && !p.eof() {
-                p.advance();
-            }
-            p.expect(TokenKind::RBrack);
-        }
+        type_arg_list(p);
     });
+}
+
+/// Parses `[arg, ..]` if the parser is at `[`. An argument is a name with its own optional
+/// argument list, as in `list[hash[u64,xxh3]]`.
+fn type_arg_list(p: &mut Parser) {
+    if p.eat(TokenKind::LBrack) {
+        p.scope(TreeKind::TypeArgList, |p| {
+            while !p.at(TokenKind::RBrack) && !p.eof() {
+                if p.at(TokenKind::Name) {
+                    expr_type_arg(p);
+                } else {
+                    break;
+                }
+            }
+        });
+        while !p.at(TokenKind::RBrack) && !p.eof() {
+            p.advance();
+        }
+        p.expect(TokenKind::RBrack);
+    }
 }
 
 pub fn expr_type_arg(p: &mut Parser) {
@@ -188,6 +194,7 @@ pub fn expr_type_arg(p: &mut Parser) {
     let m = p.open();
 
     p.expect(Name);
+    type_arg_list(p);
     p.close(m, TreeKind::TypeArg);
 
     if !p.at(RBrack) {

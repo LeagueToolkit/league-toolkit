@@ -694,10 +694,12 @@ fn bad_option_coerce_is_reported() {
                 expected: RitoTypeOrVirtual::RitoType(RitoType {
                     base: PropertyKind::Optional,
                     subtypes: [Some(PropertyKind::U32), None],
+                    ..
                 }),
                 got: RitoTypeOrVirtual::RitoType(RitoType {
                     base: PropertyKind::Optional,
                     subtypes: [Some(PropertyKind::Bool), None],
+                    ..
                 }),
                 ..
             })
@@ -924,5 +926,181 @@ pub mod string_escapes {
                 .unwrap(),
             )
         });
+    }
+}
+
+mod hash_type {
+    use ltk_hash::{HashAlgorithm, HashValue, HashWidth};
+
+    use super::*;
+    use crate::rito_hasher;
+
+    fn xxh3(width: HashWidth, text: &str) -> HashValue {
+        rito_hasher(width, HashAlgorithm::Xxh3).hash_str(text)
+    }
+
+    /// The expected hash is the `name` value of a `StaticMaterialDef` in a 16.21 skin bin. The
+    /// string is the path of that object.
+    #[test]
+    fn hash_xxh3_u64_hashes_string_with_xxh3() {
+        assert(
+            r#"0x1: hash[u64,xxh3] = "Characters/Zac/Skins/Skin31/Materials/ult""#,
+            |obj| {
+                obj.property(
+                    0x1,
+                    values::Hash::new(HashValue::wide(0x5d07_ca0d_22ff_9588)),
+                )
+            },
+        );
+    }
+
+    #[test]
+    fn hash_xxh3_u32_keeps_low_32_bits() {
+        assert(r#"0x1: hash[u32,xxh3] = "abc""#, |obj| {
+            obj.property(0x1, values::Hash::new(xxh3(HashWidth::W4, "abc")))
+        });
+    }
+
+    #[test]
+    fn hash_fnv1a_u32_is_hash() {
+        assert(r#"0x1: hash[u32,fnv1a] = "abc""#, |obj| {
+            obj.property(0x1, values::Hash::new("abc"))
+        });
+    }
+
+    #[test]
+    fn hash_hex_literal_takes_declared_width() {
+        assert(
+            r#"
+            0x1: hash = 0x1a
+            0x2: hash[u64,xxh3] = 0x0
+            0x3: hash[u64,fnv1a] = 0x5d07ca0d22ff9588
+            "#,
+            |obj| {
+                obj.property(0x1, values::Hash::new(HashValue::narrow(0x1a)))
+                    .property(0x2, values::Hash::new(HashValue::wide(0)))
+                    .property(
+                        0x3,
+                        values::Hash::new(HashValue::wide(0x5d07_ca0d_22ff_9588)),
+                    )
+            },
+        );
+    }
+
+    #[test]
+    fn hash_hex_literal_above_u32_max_in_u32_hash_fails() {
+        assert_one_err(r#"0x1: hash = 0x100000000"#, |d| {
+            matches!(d, Diagnostic::TypeMismatch(_))
+        });
+        assert_one_err(r#"0x1: hash[u32,xxh3] = 0x100000000"#, |d| {
+            matches!(d, Diagnostic::TypeMismatch(_))
+        });
+    }
+
+    #[test]
+    fn hash_in_list_map_and_option_takes_its_hasher() {
+        assert(
+            r#"
+            0x1: list[hash[u64,xxh3]] = { "a", 0x1 }
+            0x2: map[hash[u64,xxh3],hash] = {
+                "k" = "v"
+                0x5 = 0x6
+            }
+            0x3: option[hash[u64,xxh3]] = { "a" }
+            "#,
+            |obj| {
+                obj.property(
+                    0x1,
+                    values::Container::new(
+                        PropertyKind::Hash,
+                        vec![
+                            values::Hash::new(xxh3(HashWidth::W8, "a")).into(),
+                            values::Hash::new(HashValue::wide(1)).into(),
+                        ],
+                    )
+                    .unwrap(),
+                )
+                .property(
+                    0x2,
+                    values::Map::new(
+                        PropertyKind::Hash,
+                        PropertyKind::Hash,
+                        vec![
+                            (
+                                values::Hash::new(xxh3(HashWidth::W8, "k")).into(),
+                                values::Hash::new("v").into(),
+                            ),
+                            (
+                                values::Hash::new(HashValue::wide(5)).into(),
+                                values::Hash::new(HashValue::narrow(6)).into(),
+                            ),
+                        ],
+                    )
+                    .unwrap(),
+                )
+                .property(
+                    0x3,
+                    values::Optional::new(
+                        PropertyKind::Hash,
+                        Some(values::Hash::new(xxh3(HashWidth::W8, "a")).into()),
+                    )
+                    .unwrap(),
+                )
+            },
+        );
+    }
+
+    #[test]
+    fn hash_unknown_function_fails() {
+        let err = assert_one_err(r#"0x1: hash[u32,md5] = 0x1"#, |d| {
+            matches!(d, Diagnostic::UnknownHashFunction(_))
+        });
+        assert_eq!(
+            err.diagnostic.to_string(),
+            "Unknown hash function - expected fnv1a, xxh64 or xxh3"
+        );
+    }
+
+    #[test]
+    fn hash_unknown_width_in_list_fails() {
+        let err = assert_one_err(r#"0x1: list[hash[u16,xxh3]] = {}"#, |d| {
+            matches!(d, Diagnostic::UnknownHashWidth(_))
+        });
+        assert_eq!(
+            err.diagnostic.to_string(),
+            "Unknown hash width - expected u32 or u64"
+        );
+    }
+
+    #[test]
+    fn hash_with_one_type_argument_fails() {
+        assert_one_err(r#"0x1: hash[u64] = 0x1"#, |d| {
+            matches!(
+                d,
+                Diagnostic::SubtypeCountMismatch {
+                    got: 1,
+                    expected: 2,
+                    ..
+                }
+            )
+        });
+    }
+
+    #[test]
+    fn type_arguments_on_nested_non_hash_fail() {
+        assert_one_err(r#"0x1: list[u32[u64,xxh3]] = {}"#, |d| {
+            matches!(d, Diagnostic::UnexpectedSubtypes { .. })
+        });
+    }
+
+    #[test]
+    fn rito_type_display_writes_hasher() {
+        let mut rito = RitoType::map(PropertyKind::Hash, PropertyKind::Hash);
+        rito.hashers[1] = rito_hasher(HashWidth::W8, HashAlgorithm::Xxh3);
+        assert_eq!(rito.to_string(), "map[hash[u64,xxh3],hash]");
+        assert_eq!(
+            RitoType::hash(rito_hasher(HashWidth::W4, HashAlgorithm::Fnv1a32)).to_string(),
+            "hash"
+        );
     }
 }
