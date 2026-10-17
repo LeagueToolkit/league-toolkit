@@ -403,7 +403,7 @@ impl<H: HashProvider> Builder<H> {
         self.tree(Kind::TypeExpr, children)
     }
 
-    /// Returns the name token of `kind`. Adds the argument list `[algorithm,width]` if `kind`
+    /// Returns the name token of `kind`. Adds the argument list `[width,algorithm]` if `kind`
     /// is `hash` and `hasher` is not [`Hasher::DEFAULT`].
     fn kind_name(&mut self, kind: PropertyKind, hasher: Hasher) -> Vec<Child> {
         let mut children = vec![self.spanned_token(Tok::Name, kind.to_rito_name())];
@@ -412,8 +412,8 @@ impl<H: HashProvider> Builder<H> {
             let width = self.spanned_token(Tok::Name, hash_width_name(hasher.width));
             let args = vec![
                 self.token(Tok::LBrack),
-                self.tree(Kind::TypeArg, [algorithm]),
                 self.tree(Kind::TypeArg, [width]),
+                self.tree(Kind::TypeArg, [algorithm]),
                 self.token(Tok::RBrack),
             ];
             children.push(self.tree(Kind::TypeArgList, args));
@@ -798,7 +798,7 @@ mod test {
         let hashes = HashMapProvider::new();
         let text = print_value(&hashes, values::Hash::new(HashValue::wide(0x1a)));
         assert!(
-            text.contains("hash[xxh3, u64] = 0x000000000000001a"),
+            text.contains("hash[u64, xxh3] = 0x000000000000001a"),
             "{text}"
         );
     }

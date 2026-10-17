@@ -170,7 +170,7 @@ pub fn type_expr(p: &mut Parser) {
 }
 
 /// Parses `[arg, ..]` if the parser is at `[`. An argument is a name with its own optional
-/// argument list, as in `list[hash[xxh3,u64]]`.
+/// argument list, as in `list[hash[u64,xxh3]]`.
 fn type_arg_list(p: &mut Parser) {
     if p.eat(TokenKind::LBrack) {
         p.scope(TreeKind::TypeArgList, |p| {

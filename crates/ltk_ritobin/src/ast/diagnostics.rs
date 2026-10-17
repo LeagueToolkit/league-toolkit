@@ -168,9 +168,9 @@ pub enum Diagnostic {
 
     MissingToken(TokenKind),
     UnknownType(Span),
-    /// The first type argument of `hash` is not a hash function
+    /// The second type argument of `hash` is not a hash function
     UnknownHashFunction(Span),
-    /// The second type argument of `hash` is not a hash width
+    /// The first type argument of `hash` is not a hash width
     UnknownHashWidth(Span),
     MissingType(Span),
 

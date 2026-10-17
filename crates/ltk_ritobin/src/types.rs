@@ -121,11 +121,11 @@ pub fn hash_width_from_name(name: &str) -> Option<HashWidth> {
     }
 }
 
-/// Returns the hasher of the type `hash[algorithm,width]`.
+/// Returns the hasher of the type `hash[width,algorithm]`.
 ///
 /// The hasher lowercases the string. Every hasher in the class dumps of 16.21 lowercases the
 /// string.
-pub const fn rito_hasher(algorithm: HashAlgorithm, width: HashWidth) -> Hasher {
+pub const fn rito_hasher(width: HashWidth, algorithm: HashAlgorithm) -> Hasher {
     Hasher {
         width,
         algorithm,
@@ -140,14 +140,14 @@ pub const fn rito_hasher(algorithm: HashAlgorithm, width: HashWidth) -> Hasher {
 pub const fn hasher_for_width(width: HashWidth) -> Hasher {
     match width {
         HashWidth::W4 => Hasher::DEFAULT,
-        HashWidth::W8 => rito_hasher(HashAlgorithm::Xxh3, HashWidth::W8),
+        HashWidth::W8 => rito_hasher(HashWidth::W8, HashAlgorithm::Xxh3),
     }
 }
 
 /// Ritobin type representation for parsing.
 ///
-/// The type `hash[algorithm,width]` gives the hash function and the stored width of a `hash`,
-/// for example `hash[xxh3,u64]`. The type `hash` is `hash[fnv1a,u32]`.
+/// The type `hash[width,algorithm]` gives the stored width and the hash function of a `hash`,
+/// for example `hash[u64,xxh3]`. The type `hash` is `hash[u32,fnv1a]`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RitoType {
     pub base: PropertyKind,
@@ -163,7 +163,7 @@ impl From<PropertyKind> for RitoType {
     }
 }
 
-/// Writes the ritobin name of `kind`. Writes `hash[algorithm,width]` if `kind` is `hash` and
+/// Writes the ritobin name of `kind`. Writes `hash[width,algorithm]` if `kind` is `hash` and
 /// `hasher` is not [`Hasher::DEFAULT`].
 fn fmt_kind(
     f: &mut std::fmt::Formatter<'_>,
@@ -175,8 +175,8 @@ fn fmt_kind(
         write!(
             f,
             "[{},{}]",
-            hash_algorithm_name(hasher.algorithm),
-            hash_width_name(hasher.width)
+            hash_width_name(hasher.width),
+            hash_algorithm_name(hasher.algorithm)
         )?;
     }
     Ok(())

@@ -151,10 +151,10 @@ mod test {
     #[test]
     fn hash_type_arguments() {
         assert_pretty(
-            r#"a: hash [xxh3,u64] = 0x1
-b: map[ hash[xxh3 ,u64],hash[ fnv1a,u32 ] ] = {}"#,
-            r#"a: hash[xxh3, u64] = 0x1
-b: map[hash[xxh3, u64], hash[fnv1a, u32]] = { }"#,
+            r#"a: hash [u64,xxh3] = 0x1
+b: map[ hash[u64 ,xxh3],hash[ u32,fnv1a ] ] = {}"#,
+            r#"a: hash[u64, xxh3] = 0x1
+b: map[hash[u64, xxh3], hash[u32, fnv1a]] = { }"#,
             PrintConfig::default(),
         );
     }

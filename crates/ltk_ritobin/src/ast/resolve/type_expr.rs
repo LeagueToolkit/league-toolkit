@@ -157,14 +157,14 @@ impl<'a> Builder<'a> {
             .collect()
     }
 
-    /// Resolves the type arguments `[algorithm,width]` of a `hash` type to a hasher.
+    /// Resolves the type arguments `[width,algorithm]` of a `hash` type to a hasher.
     ///
     /// # Errors
-    /// Fails if the list does not have 2 arguments, if the first argument is not `fnv1a`, `xxh64`
-    /// or `xxh3`, or if the second argument is not `u32` or `u64`.
+    /// Fails if the list does not have 2 arguments, if the first argument is not `u32` or `u64`,
+    /// or if the second argument is not `fnv1a`, `xxh64` or `xxh3`.
     fn resolve_hasher(&self, list: &Node) -> Result<Hasher, Diagnostic> {
         let args = self.type_args(list);
-        let [algorithm, width] = args[..] else {
+        let [width, algorithm] = args[..] else {
             let span = match args.get(2..) {
                 Some([first, .., last]) => Span::new(first.span.start, last.span.end),
                 Some([only]) => only.span,
@@ -176,10 +176,10 @@ impl<'a> Builder<'a> {
                 expected: 2,
             });
         };
-        let algorithm = hash_algorithm_from_name(&self.text[algorithm.span])
-            .ok_or(UnknownHashFunction(algorithm.span))?;
         let width =
             hash_width_from_name(&self.text[width.span]).ok_or(UnknownHashWidth(width.span))?;
-        Ok(rito_hasher(algorithm, width))
+        let algorithm = hash_algorithm_from_name(&self.text[algorithm.span])
+            .ok_or(UnknownHashFunction(algorithm.span))?;
+        Ok(rito_hasher(width, algorithm))
     }
 }
