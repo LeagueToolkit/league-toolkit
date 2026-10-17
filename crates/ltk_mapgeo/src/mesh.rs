@@ -383,9 +383,10 @@ impl EnvironmentMesh {
 
     /// Sets the baked paint channel.
     ///
-    /// Version 18 stores only the scale and offset of this channel. The texture of a baked
-    /// paint is the [`sampler::DIFFUSE`] entry of the
-    /// [`texture_overrides`](Self::texture_overrides).
+    /// Version 18 stores only the scale and offset of this channel. If the channel has a
+    /// texture and the mesh has no [`sampler::DIFFUSE`] entry in its
+    /// [`texture_overrides`](Self::texture_overrides), the writer writes the texture as that
+    /// entry.
     #[inline]
     pub fn set_baked_paint(&mut self, channel: EnvironmentAssetChannel) {
         self.baked_paint = channel;

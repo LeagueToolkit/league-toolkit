@@ -1,6 +1,8 @@
 //! Helpers shared by the integration tests.
 
-use ltk_mapgeo::{BucketedGeometry, EnvironmentAsset, EnvironmentMesh};
+use ltk_mapgeo::{
+    sampler, BucketedGeometry, EnvironmentAsset, EnvironmentMesh, MeshTextureOverride,
+};
 
 /// Every difference between two grids, compared bit for bit.
 #[allow(dead_code)]
@@ -67,6 +69,20 @@ pub fn differences(baked: &BucketedGeometry, shipped: &BucketedGeometry) -> Vec<
         baked.face_visibility_flags() == shipped.face_visibility_flags(),
     );
     out
+}
+
+/// The texture overrides that version 18 stores for `mesh`, with the texture of a version 12 to
+/// 16 baked paint channel as the diffuse sampler override.
+fn written_texture_overrides(mesh: &EnvironmentMesh) -> Vec<MeshTextureOverride> {
+    let mut overrides = mesh.texture_overrides().to_vec();
+    let texture = mesh.baked_paint().texture();
+    if !texture.is_empty() && mesh.find_texture_override(sampler::DIFFUSE).is_none() {
+        overrides.insert(
+            0,
+            MeshTextureOverride::new(sampler::DIFFUSE, texture.into()),
+        );
+    }
+    overrides
 }
 
 /// How mesh `b` differs from mesh `a` in the fields version 18 stores, other than the
@@ -161,8 +177,8 @@ pub fn mesh_differences(a: &EnvironmentMesh, b: &EnvironmentMesh) -> Vec<String>
     );
     check(
         "texture overrides",
-        format!("{:?}", a.texture_overrides()),
-        format!("{:?}", b.texture_overrides()),
+        format!("{:?}", written_texture_overrides(a)),
+        format!("{:?}", written_texture_overrides(b)),
     );
     check(
         "baked paint",
