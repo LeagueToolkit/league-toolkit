@@ -58,6 +58,32 @@ pub enum EditError {
     /// A mesh has no vertex buffer with an `XYZ_Float32` position element.
     #[error("mesh {mesh} has no XYZ_Float32 position element")]
     MissingPositions { mesh: usize },
+
+    /// The vertex buffers of a new mesh hold different vertex counts.
+    #[error("vertex buffer {buffer} holds {actual} vertices, but the first holds {expected}")]
+    VertexCountMismatch {
+        buffer: usize,
+        expected: usize,
+        actual: usize,
+    },
+
+    /// A new mesh has more vertices than its 16-bit indices address.
+    #[error("the mesh has {count} vertices, more than 16-bit indices address")]
+    TooManyVertices { count: usize },
+
+    /// An index of a new mesh refers past its vertices.
+    #[error("index {index} is out of bounds for {vertex_count} vertices")]
+    IndexOutOfBounds { index: u16, vertex_count: usize },
+
+    /// A new mesh has more than
+    /// [`EnvironmentMesh::MAX_SUBMESH_COUNT`](crate::EnvironmentMesh::MAX_SUBMESH_COUNT)
+    /// submeshes.
+    #[error("the mesh has {count} submeshes, more than 64")]
+    TooManySubmeshes { count: usize },
+
+    /// A submesh of a new mesh draws a range outside its index buffer.
+    #[error("submesh {submesh} draws outside the index buffer")]
+    SubmeshOutOfBounds { submesh: usize },
 }
 
 /// Errors that can occur when reading or lifting a `.nvr` file

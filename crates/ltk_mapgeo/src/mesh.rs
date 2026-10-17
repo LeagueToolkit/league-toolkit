@@ -110,6 +110,18 @@ impl EnvironmentMesh {
     /// Maximum number of submeshes (primitives) per mesh
     pub const MAX_SUBMESH_COUNT: usize = 64;
 
+    /// Creates a mesh that draws `submeshes`.
+    ///
+    /// The mesh has an identity transform, every quality level and visibility layer, and no
+    /// visibility controller, region, light channel or texture override.
+    /// [`EnvironmentAsset::insert_mesh`](crate::EnvironmentAsset::insert_mesh) assigns its
+    /// buffers and bounding box.
+    pub fn new(submeshes: Vec<EnvironmentSubmesh>) -> Self {
+        EnvironmentMeshBuilder::default()
+            .submeshes(submeshes)
+            .build()
+    }
+
     /// Creates a name for a mesh with the given ID
     pub fn create_name(id: usize) -> String {
         format!("MapGeo_Instance_{}", id)
@@ -136,6 +148,26 @@ impl EnvironmentMesh {
     /// The buffer ids, which the reader renumbers past a dropped buffer.
     pub(crate) fn vertex_buffer_ids_mut(&mut self) -> &mut [usize] {
         &mut self.vertex_buffer_ids
+    }
+
+    /// Sets the index buffer id, which an edit renumbers past a dropped buffer.
+    pub(crate) fn set_index_buffer_id(&mut self, id: usize) {
+        self.index_buffer_id = id;
+    }
+
+    /// Points the mesh at new buffers. The writer derives the vertex declarations.
+    pub(crate) fn set_buffers(
+        &mut self,
+        vertex_buffer_ids: Vec<usize>,
+        vertex_count: u32,
+        index_buffer_id: usize,
+        index_count: u32,
+    ) {
+        self.vertex_buffer_ids = vertex_buffer_ids;
+        self.vertex_count = vertex_count;
+        self.index_buffer_id = index_buffer_id;
+        self.index_count = index_count;
+        self.base_vertex_declaration_id = 0;
     }
 
     /// Index into the parent asset's index buffer array
