@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use glam::{Mat4, Vec3};
 use ltk_mesh::mem::vertex::ElementName;
 
-use crate::{BucketedGeometry, EnvironmentAsset};
+use crate::{BucketedGeometry, EnvironmentAsset, EnvironmentMesh};
 
 use super::{BakeFace, BuildError, EdgeRounding, GridLayout, SceneGraphKey};
 
@@ -281,12 +281,32 @@ impl EnvironmentAsset {
             .collect()
     }
 
+    /// Returns the faces of mesh `mesh` in the space of its scene graph.
+    ///
+    /// The positions are multiplied by the mesh transform. A mesh anchored to a region keeps
+    /// its untransformed positions, because its scene graph is in the space of the region.
+    /// An identity transform is skipped, so that the positions keep their exact bits.
+    fn scene_graph_faces(&self, mesh: usize) -> Result<Vec<[Vec3; 3]>, BuildError> {
+        let mut faces = self.mesh_faces(mesh)?;
+        let m = &self.meshes()[mesh];
+        let transform = *m.transform();
+        if m.region_path_hash() == 0 && transform != Mat4::IDENTITY {
+            for p in faces.iter_mut().flatten() {
+                *p = transform.transform_point3(*p);
+            }
+        }
+        Ok(faces)
+    }
+
     /// Reads back which faces feed the scene graphs this asset was read with.
     ///
     /// A face is selected when its scene graph holds a face with the same
-    /// positions in the same order. When several faces match one stored
-    /// face, the first in source order is selected, as the baker keeps
-    /// every copy it is given. The [`GridLayout`] is recorded for every scene
+    /// positions in the same order. The positions of a mesh are multiplied by
+    /// its transform, as [`bake_scene_graphs`](Self::bake_scene_graphs)
+    /// multiplies them. When several faces match one stored face, a face of a
+    /// mesh without a transform is selected first, and then the first in
+    /// source order, as the baker keeps every copy it is given. The
+    /// [`GridLayout`] is recorded for every scene
     /// graph that has faces.
     ///
     /// For an unedited asset, [`bake_scene_graphs`](Self::bake_scene_graphs)
@@ -321,9 +341,21 @@ impl EnvironmentAsset {
             }
         }
 
-        for (index, mesh) in self.meshes().iter().enumerate() {
-            let faces = self.mesh_faces(index)?;
-            let mask = match wanted.get_mut(&SceneGraphKey::of_mesh(mesh)) {
+        // The shipped baker leaves out meshes with a transform, and some maps place a moved
+        // copy of a mesh on top of an untransformed one. Untransformed meshes match first.
+        let moved = |mesh: &EnvironmentMesh| {
+            mesh.region_path_hash() == 0 && *mesh.transform() != Mat4::IDENTITY
+        };
+        let order = self
+            .meshes()
+            .iter()
+            .enumerate()
+            .filter(|(_, m)| !moved(m))
+            .chain(self.meshes().iter().enumerate().filter(|(_, m)| moved(m)));
+        let mut masks = vec![FaceMask::default(); self.mesh_count()];
+        for (index, mesh) in order {
+            let faces = self.scene_graph_faces(index)?;
+            masks[index] = match wanted.get_mut(&SceneGraphKey::of_mesh(mesh)) {
                 Some(counts) if !counts.is_empty() => faces
                     .iter()
                     .map(|face| match counts.get_mut(&face_bits(face)) {
@@ -336,6 +368,8 @@ impl EnvironmentAsset {
                     .collect(),
                 _ => FaceMask::none(faces.len()),
             };
+        }
+        for mask in masks {
             selection.push_mesh(mask);
         }
 
@@ -359,7 +393,11 @@ impl EnvironmentAsset {
     /// files before version 15 hold exactly one grid, and ship
     /// `BucketedGeometry::bake(SceneGraphKey::MAIN, GridLayout::new(1), &[])` in that case.
     /// Each grid takes the selected faces of the meshes with its key, in
-    /// source order, with untransformed positions and the mesh's visibility.
+    /// source order, with the mesh's visibility. Each position is multiplied by
+    /// the mesh transform, except in a mesh anchored to a region, whose scene
+    /// graph is in the space of the region. Shipped files hold no face of a
+    /// mesh with a transform, so an unedited asset bakes as shipped, and a
+    /// moved mesh stays in its scene graph at its new position.
     ///
     /// # Errors
     ///
@@ -387,7 +425,7 @@ impl EnvironmentAsset {
             if mask.count() == 0 {
                 continue;
             }
-            let faces = self.mesh_faces(index)?;
+            let faces = self.scene_graph_faces(index)?;
             if mask.len() != faces.len() {
                 return Err(BuildError::FaceMaskLength {
                     mesh: index,
@@ -423,13 +461,16 @@ impl EnvironmentAsset {
     /// Summoner's Rift, mostly outer scenery):
     ///
     /// - A mesh with a region path hash gives all its faces.
-    /// - A mesh with a transform other than identity gives none.
     /// - Faces of submeshes whose material name contains `VertexDeform` are
     ///   left out.
-    /// - Of the rest, a face is kept when its highest vertex is at or above
-    ///   `min_top_y`. Each map has its own cutoff;
-    ///   [`lowest_selected_top_y`](Self::lowest_selected_top_y) gives it for
-    ///   an existing map.
+    /// - Of the rest, a face is kept when its highest vertex, multiplied by
+    ///   the mesh transform, is at or above `min_top_y`. Each map has its own
+    ///   cutoff, and [`lowest_selected_top_y`](Self::lowest_selected_top_y)
+    ///   gives it for an existing map.
+    ///
+    /// The shipped baker leaves out every mesh with a transform other than
+    /// identity. This rule keeps such a mesh, so that a placed or moved mesh
+    /// is in its scene graph.
     ///
     /// # Errors
     ///
@@ -440,12 +481,9 @@ impl EnvironmentAsset {
     /// If `mesh` is out of bounds.
     pub fn default_face_mask(&self, mesh: usize, min_top_y: f32) -> Result<FaceMask, BuildError> {
         let m = &self.meshes()[mesh];
-        let faces = self.mesh_faces(mesh)?;
+        let faces = self.scene_graph_faces(mesh)?;
         if m.region_path_hash() != 0 {
             return Ok(FaceMask::all(faces.len()));
-        }
-        if *m.transform() != Mat4::IDENTITY {
-            return Ok(FaceMask::none(faces.len()));
         }
 
         let mut mask: FaceMask = faces
@@ -489,7 +527,7 @@ impl EnvironmentAsset {
             if mesh.region_path_hash() != 0 || mask.count() == 0 {
                 continue;
             }
-            for (face, selected) in self.mesh_faces(index)?.iter().zip(mask.iter()) {
+            for (face, selected) in self.scene_graph_faces(index)?.iter().zip(mask.iter()) {
                 if selected {
                     let top = face.iter().map(|p| p.y).fold(f32::MIN, f32::max);
                     lowest = Some(lowest.map_or(top, |l| l.min(top)));

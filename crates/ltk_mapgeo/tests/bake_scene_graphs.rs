@@ -2,10 +2,10 @@
 
 use std::io::Cursor;
 
-use glam::Vec3;
+use glam::{Mat4, Vec3};
 use ltk_mapgeo::{
     BakeFace, BucketedGeometry, BuildError, EdgeRounding, EnvironmentAsset, EnvironmentVisibility,
-    FaceMask, GridLayout, SceneGraphKey,
+    FaceMask, GridLayout, SceneGraphKey, SceneGraphSelection,
 };
 
 mod common;
@@ -228,4 +228,82 @@ fn selection_must_fit_the_asset() {
         asset.bake_scene_graphs(&selection),
         Err(BuildError::FaceMaskLength { .. })
     ));
+}
+
+/// The first mesh with selected faces and no region.
+fn selected_mesh(asset: &EnvironmentAsset, selection: &SceneGraphSelection) -> usize {
+    (0..asset.mesh_count())
+        .find(|&i| selection.meshes()[i].count() > 0 && asset.meshes()[i].region_path_hash() == 0)
+        .unwrap()
+}
+
+#[test]
+fn bake_scene_graphs_applies_mesh_transform() {
+    let mut asset = brawl();
+    let selection = asset.scene_graph_selection().unwrap();
+    let mesh = selected_mesh(&asset, &selection);
+    let key = SceneGraphKey::of_mesh(&asset.meshes()[mesh]);
+    let first_selected = selection.meshes()[mesh].iter().position(|s| s).unwrap();
+    let face = asset.mesh_faces(mesh).unwrap()[first_selected];
+    let offset = Vec3::new(64.0, 8.0, -32.0);
+
+    asset
+        .set_mesh_transform(mesh, Mat4::from_translation(offset))
+        .unwrap();
+    let baked = asset.bake_scene_graphs(&selection).unwrap();
+
+    let grid = |graphs: &[BucketedGeometry]| {
+        graphs
+            .iter()
+            .find(|g| SceneGraphKey::of_graph(g) == key)
+            .cloned()
+            .unwrap()
+    };
+    let (moved, shipped) = (grid(&baked), grid(asset.scene_graphs()));
+    assert_eq!(moved.indices().len(), shipped.indices().len());
+    for p in face {
+        assert!(moved.vertices().contains(&(p + offset)));
+    }
+}
+
+#[test]
+fn scene_graph_selection_reads_back_moved_mesh() {
+    let mut asset = brawl();
+    let selection = asset.scene_graph_selection().unwrap();
+    let mesh = selected_mesh(&asset, &selection);
+    let transform = Mat4::from_rotation_y(0.5) * Mat4::from_translation(Vec3::X * 40.0);
+
+    asset.set_mesh_transform(mesh, transform).unwrap();
+    let baked = asset.bake_scene_graphs(&selection).unwrap();
+    asset.replace_scene_graphs(baked);
+    let read_back = asset.scene_graph_selection().unwrap();
+
+    assert_eq!(read_back.meshes(), selection.meshes());
+    let rebaked = asset.bake_scene_graphs(&read_back).unwrap();
+    for (i, (b, s)) in rebaked.iter().zip(asset.scene_graphs()).enumerate() {
+        assert_eq!(differences(b, s), Vec::<String>::new(), "scene graph {i}");
+    }
+}
+
+#[test]
+fn default_face_mask_keeps_transformed_mesh() {
+    let mut asset = brawl();
+    let mesh = (0..asset.mesh_count())
+        .find(|&i| {
+            let m = &asset.meshes()[i];
+            m.region_path_hash() == 0
+                && !m
+                    .submeshes()
+                    .iter()
+                    .any(|s| s.material().contains("VertexDeform"))
+        })
+        .unwrap();
+
+    asset
+        .set_mesh_transform(mesh, Mat4::from_translation(Vec3::Y * 100.0))
+        .unwrap();
+    let mask = asset.default_face_mask(mesh, f32::MIN).unwrap();
+
+    assert!(!mask.is_empty());
+    assert_eq!(mask.count(), mask.len());
 }
