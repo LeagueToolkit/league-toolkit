@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.5](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_mapgeo-v0.3.4...ltk_mapgeo-v0.3.5) - 2026-10-17
+
+### Added
+
+- *(ltk_mapgeo)* write baked paint texture as diffuse override
+- *(ltk_mapgeo)* bake scene graphs with mesh transforms
+- *(ltk_mapgeo)* add mesh insert, duplicate and remove
+- *(ltk_mapgeo)* add mesh transform and property setters
+
+### Other
+
+- Merge pull request #288 from LeagueToolkit/feat/mapgeo-baked-paint-override
+- Merge pull request #287 from LeagueToolkit/feat/mapgeo-bake-transform
+
 ## [0.3.4](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_mapgeo-v0.3.3...ltk_mapgeo-v0.3.4) - 2026-10-12
 
 ### Added
