@@ -74,6 +74,12 @@ impl EnvironmentSubmesh {
         &self.material
     }
 
+    /// Sets the material name, the entry path of a `StaticMaterialDef`
+    #[inline]
+    pub fn set_material(&mut self, material: String) {
+        self.material = material;
+    }
+
     /// The starting index in the index buffer
     #[inline]
     pub fn start_index(&self) -> i32 {

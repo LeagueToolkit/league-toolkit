@@ -57,6 +57,8 @@ pub use scene_graph::{
 mod asset;
 pub use asset::*;
 
+mod edit;
+
 pub(crate) mod read;
 
 pub mod nvr;

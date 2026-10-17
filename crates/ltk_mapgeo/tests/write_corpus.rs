@@ -5,8 +5,9 @@
 //!     cargo test -p ltk_mapgeo --test write_corpus --release -- --ignored --nocapture
 //! ```
 //!
-//! Version 18 files must write back byte for byte. Older files are written as version 18 and
-//! must read back with the same buffers, meshes and scene graphs.
+//! Version 18 files must write back byte for byte, with every mesh bounding box recomputed.
+//! Older files are written as version 18 and must read back with the same buffers, meshes and
+//! scene graphs.
 
 use std::{
     fs::File,
@@ -71,8 +72,13 @@ fn shipped_files_write_back() {
                 unreadable += 1;
                 continue;
             };
+            // Recomputing every bounding box has to give back the shipped one.
+            let mut edited = asset.clone();
+            for (mesh, transform) in asset.meshes().iter().map(|m| *m.transform()).enumerate() {
+                edited.set_mesh_transform(mesh, transform).unwrap();
+            }
             let mut written = Vec::new();
-            if let Err(e) = asset.to_writer(&mut written) {
+            if let Err(e) = edited.to_writer(&mut written) {
                 failures.push(format!("{name}: {e}"));
                 continue;
             }

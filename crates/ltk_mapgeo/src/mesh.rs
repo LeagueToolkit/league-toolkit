@@ -165,6 +165,12 @@ impl EnvironmentMesh {
         &self.submeshes
     }
 
+    /// The draw ranges (submeshes) within this mesh, for editing in place
+    #[inline]
+    pub fn submeshes_mut(&mut self) -> &mut [EnvironmentSubmesh] {
+        &mut self.submeshes
+    }
+
     /// Hash of the visibility controller path (scene graph this mesh belongs to)
     #[inline]
     pub fn visibility_controller_path_hash(&self) -> u32 {
@@ -195,32 +201,62 @@ impl EnvironmentMesh {
         self.region_path_hash
     }
 
+    /// Sets the region path hash. The caller updates the bounding box.
+    pub(crate) fn set_region_path_hash(&mut self, hash: u32) {
+        self.region_path_hash = hash;
+    }
+
     /// Whether backface culling is disabled
     #[inline]
     pub fn disable_backface_culling(&self) -> bool {
         self.disable_backface_culling
     }
 
-    /// The axis-aligned bounding box
+    /// Sets whether backface culling is disabled
+    #[inline]
+    pub fn set_disable_backface_culling(&mut self, disable: bool) {
+        self.disable_backface_culling = disable;
+    }
+
+    /// The axis-aligned bounding box.
+    ///
+    /// The box bounds the mesh in world space: the eight corners of the bounds of its
+    /// positions, each multiplied by [`transform`](Self::transform). For a mesh anchored to a
+    /// region, the box bounds the untransformed positions.
     #[inline]
     pub fn bounding_box(&self) -> &AABB {
         &self.bounding_box
     }
 
+    pub(crate) fn set_bounding_box(&mut self, bounding_box: AABB) {
+        self.bounding_box = bounding_box;
+    }
+
     /// The world transform, ready to multiply a position by.
     ///
     /// The matrix is affine and carries its translation in `w_axis`. A vertex read out of
-    /// this mesh's buffers is in model space; `transform * vertex` puts it in world space,
-    /// inside [`bounding_box`](Self::bounding_box).
+    /// this mesh's buffers is in model space, and `transform * vertex` puts it in world space.
+    /// Every mesh anchored to one region carries the same matrix, the placement of the region.
     #[inline]
     pub fn transform(&self) -> &Mat4 {
         &self.transform
+    }
+
+    /// Sets the transform. The caller updates the bounding box.
+    pub(crate) fn set_transform(&mut self, transform: Mat4) {
+        self.transform = transform;
     }
 
     /// The quality level flags
     #[inline]
     pub fn quality(&self) -> EnvironmentQuality {
         self.quality
+    }
+
+    /// Sets the quality level flags
+    #[inline]
+    pub fn set_quality(&mut self, quality: EnvironmentQuality) {
+        self.quality = quality;
     }
 
     /// The visibility layer flags
@@ -241,10 +277,22 @@ impl EnvironmentMesh {
         self.layer_transition_behavior
     }
 
+    /// Sets the layer transition behavior
+    #[inline]
+    pub fn set_layer_transition_behavior(&mut self, behavior: VisibilityTransitionBehavior) {
+        self.layer_transition_behavior = behavior;
+    }
+
     /// The render flags
     #[inline]
     pub fn render_flags(&self) -> EnvironmentMeshRenderFlags {
         self.render_flags
+    }
+
+    /// Sets the render flags
+    #[inline]
+    pub fn set_render_flags(&mut self, flags: EnvironmentMeshRenderFlags) {
+        self.render_flags = flags;
     }
 
     /// Point light position (only present in version < 7)
@@ -265,10 +313,22 @@ impl EnvironmentMesh {
         &self.stationary_light
     }
 
+    /// Sets the stationary light channel
+    #[inline]
+    pub fn set_stationary_light(&mut self, channel: EnvironmentAssetChannel) {
+        self.stationary_light = channel;
+    }
+
     /// The baked light channel (lightmap texture)
     #[inline]
     pub fn baked_light(&self) -> &EnvironmentAssetChannel {
         &self.baked_light
+    }
+
+    /// Sets the baked light channel
+    #[inline]
+    pub fn set_baked_light(&mut self, channel: EnvironmentAssetChannel) {
+        self.baked_light = channel;
     }
 
     /// Per-mesh texture overrides
@@ -277,10 +337,26 @@ impl EnvironmentMesh {
         &self.texture_overrides
     }
 
+    /// Sets the per-mesh texture overrides
+    #[inline]
+    pub fn set_texture_overrides(&mut self, overrides: Vec<MeshTextureOverride>) {
+        self.texture_overrides = overrides;
+    }
+
     /// The baked paint channel
     #[inline]
     pub fn baked_paint(&self) -> &EnvironmentAssetChannel {
         &self.baked_paint
+    }
+
+    /// Sets the baked paint channel.
+    ///
+    /// Version 18 stores only the scale and offset of this channel. The texture of a baked
+    /// paint is the [`sampler::DIFFUSE`] entry of the
+    /// [`texture_overrides`](Self::texture_overrides).
+    #[inline]
+    pub fn set_baked_paint(&mut self, channel: EnvironmentAssetChannel) {
+        self.baked_paint = channel;
     }
 
     // ========================================================================

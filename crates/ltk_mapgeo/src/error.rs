@@ -50,6 +50,16 @@ pub enum WriteError {
     Io(#[from] std::io::Error),
 }
 
+/// Errors that can occur when editing the meshes of an
+/// [`EnvironmentAsset`](crate::EnvironmentAsset)
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum EditError {
+    /// A mesh has no vertex buffer with an `XYZ_Float32` position element.
+    #[error("mesh {mesh} has no XYZ_Float32 position element")]
+    MissingPositions { mesh: usize },
+}
+
 /// Errors that can occur when reading or lifting a `.nvr` file
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
