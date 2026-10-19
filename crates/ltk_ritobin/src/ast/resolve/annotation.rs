@@ -42,7 +42,7 @@ impl<'a> Builder<'a> {
     pub fn try_resolve_annotation(
         &self,
         node: &Node,
-    ) -> Result<Option<Annotation>, smallvec::SmallVec<[AnnotationResolveError; 1]>> {
+    ) -> Result<Annotation, smallvec::SmallVec<[AnnotationResolveError; 1]>> {
         use AnnotationResolveError::*;
 
         let children = node.children.get(self.cst);
@@ -77,11 +77,11 @@ impl<'a> Builder<'a> {
             .transpose()?
             .unwrap_or_default();
 
-        Ok(Some(Annotation {
+        Ok(Annotation {
             span: node.span,
             name: name.span,
             arguments: args,
-        }))
+        })
     }
 
     fn try_resolve_arg(&self, arg: &Node) -> Result<Option<Argument>, AnnotationResolveError> {
@@ -118,7 +118,7 @@ impl<'a> Builder<'a> {
     #[must_use]
     pub fn resolve_annotation(&mut self, node: &Node) -> Option<Annotation> {
         match self.try_resolve_annotation(node) {
-            Ok(v) => v,
+            Ok(v) => Some(v),
             Err(errs) => {
                 for e in errs {
                     self.diagnostics
