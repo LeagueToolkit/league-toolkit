@@ -9,8 +9,8 @@ use crate::{
 
 mod patch;
 mod root_entry;
+use crate::Span;
 pub use root_entry::*;
-use span::Span;
 
 impl Ast {
     pub fn from_cst(cst: &Cst, text: &str) -> Self {

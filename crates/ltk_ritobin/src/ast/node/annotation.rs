@@ -1,21 +1,25 @@
-use span::{DebugSpans, Span};
+use crate::{ast::Value, span::Span, Spanned, SpannedExt};
 
-use crate::{ast::Value, Spanned, SpannedExt};
+#[cfg(feature = "span_print")]
+use crate::span::DebugSpans;
 
-#[derive(Debug, Clone, DebugSpans)]
+#[cfg_attr(feature = "span_print", derive(DebugSpans))]
+#[derive(Debug, Clone)]
 pub struct Annotation {
     pub span: Span,
     pub name: Span,
     pub arguments: Vec<Argument>,
 }
 
-#[derive(Debug, Clone, DebugSpans)]
+#[cfg_attr(feature = "span_print", derive(DebugSpans))]
+#[derive(Debug, Clone)]
 pub enum Argument {
     Bare(Span),
     Named { name: Span, value: Value },
 }
 
-#[derive(Debug, Clone, DebugSpans)]
+#[cfg_attr(feature = "span_print", derive(DebugSpans))]
+#[derive(Debug, Clone)]
 pub struct Annotations<A = Annotation> {
     nodes: Vec<Spanned<A>>,
 }

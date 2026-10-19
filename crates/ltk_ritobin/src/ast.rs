@@ -30,7 +30,7 @@ pub(crate) type Ptr<T> = Box<T>;
 pub(crate) type Ptr<T> = std::sync::Arc<T>;
 
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "span_print", derive(span::DebugSpans))]
+#[cfg_attr(feature = "span_print", derive(crate::span::DebugSpans))]
 pub struct Ast<A = Annotation> {
     pub roots: Roots,
     pub annotations: Annotations<A>,
