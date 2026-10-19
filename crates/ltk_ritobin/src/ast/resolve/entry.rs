@@ -35,7 +35,10 @@ impl<'a> Builder<'a> {
             .children
             .get(self.cst)
             .first()
-            .ok_or(D::InvalidHash(key_node.span))?;
+            .ok_or(D::CustomSpan(
+                "[resolve_entry_key] no children",
+                key_node.span,
+            ))?;
 
         if let Some(block) = node
             .tree(self.cst)
@@ -43,7 +46,10 @@ impl<'a> Builder<'a> {
         {
             let key_kind = parent_value_kind
                 .and_then(|k| k.subtypes[0])
-                .ok_or(D::InvalidHash(key_node.span))?;
+                .ok_or(D::CustomSpan(
+                    "[resolve_entry_key] no block key type",
+                    key_node.span,
+                ))?;
             return self
                 .resolve_block_value(block, RitoType::simple(key_kind), parent_type_span)
                 .map_err(|e| e.diagnostic);
@@ -86,8 +92,12 @@ impl<'a> Builder<'a> {
                     .map(ExpectedType::from),
                 parent_type_span,
             ),
-            // TODO: change this error
-            None => return Err(D::InvalidHash(key_node.span)),
+            None => {
+                return Err(D::CustomSpan(
+                    "[resolve_entry_key] node not a token",
+                    key_node.span,
+                ))
+            }
         })
     }
 

@@ -40,13 +40,19 @@ impl<'a> Builder<'a> {
                 }
                 .into()),
             },
-            _ => Err(D::InvalidHash(token.span)),
+            _ => Err(D::CustomSpan(
+                "[resolve_class_hash] unexpected token kind",
+                token.span,
+            )),
         }
     }
     pub(crate) fn resolve_class(&mut self, class: &Node, hint: RitoType) -> Result<Value, D> {
         let children = class.children.get(self.cst);
         let Some(name_token) = children.first().and_then(|c| c.token(self.cst)) else {
-            return Err(D::InvalidHash(class.span));
+            return Err(D::CustomSpan(
+                "[resolve_class] first child missing/not a token",
+                class.span,
+            ));
         };
         let class_hash = self.resolve_class_hash(name_token)?;
 
