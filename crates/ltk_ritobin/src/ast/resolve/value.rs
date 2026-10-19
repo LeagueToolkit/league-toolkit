@@ -49,7 +49,6 @@ impl<'a> Builder<'a> {
             ));
         };
         let Some(node) = child.tree(self.cst) else {
-            eprintln!("{child:?}");
             return Err(Diagnostic::CustomSpan(
                 "[resolve_value] first child is not a node",
                 wrapper.span,
