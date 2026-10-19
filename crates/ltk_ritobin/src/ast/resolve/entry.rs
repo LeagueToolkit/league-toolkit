@@ -1,6 +1,6 @@
 use ltk_meta::PropertyKind;
 
-use crate::span::Span;
+use crate::{ast::diagnostics::RitoTypeOrVirtual, span::Span};
 use crate::{
     ast::{
         builder::Builder,
@@ -40,18 +40,17 @@ impl<'a> Builder<'a> {
                 key_node.span,
             ))?;
 
+        let key_kind = parent_value_kind.and_then(|k| k.subtype(0));
         if let Some(block) = node
             .tree(self.cst)
             .filter(|tree| tree.kind == Kind::BlockKey)
         {
-            let key_kind = parent_value_kind
-                .and_then(|k| k.subtypes[0])
-                .ok_or(D::CustomSpan(
-                    "[resolve_entry_key] no block key type",
-                    key_node.span,
-                ))?;
+            let key_kind = key_kind.ok_or(D::CustomSpan(
+                "[resolve_entry_key] no block key type",
+                key_node.span,
+            ))?;
             return self
-                .resolve_block_value(block, RitoType::simple(key_kind), parent_type_span)
+                .resolve_block_value(block, key_kind, parent_type_span)
                 .map_err(|e| e.diagnostic);
         }
 
