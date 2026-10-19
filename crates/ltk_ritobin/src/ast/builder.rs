@@ -41,7 +41,7 @@ impl<'a> Builder<'a> {
         self.diagnostics.push(d);
     }
 
-    #[allow(unused, reason = "alan: I expect to need this soon enough")]
+    #[expect(unused, reason = "will probably need this eventually")]
     pub(super) fn handle_err<T, E: Into<DiagnosticWithSpan>>(
         &mut self,
         result: Result<T, E>,
