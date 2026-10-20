@@ -41,7 +41,6 @@ never inside it (D1).
   `AnnotationRef`. Annotations store spans, not strings, so reading a name needs the text.
 - **resolve** - turn every raw annotation into a consumer type `T`, through `FromAnnotation` or a
   closure. Output `Resolved<T, E>`.
-- **claimed** / **unclaimed** - the resolver returned `Some` / `None` for an annotation.
 
 Words not used: **attribute** (Rust's term, and ritobin has none), **decorator**, **metadata**
 (taken by `ltk_meta`'s `M` parameter, ADR-0010).
@@ -238,11 +237,12 @@ caller bug (D3).
 ## <a id="s8"></a>8. Resolution
 
 ```rust
-/// Turns a raw annotation into a consumer type.
+/// Turns a raw annotation into a consumer type. One impl per tool, on an enum of every
+/// annotation that tool reads. Total: an annotation the tool does not own is the consumer's own
+/// variant, such as `Unknown`, or its own error.
 pub trait FromAnnotation: Sized {
     type Error: std::error::Error;
-    /// `Ok(None)`: the annotation is not this type's, and is left unclaimed.
-    fn from_annotation(annotation: AnnotationRef<'_>) -> Result<Option<Self>, Spanned<Self::Error>>;
+    fn from_annotation(annotation: AnnotationRef<'_>) -> Result<Self, Spanned<Self::Error>>;
 }
 
 impl Annotations {
@@ -251,7 +251,7 @@ impl Annotations {
     /// Resolves through a closure, for a resolver that carries state.
     pub fn resolve_with<T, E, F>(&self, text: &str, resolver: F) -> Resolved<T, E>
     where
-        F: FnMut(AnnotationRef<'_>) -> Result<Option<T>, Spanned<E>>;
+        F: FnMut(AnnotationRef<'_>) -> Result<T, Spanned<E>>;
 }
 
 impl Ast {
@@ -265,8 +265,6 @@ pub struct Resolved<T, E> { /* private */ }
 impl<T, E> Resolved<T, E> {
     pub fn annotations(&self) -> &Annotations<T>;
     pub fn errors(&self) -> &[Spanned<E>];
-    /// Raw annotations the resolver returned `Ok(None)` for.
-    pub fn unclaimed(&self) -> impl Iterator<Item = &Attached<Annotation>>;
     pub fn into_parts(self) -> (Annotations<T>, Vec<Spanned<E>>);
 }
 
@@ -276,24 +274,28 @@ impl<E: From<ArgError>> From<ArgError> for Spanned<E> { /* keeps the ArgError's 
 - `resolve` borrows the table. Several consumers resolve the same `Ast` independently.
 - `resolve_with` is the path for a resolver with runtime state, such as a name table loaded from a
   file. `FromAnnotation` is the path for a fixed type and is the one most consumers want.
-- A failed annotation is in `errors` only. Its target gets no entry in `annotations`.
+- Every annotation resolves or fails; nothing is dropped. A failed annotation is in `errors`
+  only. Its target gets no entry in `annotations`. A consumer that wants to flag unknown names,
+  an LSP for example, filters its own `Unknown` variant.
 - Error spans: an `ArgError` raised with `?` keeps the argument's span. `AnnotationRef::error` uses
   the annotation's span.
 - `resolve` does not write to `Ast::diagnostics`. `Diagnostic` is `Copy` and cannot carry a
   consumer's error (D5).
 
 ```rust
+enum Directive { Replace, Merge { depth: u64, strict: bool }, Unknown }
+
 impl FromAnnotation for Directive {
     type Error = DirectiveError; // has #[from] ArgError
 
-    fn from_annotation(a: AnnotationRef<'_>) -> Result<Option<Self>, Spanned<Self::Error>> {
+    fn from_annotation(a: AnnotationRef<'_>) -> Result<Self, Spanned<Self::Error>> {
         match a.name() {
-            "replace" => Ok(Some(Self::Replace)),
+            "replace" => Ok(Self::Replace),
             "merge" => {
                 a.only(&["depth", "strict"])?;
-                Ok(Some(Self::Merge { depth: a.require("depth")?, strict: a.flag("strict")? }))
+                Ok(Self::Merge { depth: a.require("depth")?, strict: a.flag("strict")? })
             }
-            _ => Ok(None),
+            _ => Ok(Self::Unknown),
         }
     }
 }
@@ -378,7 +380,7 @@ error types are `Copy`, like `Diagnostic` (D15).
 - **Queries:** `on` and `applying_to` on nested targets, checked for order; an annotated map
   entry is `on` the entry and neither its key nor its value, and both inherit it; an entry with
   no value is a target.
-- **Resolution:** claimed, unclaimed and failed annotations in one file, through `resolve` and
+- **Resolution:** resolved, unknown and failed annotations in one file, through `resolve` and
   `resolve_with`; error spans for each `ArgErrorKind`; one `FromArgument` case per row of the table
   in [section 7](#s7); `null` through `arg`, `require` and `flag`; a duplicate argument name.
 - **Round trip:** printed output reparsed and its annotations compared with the original's.
@@ -393,7 +395,7 @@ error types are `Copy`, like `Diagnostic` (D15).
 | D4 | Target spans are trimmed CST spans. `on` matches the exact span; `applying_to` by inclusive containment. | Untrimmed spans; matching by start offset; half-open containment. | Untrimmed spans include trailing whitespace and never equal an AST node's span. A map entry and its key share a start offset, so start alone would put the entry's annotation on the key. | [section 4](#s4), [section 6](#s6) |
 | D5 | `resolve` returns errors and never writes `Ast::diagnostics`. | Merging consumer errors into `Diagnostic`. | `Diagnostic` is `Copy`. | [section 8](#s8) |
 | D6 | `FromAnnotation` takes `AnnotationRef` and nothing else. New context is added as `AnnotationRef` methods. | Extra trait method parameters. | A new trait parameter breaks every implementation; a new method breaks none. | [section 8](#s8); ADR-0012 |
-| D7 | `Ok(None)` from `from_annotation` leaves an annotation unclaimed, not failed. | Erroring on unknown names. | Several tools annotate one file; each ignores the others'. | [section 8](#s8) |
+| D7 | `FromAnnotation` is total: one impl per tool on an enum of its annotations, and an unknown name is the consumer's own variant. | `Result<Option<Self>, _>` with `None` for "not mine" and an `unclaimed` list on `Resolved`. | The `Option` read as one impl per annotation kind. Every annotation resolving to something keeps the decision about unknown names with the consumer: an LSP and a patch tool want different answers. | [section 8](#s8) |
 | D8 | Attachment is one CST pass before value resolution. | Per-resolver annotation handling. | One rule for every scope; resolvers do not see annotations. | [section 4](#s4); ADR-0012 |
 | D9 | An annotation is one line; arguments never wrap. | Multi-line argument lists. | A newline ends a statement everywhere else in ritobin. | [section 3](#s3), [section 10](#s10) |
 | D10 | The public module is `ast::annotation`, beside `ast::hash` and `ast::query`. | A `node::annotation` module glob re-exported into `ast::node`. | `ast::node` holds the tree's nodes. Annotations are a side table keyed by node, not nodes. | [section 5](#s5) |

@@ -395,7 +395,12 @@ fn argument_errors_carry_spans() {
 #[derive(Debug, Clone, PartialEq)]
 enum Directive {
     Replace,
-    Merge { depth: u64, strict: bool },
+    Merge {
+        depth: u64,
+        strict: bool,
+    },
+    /// Another tool's annotation.
+    Unknown,
 }
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
@@ -409,21 +414,21 @@ enum DirectiveError {
 impl FromAnnotation for Directive {
     type Error = DirectiveError;
 
-    fn from_annotation(a: AnnotationRef<'_>) -> Result<Option<Self>, Spanned<Self::Error>> {
+    fn from_annotation(a: AnnotationRef<'_>) -> Result<Self, Spanned<Self::Error>> {
         match a.name() {
-            "replace" => Ok(Some(Self::Replace)),
+            "replace" => Ok(Self::Replace),
             "merge" => {
                 a.only(&["depth", "strict"])?;
                 let depth = a.require::<u64>("depth")?;
                 if depth == 0 {
                     return Err(a.error(DirectiveError::ZeroDepth));
                 }
-                Ok(Some(Self::Merge {
+                Ok(Self::Merge {
                     depth,
                     strict: a.flag("strict")?,
-                }))
+                })
             }
-            _ => Ok(None),
+            _ => Ok(Self::Unknown),
         }
     }
 }
@@ -449,12 +454,12 @@ entries: map[hash,embed] = {
 "#;
 
 #[test]
-fn resolve_splits_claimed_unclaimed_and_failed() {
+fn resolve_splits_resolved_and_failed() {
     let ast = parse(DIRECTIVES);
     let resolved: Resolved<Directive, DirectiveError> = ast.resolve_annotations(DIRECTIVES);
 
     let typed = resolved.annotations();
-    assert_eq!(typed.len(), 2);
+    assert_eq!(typed.len(), 3);
     assert_eq!(
         typed.on(property(&ast, "x")).collect::<Vec<_>>(),
         [&Directive::Replace]
@@ -466,14 +471,12 @@ fn resolve_splits_claimed_unclaimed_and_failed() {
             strict: true
         }]
     );
-    assert_eq!(typed.on(property(&ast, "z")).count(), 0);
+    // another tool's annotation is the consumer's own variant, not dropped
+    assert_eq!(
+        typed.on(property(&ast, "z")).collect::<Vec<_>>(),
+        [&Directive::Unknown]
+    );
     assert_eq!(typed.on(property(&ast, "w")).count(), 0);
-
-    let unclaimed: Vec<&str> = resolved
-        .unclaimed()
-        .map(|a| &DIRECTIVES[a.annotation().name()])
-        .collect();
-    assert_eq!(unclaimed, ["other_tool"]);
 
     let errors = resolved.errors();
     assert_eq!(errors.len(), 2);
@@ -498,11 +501,18 @@ fn resolve_with_takes_a_stateful_closure() {
     let mut seen = 0;
     let resolved = ast.annotations.resolve_with(DIRECTIVES, |a| {
         seen += 1;
-        Ok::<_, Spanned<DirectiveError>>((a.name() == "replace").then_some(()))
+        Ok::<_, Spanned<DirectiveError>>(a.name() == "replace")
     });
     assert_eq!(seen, 5);
-    assert_eq!(resolved.annotations().len(), 1);
-    assert_eq!(resolved.unclaimed().count(), 4);
+    assert_eq!(resolved.annotations().len(), 5);
+    assert_eq!(
+        resolved
+            .annotations()
+            .iter()
+            .filter(|a| *a.annotation())
+            .count(),
+        1
+    );
     assert!(resolved.errors().is_empty());
 }
 

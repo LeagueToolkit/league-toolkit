@@ -1,24 +1,22 @@
 use crate::Spanned;
 
-use super::{Annotation, AnnotationRef, Annotations, Attached};
+use super::{AnnotationRef, Annotations};
 
 /// Turns a raw annotation into a consumer's own type.
 ///
-/// Most consumers implement this once per tool. A resolver that carries runtime state uses
-/// [`Annotations::resolve_with`] instead.
+/// Implemented once per tool, on an enum of every annotation that tool reads. The trait is
+/// total: every annotation in the file resolves to one `Self`, so an annotation the tool does not
+/// own is the consumer's own variant, such as `Unknown`, or its own error. A resolver that carries
+/// runtime state uses [`Annotations::resolve_with`] instead.
 pub trait FromAnnotation: Sized {
     type Error: std::error::Error;
 
-    /// `Ok(None)` means the annotation is not this type's and is left unclaimed, for another
-    /// tool to read.
-    ///
     /// # Errors
     ///
-    /// The annotation is this type's, but malformed. An [`ArgError`](super::ArgError) raised
-    /// with `?` keeps the argument's span; [`AnnotationRef::error`] spans anything else at the
+    /// The annotation is malformed for this type. An [`ArgError`](super::ArgError) raised with
+    /// `?` keeps the argument's span; [`AnnotationRef::error`] spans anything else at the
     /// annotation.
-    fn from_annotation(annotation: AnnotationRef<'_>)
-        -> Result<Option<Self>, Spanned<Self::Error>>;
+    fn from_annotation(annotation: AnnotationRef<'_>) -> Result<Self, Spanned<Self::Error>>;
 }
 
 impl Annotations {
@@ -34,17 +32,15 @@ impl Annotations {
     #[must_use]
     pub fn resolve_with<T, E, F>(&self, text: &str, mut resolver: F) -> Resolved<T, E>
     where
-        F: FnMut(AnnotationRef<'_>) -> Result<Option<T>, Spanned<E>>,
+        F: FnMut(AnnotationRef<'_>) -> Result<T, Spanned<E>>,
     {
         let mut resolved = Resolved {
             annotations: Annotations::default(),
             errors: Vec::new(),
-            unclaimed: Vec::new(),
         };
         for attached in self {
             match resolver(attached.annotation().with_source(text)) {
-                Ok(Some(value)) => resolved.annotations.attach(value, attached.target()),
-                Ok(None) => resolved.unclaimed.push(attached.clone()),
+                Ok(value) => resolved.annotations.attach(value, attached.target()),
                 Err(error) => resolved.errors.push(error),
             }
         }
@@ -60,7 +56,6 @@ impl Annotations {
 pub struct Resolved<T, E> {
     annotations: Annotations<T>,
     errors: Vec<Spanned<E>>,
-    unclaimed: Vec<Attached<Annotation>>,
 }
 
 impl<T, E> Resolved<T, E> {
@@ -73,11 +68,6 @@ impl<T, E> Resolved<T, E> {
     #[must_use]
     pub fn errors(&self) -> &[Spanned<E>] {
         &self.errors
-    }
-
-    /// Raw annotations the resolver returned `Ok(None)` for, in source order.
-    pub fn unclaimed(&self) -> impl Iterator<Item = &Attached<Annotation>> + '_ {
-        self.unclaimed.iter()
     }
 
     #[must_use]
