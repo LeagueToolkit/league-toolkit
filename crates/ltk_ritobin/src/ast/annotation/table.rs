@@ -67,6 +67,10 @@ impl<A> Annotations<A> {
         self.attached.is_empty()
     }
 
+    /// Targets with exactly `target`'s span.
+    ///
+    /// Exact, not by start offset: a map entry and its key start at the same byte, and an
+    /// annotation on the entry is not on the key.
     fn attached_on(&self, target: Span) -> impl Iterator<Item = &Attached<A>> + '_ {
         let from = self
             .attached
@@ -74,6 +78,7 @@ impl<A> Annotations<A> {
         self.attached[from..]
             .iter()
             .take_while(move |a| a.target.start == target.start)
+            .filter(move |a| a.target == target)
     }
 }
 

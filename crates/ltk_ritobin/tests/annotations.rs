@@ -156,12 +156,37 @@ fn target_spans_equal_node_targets() {
     let ast = parse(FILE);
     let targets: Vec<Span> = ast.annotations.iter().map(|a| a.target()).collect();
 
+    let Some(Value::UnorderedContainer { items: units, .. }) =
+        property(&ast, "units").value.as_ref()
+    else {
+        panic!("units is a list2");
+    };
+    let Some(Value::Map(lookup)) = property(&ast, "lookup").value.as_ref() else {
+        panic!("lookup is a map");
+    };
+    let linked = ast
+        .roots
+        .all
+        .iter()
+        .find(|r| r.name.value == RootKind::Linked)
+        .unwrap();
+    let Some(Value::Container { items: paths, .. }) =
+        linked.value.as_ref().and_then(|v| v.as_value())
+    else {
+        panic!("linked is a list");
+    };
+
+    // one per node kind: Root, RootEntry, Property, MapEntry, literal and class list items
     for node in [
+        ast.roots.all[0].target(),
         entry(&ast).target(),
         property(&ast, "skinClassification").target(),
         property(&ast, "loadscreen").target(),
         property(&ast, "units").target(),
         property(&ast, "lookup").target(),
+        lookup.entries[0].target(),
+        units[0].target(),
+        paths[0].target(),
     ] {
         assert!(targets.contains(&node), "{node:?} not in {targets:?}");
     }
@@ -540,4 +565,41 @@ fn an_annotation_inside_a_list_like_is_an_error() {
         property(&ast, "pos").value,
         Some(Value::Vector3(_))
     ));
+}
+
+#[test]
+fn a_map_entry_annotation_is_on_the_entry_not_its_key_or_value() {
+    let ast = parse(FILE);
+    let text = FILE;
+    let Some(Value::Map(lookup)) = property(&ast, "lookup").value.as_ref() else {
+        panic!("lookup is a map");
+    };
+    let entry = &lookup.entries[0];
+    let value = entry.value.as_ref().unwrap();
+
+    assert_eq!(names(&ast, text, entry), ["on_map_entry"]);
+    assert_eq!(names(&ast, text, &entry.key), [] as [&str; 0]);
+    assert_eq!(names(&ast, text, value), [] as [&str; 0]);
+
+    let inherited = |node: &dyn Annotatable| -> Vec<&str> {
+        ast.annotations
+            .with_source(text)
+            .applying_to(&node.target())
+            .map(|a| a.annotation().name())
+            .collect()
+    };
+    assert_eq!(
+        inherited(&entry.key),
+        ["on_entries", "on_root_entry", "on_map", "on_map_entry"]
+    );
+    assert_eq!(inherited(value), inherited(&entry.key));
+}
+
+#[test]
+fn an_entry_without_a_value_is_still_a_target() {
+    let text = "@a
+foo: u32
+";
+    let ast = Cst::parse(text).build_ast(text);
+    assert_eq!(names(&ast, text, &ast.roots.all[0]), ["a"]);
 }

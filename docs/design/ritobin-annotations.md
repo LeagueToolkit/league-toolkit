@@ -181,9 +181,10 @@ impl Annotations {
 pub struct SourceAnnotations<'a> { /* private */ }
 ```
 
-`on` matches a target by start offset. `applying_to` matches every target whose span contains the
-node's span, ends included (D4). No two targets share a start offset: a node and its first child
-start at different tokens.
+`on` matches a target by its exact span, not by start offset: a map entry and its key start at
+the same byte, and an annotation on the entry is on the entry alone. `applying_to` matches every
+target whose span contains the node's span, ends included, so the key and the value of an
+annotated map entry both inherit it (D4).
 
 ```rust
 let deprecated = ast.annotations.with_source(text).on(prop).any(|a| a.name() == "deprecated");
@@ -374,7 +375,9 @@ error types are `Copy`, like `Diagnostic` (D15).
 - **Attachment:** target spans equal `Annotatable::target()` for every node kind in
   [section 5](#s5). Cases: a comment between annotation and target, at the root and in blocks;
   stacked annotations; trailing annotations; a target at end of file with no trailing newline.
-- **Queries:** `on` and `applying_to` on nested targets, checked for order.
+- **Queries:** `on` and `applying_to` on nested targets, checked for order; an annotated map
+  entry is `on` the entry and neither its key nor its value, and both inherit it; an entry with
+  no value is a target.
 - **Resolution:** claimed, unclaimed and failed annotations in one file, through `resolve` and
   `resolve_with`; error spans for each `ArgErrorKind`; one `FromArgument` case per row of the table
   in [section 7](#s7); `null` through `arg`, `require` and `flag`; a duplicate argument name.
@@ -387,7 +390,7 @@ error types are `Copy`, like `Diagnostic` (D15).
 | D1 | `Ast` is not generic. Typed annotations live in `Annotations<T>` beside it. | `Ast<A = Annotation>`. | A type parameter that only touches one field costs every `Ast` signature `<A>`. Adding one later is non-breaking; removing it is not. | [section 1](#s1), [section 5](#s5); ADR-0012 |
 | D2 | `Annotations<A>` is the one generic type. | A second table type for typed annotations. | Raw and typed tables answer the same queries. | [section 6](#s6) |
 | D3 | Annotations store spans. Text is read through `AnnotationRef`, which pairs them with the source. | Owned `Box<str>` names. | The rest of `Ast` is span-based and does not own the source. | [section 5](#s5), [section 7](#s7) |
-| D4 | Target spans are trimmed CST spans. `on` matches by start offset; `applying_to` by inclusive containment. | Untrimmed spans with half-open containment. | Untrimmed spans include trailing whitespace and never equal an AST node's span. | [section 4](#s4), [section 6](#s6) |
+| D4 | Target spans are trimmed CST spans. `on` matches the exact span; `applying_to` by inclusive containment. | Untrimmed spans; matching by start offset; half-open containment. | Untrimmed spans include trailing whitespace and never equal an AST node's span. A map entry and its key share a start offset, so start alone would put the entry's annotation on the key. | [section 4](#s4), [section 6](#s6) |
 | D5 | `resolve` returns errors and never writes `Ast::diagnostics`. | Merging consumer errors into `Diagnostic`. | `Diagnostic` is `Copy`. | [section 8](#s8) |
 | D6 | `FromAnnotation` takes `AnnotationRef` and nothing else. New context is added as `AnnotationRef` methods. | Extra trait method parameters. | A new trait parameter breaks every implementation; a new method breaks none. | [section 8](#s8); ADR-0012 |
 | D7 | `Ok(None)` from `from_annotation` leaves an annotation unclaimed, not failed. | Erroring on unknown names. | Several tools annotate one file; each ignores the others'. | [section 8](#s8) |
