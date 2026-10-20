@@ -20,6 +20,8 @@ struct ListIter<'a, 'b, 'c> {
     span: Span,
     type_span: Option<Span>,
     count: u8,
+    /// The list-like being read, for diagnosing items it cannot hold.
+    kind: PropertyKind,
 }
 
 impl<'c> ListIter<'_, '_, 'c> {
@@ -28,8 +30,21 @@ impl<'c> ListIter<'_, '_, 'c> {
             let Some(node) = child.tree(self.cst) else {
                 continue;
             };
-            if node.kind == Kind::Comment {
-                continue;
+            match node.kind {
+                Kind::Comment => continue,
+                // a list-like is one value, so there is nothing inside it to annotate
+                Kind::Annotation => {
+                    self.ctx.push(
+                        D::UnexpectedItem {
+                            span: node.span,
+                            parent: RitoType::simple(self.kind),
+                            expected: crate::ItemShape::Value,
+                        }
+                        .unwrap(),
+                    );
+                    continue;
+                }
+                _ => {}
             }
             self.count += 1;
             self.span = node.span;
@@ -130,6 +145,7 @@ impl<'a> Builder<'a> {
             span,
             type_span,
             count: 0,
+            kind,
         };
 
         let value = match kind {

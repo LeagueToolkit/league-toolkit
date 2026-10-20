@@ -4,7 +4,7 @@ use crate::ast::{
     Ast,
 };
 
-impl<A> Ast<A> {
+impl Ast {
     /// The chain of nodes on the way to `offset`, outermost first.
     pub fn coarse_path_to(&self, offset: u32) -> AstPathIter<'_> {
         AstPathIter::from_ast(self, offset)

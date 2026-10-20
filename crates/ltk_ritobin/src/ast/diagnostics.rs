@@ -524,7 +524,7 @@ impl Diagnostic {
             | InvalidPropertyPath { span, .. }
             | UnexpectedFileKind { span, .. }
             | InvalidRootEntryType { key_span: span, .. } => Some(*span),
-            AnnotationResolve(err) => err.span(),
+            AnnotationResolve(err) => Some(err.span()),
             TrailingAnnotations(span) => Some(*span),
             TypeMismatch(err) => Some(err.span),
             ValueEvalError(err) => Some(err.span()),

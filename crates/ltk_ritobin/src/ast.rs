@@ -1,3 +1,4 @@
+pub mod annotation;
 pub mod builder;
 pub mod diagnostics;
 pub mod hash;
@@ -18,8 +19,9 @@ pub use to_bin::PartialBin;
 
 use crate::{
     ast::{
+        annotation::{Annotations, FromAnnotation, Resolved},
         diagnostics::DiagnosticWithSpan,
-        node::{roots::Roots, Annotation, Annotations},
+        node::roots::Roots,
     },
     Cst,
 };
@@ -31,39 +33,22 @@ pub(crate) type Ptr<T> = std::sync::Arc<T>;
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "span_print", derive(crate::span::DebugSpans))]
-pub struct Ast<A = Annotation> {
+pub struct Ast {
     pub roots: Roots,
-    pub annotations: Annotations<A>,
+    /// Every annotation in the file, keyed by the node it applies to.
+    pub annotations: Annotations,
     pub diagnostics: Vec<DiagnosticWithSpan>,
 }
 
-impl<A> Ast<A> {
+impl Ast {
     pub fn root_entries(&self) -> impl Iterator<Item = &RootEntry> {
         self.roots.entries().unwrap_or_default().iter()
     }
 
-    pub fn map_annotations<T>(self, map: impl FnOnce(Annotations<A>) -> Annotations<T>) -> Ast<T> {
-        Ast {
-            roots: self.roots,
-            annotations: map(self.annotations),
-            diagnostics: self.diagnostics,
-        }
-    }
-
-    pub fn try_map_annotations<T, E, F>(self, mut map: F) -> Ast<T>
-    where
-        E: Into<DiagnosticWithSpan>,
-        F: FnMut(A) -> Result<T, E>,
-    {
-        let mut diagnostics = self.diagnostics;
-
-        Ast {
-            roots: self.roots,
-            annotations: self
-                .annotations
-                .map_fallible(|a| map(a).map_err(|e| e.into()), &mut diagnostics),
-            diagnostics,
-        }
+    /// Shorthand for `self.annotations.resolve(text)`. See [`FromAnnotation`].
+    #[must_use]
+    pub fn resolve_annotations<T: FromAnnotation>(&self, text: &str) -> Resolved<T, T::Error> {
+        self.annotations.resolve(text)
     }
 }
 

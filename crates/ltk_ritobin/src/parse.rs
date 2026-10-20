@@ -150,11 +150,19 @@ entries: map[hash, embed] = {
     }
     #[test]
     fn annotation_edgecases() {
+        assert_success("@a()");
+        assert_success("@a(x,)");
+        assert_success("@a(x = null)");
         assert_fail("@(a");
         assert_fail("@(");
         assert_fail("@a(");
         assert_fail("@");
         assert_fail("@()");
+        assert_fail("@a(x y)");
+        assert_fail("@a(x,,y)");
+        assert_fail("@a(x = )");
+        assert_fail("@a(1)");
+        assert_fail("@a(\nx = 1\n)");
     }
 
     #[test]

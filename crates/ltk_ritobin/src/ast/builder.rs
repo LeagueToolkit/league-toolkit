@@ -1,15 +1,10 @@
 use crate::{
-    ast::{
-        diagnostics::DiagnosticWithSpan,
-        node::{Annotation, Annotations},
-        Ast,
-    },
+    ast::{annotation::Annotations, diagnostics::DiagnosticWithSpan, Ast},
     cst::Cst,
 };
 
 mod patch;
 mod root_entry;
-use crate::Span;
 pub use root_entry::*;
 
 impl Ast {
@@ -18,7 +13,7 @@ impl Ast {
             cst,
             text,
             diagnostics: Vec::new(),
-            annotations: Annotations::new(),
+            annotations: Annotations::default(),
         };
         ctx.build()
     }
@@ -29,7 +24,7 @@ pub(super) struct Builder<'a> {
     pub cst: &'a Cst,
     pub text: &'a str,
     pub diagnostics: Vec<DiagnosticWithSpan>,
-    annotations: Annotations,
+    pub(super) annotations: Annotations,
 }
 
 impl<'a> Builder<'a> {
@@ -39,27 +34,5 @@ impl<'a> Builder<'a> {
 
     pub(super) fn push(&mut self, d: DiagnosticWithSpan) {
         self.diagnostics.push(d);
-    }
-
-    #[expect(unused, reason = "will probably need this eventually")]
-    pub(super) fn handle_err<T, E: Into<DiagnosticWithSpan>>(
-        &mut self,
-        result: Result<T, E>,
-    ) -> Option<T> {
-        match result {
-            Ok(v) => Some(v),
-            Err(e) => {
-                self.push(e.into());
-                None
-            }
-        }
-    }
-
-    pub(super) fn apply_annotations(
-        &mut self,
-        annotations: impl IntoIterator<Item = Annotation>,
-        target: Span,
-    ) {
-        self.annotations.extend(annotations, target)
     }
 }

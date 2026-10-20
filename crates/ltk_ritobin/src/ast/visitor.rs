@@ -53,7 +53,7 @@ pub trait Visitor {
 }
 
 pub trait VisitorExt: Sized + Visitor {
-    fn walk<A>(mut self, ast: &Ast<A>) -> Self {
+    fn walk(mut self, ast: &Ast) -> Self {
         ast.walk(&mut self);
         self
     }
@@ -209,7 +209,7 @@ fn walk_value<V: Visitor>(visitor: &mut V, value: &Value) -> ExitFlow {
     )
 }
 
-impl<A> Ast<A> {
+impl Ast {
     /// Walk a [`Visitor`] over every object in this tree.
     pub fn walk<V: Visitor>(&self, visitor: &mut V) {
         let _ = walk_all(visitor, self.root_entries(), walk_root_object);

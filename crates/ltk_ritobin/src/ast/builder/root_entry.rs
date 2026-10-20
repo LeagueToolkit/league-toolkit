@@ -1,5 +1,3 @@
-use std::mem::take;
-
 use crate::{
     ast::{
         diagnostics::{Diagnostic as D, TypeMismatch},
@@ -29,6 +27,7 @@ pub struct RawRootProperty {
 
 impl<'a> Builder<'a> {
     pub(crate) fn build(mut self) -> Ast {
+        self.attach_annotations(self.cst.root());
         let mut all = self.resolve_roots();
         let mut roots = Roots::default();
 
@@ -47,44 +46,25 @@ impl<'a> Builder<'a> {
 
         Ast {
             roots,
-            diagnostics: self.diagnostics,
             annotations: self.annotations,
+            diagnostics: self.diagnostics,
         }
     }
 
     /// Resolves every top-level entry of the tree to a [`Root`], in file order.
     fn resolve_roots(&mut self) -> Vec<Root> {
         let cst = self.cst;
-        let mut roots = vec![];
-        let mut anns = vec![];
-        for child in cst.root().children.get(cst).iter() {
-            let Some(node) = child.tree(cst) else {
-                continue;
-            };
-
-            match node.kind {
-                Kind::Comment => continue,
-                Kind::Annotation => {
-                    if let Some(ann) = self.resolve_annotation(node) {
-                        anns.push(ann);
-                    }
-                    continue;
-                }
-                _ => {}
-            }
-
-            if let Some(root) = self.resolve_root(node, roots.len()) {
-                roots.push(root);
-            }
-            if let Some(anns) = (!anns.is_empty()).then(|| take(&mut anns)) {
-                self.apply_annotations(anns, node.span);
-            };
-        }
-        if let Some((l, r)) = anns.first().zip(anns.last()) {
-            let span = l.span.cover(r.span);
-            self.push(D::TrailingAnnotations(span).unwrap());
-        }
-        roots
+        let mut idx = 0;
+        cst.root()
+            .children
+            .get(cst)
+            .iter()
+            .filter_map(|child| {
+                let root = self.resolve_root(child.tree(cst)?, idx)?;
+                idx += 1;
+                Some(root)
+            })
+            .collect()
     }
 
     /// Checks a root's type expression and value against the type its kind expects.

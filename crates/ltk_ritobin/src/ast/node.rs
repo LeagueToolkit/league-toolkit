@@ -1,4 +1,3 @@
-mod annotation;
 mod kind;
 mod object;
 mod property;
@@ -10,7 +9,6 @@ pub mod root;
 pub mod roots;
 pub mod value;
 
-pub use annotation::*;
 pub use kind::*;
 pub use object::*;
 pub use property::*;

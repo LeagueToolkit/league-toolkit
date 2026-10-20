@@ -66,10 +66,9 @@ pub fn annotation(p: &mut Parser) -> MarkClosed {
         p.expect(Name);
         if p.at(LParen) {
             p.scope(TreeKind::AnnotationArgList, |p| {
-                // "name", "name = true", "name = 2"
+                // `name`, `name = true`, `name = 2`; comma separated, one trailing comma allowed
                 p.advance();
-                while p.eat(TokenKind::Newline) {}
-                while p.at_any(&[RParen, Eof]).is_none() {
+                while p.at_any(&[RParen, Eof, Newline]).is_none() {
                     p.scope(TreeKind::AnnotationArg, |p| {
                         p.expect(Name);
                         if p.at(Eq) {
@@ -77,9 +76,10 @@ pub fn annotation(p: &mut Parser) -> MarkClosed {
                             p.expect_any(&[String, Number, HexLit, True, False, Null]);
                         }
                     });
-                    while p.at_any(&[Comma, Newline]).is_some() {
-                        p.advance();
+                    if p.at_any(&[RParen, Eof, Newline]).is_some() {
+                        break;
                     }
+                    p.expect(Comma);
                     while p.at_any(&[RParen, Name, Eof, Newline]).is_none() {
                         p.advance_with_error(ErrorKind::Unexpected { token: p.nth(0) }, None);
                     }

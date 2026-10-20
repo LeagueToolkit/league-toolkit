@@ -90,13 +90,10 @@ impl<'a> Builder<'a> {
                 Ok(self.resolve_literal(self.text, token, expected_type, expected_type_span))
             }
             Kind::ErrorTree => Ok(Value::Unknown(node.span)),
-            kind => {
-                eprintln!("cannot resolve {kind:?}");
-                Err(Diagnostic::CustomSpan(
-                    "[resolve_value] cannot resolve this node kind",
-                    node.span,
-                ))
-            }
+            _ => Err(Diagnostic::CustomSpan(
+                "[resolve_value] cannot resolve this node kind",
+                node.span,
+            )),
         }
     }
 
