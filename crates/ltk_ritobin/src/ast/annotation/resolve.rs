@@ -2,20 +2,12 @@ use crate::Spanned;
 
 use super::{AnnotationRef, Annotations};
 
-/// Turns a raw annotation into a consumer's own type.
+/// Convert from an input raw annotation
 ///
-/// Implemented once per tool, on an enum of every annotation that tool reads. The trait is
-/// total: every annotation in the file resolves to one `Self`, so an annotation the tool does not
-/// own is the consumer's own variant, such as `Unknown`, or its own error. A resolver that carries
-/// runtime state uses [`Annotations::resolve_with`] instead.
+/// If mutable state is needed, use [`Annotations::resolve_with`] instead.
 pub trait FromAnnotation: Sized {
     type Error: std::error::Error;
 
-    /// # Errors
-    ///
-    /// The annotation is malformed for this type. An [`ArgError`](super::ArgError) raised with
-    /// `?` keeps the argument's span; [`AnnotationRef::error`] spans anything else at the
-    /// annotation.
     fn from_annotation(annotation: AnnotationRef<'_>) -> Result<Self, Spanned<Self::Error>>;
 }
 
@@ -26,9 +18,9 @@ impl Annotations {
         self.resolve_with(text, T::from_annotation)
     }
 
-    /// Resolves every annotation through `resolver`, for a resolver that carries state.
+    /// Resolves every annotation in the annotation set.
     ///
-    /// The contract is that of [`FromAnnotation::from_annotation`].
+    /// See [`Self::resolve`] for a simpler way to resolve annotations.
     #[must_use]
     pub fn resolve_with<T, E, F>(&self, text: &str, mut resolver: F) -> Resolved<T, E>
     where
@@ -49,9 +41,6 @@ impl Annotations {
 }
 
 /// The result of [`Annotations::resolve`] or [`Annotations::resolve_with`].
-///
-/// A failed annotation is in [`errors`](Self::errors) only; its target gets no entry in
-/// [`annotations`](Self::annotations). The raw table is untouched.
 #[derive(Debug, Clone)]
 pub struct Resolved<T, E> {
     annotations: Annotations<T>,

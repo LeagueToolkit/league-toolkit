@@ -1,9 +1,7 @@
-//! Annotations: `@name(args)` lines that apply to the entry or list item after them.
+//! Annotations: `@name(args)` decorators that apply to the entry or list item after them.
 //!
-//! The crate gives an annotation no meaning. It parses the line, attaches it to its target and
-//! keeps it in [`Annotations`], a side table on [`Ast`](crate::ast::Ast) keyed by target span. A
-//! consumer reads the raw table through [`AnnotationRef`], or resolves it into its own type with
-//! [`FromAnnotation`].
+//! [`Annotation`] are minimally parsed, with the implementation of concrete annotations left entirely to the consumer (for now).
+//! Consumers can resolve raw [`Annotation`]s into their own types with [`FromAnnotation`].
 //!
 //! The spec is `docs/design/ritobin-annotations.md`.
 
@@ -25,8 +23,8 @@ use crate::{
 
 /// One `@name(args)` as written in the source.
 ///
-/// Names and flags are spans into the source the tree was built from; pair the annotation with
-/// that source through [`with_source`](Self::with_source) to read them.
+/// Annotation/argument names are spans into the source the tree was built from.
+/// Use [`with_source`](Self::with_source) to read them conveniently.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "span_print", derive(crate::span::DebugSpans))]
 pub struct Annotation {
@@ -44,13 +42,13 @@ impl Annotation {
         }
     }
 
-    /// From `@` to the closing `)`, or to the end of the name when there are no arguments.
+    /// The full annotation span, including the `@`, and the argument parentheses.
     #[must_use]
     pub fn span(&self) -> Span {
         self.span
     }
 
-    /// The name only, without `@`.
+    /// The name of the annotation (`foo` in `@foo(..)`).
     #[must_use]
     pub fn name(&self) -> Span {
         self.name
@@ -65,7 +63,7 @@ impl Annotation {
     ///
     /// # Panics
     ///
-    /// The returned view panics when read if `text` is not that source.
+    /// The returned view can panic doing span lookups, if `text` is not the AST's original source.
     #[must_use]
     pub fn with_source<'a>(&'a self, text: &'a str) -> AnnotationRef<'a> {
         AnnotationRef::new(self, text)
@@ -143,12 +141,12 @@ mod sealed {
     pub trait Sealed {}
 }
 
-/// A node an annotation can target.
+/// Something an annotation can target.
 ///
 /// Implemented for [`Root`], [`RootEntry`], [`Property`], [`MapEntry`], [`Value`] (as a list
-/// item), and [`Span`] as the identity for a caller that already holds a target span. Sealed.
+/// item), and [`Span`] for convenience.
 pub trait Annotatable: sealed::Sealed {
-    /// The span annotations on this node are keyed by.
+    /// The span that annotations should target
     fn target(&self) -> Span;
 }
 

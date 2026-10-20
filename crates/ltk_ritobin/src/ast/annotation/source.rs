@@ -5,9 +5,6 @@ use crate::{ast::Value, span::Span, Spanned};
 use super::{Annotation, Argument};
 
 /// An [`Annotation`] paired with the source text it was parsed from.
-///
-/// Every accessor slices `text` by a span the annotation recorded, so passing a different text
-/// is a caller bug: the slice falls outside the text or splits a character, and panics.
 #[derive(Debug, Clone, Copy)]
 pub struct AnnotationRef<'a> {
     annotation: &'a Annotation,
@@ -24,7 +21,7 @@ impl<'a> AnnotationRef<'a> {
         self.annotation
     }
 
-    /// The name, without `@`.
+    /// The name of the annotation (`foo` in `@foo(..)`).
     #[must_use]
     pub fn name(&self) -> &'a str {
         &self.text[self.annotation.name]
@@ -142,7 +139,6 @@ impl<'a> AnnotationRef<'a> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error("{kind}")]
 pub struct ArgError {
-    /// The argument, or the whole annotation for [`ArgErrorKind::Missing`].
     pub span: Span,
     pub kind: ArgErrorKind,
 }
@@ -160,7 +156,6 @@ pub enum ArgErrorKind {
     Unexpected,
 }
 
-/// Lets `?` on an [`ArgError`] keep the argument's span inside a consumer's error.
 impl<E: From<ArgError>> From<ArgError> for Spanned<E> {
     fn from(error: ArgError) -> Self {
         Spanned::new(error.span, E::from(error))

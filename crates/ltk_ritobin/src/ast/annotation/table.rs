@@ -103,7 +103,7 @@ impl Annotations {
     }
 }
 
-/// [`Annotations`] with the source bound. Same queries; items are [`AnnotationRef`].
+/// [`Annotations`] with the source bound for convenience.
 #[derive(Debug, Clone, Copy)]
 pub struct SourceAnnotations<'a> {
     table: &'a Annotations,
@@ -119,8 +119,8 @@ impl<'a> SourceAnnotations<'a> {
             .map(move |annotation| annotation.with_source(text))
     }
 
-    /// Annotations direct on `node` or inherited from an enclosing node: outermost target first,
-    /// source order within one target.
+    /// All annotations that apply to the given node, including ones inherited from outer scopes.
+    /// Ordered by annotation start span.
     pub fn applying_to(
         &self,
         node: &impl Annotatable,

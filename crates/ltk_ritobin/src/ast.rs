@@ -35,7 +35,6 @@ pub(crate) type Ptr<T> = std::sync::Arc<T>;
 #[cfg_attr(feature = "span_print", derive(crate::span::DebugSpans))]
 pub struct Ast {
     pub roots: Roots,
-    /// Every annotation in the file, keyed by the node it applies to.
     pub annotations: Annotations,
     pub diagnostics: Vec<DiagnosticWithSpan>,
 }
