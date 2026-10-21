@@ -1,9 +1,9 @@
-use ltk_hash::{BinHash, Hash as _, HashValue, Hasher, WadHash};
+use ltk_hash::{BinHash, Hash as _, HashValue, WadHash};
 use ltk_meta::PropertyKind;
 
 use crate::{
     ast::{node::Value, Ptr},
-    RitoType,
+    HashType, RitoType,
 };
 
 use crate::ast::hash::{HashedLiteral, Originally};
@@ -52,15 +52,15 @@ impl Value {
         }
     }
 
-    /// Converts the value to the base kind of `to`. A `hash` value takes the width of the
-    /// hasher of `to`. A string in a `hash` position is hashed with the hasher of `to`.
+    /// Converts the value to the base kind of `to`. A `hash` value takes the width of the hash
+    /// type of `to`. A string in a `hash` position is hashed with the hash type of `to`.
     ///
     /// # Errors
     /// Returns the value unchanged if it does not convert.
     pub fn try_coerce_to(self, to: impl Into<RitoType>) -> Result<Self, Self> {
         let to = to.into();
         Ok(match to.base {
-            PropertyKind::Hash => return self.try_coerce_to_hash(to.hasher()),
+            PropertyKind::Hash => return self.try_coerce_to_hash(to.hash_type()),
             to if self.kind().is_some_and(|k| k == to) => self,
             // Unknown values can be coerced into any value (as an unresolved variant)
             to if self.kind().is_none() => Self::Unresolved {
@@ -109,7 +109,7 @@ impl Value {
         })
     }
 
-    /// Converts the value to a 4-byte hash literal of [`Hasher::DEFAULT`].
+    /// Converts the value to a 4-byte hash literal of [`HashType::DEFAULT`].
     ///
     /// # Errors
     /// Returns the value if it does not convert.
@@ -120,32 +120,33 @@ impl Value {
         }
     }
 
-    /// Converts the value to a `hash` value of `hasher`.
+    /// Converts the value to a `hash` value of `hash_type`.
     ///
-    /// A hex literal takes the width of `hasher`. A string is hashed with `hasher`.
+    /// A hex literal takes the width of `hash_type`. A string is hashed with the hash function
+    /// of `hash_type`.
     ///
     /// # Errors
-    /// Returns the value unchanged if it is not a hash literal or a string, or if the literal
-    /// does not fit in the width of `hasher`.
-    fn try_coerce_to_hash(self, hasher: Hasher) -> Result<Self, Self> {
+    /// Returns the value unchanged if it is not a hash literal or a string, if the literal does
+    /// not fit in the width of `hash_type`, or if it is a string and `hash_type` does not give
+    /// a hash function (`hash[u32]`, `hash[u64]`).
+    fn try_coerce_to_hash(self, hash_type: HashType) -> Result<Self, Self> {
         let literal = match &self {
             Self::Hash(hash) => Some(hash.value.as_u64()),
             Self::WadChunkLink(hash) if hash.was_hash() => Some(*hash.value),
             _ => None,
         };
         if let Some(literal) = literal {
-            return match (HashValue::try_with_width(literal, hasher.width), self) {
+            return match (HashValue::try_with_width(literal, hash_type.width), self) {
                 (Some(value), Self::Hash(hash)) => Ok(Self::Hash(hash.with_value(value))),
                 (Some(value), Self::WadChunkLink(hash)) => Ok(Self::Hash(hash.with_value(value))),
                 (_, this) => Err(this),
             };
         }
         Ok(match self {
-            Self::String(str) => Self::Hash(HashedLiteral::new(
-                str.span,
-                Originally::String,
-                hasher.hash_str(&str),
-            )),
+            Self::String(str) => match hash_type.hash_str(&str) {
+                Some(value) => Self::Hash(HashedLiteral::new(str.span, Originally::String, value)),
+                None => return Err(Self::String(str)),
+            },
             Self::Unknown(span) => Self::Unresolved {
                 span,
                 kind: PropertyKind::Hash,

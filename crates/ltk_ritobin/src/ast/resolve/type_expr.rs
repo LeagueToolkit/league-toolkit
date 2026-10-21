@@ -1,4 +1,3 @@
-use ltk_hash::Hasher;
 use ltk_meta::PropertyKind;
 
 use crate::span::Span;
@@ -11,7 +10,7 @@ use crate::{
     cst::{ChildrenExt as _, Kind},
     hash_algorithm_from_name, hash_width_from_name,
     parse::TokenKind,
-    rito_hasher, Node, RitoType, RitobinName as _,
+    HashType, Node, RitoType, RitobinName as _,
 };
 
 impl<'a> Builder<'a> {
@@ -41,12 +40,12 @@ impl<'a> Builder<'a> {
         let args = children.find_tree(self.cst, Kind::TypeArgList);
         if base == PropertyKind::Hash {
             return Ok(RitoType::hash(match args {
-                Some(args) => self.resolve_hasher(args)?,
-                None => Hasher::DEFAULT,
+                Some(args) => self.resolve_hash_type(args)?,
+                None => HashType::DEFAULT,
             }));
         }
 
-        let mut hashers = [Hasher::DEFAULT; 2];
+        let mut hash_types = [HashType::DEFAULT; 2];
         let subtypes = match args {
             Some(subtypes_node) => {
                 let subtypes_span = subtypes_node.span;
@@ -97,8 +96,10 @@ impl<'a> Builder<'a> {
                         }
                         if let Some(nested) = arg.find_tree(self.cst, Kind::TypeArgList) {
                             match resolved {
-                                Some(PropertyKind::Hash) => match self.resolve_hasher(nested) {
-                                    Ok(hasher) if i < hashers.len() => hashers[i] = hasher,
+                                Some(PropertyKind::Hash) => match self.resolve_hash_type(nested) {
+                                    Ok(hash_type) if i < hash_types.len() => {
+                                        hash_types[i] = hash_type
+                                    }
                                     Ok(_) => {}
                                     Err(e) => self.push(e.default_span(nested.span)),
                                 },
@@ -143,7 +144,7 @@ impl<'a> Builder<'a> {
         };
 
         let mut rito = RitoType::new(base, subtypes);
-        rito.hashers[1..].copy_from_slice(&hashers);
+        rito.hash_types[1..].copy_from_slice(&hash_types);
         Ok(rito)
     }
 
@@ -157,29 +158,37 @@ impl<'a> Builder<'a> {
             .collect()
     }
 
-    /// Resolves the type arguments `[width,algorithm]` of a `hash` type to a hasher.
+    /// Resolves the type arguments `[width]` or `[width,algorithm]` of a `hash` type.
     ///
     /// # Errors
-    /// Fails if the list does not have 2 arguments, if the first argument is not `u32` or `u64`,
-    /// or if the second argument is not `fnv1a`, `xxh64` or `xxh3`.
-    fn resolve_hasher(&self, list: &Node) -> Result<Hasher, Diagnostic> {
+    /// Fails if the list does not have 1 or 2 arguments, if the first argument is not `u32` or
+    /// `u64`, or if the second argument is not `fnv1a`, `xxh64` or `xxh3`.
+    fn resolve_hash_type(&self, list: &Node) -> Result<HashType, Diagnostic> {
         let args = self.type_args(list);
-        let [width, algorithm] = args[..] else {
-            let span = match args.get(2..) {
-                Some([first, .., last]) => Span::new(first.span.start, last.span.end),
-                Some([only]) => only.span,
-                _ => args.last().map_or(list.span, |arg| arg.span),
-            };
-            return Err(SubtypeCountMismatch {
-                span,
-                got: args.len() as u8,
-                expected: 2,
-            });
+        let (width, algorithm) = match args[..] {
+            [width] => (width, None),
+            [width, algorithm] => (width, Some(algorithm)),
+            [] => {
+                return Err(HashArgCountMismatch {
+                    span: list.span,
+                    got: 0,
+                })
+            }
+            [_, _, first, ..] => {
+                let last = args.last().copied().unwrap_or(first);
+                return Err(HashArgCountMismatch {
+                    span: Span::new(first.span.start, last.span.end),
+                    got: args.len() as u8,
+                });
+            }
         };
         let width =
             hash_width_from_name(&self.text[width.span]).ok_or(UnknownHashWidth(width.span))?;
+        let Some(algorithm) = algorithm else {
+            return Ok(HashType::width_only(width));
+        };
         let algorithm = hash_algorithm_from_name(&self.text[algorithm.span])
             .ok_or(UnknownHashFunction(algorithm.span))?;
-        Ok(rito_hasher(width, algorithm))
+        Ok(HashType::new(width, algorithm))
     }
 }

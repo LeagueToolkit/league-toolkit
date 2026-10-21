@@ -3,7 +3,7 @@ use std::{
     iter::once,
 };
 
-use ltk_hash::{BinHash, HashValue, Hasher, WadHash};
+use ltk_hash::{BinHash, HashValue, WadHash};
 use ltk_meta::{
     path::PropertyPath, property::values, Bin, BinObject, BinOverride, PropertyKind, PropertyPatch,
     PropertyValueEnum,
@@ -15,7 +15,7 @@ use crate::{
     cst::{Child, ChildRange, Cst, ErrorRange, Kind, Node, NodeId, TokenId},
     hash_algorithm_name, hash_width_name,
     parse::{Error, Token, TokenKind as Tok},
-    HashProvider, PropertyValueExt as _, RitoType, RitobinName as _,
+    HashProvider, HashType, PropertyValueExt as _, RitoType, RitobinName as _,
 };
 
 #[derive(Default)]
@@ -387,13 +387,13 @@ impl<H: HashProvider> Builder<H> {
     }
 
     fn rito_type(&mut self, rito_type: RitoType) -> Child {
-        let mut children = self.kind_name(rito_type.base, rito_type.hashers[0]);
+        let mut children = self.kind_name(rito_type.base, rito_type.hash_types[0]);
 
         if let Some(sub) = rito_type.subtypes[0] {
-            let name = self.kind_name(sub, rito_type.hashers[1]);
+            let name = self.kind_name(sub, rito_type.hash_types[1]);
             let mut args = vec![self.token(Tok::LBrack), self.tree(Kind::TypeArg, name)];
             if let Some(sub) = rito_type.subtypes[1] {
-                let name = self.kind_name(sub, rito_type.hashers[2]);
+                let name = self.kind_name(sub, rito_type.hash_types[2]);
                 args.push(self.tree(Kind::TypeArg, name));
             }
             args.push(self.token(Tok::RBrack));
@@ -403,19 +403,18 @@ impl<H: HashProvider> Builder<H> {
         self.tree(Kind::TypeExpr, children)
     }
 
-    /// Returns the name token of `kind`. Adds the argument list `[width,algorithm]` if `kind`
-    /// is `hash` and `hasher` is not [`Hasher::DEFAULT`].
-    fn kind_name(&mut self, kind: PropertyKind, hasher: Hasher) -> Vec<Child> {
+    /// Returns the name token of `kind`. Adds the argument list `[width]` or
+    /// `[width,algorithm]` if `kind` is `hash` and `hash_type` is not [`HashType::DEFAULT`].
+    fn kind_name(&mut self, kind: PropertyKind, hash_type: HashType) -> Vec<Child> {
         let mut children = vec![self.spanned_token(Tok::Name, kind.to_rito_name())];
-        if kind == PropertyKind::Hash && hasher != Hasher::DEFAULT {
-            let algorithm = self.spanned_token(Tok::Name, hash_algorithm_name(hasher.algorithm));
-            let width = self.spanned_token(Tok::Name, hash_width_name(hasher.width));
-            let args = vec![
-                self.token(Tok::LBrack),
-                self.tree(Kind::TypeArg, [width]),
-                self.tree(Kind::TypeArg, [algorithm]),
-                self.token(Tok::RBrack),
-            ];
+        if kind == PropertyKind::Hash && hash_type != HashType::DEFAULT {
+            let width = self.spanned_token(Tok::Name, hash_width_name(hash_type.width));
+            let mut args = vec![self.token(Tok::LBrack), self.tree(Kind::TypeArg, [width])];
+            if let Some(algorithm) = hash_type.algorithm {
+                let algorithm = self.spanned_token(Tok::Name, hash_algorithm_name(algorithm));
+                args.push(self.tree(Kind::TypeArg, [algorithm]));
+            }
+            args.push(self.token(Tok::RBrack));
             children.push(self.tree(Kind::TypeArgList, args));
         }
         children
@@ -794,13 +793,10 @@ mod test {
     }
 
     #[test]
-    fn wide_hash_prints_xxh3_u64_type() {
+    fn wide_hash_prints_u64_type() {
         let hashes = HashMapProvider::new();
         let text = print_value(&hashes, values::Hash::new(HashValue::wide(0x1a)));
-        assert!(
-            text.contains("hash[u64, xxh3] = 0x000000000000001a"),
-            "{text}"
-        );
+        assert!(text.contains("hash[u64] = 0x000000000000001a"), "{text}");
     }
 
     #[test]

@@ -933,7 +933,7 @@ mod hash_type {
     use ltk_hash::{HashAlgorithm, HashValue, HashWidth};
 
     use super::*;
-    use crate::rito_hasher;
+    use crate::{rito_hasher, HashType};
 
     fn xxh3(width: HashWidth, text: &str) -> HashValue {
         rito_hasher(width, HashAlgorithm::Xxh3).hash_str(text)
@@ -1073,16 +1073,82 @@ mod hash_type {
     }
 
     #[test]
-    fn hash_with_one_type_argument_fails() {
-        assert_one_err(r#"0x1: hash[u64] = 0x1"#, |d| {
-            matches!(
-                d,
-                Diagnostic::SubtypeCountMismatch {
-                    got: 1,
-                    expected: 2,
-                    ..
-                }
-            )
+    fn hash_width_only_takes_hex_literal() {
+        assert(
+            r#"
+            0x1: hash[u64] = 0x5d07ca0d22ff9588
+            0x2: hash[u32] = 0x1a
+            0x3: list[hash[u64]] = { 0x1, 0x2 }
+            0x4: map[hash[u64],hash[u32]] = { 0x3 = 0x4 }
+            "#,
+            |obj| {
+                obj.property(
+                    0x1,
+                    values::Hash::new(HashValue::wide(0x5d07_ca0d_22ff_9588)),
+                )
+                .property(0x2, values::Hash::new(HashValue::narrow(0x1a)))
+                .property(
+                    0x3,
+                    values::Container::new(
+                        PropertyKind::Hash,
+                        vec![
+                            values::Hash::new(HashValue::wide(1)).into(),
+                            values::Hash::new(HashValue::wide(2)).into(),
+                        ],
+                    )
+                    .unwrap(),
+                )
+                .property(
+                    0x4,
+                    values::Map::new(
+                        PropertyKind::Hash,
+                        PropertyKind::Hash,
+                        vec![(
+                            values::Hash::new(HashValue::wide(3)).into(),
+                            values::Hash::new(HashValue::narrow(4)).into(),
+                        )],
+                    )
+                    .unwrap(),
+                )
+            },
+        );
+    }
+
+    #[test]
+    fn hash_width_only_rejects_string() {
+        assert_one_err(r#"0x1: hash[u64] = "abc""#, |d| {
+            matches!(d, Diagnostic::TypeMismatch(_))
+        });
+        assert_one_err(r#"0x1: list[hash[u32]] = { "abc" }"#, |d| {
+            matches!(d, Diagnostic::TypeMismatch(_))
+        });
+    }
+
+    #[test]
+    fn hash_width_only_rejects_literal_above_width() {
+        assert_one_err(r#"0x1: hash[u32] = 0x100000000"#, |d| {
+            matches!(d, Diagnostic::TypeMismatch(_))
+        });
+    }
+
+    #[test]
+    fn hash_with_no_type_argument_fails() {
+        let err = assert_one_err(r#"0x1: hash[] = 0x1"#, |d| {
+            matches!(d, Diagnostic::HashArgCountMismatch { got: 0, .. })
+        });
+        assert_eq!(
+            err.diagnostic.to_string(),
+            "Expected 1 or 2 type parameters - hash[width] or hash[width,algorithm], got 0"
+        );
+    }
+
+    #[test]
+    fn hash_with_three_type_arguments_fails() {
+        assert_one_err(r#"0x1: hash[u32,fnv1a,x] = 0x1"#, |d| {
+            matches!(d, Diagnostic::HashArgCountMismatch { got: 3, .. })
+        });
+        assert_one_err(r#"0x1: list[hash[u32,fnv1a,x,y]] = {}"#, |d| {
+            matches!(d, Diagnostic::HashArgCountMismatch { got: 4, .. })
         });
     }
 
@@ -1094,13 +1160,18 @@ mod hash_type {
     }
 
     #[test]
-    fn rito_type_display_writes_hasher() {
+    fn rito_type_display_writes_hash_type() {
         let mut rito = RitoType::map(PropertyKind::Hash, PropertyKind::Hash);
-        rito.hashers[1] = rito_hasher(HashWidth::W8, HashAlgorithm::Xxh3);
-        assert_eq!(rito.to_string(), "map[hash[u64,xxh3],hash]");
+        rito.hash_types[1] = HashType::new(HashWidth::W8, HashAlgorithm::Xxh3);
+        rito.hash_types[2] = HashType::width_only(HashWidth::W4);
+        assert_eq!(rito.to_string(), "map[hash[u64,xxh3],hash[u32]]");
         assert_eq!(
-            RitoType::hash(rito_hasher(HashWidth::W4, HashAlgorithm::Fnv1a32)).to_string(),
+            RitoType::hash(HashType::new(HashWidth::W4, HashAlgorithm::Fnv1a32)).to_string(),
             "hash"
+        );
+        assert_eq!(
+            RitoType::hash(HashType::width_only(HashWidth::W8)).to_string(),
+            "hash[u64]"
         );
     }
 }

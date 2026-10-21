@@ -327,6 +327,11 @@ pub enum Diagnostic {
         got: u8,
         expected: u8,
     },
+    /// A `hash` type with no arguments or with more than 2: `hash[]`, `hash[u32,fnv1a,x]`
+    HashArgCountMismatch {
+        span: Span,
+        got: u8,
+    },
     /// Subtypes found on a type that has no subtypes
     UnexpectedSubtypes {
         span: Span,
@@ -470,6 +475,10 @@ impl Display for Diagnostic {
             SubtypeCountMismatch { got, expected, .. } => {
                 write!(f, "Expected {expected} type parameters, got {got}")
             }
+            HashArgCountMismatch { got, .. } => write!(
+                f,
+                "Expected 1 or 2 type parameters - hash[width] or hash[width,algorithm], got {got}"
+            ),
             UnexpectedSubtypes { .. } => f.write_str("This type does not accept type parameters"),
 
             InvalidNesting { kind, .. } => {
@@ -505,6 +514,7 @@ impl Diagnostic {
             | UnexpectedTree { span, .. }
             | CustomSpan(_, span)
             | SubtypeCountMismatch { span, .. }
+            | HashArgCountMismatch { span, .. }
             | UnexpectedSubtypes { span, .. }
             | UnexpectedContainerItem { span, .. }
             | MissingClassName { span, .. }

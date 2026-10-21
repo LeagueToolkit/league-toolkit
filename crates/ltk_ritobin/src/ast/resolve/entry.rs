@@ -133,7 +133,7 @@ impl<'a> Builder<'a> {
                 // a value does not record its hasher, and coercion gave it the declared width
                 if value
                     .rito_type()
-                    .is_some_and(|k| k != kind.without_hashers())
+                    .is_some_and(|k| k != kind.without_hash_types())
                 {
                     self.push(Diagnostic::unwrap(
                         TypeMismatch {

@@ -220,7 +220,7 @@ impl Value {
             K::Hash => Value::Hash(HashedLiteral::new(
                 span,
                 Originally::HexLit,
-                kind.hasher().from_hash(0),
+                kind.hash_type().from_hash(0),
             )),
             K::WadChunkLink => Value::WadChunkLink(HashedLiteral::default().with_span(span)),
             K::ObjectLink => Value::ObjectLink(HashedLiteral::default().with_span(span)),
@@ -316,7 +316,7 @@ impl Value {
         }
     }
 
-    /// Returns the type of the value. Each slot holds [`ltk_hash::Hasher::DEFAULT`]. A value
+    /// Returns the type of the value. Each slot holds [`crate::HashType::DEFAULT`]. A value
     /// does not record the hasher that computed it.
     pub fn rito_type(&self) -> Option<RitoType> {
         Some(match self {
