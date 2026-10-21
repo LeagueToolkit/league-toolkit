@@ -211,6 +211,8 @@ impl<'a> AnnotationRef<'a> {
     pub fn only(&self, allowed: &[&str]) -> Result<(), ArgError>;
     /// Spans a consumer error at this annotation.
     pub fn error<E>(&self, error: E) -> Spanned<E>;
+    /// This one annotation as `T`, like `str::parse`.
+    pub fn resolve<T: FromAnnotation>(&self) -> Result<T, Spanned<T::Error>>;
 }
 
 /// A type an argument value converts to. Sealed.
@@ -242,11 +244,11 @@ caller bug (D3).
 /// variant, such as `Unknown`, or its own error.
 pub trait FromAnnotation: Sized {
     type Error: std::error::Error;
-    fn from_annotation(annotation: AnnotationRef<'_>) -> Result<Self, Spanned<Self::Error>>;
+    fn resolve(annotation: AnnotationRef<'_>) -> Result<Self, Spanned<Self::Error>>;
 }
 
 impl Annotations {
-    /// `resolve_with(text, T::from_annotation)`.
+    /// `resolve_with(text, T::resolve)`.
     pub fn resolve<T: FromAnnotation>(&self, text: &str) -> Resolved<T, T::Error>;
     /// Resolves through a closure, for a resolver that carries state.
     pub fn resolve_with<T, E, F>(&self, text: &str, resolver: F) -> Resolved<T, E>
@@ -288,7 +290,7 @@ enum Directive { Replace, Merge { depth: u64, strict: bool }, Unknown }
 impl FromAnnotation for Directive {
     type Error = DirectiveError; // has #[from] ArgError
 
-    fn from_annotation(a: AnnotationRef<'_>) -> Result<Self, Spanned<Self::Error>> {
+    fn resolve(a: AnnotationRef<'_>) -> Result<Self, Spanned<Self::Error>> {
         match a.name() {
             "replace" => Ok(Self::Replace),
             "merge" => {

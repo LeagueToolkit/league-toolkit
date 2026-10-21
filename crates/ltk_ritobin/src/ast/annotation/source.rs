@@ -2,7 +2,7 @@ use ltk_hash::{BinHash, Hash as _, WadHash};
 
 use crate::{ast::Value, span::Span, Spanned};
 
-use super::{Annotation, Argument};
+use super::{Annotation, Argument, FromAnnotation};
 
 /// An [`Annotation`] paired with the source text it was parsed from.
 #[derive(Debug, Clone, Copy)]
@@ -119,6 +119,15 @@ impl<'a> AnnotationRef<'a> {
             }),
             None => Ok(()),
         }
+    }
+
+    /// Resolves this one annotation into `T`, like [`str::parse`]. See [`FromAnnotation`].
+    ///
+    /// # Errors
+    ///
+    /// Those of [`FromAnnotation::resolve`].
+    pub fn resolve<T: FromAnnotation>(&self) -> Result<T, Spanned<T::Error>> {
+        T::resolve(*self)
     }
 
     /// Spans a consumer error at this annotation.

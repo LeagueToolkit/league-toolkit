@@ -414,7 +414,7 @@ enum DirectiveError {
 impl FromAnnotation for Directive {
     type Error = DirectiveError;
 
-    fn from_annotation(a: AnnotationRef<'_>) -> Result<Self, Spanned<Self::Error>> {
+    fn resolve(a: AnnotationRef<'_>) -> Result<Self, Spanned<Self::Error>> {
         match a.name() {
             "replace" => Ok(Self::Replace),
             "merge" => {
@@ -612,4 +612,23 @@ foo: u32
 ";
     let ast = Cst::parse(text).build_ast(text);
     assert_eq!(names(&ast, text, &ast.roots.all[0]), ["a"]);
+}
+
+#[test]
+fn one_annotation_resolves_on_its_own() {
+    let ast = parse(DIRECTIVES);
+    let table = ast.annotations.with_source(DIRECTIVES);
+    let a = table.on(property(&ast, "y")).next().unwrap();
+    assert_eq!(
+        a.resolve::<Directive>().unwrap(),
+        Directive::Merge {
+            depth: 2,
+            strict: true
+        }
+    );
+    let bad = table.on(property(&ast, "w")).next().unwrap();
+    assert_eq!(
+        bad.resolve::<Directive>().unwrap_err().value,
+        DirectiveError::ZeroDepth
+    );
 }

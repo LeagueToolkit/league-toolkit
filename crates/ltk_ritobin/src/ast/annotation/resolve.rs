@@ -8,14 +8,14 @@ use super::{AnnotationRef, Annotations};
 pub trait FromAnnotation: Sized {
     type Error: std::error::Error;
 
-    fn from_annotation(annotation: AnnotationRef<'_>) -> Result<Self, Spanned<Self::Error>>;
+    fn resolve(annotation: AnnotationRef<'_>) -> Result<Self, Spanned<Self::Error>>;
 }
 
 impl Annotations {
     /// Resolves every annotation into `T`. See [`FromAnnotation`].
     #[must_use]
     pub fn resolve<T: FromAnnotation>(&self, text: &str) -> Resolved<T, T::Error> {
-        self.resolve_with(text, T::from_annotation)
+        self.resolve_with(text, T::resolve)
     }
 
     /// Resolves every annotation in the annotation set.
