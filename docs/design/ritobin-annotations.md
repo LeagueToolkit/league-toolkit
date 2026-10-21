@@ -211,7 +211,7 @@ impl<'a> AnnotationRef<'a> {
     pub fn only(&self, allowed: &[&str]) -> Result<(), ArgError>;
     /// Spans a consumer error at this annotation.
     pub fn error<E>(&self, error: E) -> Spanned<E>;
-    /// This one annotation as `T`, like `str::parse`.
+    /// This one annotation as `T`.
     pub fn resolve<T: FromAnnotation>(&self) -> Result<T, Spanned<T::Error>>;
 }
 

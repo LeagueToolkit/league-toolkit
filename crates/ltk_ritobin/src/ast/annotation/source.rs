@@ -121,7 +121,7 @@ impl<'a> AnnotationRef<'a> {
         }
     }
 
-    /// Resolves this one annotation into `T`, like [`str::parse`]. See [`FromAnnotation`].
+    /// Resolves this one annotation into `T`. See [`FromAnnotation`].
     ///
     /// # Errors
     ///
