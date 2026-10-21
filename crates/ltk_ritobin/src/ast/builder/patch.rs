@@ -96,6 +96,7 @@ impl Builder<'_> {
         let Value::Hash(object_hash) = key else {
             return None;
         };
+        let object_hash = object_hash.try_as_bin_hash()?;
         let Some(Value::Embedded(record)) = value else {
             return None;
         };
@@ -148,7 +149,7 @@ impl Builder<'_> {
         let path = self.resolve_patch_path(fields.path?.value.as_ref());
         let patch_value = fields.value?.value.as_ref().filter(|v| is_resolved(v));
         Some(RootPatch {
-            object_hash: *object_hash,
+            object_hash,
             path: path?,
             value: patch_value?.clone(),
             span: object_hash.span().cover(record.span),

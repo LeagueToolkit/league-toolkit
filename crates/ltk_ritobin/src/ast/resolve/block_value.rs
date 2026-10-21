@@ -43,7 +43,7 @@ impl<'a> Builder<'a> {
             K::Map => {
                 let key_kind = hint.subtype(0);
                 let value_kind = hint.subtype(1);
-                let entries = self.resolve_body_map_entries(block, key_kind, value_kind, hint_span);
+                let entries = self.resolve_body_map_entries(block, hint, hint_span);
                 Ok(Map {
                     key_kind,
                     value_kind,
@@ -54,7 +54,7 @@ impl<'a> Builder<'a> {
             }
             K::Container | K::UnorderedContainer => {
                 let item_kind = hint.subtype(0);
-                let items = self.resolve_body_items(block, item_kind, hint_span);
+                let items = self.resolve_body_items(block, hint, hint_span);
                 Ok(match hint.base {
                     K::Container => Value::Container {
                         item_kind,
@@ -71,7 +71,7 @@ impl<'a> Builder<'a> {
             }
             K::Optional => {
                 let item_kind = hint.subtype(0);
-                let item_hint = RitoType::simple(item_kind);
+                let item_hint = hint.item(0);
                 if matches!(
                     item_kind,
                     K::Vector2 | K::Vector3 | K::Vector4 | K::Color | K::Matrix44
@@ -121,12 +121,12 @@ impl<'a> Builder<'a> {
                         Kind::Comment => continue,
                         Kind::ListItem => {
                             match self.resolve_value(node, Some(item_hint), hint_span) {
-                                Ok(v) => match v.try_coerce_to(item_kind) {
+                                Ok(v) => match v.try_coerce_to(item_hint) {
                                     Ok(coerced) => value = Some(coerced),
                                     Err(v) => self.push(D::unwrap(
                                         TypeMismatch {
                                             span: v.span(),
-                                            expected: RitoType::simple(item_kind).into(),
+                                            expected: item_hint.into(),
                                             expected_span: hint_span,
                                             got: v.rito_type().into(),
                                         }
@@ -180,13 +180,13 @@ impl<'a> Builder<'a> {
             match node.kind {
                 Kind::Comment => continue,
                 Kind::Entry => match self.resolve_entry(node, Some(hint), None) {
-                    Ok(entry) => match entry.key.try_coerce_to(PropertyKind::Hash) {
-                        Ok(Value::Hash(hash)) => properties.push(Property {
+                    Ok(entry) => match entry.key.try_coerce_to_bin_hash() {
+                        Ok(hash) => properties.push(Property {
                             name: hash,
                             type_expr: entry.type_expr,
                             value: entry.value,
                         }),
-                        Ok(value) | Err(value) => self.push(D::unwrap(
+                        Err(value) => self.push(D::unwrap(
                             TypeMismatch {
                                 span: value.span(),
                                 expected: RitoType::simple(PropertyKind::Hash).into(),
@@ -215,11 +215,11 @@ impl<'a> Builder<'a> {
     fn resolve_body_map_entries(
         &mut self,
         block: &Node,
-        key_kind: PropertyKind,
-        value_kind: PropertyKind,
+        hint: RitoType,
         hint_span: Option<Span>,
     ) -> Vec<MapEntry> {
-        let hint = RitoType::map(key_kind, value_kind);
+        let key_hint = hint.item(0);
+        let value_kind = hint.subtype(1);
         let mut entries = Vec::new();
         for child in block.children.get(self.cst).iter() {
             let Some(node) = child.tree(self.cst) else {
@@ -228,14 +228,14 @@ impl<'a> Builder<'a> {
             match node.kind {
                 Kind::Comment => continue,
                 Kind::Entry => match self.resolve_entry(node, Some(hint), hint_span) {
-                    Ok(entry) => match entry.key.try_coerce_to(key_kind) {
+                    Ok(entry) => match entry.key.try_coerce_to(key_hint) {
                         Ok(key) => {
                             match entry.value.as_ref() {
                                 Some(value) if value.kind().is_some_and(|k| k != value_kind) => {
                                     self.push(D::unwrap(
                                         TypeMismatch {
                                             span: value.span(),
-                                            expected: RitoType::simple(value_kind).into(),
+                                            expected: hint.item(1).into(),
                                             expected_span: hint_span,
                                             got: value.rito_type().into(),
                                         }
@@ -254,7 +254,7 @@ impl<'a> Builder<'a> {
                         Err(key) => self.push(D::unwrap(
                             TypeMismatch {
                                 span: key.span(),
-                                expected: RitoType::simple(key_kind).into(),
+                                expected: key_hint.into(),
                                 expected_span: hint_span,
                                 got: key.rito_type().into(),
                             }
@@ -280,10 +280,11 @@ impl<'a> Builder<'a> {
     fn resolve_body_items(
         &mut self,
         block: &Node,
-        item_kind: PropertyKind,
+        hint: RitoType,
         hint_span: Option<Span>,
     ) -> Vec<Value> {
-        let item_hint = RitoType::simple(item_kind);
+        let item_kind = hint.subtype(0);
+        let item_hint = hint.item(0);
         let mut items = Vec::new();
         for child in block.children.get(self.cst).iter() {
             let Some(node) = child.tree(self.cst) else {
@@ -295,10 +296,10 @@ impl<'a> Builder<'a> {
                     match self
                         .resolve_value(node, Some(item_hint), hint_span)
                         .and_then(|value| {
-                            value.try_coerce_to(item_kind).map_err(|value| {
+                            value.try_coerce_to(item_hint).map_err(|value| {
                                 TypeMismatch {
                                     span: value.span(),
-                                    expected: RitoType::simple(item_kind).into(),
+                                    expected: item_hint.into(),
                                     expected_span: hint_span,
                                     got: value.rito_type().into(),
                                 }

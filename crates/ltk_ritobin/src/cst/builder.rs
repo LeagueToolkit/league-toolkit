@@ -13,8 +13,9 @@ use crate::span::Span;
 use crate::{
     ast::node::root::FileKind,
     cst::{Child, ChildRange, Cst, ErrorRange, Kind, Node, NodeId, TokenId},
+    hash_algorithm_name, hash_width_name,
     parse::{Error, Token, TokenKind as Tok},
-    HashProvider, PropertyValueExt as _, RitoType, RitobinName as _,
+    HashProvider, HashType, PropertyValueExt as _, RitoType, RitobinName as _,
 };
 
 #[derive(Default)]
@@ -386,20 +387,37 @@ impl<H: HashProvider> Builder<H> {
     }
 
     fn rito_type(&mut self, rito_type: RitoType) -> Child {
-        let mut children = vec![self.spanned_token(Tok::Name, rito_type.base.to_rito_name())];
+        let mut children = self.kind_name(rito_type.base, rito_type.hash_types[0]);
 
         if let Some(sub) = rito_type.subtypes[0] {
-            let name = self.spanned_token(Tok::Name, sub.to_rito_name());
-            let mut args = vec![self.token(Tok::LBrack), self.tree(Kind::TypeArg, [name])];
+            let name = self.kind_name(sub, rito_type.hash_types[1]);
+            let mut args = vec![self.token(Tok::LBrack), self.tree(Kind::TypeArg, name)];
             if let Some(sub) = rito_type.subtypes[1] {
-                let name = self.spanned_token(Tok::Name, sub.to_rito_name());
-                args.push(self.tree(Kind::TypeArg, [name]));
+                let name = self.kind_name(sub, rito_type.hash_types[2]);
+                args.push(self.tree(Kind::TypeArg, name));
             }
             args.push(self.token(Tok::RBrack));
             children.push(self.tree(Kind::TypeArgList, args));
         }
 
         self.tree(Kind::TypeExpr, children)
+    }
+
+    /// Returns the name token of `kind`. Adds the argument list `[width]` or
+    /// `[width,algorithm]` if `kind` is `hash` and `hash_type` is not [`HashType::DEFAULT`].
+    fn kind_name(&mut self, kind: PropertyKind, hash_type: HashType) -> Vec<Child> {
+        let mut children = vec![self.spanned_token(Tok::Name, kind.to_rito_name())];
+        if kind == PropertyKind::Hash && hash_type != HashType::DEFAULT {
+            let width = self.spanned_token(Tok::Name, hash_width_name(hash_type.width));
+            let mut args = vec![self.token(Tok::LBrack), self.tree(Kind::TypeArg, [width])];
+            if let Some(algorithm) = hash_type.algorithm {
+                let algorithm = self.spanned_token(Tok::Name, hash_algorithm_name(algorithm));
+                args.push(self.tree(Kind::TypeArg, [algorithm]));
+            }
+            args.push(self.token(Tok::RBrack));
+            children.push(self.tree(Kind::TypeArgList, args));
+        }
+        children
     }
     fn property_to_cst(&mut self, name_hash: BinHash, value: &PropertyValueEnum) -> Child {
         let k = self.hash_field_lit(name_hash);
@@ -772,6 +790,46 @@ mod test {
         // A `hash` value is not an object path. The entry table is not used for it.
         let text = print_value(&hashes, values::Hash::new(0x58a7d43d));
         assert!(text.contains("hash = 0x58a7d43d"), "{text}");
+    }
+
+    #[test]
+    fn wide_hash_prints_u64_type() {
+        let hashes = HashMapProvider::new();
+        let text = print_value(&hashes, values::Hash::new(HashValue::wide(0x1a)));
+        assert!(text.contains("hash[u64] = 0x000000000000001a"), "{text}");
+    }
+
+    #[test]
+    fn wide_hash_roundtrip() {
+        let wide = |hash| PropertyValueEnum::from(values::Hash::new(HashValue::wide(hash)));
+        roundtrip(
+            Bin::builder()
+                .object(
+                    BinObject::builder(0xDEADBEEF, 0x12344321)
+                        .property(0x1, wide(0x5d07_ca0d_22ff_9588))
+                        .property(0x2, wide(0))
+                        .property(
+                            0x3,
+                            values::Container::new(PropertyKind::Hash, vec![wide(1), wide(2)])
+                                .unwrap(),
+                        )
+                        .property(
+                            0x4,
+                            values::Map::new(
+                                PropertyKind::Hash,
+                                PropertyKind::Hash,
+                                vec![(wide(3), values::Hash::new(4).into())],
+                            )
+                            .unwrap(),
+                        )
+                        .property(
+                            0x5,
+                            values::Optional::new(PropertyKind::Hash, Some(wide(5))).unwrap(),
+                        )
+                        .build(),
+                )
+                .build(),
+        );
     }
 
     #[test]
