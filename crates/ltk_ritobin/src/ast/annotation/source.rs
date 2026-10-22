@@ -269,7 +269,13 @@ impl<'a> FromValue<'a> for BinHash {
 
     fn from_value(value: &'a Value, _: &'a str) -> Result<Self, ArgErrorKind> {
         match value {
-            Value::Hash(v) => Ok(v.value),
+            Value::Hash(v) => v
+                .value
+                .try_as_u32()
+                .map(BinHash)
+                .ok_or(ArgErrorKind::WrongType {
+                    expected: Self::EXPECTED,
+                }),
             Value::String(v) => Ok(BinHash::hash_str(&v.value)),
             _ => Err(ArgErrorKind::WrongType {
                 expected: Self::EXPECTED,
@@ -285,7 +291,7 @@ impl<'a> FromValue<'a> for WadHash {
     fn from_value(value: &'a Value, _: &'a str) -> Result<Self, ArgErrorKind> {
         match value {
             Value::WadChunkLink(v) => Ok(v.value),
-            Value::Hash(v) => Ok(WadHash(u64::from(v.value.0))),
+            Value::Hash(v) => Ok(WadHash(v.value.as_u64())),
             Value::String(v) => Ok(WadHash::hash_str(&v.value)),
             _ => Err(ArgErrorKind::WrongType {
                 expected: Self::EXPECTED,

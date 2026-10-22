@@ -9,7 +9,7 @@ use crate::{
             MaybeSpanDiag, TypeMismatch,
         },
         node::TypeExpr,
-        resolve::literals::{self, ExpectedType},
+        resolve::literals::ExpectedType,
         Value,
     },
     cst::{ChildrenExt as _, Kind},
