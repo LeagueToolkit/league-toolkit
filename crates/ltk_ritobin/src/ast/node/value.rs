@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 use glam::{Mat4, Vec2, Vec3, Vec4};
-use ltk_hash::{BinHash, WadHash};
+use ltk_hash::{BinHash, HashValue, WadHash};
 use ltk_meta::PropertyKind;
 use ltk_primitives::Color;
 
@@ -10,7 +10,10 @@ pub use coerce::CanCoerce;
 
 use crate::span::Span;
 use crate::{
-    ast::{hash::HashedLiteral, Object},
+    ast::{
+        hash::{HashedLiteral, Originally},
+        Object,
+    },
     RitoType, RitobinName, Spanned,
 };
 
@@ -41,7 +44,7 @@ pub enum Value {
     Matrix44(Spanned<Mat4>),
     Color(Spanned<Color<u8>>),
     String(Spanned<String>), // TODO: intern this string when no escapes needed
-    Hash(HashedLiteral<BinHash>),
+    Hash(HashedLiteral<HashValue>),
     WadChunkLink(HashedLiteral<WadHash>),
     ObjectLink(HashedLiteral<BinHash>),
     //---------------------
@@ -223,7 +226,11 @@ impl Value {
                 span,
                 properties: Vec::new(),
             }),
-            K::Hash => Value::Hash(HashedLiteral::default().with_span(span)),
+            K::Hash => Value::Hash(HashedLiteral::new(
+                span,
+                Originally::HexLit,
+                kind.hash_type().from_hash(0),
+            )),
             K::WadChunkLink => Value::WadChunkLink(HashedLiteral::default().with_span(span)),
             K::ObjectLink => Value::ObjectLink(HashedLiteral::default().with_span(span)),
             K::None => Value::None(span),
@@ -318,26 +325,19 @@ impl Value {
         }
     }
 
+    /// Returns the type of the value. Each slot holds [`crate::HashType::DEFAULT`]. A value
+    /// does not record the hasher that computed it.
     pub fn rito_type(&self) -> Option<RitoType> {
         Some(match self {
             Value::Container { item_kind, .. } | Value::UnorderedContainer { item_kind, .. } => {
-                RitoType {
-                    base: self.kind()?,
-                    subtypes: [Some(*item_kind), None],
-                }
+                RitoType::new(self.kind()?, [Some(*item_kind), None])
             }
             Value::Map(Map {
                 key_kind,
                 value_kind,
                 ..
-            }) => RitoType {
-                base: self.kind()?,
-                subtypes: [Some(*key_kind), Some(*value_kind)],
-            },
-            Value::Optional { item_kind, .. } => RitoType {
-                base: self.kind()?,
-                subtypes: [*item_kind, None],
-            },
+            }) => RitoType::new(self.kind()?, [Some(*key_kind), Some(*value_kind)]),
+            Value::Optional { item_kind, .. } => RitoType::new(self.kind()?, [*item_kind, None]),
             _ => RitoType::simple(self.kind()?),
         })
     }

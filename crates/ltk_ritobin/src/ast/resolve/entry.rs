@@ -65,7 +65,7 @@ impl<'a> Builder<'a> {
             Some(Token {
                 kind: TokenKind::HexLit,
                 span,
-            }) => Value::Hash(literals::eval_hash(self.text, *span)?),
+            }) => Value::eval_unknown_hash(self.text, *span)?,
             Some(token) => self.resolve_literal(
                 self.text,
                 token,
@@ -93,9 +93,7 @@ impl<'a> Builder<'a> {
             .ok_or(MissingTree(Kind::EntryKey))?;
         let key = self.resolve_entry_key(key_node, parent_value_kind, parent_type_span)?;
 
-        let parent_value_kind = parent_value_kind
-            .and_then(|p| p.value_subtype())
-            .map(RitoType::simple);
+        let parent_value_kind = parent_value_kind.and_then(|p| p.value_item());
 
         let type_expr_node = children.find_tree(self.cst, Kind::TypeExpr);
         let type_expr_span = type_expr_node.map(|k| k.span);
@@ -127,7 +125,7 @@ impl<'a> Builder<'a> {
         };
 
         let value = value.map(|value| match desired_kind {
-            Some(TypeExpr::Resolved(kind)) => match value.try_coerce_to(kind.base) {
+            Some(TypeExpr::Resolved(kind)) => match value.try_coerce_to(kind) {
                 Ok(value) => value,
                 Err(value) => value,
             },
@@ -135,8 +133,12 @@ impl<'a> Builder<'a> {
         });
 
         match (desired_kind, value.as_ref()) {
-            (Some(kind), Some(value)) => {
-                if value.rito_type().is_some_and(|k| k != kind) {
+            (Some(TypeExpr::Resolved(kind)), Some(value)) => {
+                // a value does not record its hasher, and coercion gave it the declared width
+                if value
+                    .rito_type()
+                    .is_some_and(|k| k != kind.without_hash_types())
+                {
                     self.push(Diagnostic::unwrap(
                         TypeMismatch {
                             span: value.span(),

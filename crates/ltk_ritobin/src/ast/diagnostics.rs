@@ -168,6 +168,10 @@ pub enum Diagnostic {
 
     MissingToken(TokenKind),
     UnknownType(Span),
+    /// The second type argument of `hash` is not a hash function
+    UnknownHashFunction(Span),
+    /// The first type argument of `hash` is not a hash width
+    UnknownHashWidth(Span),
     MissingType(Span),
 
     InvalidHash(Span),
@@ -325,6 +329,11 @@ pub enum Diagnostic {
         got: u8,
         expected: u8,
     },
+    /// A `hash` type with no arguments or with more than 2: `hash[]`, `hash[u32,fnv1a,x]`
+    HashArgCountMismatch {
+        span: Span,
+        got: u8,
+    },
     /// Subtypes found on a type that has no subtypes
     UnexpectedSubtypes {
         span: Span,
@@ -377,6 +386,10 @@ impl Display for Diagnostic {
 
             InvalidHash(_) => f.write_str("Invalid hash"),
             UnknownType(_) => f.write_str("Unknown type"),
+            UnknownHashFunction(_) => {
+                f.write_str("Unknown hash function - expected fnv1a, xxh64 or xxh3")
+            }
+            UnknownHashWidth(_) => f.write_str("Unknown hash width - expected u32 or u64"),
             MissingType(_) => {
                 f.write_str("Missing type - entries are written 'name: type = value'")
             }
@@ -468,6 +481,10 @@ impl Display for Diagnostic {
             SubtypeCountMismatch { got, expected, .. } => {
                 write!(f, "Expected {expected} type parameters, got {got}")
             }
+            HashArgCountMismatch { got, .. } => write!(
+                f,
+                "Expected 1 or 2 type parameters - hash[width] or hash[width,algorithm], got {got}"
+            ),
             UnexpectedSubtypes { .. } => f.write_str("This type does not accept type parameters"),
 
             InvalidNesting { kind, .. } => {
@@ -496,11 +513,14 @@ impl Diagnostic {
                 (span.start + value.index as u32 + 1).min(span.end),
             )),
             UnknownType(span)
+            | UnknownHashFunction(span)
+            | UnknownHashWidth(span)
             | UnknownRoot { span }
             | InvalidHash(span)
             | UnexpectedTree { span, .. }
             | CustomSpan(_, span)
             | SubtypeCountMismatch { span, .. }
+            | HashArgCountMismatch { span, .. }
             | UnexpectedSubtypes { span, .. }
             | UnexpectedContainerItem { span, .. }
             | MissingClassName { span, .. }

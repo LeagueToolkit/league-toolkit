@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fmt::Display, num::IntErrorKind, str::FromStr};
+use std::{borrow::Cow, fmt::Display, num::IntErrorKind};
 
 use ltk_hash::{BinHash, WadHash};
 use ltk_meta::PropertyKind;
@@ -25,24 +25,13 @@ impl Value {
         // since we can't know whether bin/wad was intended, we will just try fit it in the smallest hash that allows it.
         // we can then safely coerce the type upwards when we are given type information
         Ok(match BinHash::from_str_radix(src, 16) {
-            Ok(hash) => Self::Hash(HashedLiteral::new(span, Originally::HexLit, hash)),
+            Ok(hash) => Self::Hash(HashedLiteral::new(span, Originally::HexLit, hash.into())),
             Err(_) => match WadHash::from_str_radix(src, 16) {
                 Ok(hash) => Self::WadChunkLink(HashedLiteral::new(span, Originally::HexLit, hash)),
                 Err(_) => return Err(E::InvalidHash(span)),
             },
         })
     }
-}
-
-pub(crate) fn eval_hash<H: ltk_hash::Hash + FromStr>(
-    text: &str,
-    span: Span,
-) -> Result<HashedLiteral<H>, ValueEvalError> {
-    // TODO: better errs here?
-    let src = text[span].strip_prefix("0x").ok_or(E::InvalidHash(span))?;
-    H::from_str(src)
-        .map_err(|_| E::InvalidHash(span))
-        .map(|value| HashedLiteral::new(span, Originally::HexLit, value))
 }
 
 #[derive(Debug, thiserror::Error, Clone, Copy)]
