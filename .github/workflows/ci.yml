@@ -9,6 +9,9 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -23,25 +26,18 @@ jobs:
           components: rustfmt, clippy
           override: true
 
-      - name: Cache dependencies
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+      # Must come after the toolchain step: the cache key includes `rustc -vV`.
+      - name: Set up mbx
+        uses: jdx/mr-boxington-action@v1
 
       - name: Check formatting
         run: cargo fmt -- --check
 
       - name: Run Clippy
-        run: cargo clippy --all-targets
+        run: mbx clippy --all-targets
 
       - name: Build
-        run: cargo build --verbose
+        run: mbx build --verbose
 
       - name: Run tests
-        run: cargo test --verbose
+        run: mbx test --verbose
