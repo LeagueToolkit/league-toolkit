@@ -125,7 +125,7 @@ impl<'a> Builder<'a> {
                         Kind::ListItem => {
                             match self.resolve_value(
                                 node,
-                                Some(ExpectedType::from(item_hint)),
+                                Some(ExpectedType::from(item_kind)),
                                 hint_span,
                             ) {
                                 Ok(v) => match v.try_coerce_to(item_kind) {
@@ -305,7 +305,7 @@ impl<'a> Builder<'a> {
                 Kind::Comment | Kind::Annotation => continue,
                 Kind::ListItem => {
                     match self
-                        .resolve_value(node, Some(ExpectedType::from(item_hint)), hint_span)
+                        .resolve_value(node, Some(ExpectedType::from(item_kind)), hint_span)
                         .and_then(|value| {
                             value.try_coerce_to(item_kind).map_err(|value| {
                                 TypeMismatch {

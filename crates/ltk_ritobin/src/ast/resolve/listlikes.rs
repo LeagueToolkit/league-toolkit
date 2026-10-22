@@ -21,7 +21,7 @@ struct ListIter<'a, 'b, 'c> {
     type_span: Option<Span>,
     count: u8,
     /// The list-like being read, for diagnosing items it cannot hold.
-    kind: PropertyKind,
+    kind: ScalarType,
 }
 
 impl<'c> ListIter<'_, '_, 'c> {
@@ -37,7 +37,7 @@ impl<'c> ListIter<'_, '_, 'c> {
                     self.ctx.push(
                         D::UnexpectedItem {
                             span: node.span,
-                            parent: RitoType::simple(self.kind),
+                            parent: self.kind.into(),
                             expected: crate::ItemShape::Value,
                         }
                         .unwrap(),
@@ -123,11 +123,7 @@ impl<'a> Builder<'a> {
         expected: ScalarType,
         hint_span: Option<Span>,
     ) -> Result<Value, D> {
-        self.resolve_value(
-            node,
-            Some(ExpectedType::Exact(RitoType::simple(expected))),
-            hint_span,
-        )
+        self.resolve_value(node, Some(ExpectedType::from(expected)), hint_span)
     }
 
     pub(crate) fn resolve_listlike_fallable(

@@ -70,9 +70,8 @@ impl<'a> Builder<'a> {
                 self.text,
                 token,
                 parent_value_kind
-                    .and_then(|k| k.subtypes[0])
-                    .map(RitoType::simple)
-                    .map(ExpectedType::Exact),
+                    .and_then(|k| k.subtype(0))
+                    .map(ExpectedType::from),
                 parent_type_span,
             ),
             // TODO: change this error
