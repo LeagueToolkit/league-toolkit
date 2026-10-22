@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::span::Span;
+use crate::{span::Span, ContainerType, ScalarType};
 use ltk_hash::{BinHash, Hash as _};
 use ltk_meta::{path::PropertyPathError, PropertyKind};
 
@@ -31,18 +31,18 @@ impl RitoTypeOrVirtual {
     }
 }
 
-impl From<Option<RitoType>> for RitoTypeOrVirtual {
-    fn from(value: Option<RitoType>) -> Self {
+impl<R: Into<RitoType>> From<Option<R>> for RitoTypeOrVirtual {
+    fn from(value: Option<R>) -> Self {
         match value {
-            Some(value) => value.into(),
+            Some(value) => RitoTypeOrVirtual::RitoType(value.into()),
             None => Self::Unknown,
         }
     }
 }
 
-impl From<RitoType> for RitoTypeOrVirtual {
-    fn from(value: RitoType) -> Self {
-        RitoTypeOrVirtual::RitoType(value)
+impl<R: Into<RitoType>> From<R> for RitoTypeOrVirtual {
+    fn from(value: R) -> Self {
+        RitoTypeOrVirtual::RitoType(value.into())
     }
 }
 
@@ -94,13 +94,14 @@ impl ListLike {
 
 impl Display for ListLike {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        RitoType::simple(match self {
+        RitoType::try_from_scalar(match self {
             ListLike::Color => PropertyKind::Color,
             ListLike::Vec2 => PropertyKind::Vector2,
             ListLike::Vec3 => PropertyKind::Vector3,
             ListLike::Vec4 => PropertyKind::Vector4,
             ListLike::Mat44 => PropertyKind::Matrix44,
         })
+        .unwrap()
         .fmt(f)
     }
 }

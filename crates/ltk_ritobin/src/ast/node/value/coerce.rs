@@ -3,7 +3,7 @@ use ltk_meta::PropertyKind;
 
 use crate::{
     ast::{node::Value, Ptr},
-    HashType, RitoType,
+    ContainerType, HashType, RitoType, ScalarType,
 };
 
 use crate::ast::hash::{HashedLiteral, Originally};
@@ -28,14 +28,18 @@ impl CanCoerce for PropertyKind {
         }
     }
 }
+impl CanCoerce for ScalarType {
+    fn can_coerce(self, from: Self) -> bool {
+        self.kind().can_coerce(from.kind())
+    }
+}
 impl CanCoerce for RitoType {
     fn can_coerce(self, from: Self) -> bool {
-        if !self.base.can_coerce(from.base) {
+        if !self.base().can_coerce(from.base()) {
             return false;
         }
         for i in 0..1 {
-            if (self.subtypes[i].zip(from.subtypes[i]))
-                .is_some_and(|(to, from)| !to.can_coerce(from))
+            if (self.subtype(i).zip(from.subtype(i))).is_some_and(|(to, from)| !to.can_coerce(from))
             {
                 return false;
             }
@@ -59,52 +63,58 @@ impl Value {
     /// Returns the value unchanged if it does not convert.
     pub fn try_coerce_to(self, to: impl Into<RitoType>) -> Result<Self, Self> {
         let to = to.into();
-        Ok(match to.base {
-            PropertyKind::Hash => return self.try_coerce_to_hash(to.hash_type()),
-            to if self.kind().is_some_and(|k| k == to) => self,
+        Ok(match to {
+            RitoType::Scalar(ScalarType::Hash(hash_type)) => {
+                return self.try_coerce_to_hash(hash_type)
+            }
+            to if self.rito_type().is_some_and(|k| k.equivalent_to(&to)) => self,
             // Unknown values can be coerced into any value (as an unresolved variant)
             to if self.kind().is_none() => Self::Unresolved {
                 span: self.span(),
                 kind: to,
             },
 
-            PropertyKind::Optional => Self::Optional {
-                item_kind: self.kind(),
+            RitoType::Container(ContainerType::Optional(Some(item_kind))) => Self::Optional {
+                item_kind: Some(item_kind),
                 span: self.span(),
-                value: Some(Ptr::new(self)),
+                value: Some(Ptr::new(self.try_coerce_to(RitoType::from(item_kind))?)),
             },
 
-            PropertyKind::ObjectLink => match self {
-                Self::Hash(hash) => match hash.try_as_bin_hash() {
-                    Some(hash) => Self::ObjectLink(hash),
-                    None => return Err(self),
+            RitoType::Scalar(scalar) => match scalar {
+                ScalarType::ObjectLink => match self {
+                    Self::Hash(hash) => match hash.try_as_bin_hash() {
+                        Some(hash) => Self::ObjectLink(hash),
+                        None => return Err(self),
+                    },
+                    Self::String(str) => Self::ObjectLink(HashedLiteral::new(
+                        str.span,
+                        Originally::String,
+                        BinHash::hash_str(&str),
+                    )),
+                    _ => return Err(self),
                 },
-                Self::String(str) => Self::ObjectLink(HashedLiteral::new(
-                    str.span,
-                    Originally::String,
-                    BinHash::hash_str(&str),
-                )),
+                ScalarType::WadChunkLink => match self {
+                    Self::Hash(hash) => {
+                        Self::WadChunkLink(hash.with_value(WadHash(hash.value.as_u64())))
+                    }
+                    Self::String(str) => Self::WadChunkLink(HashedLiteral::new(
+                        str.span,
+                        Originally::String,
+                        WadHash::hash_str(str.as_str()),
+                    )),
+                    _ => return Err(self),
+                },
+                ScalarType::BitBool => match self {
+                    Self::Bool(bool) => Self::BitBool(bool),
+                    _ => return Err(self),
+                },
+                ScalarType::Bool => match self {
+                    Self::BitBool(bool) => Self::Bool(bool),
+                    _ => return Err(self),
+                },
                 _ => return Err(self),
             },
-            PropertyKind::WadChunkLink => match self {
-                Self::Hash(hash) => {
-                    Self::WadChunkLink(hash.with_value(WadHash(hash.value.as_u64())))
-                }
-                Self::String(str) => Self::WadChunkLink(HashedLiteral::new(
-                    str.span,
-                    Originally::String,
-                    WadHash::hash_str(str.as_str()),
-                )),
-                _ => return Err(self),
-            },
-            PropertyKind::BitBool => match self {
-                Self::Bool(bool) => Self::BitBool(bool),
-                _ => return Err(self),
-            },
-            PropertyKind::Bool => match self {
-                Self::BitBool(bool) => Self::Bool(bool),
-                _ => return Err(self),
-            },
+
             _ => return Err(self),
         })
     }
@@ -114,7 +124,7 @@ impl Value {
     /// # Errors
     /// Returns the value if it does not convert.
     pub fn try_coerce_to_bin_hash(self) -> Result<HashedLiteral<BinHash>, Self> {
-        match self.try_coerce_to(PropertyKind::Hash)? {
+        match self.try_coerce_to(ScalarType::Hash(HashType::DEFAULT))? {
             Self::Hash(hash) => hash.try_as_bin_hash().ok_or(Self::Hash(hash)),
             other => Err(other),
         }
@@ -149,12 +159,15 @@ impl Value {
             },
             Self::Unknown(span) => Self::Unresolved {
                 span,
-                kind: PropertyKind::Hash,
+                kind: ScalarType::Hash(hash_type).into(),
             },
-            this @ Self::Unresolved {
-                kind: PropertyKind::Hash,
-                ..
-            } => this,
+            Self::Unresolved {
+                kind: RitoType::Scalar(ScalarType::Hash(_)),
+                span,
+            } => Self::Unresolved {
+                span,
+                kind: ScalarType::Hash(hash_type).into(),
+            },
             this => return Err(this),
         })
     }

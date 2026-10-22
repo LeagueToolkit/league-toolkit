@@ -18,9 +18,10 @@ impl<'a> Builder<'a> {
         &mut self,
         text: &str,
         token: &Token,
-        kind_hint: Option<RitoType>,
+        kind_hint: Option<impl Into<RitoType>>,
         kind_hint_span: Option<Span>,
     ) -> Value {
+        let kind_hint = kind_hint.map(|h| h.into());
         match Value::eval(text, token, kind_hint, kind_hint_span) {
             Ok(value) => value,
             Err(e) => {
@@ -28,7 +29,7 @@ impl<'a> Builder<'a> {
                 kind_hint
                     .map(|k| Value::Unresolved {
                         span: token.span,
-                        kind: k.base,
+                        kind: k,
                     })
                     .unwrap_or(Value::Unknown(token.span))
             }
@@ -37,9 +38,11 @@ impl<'a> Builder<'a> {
     pub(crate) fn resolve_value(
         &mut self,
         wrapper: &Node,
-        hint: Option<RitoType>,
+        hint: Option<impl Into<RitoType>>,
         hint_span: Option<Span>,
     ) -> Result<Value, Diagnostic> {
+        let hint = hint.map(|h| h.into());
+
         let Some(child) = wrapper.children.get(self.cst).first() else {
             return Err(Diagnostic::CustomSpan(
                 "[resolve_value] node has no children",
@@ -101,7 +104,7 @@ impl<'a> Builder<'a> {
     pub(crate) fn resolve_list_item_block(
         &mut self,
         node: &Node,
-        hint: RitoType,
+        hint: impl Into<RitoType>,
         hint_span: Option<Span>,
     ) -> Result<Value, MaybeSpanDiag> {
         self.resolve_block_value(node, hint, hint_span)

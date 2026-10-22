@@ -46,7 +46,7 @@ impl<'a> Builder<'a> {
                 span,
             }) => {
                 if let Some(parent) = parent_value_kind
-                    .filter(|p| matches!(p.base, PropertyKind::Struct | PropertyKind::Embedded))
+                    .filter(|p| matches!(p.base(), PropertyKind::Struct | PropertyKind::Embedded))
                 {
                     self.push(
                         QuotedPropertyName {
@@ -68,9 +68,7 @@ impl<'a> Builder<'a> {
             Some(token) => self.resolve_literal(
                 self.text,
                 token,
-                parent_value_kind
-                    .filter(|k| k.subtypes[0].is_some())
-                    .map(|k| k.item(0)),
+                parent_value_kind.and_then(|k| k.subtype(0)),
                 parent_type_span,
             ),
             // TODO: change this error
@@ -91,7 +89,7 @@ impl<'a> Builder<'a> {
             .ok_or(MissingTree(Kind::EntryKey))?;
         let key = self.resolve_entry_key(key_node, parent_value_kind, parent_type_span)?;
 
-        let parent_value_kind = parent_value_kind.and_then(|p| p.value_item());
+        let parent_value_kind = parent_value_kind.and_then(|p| p.value_subtype());
 
         let type_expr_node = children.find_tree(self.cst, Kind::TypeExpr);
         let type_expr_span = type_expr_node.map(|k| k.span);
@@ -101,7 +99,7 @@ impl<'a> Builder<'a> {
             .find_tree(self.cst, Kind::EntryValue)
             .ok_or(MissingTree(Kind::EntryValue))?;
 
-        let desired_kind = type_expr.or(parent_value_kind.map(|k| k.into()));
+        let desired_kind = type_expr.or(parent_value_kind.map(TypeExpr::from));
         let type_span = type_expr_span.or(parent_type_span);
 
         let value = match self.resolve_value(
@@ -121,20 +119,24 @@ impl<'a> Builder<'a> {
         };
 
         let value = value.map(|value| match desired_kind {
-            Some(TypeExpr::Resolved(kind)) => match value.try_coerce_to(kind) {
-                Ok(value) => value,
-                Err(value) => value,
-            },
+            Some(TypeExpr::Resolved(kind)) => {
+                let coerce = value.try_coerce_to(kind);
+                match coerce {
+                    Ok(value) => value,
+                    Err(value) => value,
+                }
+            }
             _ => value,
         });
 
         match (desired_kind, value.as_ref()) {
             (Some(TypeExpr::Resolved(kind)), Some(value)) => {
-                // a value does not record its hasher, and coercion gave it the declared width
-                if value
-                    .rito_type()
-                    .is_some_and(|k| k != kind.without_hash_types())
-                {
+                // a value doesn't preserve hash algo, so erase it here.
+                // coercion makes sure we have the declared width.
+                if value.rito_type().is_some_and(|k| {
+                    !k.with_default_hash_types()
+                        .equivalent_to(&kind.with_default_hash_types())
+                }) {
                     self.push(Diagnostic::unwrap(
                         TypeMismatch {
                             span: value.span(),

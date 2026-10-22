@@ -10,7 +10,7 @@ use crate::{
     },
     cst::{ChildrenExt as _, Kind},
     parse::{Token, TokenKind},
-    Node, RitoType,
+    rito, Node, RitoType,
 };
 
 impl<'a> Builder<'a> {
@@ -34,7 +34,7 @@ impl<'a> Builder<'a> {
                 Value::Hash(hash) => hash.try_as_bin_hash().ok_or(D::InvalidHash(hash.span())),
                 value => Err(TypeMismatch {
                     span: value.span(),
-                    expected: RitoType::simple(PropertyKind::Hash).into(),
+                    expected: rito!(Hash).into(),
                     expected_span: None,
                     got: value.rito_type().into(),
                 }
@@ -50,10 +50,10 @@ impl<'a> Builder<'a> {
         };
         let class_hash = self.resolve_class_hash(name_token)?;
 
-        if !matches!(hint.base, PropertyKind::Struct | PropertyKind::Embedded) {
+        if !matches!(hint.base(), PropertyKind::Struct | PropertyKind::Embedded) {
             return Err(TypeMismatch {
                 span: name_token.span,
-                expected: RitoType::simple(hint.base).into(),
+                expected: hint.into(),
                 expected_span: None,
                 got: RitoTypeOrVirtual::StructOrEmbedded,
             }
@@ -71,7 +71,7 @@ impl<'a> Builder<'a> {
             properties,
         };
 
-        Ok(match hint.base {
+        Ok(match hint.base() {
             PropertyKind::Struct => Value::Struct(ast_struct),
             PropertyKind::Embedded => Value::Embedded(ast_struct),
             _ => unreachable!(),

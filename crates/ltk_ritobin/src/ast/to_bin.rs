@@ -9,7 +9,7 @@ use crate::{
         node::{root::FileKind, Map, MapEntry},
         Ast, Object, RootEntry, RootPatch, Value,
     },
-    Spanned,
+    ScalarType, Spanned,
 };
 
 pub struct PartialBin {
@@ -157,7 +157,7 @@ impl Value {
         use PropertyValueEnum as P;
         Some(match self {
             Value::Unknown(_) => return None,
-            Value::Unresolved { kind, .. } => kind.default_value(),
+            Value::Unresolved { kind, .. } => kind.make_default(),
             Value::None(_) => P::None(values::None),
             Value::Bool(Spanned { value, .. }) => P::Bool(values::Bool::new(*value)),
             Value::BitBool(Spanned { value, .. }) => P::BitBool(values::BitBool::new(*value)),
@@ -199,10 +199,13 @@ impl Value {
                 entries,
                 span: _,
             }) => {
-                let mut map = assert(values::Map::empty(*key_kind, *value_kind), || {
-                    values::Map::empty(PropertyKind::None, PropertyKind::None)
-                        .expect("None is always a valid map key and value kind")
-                });
+                let mut map = assert(
+                    values::Map::empty(key_kind.kind(), value_kind.kind()),
+                    || {
+                        values::Map::empty(PropertyKind::None, PropertyKind::None)
+                            .expect("None is always a valid map key and value kind")
+                    },
+                );
                 for MapEntry {
                     key: k, value: v, ..
                 } in entries
@@ -223,8 +226,8 @@ impl Value {
             } => {
                 let inner = value.as_deref().and_then(Value::to_bin_value);
                 let item_kind = (*item_kind)?;
-                let optional = assert(values::Optional::new(item_kind, inner), || {
-                    values::Optional::empty(item_kind).unwrap_or_default()
+                let optional = assert(values::Optional::new(item_kind.kind(), inner), || {
+                    values::Optional::empty(item_kind.kind()).unwrap_or_default()
                 });
                 P::Optional(optional)
             }
@@ -232,8 +235,8 @@ impl Value {
     }
 }
 
-fn container_from(item_kind: PropertyKind, items: &[Value]) -> values::Container {
-    let mut container = assert(values::Container::empty(item_kind), || {
+fn container_from(item_kind: ScalarType, items: &[Value]) -> values::Container {
+    let mut container = assert(values::Container::empty(item_kind.kind()), || {
         values::Container::empty(PropertyKind::None).expect("None is always a valid item kind")
     });
     for item in items {

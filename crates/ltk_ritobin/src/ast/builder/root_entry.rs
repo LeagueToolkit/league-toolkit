@@ -9,14 +9,13 @@ use crate::{
         RootEntry, Value,
     },
     cst::Kind,
-    Node, Spanned, SpannedExt,
+    rito, Node, Spanned, SpannedExt,
 };
 
 use super::*;
 
 use crate::span::Span;
 use ltk_hash::BinHash;
-use ltk_meta::PropertyKind::{self};
 
 #[derive(Debug, Clone)]
 pub struct RawRootProperty {
@@ -93,7 +92,10 @@ impl<'a> Builder<'a> {
         }
 
         if let Some(RootValue::Value(value)) = root.value.as_ref() {
-            if let Some(got) = value.rito_type().filter(|got| *got != expected_type) {
+            if let Some(got) = value
+                .rito_type()
+                .filter(|got| !got.equivalent_to(&expected_type))
+            {
                 self.push(D::unwrap(
                     TypeMismatch {
                         span: value.span(),
@@ -229,7 +231,7 @@ fn linked_paths(items: &[Value]) -> Vec<String> {
         .iter()
         .filter_map(|v| {
             v.clone()
-                .try_coerce_to(PropertyKind::String)
+                .try_coerce_to(rito!(String))
                 .ok()
                 .and_then(|v| v.into_string())
         })

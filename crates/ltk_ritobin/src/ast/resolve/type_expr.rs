@@ -1,6 +1,5 @@
 use ltk_meta::PropertyKind;
 
-use crate::span::Span;
 use crate::{
     ast::{
         builder::Builder,
@@ -12,6 +11,7 @@ use crate::{
     parse::TokenKind,
     HashType, Node, RitoType, RitobinName as _,
 };
+use crate::{span::Span, ScalarType};
 
 impl<'a> Builder<'a> {
     pub fn resolve_type_expr(&mut self, tree: &Node) -> Option<TypeExpr> {
@@ -39,10 +39,11 @@ impl<'a> Builder<'a> {
 
         let args = children.find_tree(self.cst, Kind::TypeArgList);
         if base == PropertyKind::Hash {
-            return Ok(RitoType::hash(match args {
+            return Ok(ScalarType::Hash(match args {
                 Some(args) => self.resolve_hash_type(args)?,
                 None => HashType::DEFAULT,
-            }));
+            })
+            .into());
         }
 
         let mut hash_types = [HashType::DEFAULT; 2];
@@ -74,7 +75,7 @@ impl<'a> Builder<'a> {
                                 self.push(
                                     InvalidNesting {
                                         span: t.span,
-                                        kind: RitoType::simple(kind),
+                                        kind: RitoType::from_property_kind(kind),
                                     }
                                     .unwrap(),
                                 );
@@ -87,7 +88,7 @@ impl<'a> Builder<'a> {
                                 self.push(
                                     InvalidMapKey {
                                         span: t.span,
-                                        kind: RitoType::simple(kind),
+                                        kind: RitoType::from_property_kind(kind),
                                     }
                                     .unwrap(),
                                 );
@@ -143,9 +144,7 @@ impl<'a> Builder<'a> {
             None => [None, None],
         };
 
-        let mut rito = RitoType::new(base, subtypes);
-        rito.hash_types[1..].copy_from_slice(&hash_types);
-        Ok(rito)
+        Ok(RitoType::from_parts(base, subtypes).with_hash_types(hash_types))
     }
 
     /// Returns the `TypeArg` nodes of a `TypeArgList` node.
