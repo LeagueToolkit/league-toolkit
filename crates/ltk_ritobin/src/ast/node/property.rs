@@ -57,9 +57,9 @@ impl PartialEq<TypeExpr> for RitoType {
     }
 }
 
-impl From<RitoType> for TypeExpr {
-    fn from(value: RitoType) -> Self {
-        Self::Resolved(value)
+impl<R: Into<RitoType>> From<R> for TypeExpr {
+    fn from(value: R) -> Self {
+        Self::Resolved(value.into())
     }
 }
 

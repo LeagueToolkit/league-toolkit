@@ -360,7 +360,7 @@ fn a_path_that_is_not_a_string_is_diagnosed_and_left_out() {
             Diagnostic::TypeMismatch(TypeMismatch {
                 got: RitoTypeOrVirtual::RitoType(got),
                 ..
-            }) if got.base == PropertyKind::Hash
+            }) if got.base() == PropertyKind::Hash
         ),
         "{diagnostic:#?}"
     );

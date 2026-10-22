@@ -1,6 +1,5 @@
 use ltk_meta::PropertyKind;
 
-use crate::span::Span;
 use crate::{
     ast::{
         builder::Builder,
@@ -8,8 +7,9 @@ use crate::{
         Value,
     },
     cst::{Child, Cst, Kind, Node},
-    RitoType, Spanned,
+    RitoType, ScalarType, Spanned,
 };
+use crate::{rito, span::Span};
 
 use super::literals::ExpectedType;
 
@@ -25,7 +25,7 @@ struct ListIter<'a, 'b, 'c> {
 }
 
 impl<'c> ListIter<'_, '_, 'c> {
-    fn next_value(&mut self, expected: PropertyKind) -> Option<Result<Value, MaybeSpanDiag>> {
+    fn next_value(&mut self, expected: ScalarType) -> Option<Result<Value, MaybeSpanDiag>> {
         for child in self.children.by_ref() {
             let Some(node) = child.tree(self.cst) else {
                 continue;
@@ -59,7 +59,7 @@ impl<'c> ListIter<'_, '_, 'c> {
 
     fn expect_next(
         &mut self,
-        expected_kind: PropertyKind,
+        expected_kind: ScalarType,
         expected: ListLike,
     ) -> Result<Value, MaybeSpanDiag> {
         match self.next_value(expected_kind) {
@@ -79,14 +79,14 @@ impl<'c> ListIter<'_, '_, 'c> {
     ) -> Result<[f32; N], MaybeSpanDiag> {
         let mut out = [0.0f32; N];
         for slot in &mut out {
-            *slot = match self.expect_next(PropertyKind::F32, expected)? {
+            *slot = match self.expect_next(ScalarType::F32, expected)? {
                 Value::F32(v) => v.value,
                 other => {
                     return Err(D::from(TypeMismatch {
                         span: other.span(),
-                        expected: RitoType::simple(PropertyKind::F32).into(),
+                        expected: rito!(F32).into(),
                         expected_span: self.type_span,
-                        got: other.kind().map(RitoType::simple).into(),
+                        got: other.rito_type().into(),
                     })
                     .into())
                 }
@@ -98,14 +98,14 @@ impl<'c> ListIter<'_, '_, 'c> {
     fn read_u8s<const N: usize>(&mut self, expected: ListLike) -> Result<[u8; N], MaybeSpanDiag> {
         let mut out = [0u8; N];
         for slot in &mut out {
-            *slot = match self.expect_next(PropertyKind::U8, expected)? {
+            *slot = match self.expect_next(ScalarType::U8, expected)? {
                 Value::U8(v) => v.value,
                 other => {
                     return Err(D::from(TypeMismatch {
                         span: other.span(),
-                        expected: RitoType::simple(PropertyKind::U8).into(),
+                        expected: rito!(U8).into(),
                         expected_span: self.type_span,
-                        got: other.kind().map(RitoType::simple).into(),
+                        got: other.rito_type().into(),
                     })
                     .into())
                 }
@@ -120,7 +120,7 @@ impl<'a> Builder<'a> {
     pub(crate) fn resolve_numeric(
         &mut self,
         node: &Node,
-        expected: PropertyKind,
+        expected: ScalarType,
         hint_span: Option<Span>,
     ) -> Result<Value, D> {
         self.resolve_value(
@@ -133,7 +133,7 @@ impl<'a> Builder<'a> {
     pub(crate) fn resolve_listlike_fallable(
         &mut self,
         block: &Node,
-        kind: PropertyKind,
+        kind: ScalarType,
         type_span: Option<Span>,
     ) -> Result<Value, MaybeSpanDiag> {
         let cst = self.cst();
@@ -149,23 +149,23 @@ impl<'a> Builder<'a> {
         };
 
         let value = match kind {
-            PropertyKind::Vector2 => {
+            ScalarType::Vector2 => {
                 let [x, y] = items.read_floats::<2>(ListLike::Vec2)?;
                 Value::Vector2(Spanned::new(span, [x, y].into()))
             }
-            PropertyKind::Vector3 => {
+            ScalarType::Vector3 => {
                 let [x, y, z] = items.read_floats::<3>(ListLike::Vec3)?;
                 Value::Vector3(Spanned::new(span, [x, y, z].into()))
             }
-            PropertyKind::Vector4 => {
+            ScalarType::Vector4 => {
                 let [x, y, z, w] = items.read_floats::<4>(ListLike::Vec4)?;
                 Value::Vector4(Spanned::new(span, [x, y, z, w].into()))
             }
-            PropertyKind::Color => {
+            ScalarType::Color => {
                 let [r, g, b, a] = items.read_u8s::<4>(ListLike::Color)?;
                 Value::Color(Spanned::new(span, ltk_primitives::Color { r, g, b, a }))
             }
-            PropertyKind::Matrix44 => {
+            ScalarType::Matrix44 => {
                 let x_axis = items.read_floats::<4>(ListLike::Mat44)?;
                 let y_axis = items.read_floats::<4>(ListLike::Mat44)?;
                 let z_axis = items.read_floats::<4>(ListLike::Mat44)?;
@@ -183,14 +183,14 @@ impl<'a> Builder<'a> {
         };
 
         let expected = match kind {
-            PropertyKind::Vector2 => ListLike::Vec2,
-            PropertyKind::Vector3 => ListLike::Vec3,
-            PropertyKind::Vector4 => ListLike::Vec4,
-            PropertyKind::Color => ListLike::Color,
-            PropertyKind::Matrix44 => ListLike::Mat44,
+            ScalarType::Vector2 => ListLike::Vec2,
+            ScalarType::Vector3 => ListLike::Vec3,
+            ScalarType::Vector4 => ListLike::Vec4,
+            ScalarType::Color => ListLike::Color,
+            ScalarType::Matrix44 => ListLike::Mat44,
             _ => unreachable!(),
         };
-        if let Some(extra) = items.next_value(PropertyKind::F32) {
+        if let Some(extra) = items.next_value(ScalarType::F32) {
             let extra = extra?;
             let count = 1 + items.children.count();
             return Err(D::TooManyItems {
@@ -210,7 +210,7 @@ impl<'a> Builder<'a> {
     pub(super) fn resolve_listlike(
         &mut self,
         block: &Node,
-        kind: PropertyKind,
+        kind: ScalarType,
         type_span: Option<Span>,
     ) -> Value {
         match self.resolve_listlike_fallable(block, kind, type_span) {
@@ -219,7 +219,7 @@ impl<'a> Builder<'a> {
             Err(e) => {
                 self.push(e.fallback(block.span));
                 Value::Unresolved {
-                    kind,
+                    kind: kind.into(),
                     span: block.span,
                 }
             }

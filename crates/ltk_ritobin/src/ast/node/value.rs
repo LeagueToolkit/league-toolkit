@@ -8,21 +8,21 @@ use ltk_primitives::Color;
 mod coerce;
 pub use coerce::CanCoerce;
 
-use crate::span::Span;
 use crate::{
     ast::{
         hash::{HashedLiteral, Originally},
         Object,
     },
-    RitoType, RitobinName, Spanned,
+    ContainerType, RitoType, RitobinName, Spanned,
 };
+use crate::{span::Span, ScalarType};
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "span_print", derive(crate::span::DebugSpans))]
 pub enum Value {
     Unresolved {
         span: Span,
-        kind: PropertyKind,
+        kind: RitoType,
     },
     Unknown(Span),
     //---------------------
@@ -51,18 +51,18 @@ pub enum Value {
     Struct(Object),
     Embedded(Object),
     Container {
-        item_kind: PropertyKind,
+        item_kind: ScalarType,
         items: Vec<Value>,
         span: Span,
     },
     UnorderedContainer {
-        item_kind: PropertyKind,
+        item_kind: ScalarType,
         items: Vec<Value>,
         span: Span,
     },
     Map(Map),
     Optional {
-        item_kind: Option<PropertyKind>,
+        item_kind: Option<ScalarType>,
         value: Option<Box<Value>>,
         span: Span,
     },
@@ -70,8 +70,8 @@ pub enum Value {
 
 #[derive(Debug, Clone)]
 pub struct Map {
-    pub key_kind: PropertyKind,
-    pub value_kind: PropertyKind,
+    pub key_kind: ScalarType,
+    pub value_kind: ScalarType,
     pub entries: Vec<MapEntry>,
     pub span: Span,
 }
@@ -145,7 +145,7 @@ impl Value {
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Value::Unresolved { kind, .. } => write!(f, "unresolved {}", kind.to_rito_name()),
+            Value::Unresolved { kind, .. } => write!(f, "unresolved {kind}"),
             Value::Unknown(_) => f.write_str("unknown"),
             Value::None(_) => f.write_str("null"),
             Value::Bool(v) => v.fmt(f),
@@ -193,64 +193,71 @@ impl Display for Value {
 
 impl Value {
     pub fn default_for(kind: RitoType, span: Span) -> Value {
-        use PropertyKind as K;
-        match kind.base {
-            K::Map => Value::Map(Map {
-                key_kind: kind.subtype(0),
-                value_kind: kind.subtype(1),
-                entries: Vec::new(),
-                span,
-            }),
-            K::Container => Value::Container {
-                item_kind: kind.subtype(0),
-                items: Vec::new(),
-                span,
+        use ContainerType as C;
+        use ScalarType as S;
+        match kind {
+            RitoType::Container(container) => match container {
+                C::Map { key, value } => Value::Map(Map {
+                    key_kind: key.unwrap_or_default().into(),
+                    value_kind: value.unwrap_or_default().into(),
+                    entries: Vec::new(),
+                    span,
+                }),
+                C::Container(item) => Value::Container {
+                    item_kind: item.unwrap_or_default().into(),
+                    items: Vec::new(),
+                    span,
+                },
+                C::UnorderedContainer(item) => Value::UnorderedContainer {
+                    item_kind: item.unwrap_or_default().into(),
+                    items: Vec::new(),
+                    span,
+                },
+                C::Optional(item) => Value::Optional {
+                    item_kind: item.into(),
+                    value: None,
+                    span,
+                },
             },
-            K::UnorderedContainer => Value::UnorderedContainer {
-                item_kind: kind.subtype(0),
-                items: Vec::new(),
-                span,
+            RitoType::Scalar(scalar) => match scalar {
+                S::Struct => Value::Struct(Object {
+                    class_hash: HashedLiteral::default()
+                        .with_span(Span::new(span.start, span.start)),
+                    span,
+                    properties: Vec::new(),
+                }),
+                S::Embedded => Value::Embedded(Object {
+                    class_hash: HashedLiteral::default()
+                        .with_span(Span::new(span.start, span.start)),
+                    span,
+                    properties: Vec::new(),
+                }),
+                S::Hash(hash_type) => Value::Hash(HashedLiteral::new(
+                    span,
+                    Originally::HexLit,
+                    hash_type.from_hash(0),
+                )),
+                S::WadChunkLink => Value::WadChunkLink(HashedLiteral::default().with_span(span)),
+                S::ObjectLink => Value::ObjectLink(HashedLiteral::default().with_span(span)),
+                S::None => Value::None(span),
+                S::BitBool => Value::BitBool(Spanned::spanned_default(span)),
+                S::Bool => Value::Bool(Spanned::spanned_default(span)),
+                S::I8 => Value::I8(Spanned::spanned_default(span)),
+                S::U8 => Value::U8(Spanned::spanned_default(span)),
+                S::I16 => Value::I16(Spanned::spanned_default(span)),
+                S::U16 => Value::U16(Spanned::spanned_default(span)),
+                S::I32 => Value::I32(Spanned::spanned_default(span)),
+                S::U32 => Value::U32(Spanned::spanned_default(span)),
+                S::I64 => Value::I64(Spanned::spanned_default(span)),
+                S::U64 => Value::U64(Spanned::spanned_default(span)),
+                S::F32 => Value::F32(Spanned::spanned_default(span)),
+                S::Vector2 => Value::Vector2(Spanned::spanned_default(span)),
+                S::Vector3 => Value::Vector3(Spanned::spanned_default(span)),
+                S::Vector4 => Value::Vector4(Spanned::spanned_default(span)),
+                S::Matrix44 => Value::Matrix44(Spanned::spanned_default(span)),
+                S::Color => Value::Color(Spanned::spanned_default(span)),
+                S::String => Value::String(Spanned::spanned_default(span)),
             },
-            K::Optional => Value::Optional {
-                item_kind: kind.subtypes[0],
-                value: None,
-                span,
-            },
-            K::Struct => Value::Struct(Object {
-                class_hash: HashedLiteral::default().with_span(Span::new(span.start, span.start)),
-                span,
-                properties: Vec::new(),
-            }),
-            K::Embedded => Value::Embedded(Object {
-                class_hash: HashedLiteral::default().with_span(Span::new(span.start, span.start)),
-                span,
-                properties: Vec::new(),
-            }),
-            K::Hash => Value::Hash(HashedLiteral::new(
-                span,
-                Originally::HexLit,
-                kind.hash_type().from_hash(0),
-            )),
-            K::WadChunkLink => Value::WadChunkLink(HashedLiteral::default().with_span(span)),
-            K::ObjectLink => Value::ObjectLink(HashedLiteral::default().with_span(span)),
-            K::None => Value::None(span),
-            K::BitBool => Value::BitBool(Spanned::spanned_default(span)),
-            K::Bool => Value::Bool(Spanned::spanned_default(span)),
-            K::I8 => Value::I8(Spanned::spanned_default(span)),
-            K::U8 => Value::U8(Spanned::spanned_default(span)),
-            K::I16 => Value::I16(Spanned::spanned_default(span)),
-            K::U16 => Value::U16(Spanned::spanned_default(span)),
-            K::I32 => Value::I32(Spanned::spanned_default(span)),
-            K::U32 => Value::U32(Spanned::spanned_default(span)),
-            K::I64 => Value::I64(Spanned::spanned_default(span)),
-            K::U64 => Value::U64(Spanned::spanned_default(span)),
-            K::F32 => Value::F32(Spanned::spanned_default(span)),
-            K::Vector2 => Value::Vector2(Spanned::spanned_default(span)),
-            K::Vector3 => Value::Vector3(Spanned::spanned_default(span)),
-            K::Vector4 => Value::Vector4(Spanned::spanned_default(span)),
-            K::Matrix44 => Value::Matrix44(Spanned::spanned_default(span)),
-            K::Color => Value::Color(Spanned::spanned_default(span)),
-            K::String => Value::String(Spanned::spanned_default(span)),
         }
     }
 }
@@ -260,7 +267,7 @@ impl Value {
     pub fn kind(&self) -> Option<PropertyKind> {
         use PropertyKind as K;
         Some(match self {
-            Value::Unresolved { kind, .. } => *kind,
+            Value::Unresolved { kind, .. } => kind.base(),
             Value::Unknown(_) => return None,
             Value::None(_) => K::None,
             Value::Bool(_) => K::Bool,
@@ -325,20 +332,21 @@ impl Value {
         }
     }
 
-    /// Returns the type of the value. Each slot holds [`crate::HashType::DEFAULT`]. A value
-    /// does not record the hasher that computed it.
+    /// Returns the type of the value. Hash values use [`crate::HashType::default`],
+    /// since values don't track the hash algo they came from.
     pub fn rito_type(&self) -> Option<RitoType> {
         Some(match self {
-            Value::Container { item_kind, .. } | Value::UnorderedContainer { item_kind, .. } => {
-                RitoType::new(self.kind()?, [Some(*item_kind), None])
+            Value::Container { item_kind, .. } => ContainerType::Container(Some(*item_kind)).into(),
+            Value::UnorderedContainer { item_kind, .. } => {
+                ContainerType::UnorderedContainer(Some(*item_kind)).into()
             }
             Value::Map(Map {
                 key_kind,
                 value_kind,
                 ..
-            }) => RitoType::new(self.kind()?, [Some(*key_kind), Some(*value_kind)]),
-            Value::Optional { item_kind, .. } => RitoType::new(self.kind()?, [*item_kind, None]),
-            _ => RitoType::simple(self.kind()?),
+            }) => RitoType::map(*key_kind, *value_kind),
+            Value::Optional { item_kind, .. } => ContainerType::Optional(*item_kind).into(),
+            _ => RitoType::try_from_scalar(self.kind()?).ok()?,
         })
     }
 }

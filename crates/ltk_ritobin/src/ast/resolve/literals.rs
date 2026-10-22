@@ -3,7 +3,6 @@ use std::{borrow::Cow, fmt::Display, num::IntErrorKind};
 use ltk_hash::{BinHash, WadHash};
 use ltk_meta::PropertyKind;
 
-use crate::span::Span;
 use crate::{
     ast::{
         diagnostics::{RitoTypeOrVirtual, TypeMismatch},
@@ -14,6 +13,7 @@ use crate::{
     parse::{Token, TokenKind},
     RitoType, RitobinName, Spanned, SpannedExt,
 };
+use crate::{span::Span, ScalarType};
 
 use ValueEvalError as E;
 
@@ -36,7 +36,7 @@ impl Value {
 
 #[derive(Debug, thiserror::Error, Clone, Copy)]
 pub struct ParseNumericError {
-    pub expected: PropertyKind,
+    pub expected: ScalarType,
     pub error: Option<std::num::IntErrorKind>,
     pub span: Span,
 }
@@ -61,7 +61,7 @@ impl Display for ParseNumericError {
 
 fn parse_int<T: std::str::FromStr<Err = std::num::ParseIntError>>(
     txt: &str,
-    kind_hint: PropertyKind,
+    kind_hint: ScalarType,
     span: Span,
     wrap: impl FnOnce(T, Span) -> Value,
 ) -> Result<Value, ParseNumericError> {
@@ -150,6 +150,7 @@ impl Value {
         expected_type_span: Option<Span>,
     ) -> Result<Self, ValueEvalError> {
         use PropertyKind as K;
+        use ScalarType as S;
         Ok(match token {
             Token {
                 kind: TokenKind::String,

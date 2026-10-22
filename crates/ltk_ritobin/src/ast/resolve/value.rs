@@ -42,6 +42,8 @@ impl<'a> Builder<'a> {
         expected_type: Option<ExpectedType>,
         expected_type_span: Option<Span>,
     ) -> Result<Value, Diagnostic> {
+        let hint = hint.map(|h| h.into());
+
         let Some(child) = wrapper.children.get(self.cst).first() else {
             return Err(Diagnostic::CustomSpan(
                 "[resolve_value] node has no children",
@@ -100,7 +102,7 @@ impl<'a> Builder<'a> {
     pub(crate) fn resolve_list_item_block(
         &mut self,
         node: &Node,
-        hint: RitoType,
+        hint: impl Into<RitoType>,
         hint_span: Option<Span>,
     ) -> Result<Value, MaybeSpanDiag> {
         self.resolve_block_value(node, hint, hint_span)
