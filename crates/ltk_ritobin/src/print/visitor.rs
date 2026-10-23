@@ -202,7 +202,12 @@ impl<'a, W: Write> CstVisitor<'a, W> {
     /// break the first/oldest group if running size is too big (bottom of the stack)
     pub fn check_running_size(&mut self) -> fmt::Result {
         if let Some(size) = self.size_stack.last() {
-            if self.col + size > self.config.wrap.line_width {
+            if self
+                .config
+                .wrap
+                .line_width
+                .is_some_and(|line_width| self.col + size > line_width)
+            {
                 self.break_first_group()?;
             }
         }
@@ -220,7 +225,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
             match cmd {
                 Cmd::Text(s) | Cmd::TextIf(s, Mode::Flat) => {
                     col += s.len();
-                    if col > self.config.wrap.line_width {
+                    if self.config.wrap.line_width.is_some_and(|width| col > width) {
                         return false;
                     }
                 }

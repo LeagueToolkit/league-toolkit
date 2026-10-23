@@ -4,7 +4,7 @@ use crate::HashProvider;
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct WrapConfig {
     /// Maximum line width - will try to break blocks if the line exceeds this number.
-    pub line_width: usize,
+    pub line_width: Option<usize>,
 
     /// Whether to allow the printing of structs/classes in one line
     /// (subject to [`Self::line_width`] wrapping)
@@ -15,9 +15,19 @@ pub struct WrapConfig {
     pub inline_lists: bool,
 }
 
+impl Default for WrapConfig {
+    fn default() -> Self {
+        Self {
+            line_width: Some(120),
+            inline_structs: false,
+            inline_lists: true,
+        }
+    }
+}
+
 impl WrapConfig {
     pub fn line_width(mut self, line_width: usize) -> Self {
-        self.line_width = line_width;
+        self.line_width.replace(line_width);
         self
     }
 
@@ -29,16 +39,6 @@ impl WrapConfig {
     pub fn inline_lists(mut self, inline_lists: bool) -> Self {
         self.inline_lists = inline_lists;
         self
-    }
-}
-
-impl Default for WrapConfig {
-    fn default() -> Self {
-        Self {
-            line_width: 120,
-            inline_structs: false,
-            inline_lists: true,
-        }
     }
 }
 
