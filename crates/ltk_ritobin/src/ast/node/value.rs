@@ -13,7 +13,7 @@ use crate::{
         hash::{HashedLiteral, Originally},
         Object,
     },
-    ContainerType, RitoType, RitobinName, Spanned,
+    ContainerType, RitoType, Spanned,
 };
 use crate::{span::Span, ScalarType};
 
@@ -198,23 +198,23 @@ impl Value {
         match kind {
             RitoType::Container(container) => match container {
                 C::Map { key, value } => Value::Map(Map {
-                    key_kind: key.unwrap_or_default().into(),
-                    value_kind: value.unwrap_or_default().into(),
+                    key_kind: key.unwrap_or_default(),
+                    value_kind: value.unwrap_or_default(),
                     entries: Vec::new(),
                     span,
                 }),
                 C::Container(item) => Value::Container {
-                    item_kind: item.unwrap_or_default().into(),
+                    item_kind: item.unwrap_or_default(),
                     items: Vec::new(),
                     span,
                 },
                 C::UnorderedContainer(item) => Value::UnorderedContainer {
-                    item_kind: item.unwrap_or_default().into(),
+                    item_kind: item.unwrap_or_default(),
                     items: Vec::new(),
                     span,
                 },
                 C::Optional(item) => Value::Optional {
-                    item_kind: item.into(),
+                    item_kind: item,
                     value: None,
                     span,
                 },

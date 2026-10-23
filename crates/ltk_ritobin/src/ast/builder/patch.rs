@@ -1,5 +1,5 @@
 use ltk_hash::{BinHash, Hash as _};
-use ltk_meta::{path::PropertyPath, PropertyKind};
+use ltk_meta::path::PropertyPath;
 
 use crate::{
     ast::{
@@ -11,7 +11,7 @@ use crate::{
         },
         Property, RootPatch, Value,
     },
-    rito, RitoType, Spanned,
+    rito, Spanned,
 };
 
 use super::Builder;

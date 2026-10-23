@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::{span::Span, ContainerType, ScalarType};
+use crate::span::Span;
 use ltk_hash::{BinHash, Hash as _};
 use ltk_meta::{path::PropertyPathError, PropertyKind};
 

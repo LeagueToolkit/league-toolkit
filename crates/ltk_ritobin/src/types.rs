@@ -1,6 +1,6 @@
 //! Type name mappings for ritobin format.
 
-use ltk_hash::{HashAlgorithm, HashValue, HashWidth, Hasher};
+use ltk_hash::HashWidth;
 use ltk_meta::{property::values, PropertyKind, PropertyValueEnum};
 use std::fmt::Display;
 
@@ -303,7 +303,7 @@ impl RitoType {
     /// The value type of a map, item type of an {un,}ordered list/optional, or `None` if we're a scalar.
     pub const fn value_subtype(&self) -> Option<ScalarType> {
         match self {
-            RitoType::Scalar(_) => return None,
+            RitoType::Scalar(_) => None,
             RitoType::Container(container) => match container {
                 ContainerType::Map { value, .. } => *value,
                 ContainerType::Container(value) => *value,

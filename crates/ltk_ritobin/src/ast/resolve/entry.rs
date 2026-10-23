@@ -1,6 +1,6 @@
 use ltk_meta::PropertyKind;
 
-use crate::{ast::diagnostics::RitoTypeOrVirtual, span::Span};
+use crate::span::Span;
 use crate::{
     ast::{
         builder::Builder,

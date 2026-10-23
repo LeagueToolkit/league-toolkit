@@ -108,7 +108,7 @@ impl<'a> Builder<'a> {
                         });
                     }
                     // an optional listlike spells its components flat, same as a bare listlike
-                    let inner = self.resolve_listlike(block, item_kind.into(), hint_span);
+                    let inner = self.resolve_listlike(block, item_kind, hint_span);
                     return Ok(Value::Optional {
                         item_kind: Some(item_kind),
                         value: Some(Box::new(inner)),
