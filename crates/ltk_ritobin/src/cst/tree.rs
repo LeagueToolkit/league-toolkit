@@ -29,8 +29,10 @@ pub enum Kind {
     Block, 
     /// a block that is an entry key
     BlockKey,
-    /// a literal that looks like a block (vec's, rgba, a single row in a mtx44)
+    /// a literal that looks like a block (vec's, rgba)
     BlockLiteral,
+    /// a matrix block, printed as rows of fixed width (`mtx44`: 4 rows of 4)
+    BlockMatrix,
 
     Entry, EntryKey, EntryValue, EntryTerminator,
     Literal,
@@ -54,7 +56,8 @@ impl Display for Kind {
             Self::BlockKey => "key",
             Self::Class => "bin class",
             Self::ListItem => "list item",
-            Self::BlockLiteral => "list item (block)",
+            Self::BlockLiteral => "block literal",
+            Self::BlockMatrix => "matrix block",
             Self::Comment => "comment",
             Self::Annotation => "annotation",
             Self::AnnotationArgList => "annotation argument list",

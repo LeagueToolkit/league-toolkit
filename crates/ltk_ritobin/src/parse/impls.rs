@@ -261,6 +261,7 @@ pub fn block(p: &mut Parser) -> MarkOpened {
         if kind == TreeKind::Class {
             let m = p.open_before(mark);
             p.close(m, TreeKind::ListItem);
+            // TODO: also wrap ListItem around BlockLiteral
         }
     }
     p.expect(RCurly);

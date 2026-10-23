@@ -23,6 +23,8 @@ struct ListContext {
     len: u32,
     idx: u32,
     grp: GroupId,
+    /// number of items per column, for a matrix layout
+    cols: Option<u32>,
 }
 
 const MAX_QUEUE: usize = 4096;
@@ -46,6 +48,8 @@ pub struct CstVisitor<'a, W: Write> {
     list_stack: Vec<ListContext>,
     /// running inline size for each group
     size_stack: Vec<usize>,
+    /// Kind of each open ancestor node
+    node_stack: Vec<Kind>,
 
     pub error: Option<PrintError>,
 
@@ -90,6 +94,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
             group_stack: Vec::new(),
             list_stack: Vec::new(),
             size_stack: Vec::new(),
+            node_stack: Vec::new(),
 
             error: None,
 
@@ -186,14 +191,17 @@ impl<'a, W: Write> CstVisitor<'a, W> {
         Ok(())
     }
 
-    /// break the first/oldest group if running size is too big (bottom of the stack)
+    /// Break the first breakable group. A group that was opened as [`Mode::Flat`] can never break.
     pub fn break_first_group(&mut self) -> fmt::Result {
-        if let Some(&idx) = self.group_stack.first() {
-            // eprintln!("[printer] breaking first group");
-            self.force_group(GroupId(idx), Mode::Break);
-
+        while let Some(&idx) = self.group_stack.first() {
             self.group_stack.remove(0);
             self.size_stack.remove(0);
+            if self.group_began_flat(idx) {
+                continue;
+            }
+            // eprintln!("[printer] breaking first group");
+            self.force_group(GroupId(idx), Mode::Break);
+            break;
         }
         self.print_safe()?;
         Ok(())
@@ -257,6 +265,13 @@ impl<'a, W: Write> CstVisitor<'a, W> {
             unreachable!("grp pointing at non begin cmd {cmd:?}");
         };
         grp_mode.replace(mode)
+    }
+
+    /// Whether the group opened at `idx` started out [`Mode::Flat`]
+    fn group_began_flat(&self, idx: usize) -> bool {
+        idx.checked_sub(self.printed_commands)
+            .and_then(|i| self.queue.get(i))
+            .is_some_and(|cmd| matches!(cmd, Cmd::Begin(Some(Mode::Flat))))
     }
 
     fn last_mode(&self) -> &Mode {
@@ -398,6 +413,8 @@ impl<'a, W: Write> CstVisitor<'a, W> {
 
     fn enter_tree_inner(&mut self, ctx: &VisitCtx<'_>, tree: NodeId) -> Result<(), PrintError> {
         let tree = ctx.node(tree).unwrap();
+        let parent_kind = self.node_stack.last().copied();
+        self.node_stack.push(tree.kind);
 
         match tree.kind {
             Kind::TypeArgList | Kind::AnnotationArgList => {
@@ -419,11 +436,15 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                         .unwrap(),
                     idx: 0,
                     grp,
+                    cols: None,
                 });
             }
             Kind::BlockLiteral => {
-                self.softline()?;
-                let grp = self.begin_group(None)?;
+                let is_list_item = parent_kind == Some(Kind::Block);
+                if is_list_item {
+                    self.softline()?;
+                }
+                let grp = self.begin_group(Some(Mode::Flat))?;
 
                 let len = tree
                     .children
@@ -432,15 +453,12 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                     .filter(|n| n.tree(ctx.cst).is_some_and(|t| t.kind == Kind::ListItem))
                     .count();
 
-                if !self.config.wrap.inline_lists {
-                    self.force_group(grp, Mode::Break);
-                }
-
                 if len > 0 {
                     self.list_stack.push(ListContext {
                         len: len.try_into().unwrap(),
                         idx: 0,
                         grp,
+                        cols: None,
                     });
                 }
                 self.space()?;
@@ -490,6 +508,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                     len: len.try_into().unwrap(),
                     idx: 0,
                     grp,
+                    cols: None,
                 });
 
                 self.space()?;
@@ -500,6 +519,27 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                 }
             }
             Kind::Class => {}
+            Kind::BlockMatrix => {
+                self.space()?;
+                let grp = self.begin_group(Some(Mode::Break))?;
+                let len = tree
+                    .children
+                    .get(ctx.cst)
+                    .iter()
+                    .filter(|n| n.tree(ctx.cst).is_some_and(|t| t.kind == Kind::ListItem))
+                    .count();
+                self.list_stack.push(ListContext {
+                    len: len.try_into().unwrap(),
+                    idx: 0,
+                    grp,
+                    cols: Some(4),
+                });
+                self.text("{")?;
+                self.indent(4)?;
+                if len > 0 {
+                    self.softline()?;
+                }
+            }
             Kind::ListItem => {
                 if tree
                     .children
@@ -511,7 +551,10 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                         self.force_group(list.grp, Mode::Break);
                     }
                 }
-                self.softline()?;
+                // matrix blocks (c.cols is Some) have their line breaks handled per item
+                if self.list_stack.last().and_then(|c| c.cols).is_none() {
+                    self.softline()?;
+                }
             }
             Kind::Entry => {
                 match self.config.wrap.inline_structs {
@@ -530,12 +573,13 @@ impl<'a, W: Write> CstVisitor<'a, W> {
 
     fn exit_tree_inner(&mut self, ctx: &VisitCtx<'_>, tree: NodeId) -> Result<(), PrintError> {
         let tree = ctx.node(tree).unwrap();
+        self.node_stack.pop();
         match tree.kind {
             Kind::TypeArgList | Kind::AnnotationArgList => {
                 self.list_stack.pop();
                 self.end_group()?;
             }
-            Kind::BlockLiteral | Kind::Block => {
+            Kind::BlockLiteral | Kind::Block | Kind::BlockMatrix => {
                 self.dedent(4)?;
                 let list = self.list_stack.pop();
                 if list.is_some_and(|list| list.len > 0) || self.config.empty_block_spaces {
@@ -569,15 +613,28 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                     let last_item = ctx.idx + 1 == ctx.len;
 
                     if !last_item {
-                        self.text_if(",", Mode::Flat)?;
-                        match kind {
-                            Kind::ListItem | Kind::AnnotationArg => {
-                                self.softline()?;
+                        match ctx.cols {
+                            // matrix layout
+                            Some(cols) if kind == Kind::ListItem => {
+                                if (ctx.idx + 1) % cols == 0 {
+                                    self.softline()?;
+                                } else {
+                                    self.text(",")?;
+                                    self.space()?;
+                                }
                             }
-                            Kind::TypeArg if self.config.type_expr_spaces => {
-                                self.space()?;
+                            _ => {
+                                self.text_if(",", Mode::Flat)?;
+                                match kind {
+                                    Kind::ListItem | Kind::AnnotationArg => {
+                                        self.softline()?;
+                                    }
+                                    Kind::TypeArg if self.config.type_expr_spaces => {
+                                        self.space()?;
+                                    }
+                                    _ => {}
+                                }
                             }
-                            _ => {}
                         }
                     }
 
