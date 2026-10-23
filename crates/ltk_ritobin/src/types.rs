@@ -272,13 +272,10 @@ impl RitoType {
     }
 
     pub fn from_parts(base: PropertyKind, subtypes: [Option<PropertyKind>; 2]) -> Self {
-        ContainerType::from_parts(base, subtypes)
-            .map(RitoType::from)
-            .unwrap_or_else(|| {
-                ScalarType::try_from_kind(base)
-                    .map(RitoType::from)
-                    .expect("ContainerType::from_parts prevents this")
-            })
+        match ContainerType::from_parts(base, subtypes) {
+            Some(container) => container.into(),
+            None => Self::from_property_kind(base),
+        }
     }
 
     pub const fn ordered_list(value_type: ScalarType) -> Self {
@@ -393,64 +390,38 @@ pub trait PropertyValueExt {
 }
 impl PropertyValueExt for PropertyValueEnum {
     fn rito_type(&self) -> RitoType {
-        #[allow(
-            clippy::unwrap_used,
-            reason = "meta values should be safe by construction"
-        )]
+        let item = |kind: PropertyKind, width: Option<HashWidth>| {
+            ScalarType::try_from_kind(kind)
+                .ok()
+                .map(|item| item.with_hash_type(hash_type_for_width(width.unwrap_or_default())))
+        };
         match self {
-            PropertyValueEnum::Hash(hash) => ScalarType::from(match hash.width() {
-                HashWidth::W4 => HashType::DEFAULT,
-                HashWidth::W8 => HashType::width_only(HashWidth::W8),
-            })
-            .into(),
-
-            PropertyValueEnum::Map(map) => {
-                let (key, value) = map
-                    .entries()
-                    .first()
-                    .map(|(k, v)| {
-                        (
-                            k.rito_type().as_scalar().unwrap(),
-                            v.rito_type().as_scalar().unwrap(),
-                        )
-                    })
-                    .unwrap_or_else(|| {
-                        (
-                            ScalarType::try_from(map.key_kind()).unwrap(),
-                            ScalarType::try_from(map.value_kind()).unwrap(),
-                        )
-                    });
-                RitoType::map(key, value)
+            PropertyValueEnum::Hash(hash) => {
+                ScalarType::Hash(hash_type_for_width(hash.width())).into()
             }
-            PropertyValueEnum::UnorderedContainer(container) => ContainerType::UnorderedContainer(
-                container
-                    .items()
-                    .first()
-                    .map(|v| v.rito_type().as_scalar().unwrap())
-                    .or_else(|| ScalarType::try_from(container.item_kind()).ok()),
-            )
+            PropertyValueEnum::Map(map) => ContainerType::Map {
+                key: item(map.key_kind(), map.key_hash_width()),
+                value: item(map.value_kind(), map.value_hash_width()),
+            }
             .into(),
-            PropertyValueEnum::Container(container) => ContainerType::Container(
-                container
-                    .items()
-                    .first()
-                    .map(|v| v.rito_type().as_scalar().unwrap())
-                    .or_else(|| ScalarType::try_from(container.item_kind()).ok()),
-            )
-            .into(),
-            PropertyValueEnum::Optional(optional) => ContainerType::Optional(
-                optional
-                    .value()
-                    .and_then(|v| v.rito_type().as_scalar())
-                    .or_else(|| ScalarType::try_from_kind(optional.item_kind()).ok()),
-            )
-            .into(),
-
-            #[allow(
-                clippy::unwrap_used,
-                reason = "all non scalar cases should be handled in the above match arms"
-            )]
-            _ => RitoType::try_from_scalar(self.kind()).unwrap(),
+            PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(container)) => {
+                ContainerType::UnorderedContainer(item(
+                    container.item_kind(),
+                    container.hash_width(),
+                ))
+                .into()
+            }
+            PropertyValueEnum::Container(container) => {
+                ContainerType::Container(item(container.item_kind(), container.hash_width())).into()
+            }
+            PropertyValueEnum::Optional(optional) => {
+                let width = match optional.value() {
+                    Some(PropertyValueEnum::Hash(hash)) => Some(hash.width()),
+                    _ => None,
+                };
+                ContainerType::Optional(item(optional.item_kind(), width)).into()
+            }
+            _ => RitoType::from_property_kind(self.kind()),
         }
     }
 }

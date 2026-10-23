@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::span::Span;
+use crate::{span::Span, ScalarType};
 use ltk_hash::{BinHash, Hash as _};
 use ltk_meta::{path::PropertyPathError, PropertyKind};
 
@@ -94,14 +94,13 @@ impl ListLike {
 
 impl Display for ListLike {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        RitoType::try_from_scalar(match self {
-            ListLike::Color => PropertyKind::Color,
-            ListLike::Vec2 => PropertyKind::Vector2,
-            ListLike::Vec3 => PropertyKind::Vector3,
-            ListLike::Vec4 => PropertyKind::Vector4,
-            ListLike::Mat44 => PropertyKind::Matrix44,
-        })
-        .unwrap()
+        match self {
+            ListLike::Color => ScalarType::Color,
+            ListLike::Vec2 => ScalarType::Vector2,
+            ListLike::Vec3 => ScalarType::Vector3,
+            ListLike::Vec4 => ScalarType::Vector4,
+            ListLike::Mat44 => ScalarType::Matrix44,
+        }
         .fmt(f)
     }
 }
