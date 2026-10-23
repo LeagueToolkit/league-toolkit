@@ -251,10 +251,11 @@ impl<'a> Cursor<'a> {
 
         let mut escaped = false;
         while let Some(&b) = self.bytes.get(self.pos) {
+            if matches!(b, b'\n' | b'\r') {
+                return UnterminatedString;
+            }
             self.pos += 1;
             match b {
-                b'\n' | b'\r' => return UnterminatedString,
-
                 _ if escaped => escaped = false,
                 b'\\' => escaped = true,
                 _ if b == quote => return String,
