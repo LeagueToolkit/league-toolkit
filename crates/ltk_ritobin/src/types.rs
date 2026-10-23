@@ -15,6 +15,9 @@ pub use hash::*;
 pub use rito_type::*;
 pub use scalar::*;
 
+#[cfg(test)]
+mod tests;
+
 /// Extension trait for mapping ritobin type names to/from [`PropertyKind`]'s
 pub trait RitobinName {
     /// Maps a ritobin type name string to a [`ltk_meta::PropertyKind`].
