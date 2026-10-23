@@ -26,6 +26,7 @@ pub struct Builder<H: HashProvider> {
     children: Vec<Child>,
     errors: Vec<Error>,
     tokens: Vec<Token>,
+    vector_form: crate::print::VectorForm,
 }
 
 impl Builder<()> {
@@ -43,7 +44,14 @@ impl<H: HashProvider> Builder<H> {
             children: self.children,
             tokens: self.tokens,
             errors: self.errors,
+            vector_form: self.vector_form,
         }
+    }
+
+    /// Sets how vectors/colors (`vec2`/`vec3`/`vec4`/`rgba`) are rendered.
+    pub fn with_vector_form(mut self, vector_form: crate::print::VectorForm) -> Self {
+        self.vector_form = vector_form;
+        self
     }
 
     pub fn build(mut self, bin: &Bin) -> (Cst, String) {
@@ -220,6 +228,47 @@ impl<H: HashProvider> Builder<H> {
         self.tree(Kind::Block, children)
     }
 
+    fn block_literal(&mut self, children: Vec<Child>) -> Child {
+        self.tree(Kind::BlockLiteral, children)
+    }
+
+    fn list_child(&mut self, item: Child) -> Child {
+        match self.child_kind(item) {
+            Some(Kind::BlockLiteral) => item,
+            _ => self.tree(Kind::ListItem, [item]),
+        }
+    }
+
+    /// The [`Kind`] of `child`, or `None` when it is a token.
+    fn child_kind(&self, child: Child) -> Option<Kind> {
+        match child {
+            Child::Tree(id) => self.nodes.get(id.0 as usize).map(|n| n.kind),
+            Child::Token(_) => None,
+        }
+    }
+
+    /// Wraps the components of a vector/color (`vec2`/`vec3`/`vec4`/`rgba`).
+    fn vector_block(&mut self, components: Vec<Child>) -> Child {
+        match self.vector_form {
+            crate::print::VectorForm::Inline => self.block_literal(components),
+            crate::print::VectorForm::List => self.block(components),
+        }
+    }
+
+    /// Builds one [`Kind::ListItem`] per value.
+    fn number_items<T: std::fmt::Display>(
+        &mut self,
+        values: impl IntoIterator<Item = T>,
+    ) -> Vec<Child> {
+        values
+            .into_iter()
+            .map(|v| {
+                let v = self.number(v);
+                self.tree(Kind::ListItem, [v])
+            })
+            .collect()
+    }
+
     fn bool(&mut self, v: bool) -> Child {
         let tok = self.token(match v {
             true => Tok::True,
@@ -243,70 +292,25 @@ impl<H: HashProvider> Builder<H> {
             PropertyValueEnum::I64(n) => self.number(**n),
             PropertyValueEnum::F32(n) => self.number(**n),
             PropertyValueEnum::Vector2(v) => {
-                let items = v
-                    .to_array()
-                    .iter()
-                    .map(|v| {
-                        let v = self.number(*v);
-                        self.tree(Kind::ListItem, [v])
-                    })
-                    .collect();
-                self.block(items)
+                let items = self.number_items(v.to_array());
+                self.vector_block(items)
             }
             PropertyValueEnum::Vector3(v) => {
-                let items = v
-                    .to_array()
-                    .iter()
-                    .map(|v| {
-                        let v = self.number(*v);
-                        self.tree(Kind::ListItem, [v])
-                    })
-                    .collect();
-                self.block(items)
+                let items = self.number_items(v.to_array());
+                self.vector_block(items)
             }
             PropertyValueEnum::Vector4(v) => {
-                let items = v
-                    .to_array()
-                    .iter()
-                    .map(|v| {
-                        let v = self.number(*v);
-                        self.tree(Kind::ListItem, [v])
-                    })
-                    .collect();
-                self.block(items)
+                let items = self.number_items(v.to_array());
+                self.vector_block(items)
             }
             PropertyValueEnum::Matrix44(v) => {
-                let items = v
-                    .transpose() // ritobin text stores matrices row-major, glam::Mat4 is column-major.
-                    .to_cols_array_2d()
-                    .iter()
-                    .flat_map(|v| {
-                        let values = [
-                            self.number(v[0]),
-                            self.number(v[1]),
-                            self.number(v[2]),
-                            self.number(v[3]),
-                        ];
-                        [
-                            self.tree(Kind::ListItem, [values[0]]),
-                            self.tree(Kind::ListItem, [values[1]]),
-                            self.tree(Kind::ListItem, [values[2]]),
-                            self.tree(Kind::ListItem, [values[3]]),
-                        ]
-                    })
-                    .collect();
-                self.block(items)
+                // ritobin is row-major, glam::Mat4 is column-major
+                let items = self.number_items(v.transpose().to_cols_array());
+                self.tree(Kind::BlockMatrix, items)
             }
             PropertyValueEnum::Color(v) => {
-                let items = v
-                    .to_array()
-                    .iter()
-                    .map(|v| {
-                        let v = self.number(*v);
-                        self.tree(Kind::ListItem, [v])
-                    })
-                    .collect();
-                self.block(items)
+                let items = self.number_items(v.to_array());
+                self.vector_block(items)
             }
             PropertyValueEnum::String(s) => {
                 let s = self.string(crate::escaping::escape(s));
@@ -326,11 +330,10 @@ impl<H: HashProvider> Builder<H> {
 
                 for item in container.clone().into_items() {
                     let item = self.value_to_cst(&item);
-                    children.push(self.tree(Kind::ListItem, [item]));
+                    children.push(self.list_child(item));
                 }
 
-                let children = self.tree(Kind::TypeArgList, children);
-                self.block(vec![children])
+                self.block(children)
             }
             PropertyValueEnum::Embedded(values::Embedded(s)) | PropertyValueEnum::Struct(s) => {
                 if *s.class_hash == 0 && s.properties.is_empty() {
@@ -350,7 +353,10 @@ impl<H: HashProvider> Builder<H> {
 
             PropertyValueEnum::Optional(optional) => {
                 let children = match optional.clone().into_inner() {
-                    Some(v) => vec![self.value_to_cst(&v)],
+                    Some(v) => {
+                        let v = self.value_to_cst(&v);
+                        vec![self.list_child(v)]
+                    }
                     None => vec![],
                 };
                 self.block(children)

@@ -61,7 +61,9 @@ impl<H: HashProvider> BinPrinter<H> {
         H: Clone,
     {
         let (config, hashes) = self.config.take_hashes();
-        let builder = cst::builder::Builder::new().with_hashes(hashes);
+        let builder = cst::builder::Builder::new()
+            .with_hashes(hashes)
+            .with_vector_form(config.wrap.vector_form);
         let (cst, buf) = builder.build(tree);
         CstPrinter::new(&buf, writer, config).print(&cst)
     }

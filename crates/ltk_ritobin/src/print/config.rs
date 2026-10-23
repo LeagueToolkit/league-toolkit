@@ -13,6 +13,9 @@ pub struct WrapConfig {
     /// Whether to allow the printing of lists in one line
     /// (subject to [`Self::line_width`] wrapping)
     pub inline_lists: bool,
+
+    /// How vectors/colors (`vec2`/`vec3`/`vec4`/`rgba`) are wrapped
+    pub vector_form: VectorForm,
 }
 
 impl Default for WrapConfig {
@@ -21,6 +24,7 @@ impl Default for WrapConfig {
             line_width: Some(120),
             inline_structs: false,
             inline_lists: true,
+            vector_form: VectorForm::Inline,
         }
     }
 }
@@ -40,6 +44,16 @@ impl WrapConfig {
         self.inline_lists = inline_lists;
         self
     }
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum VectorForm {
+    /// Always print inline
+    #[default]
+    Inline,
+    /// Inherit line wrapping
+    List,
 }
 
 /// Configuration for the ritobin printer.
@@ -81,6 +95,7 @@ impl WrapConfig {
             line_width: None,
             inline_structs: false,
             inline_lists: false,
+            vector_form: VectorForm::Inline,
         }
     }
 }
