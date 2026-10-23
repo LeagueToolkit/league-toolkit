@@ -179,7 +179,7 @@ impl ContainerType {
 }
 
 /// The error for a container type that cannot be built from its parts.
-#[derive(thiserror::Error, Debug)]
+#[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BadContainerType {
     /// The base kind is not a container kind.
     #[error("{got:?} is not a container type")]

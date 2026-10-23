@@ -113,7 +113,7 @@ impl From<HashType> for ScalarType {
 }
 
 /// The error for a [`PropertyKind`] that is a container kind, where a scalar is required.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, Clone, Copy, PartialEq, Eq)]
 #[error("{0:?} is not a scalar type")]
 pub struct BadScalarType(pub PropertyKind);
 impl ScalarType {
