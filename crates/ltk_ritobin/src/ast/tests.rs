@@ -84,6 +84,32 @@ fn option_coerce() {
 }
 
 #[test]
+fn a_value_coerces_to_a_bare_option() {
+    let span = crate::span::Span::default();
+    let bare = RitoType::Container(ContainerType::Optional(None));
+
+    let wrapped = crate::ast::Value::bool(span, true).try_coerce_to(bare);
+    assert!(
+        matches!(
+            wrapped,
+            Ok(crate::ast::Value::Optional {
+                item_kind: Some(ScalarType::Bool),
+                value: Some(_),
+                ..
+            })
+        ),
+        "{wrapped:?}"
+    );
+
+    let list = crate::ast::Value::Container {
+        item_kind: ScalarType::U32,
+        items: Vec::new(),
+        span,
+    };
+    assert!(list.try_coerce_to(bare).is_err());
+}
+
+#[test]
 fn list() {
     assert(
         r#"

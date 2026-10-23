@@ -84,6 +84,17 @@ impl Value {
                 span: self.span(),
                 value: Some(Ptr::new(self.try_coerce_to(RitoType::from(item_kind))?)),
             },
+            // a bare `option` takes the type of the value it wraps
+            RitoType::Container(ContainerType::Optional(None)) => {
+                let Some(item_kind) = self.rito_type().and_then(RitoType::as_scalar) else {
+                    return Err(self);
+                };
+                Self::Optional {
+                    item_kind: Some(item_kind),
+                    span: self.span(),
+                    value: Some(Ptr::new(self)),
+                }
+            }
 
             RitoType::Scalar(scalar) => match scalar {
                 ScalarType::ObjectLink => match self {
