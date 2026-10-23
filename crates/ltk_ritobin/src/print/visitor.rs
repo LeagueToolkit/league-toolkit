@@ -443,6 +443,12 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                         grp,
                     });
                 }
+                self.space()?;
+                self.text("{")?;
+                self.indent(4)?;
+                if len > 0 {
+                    self.softline()?;
+                }
             }
             Kind::Block => {
                 // eprintln!("BLOCK: {:#?}", tree.children);
@@ -480,12 +486,17 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                 }
                 let len = struct_len + list_len;
 
+                self.list_stack.push(ListContext {
+                    len: len.try_into().unwrap(),
+                    idx: 0,
+                    grp,
+                });
+
+                self.space()?;
+                self.text("{")?;
+                self.indent(4)?;
                 if len > 0 {
-                    self.list_stack.push(ListContext {
-                        len: len.try_into().unwrap(),
-                        idx: 0,
-                        grp,
-                    });
+                    self.softline()?;
                 }
             }
             Kind::Class => {}
@@ -525,7 +536,13 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                 self.end_group()?;
             }
             Kind::ListItemBlock | Kind::Block => {
-                self.list_stack.pop();
+                self.dedent(4)?;
+                let list = self.list_stack.pop();
+                if list.is_some_and(|list| list.len > 0) || self.config.empty_block_spaces {
+                    self.softline()?;
+                }
+                self.text("}")?;
+
                 // eprintln!("exit {} | stack: {}", tree.kind, self.list_stack.len());
                 if let Some(list) = self.list_stack.last() {
                     if list.len > 1 {
@@ -601,19 +618,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                 }
                 self.text(txt)?;
             }
-            TokenKind::LCurly => {
-                self.space()?;
-                self.text("{")?;
-                self.indent(4)?;
-                self.space()?;
-                // self.softline();
-            }
-
-            TokenKind::RCurly => {
-                self.dedent(4)?;
-                self.softline()?;
-                self.text("}")?;
-            }
+            TokenKind::LCurly | TokenKind::RCurly => {}
 
             TokenKind::Comma => {
                 // self.text_if(",", Mode::Flat);

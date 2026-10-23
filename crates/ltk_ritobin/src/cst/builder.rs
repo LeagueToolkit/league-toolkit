@@ -217,12 +217,7 @@ impl<H: HashProvider> Builder<H> {
     }
 
     fn block(&mut self, children: Vec<Child>) -> Child {
-        let lcurly = self.token(Tok::LCurly);
-        let rcurly = self.token(Tok::RCurly);
-        self.tree(
-            Kind::Block,
-            once(lcurly).chain(children).chain(once(rcurly)),
-        )
+        self.tree(Kind::Block, children)
     }
 
     fn bool(&mut self, v: bool) -> Child {
@@ -327,15 +322,15 @@ impl<H: HashProvider> Builder<H> {
 
             PropertyValueEnum::Container(container)
             | PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(container)) => {
-                let mut children = vec![self.token(Tok::LCurly)];
+                let mut children = vec![];
 
                 for item in container.clone().into_items() {
                     let item = self.value_to_cst(&item);
                     children.push(self.tree(Kind::ListItem, [item]));
                 }
 
-                children.push(self.token(Tok::RCurly));
-                self.tree(Kind::TypeArgList, children)
+                let children = self.tree(Kind::TypeArgList, children);
+                self.block(vec![children])
             }
             PropertyValueEnum::Embedded(values::Embedded(s)) | PropertyValueEnum::Struct(s) => {
                 if *s.class_hash == 0 && s.properties.is_empty() {

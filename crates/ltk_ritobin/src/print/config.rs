@@ -49,6 +49,10 @@ pub struct PrintConfig<Hashes: HashProvider> {
     /// Number of spaces per indent level.
     pub indent_size: usize,
 
+    /// Whether to put a space inside empty blocks.
+    /// `Class {}` vs `Class { }`
+    pub empty_block_spaces: bool,
+
     /// Config relating to how/when to wrap
     pub wrap: WrapConfig,
 
@@ -60,6 +64,7 @@ impl Default for PrintConfig<()> {
     fn default() -> Self {
         Self {
             indent_size: 4,
+            empty_block_spaces: true,
             wrap: Default::default(),
             hashes: (),
         }
@@ -79,6 +84,7 @@ impl PrintConfig<()> {
     pub fn canonical() -> Self {
         Self {
             indent_size: 4,
+            empty_block_spaces: false,
             wrap: WrapConfig::canonical(),
             hashes: (),
         }
@@ -98,6 +104,7 @@ impl<H: HashProvider> PrintConfig<H> {
     pub fn with_hashes<H2: HashProvider>(self, hashes: H2) -> PrintConfig<H2> {
         PrintConfig {
             indent_size: self.indent_size,
+            empty_block_spaces: self.empty_block_spaces,
             wrap: self.wrap,
             hashes,
         }
@@ -107,6 +114,7 @@ impl<H: HashProvider> PrintConfig<H> {
         (
             PrintConfig {
                 indent_size: self.indent_size,
+                empty_block_spaces: self.empty_block_spaces,
                 wrap: self.wrap,
                 hashes: (),
             },
