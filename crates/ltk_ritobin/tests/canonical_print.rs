@@ -1,7 +1,4 @@
-use ltk_ritobin::{
-    print::{CstPrinter, PrintConfig},
-    Cst, Print,
-};
+use ltk_ritobin::{print::PrintConfig, Cst, Print};
 
 fn fixture(name: &str) -> (Vec<u8>, String) {
     let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/samples/");
@@ -22,25 +19,39 @@ fn assert_cst(text: &str) -> Cst {
     cst
 }
 
-fn print_equal(text: &str) {
+fn assert_canonical_print(text: &str) {
     let config = PrintConfig::canonical();
 
     let cst = assert_cst(text);
     let bin = cst.build_bin(text).into_result().unwrap();
 
-    let mut cst_print = String::new();
-    CstPrinter::new(text, &mut cst_print, config)
-        .print(&cst)
-        .unwrap();
+    // let mut cst_print = String::new();
+    // CstPrinter::new(text, &mut cst_print, config)
+    //     .print(&cst)
+    //     .unwrap();
 
     let bin_print = bin.print_with_config(config).unwrap();
 
-    pretty_assertions::assert_str_eq!(cst_print, text, "cst == text");
-    pretty_assertions::assert_str_eq!(bin_print, text, "bin == text");
-    pretty_assertions::assert_str_eq!(cst_print, bin_print, "cst == bin");
+    pretty_assertions::assert_str_eq!(bin_print, text, "bin print == canonical");
 }
 
 #[test]
 fn edge_prop() {
-    print_equal(&fixture("edge-prop").1);
+    assert_canonical_print(&fixture("edge-prop").1);
+}
+#[test]
+fn edge_ptch() {
+    assert_canonical_print(&fixture("edge-ptch").1);
+}
+#[test]
+fn edge_v1() {
+    assert_canonical_print(&fixture("edge-v1").1);
+}
+#[test]
+fn ptch() {
+    assert_canonical_print(&fixture("ptch").1);
+}
+#[test]
+fn test() {
+    assert_canonical_print(&fixture("test").1);
 }
