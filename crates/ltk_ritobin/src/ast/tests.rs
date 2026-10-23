@@ -709,6 +709,19 @@ fn bad_option_coerce_is_reported() {
     });
 }
 
+#[test]
+fn a_number_in_an_option_reports_the_item_type() {
+    assert_one_err(r#"0x1: option[string] = 5"#, |d| {
+        matches!(
+            d,
+            Diagnostic::ValueEvalError(ValueEvalError::TypeMismatch(TypeMismatch {
+                expected: RitoTypeOrVirtual::RitoType(RitoType::Scalar(ScalarType::String)),
+                ..
+            }))
+        )
+    });
+}
+
 /// A key that can't become a hash was dropped silently by `merge_ir`.
 #[test]
 fn a_property_name_that_cannot_be_hashed_is_reported() {
