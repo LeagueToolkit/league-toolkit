@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::{span::Span, ScalarType};
+use crate::{span::Span, ContainerType, ScalarType};
 use ltk_hash::{BinHash, Hash as _};
 use ltk_meta::{path::PropertyPathError, PropertyKind};
 
@@ -31,20 +31,25 @@ impl RitoTypeOrVirtual {
     }
 }
 
-impl<R: Into<RitoType>> From<Option<R>> for RitoTypeOrVirtual {
-    fn from(value: Option<R>) -> Self {
-        match value {
-            Some(value) => RitoTypeOrVirtual::RitoType(value.into()),
-            None => Self::Unknown,
+/// Implements `From<T>` and `From<Option<T>>` for each type `T` that converts to [`RitoType`].
+/// `None` is [`RitoTypeOrVirtual::Unknown`].
+macro_rules! impl_from_rito_type {
+    ($($ty:ty),*) => {$(
+        impl From<$ty> for RitoTypeOrVirtual {
+            fn from(value: $ty) -> Self {
+                Self::RitoType(value.into())
+            }
         }
-    }
+
+        impl From<Option<$ty>> for RitoTypeOrVirtual {
+            fn from(value: Option<$ty>) -> Self {
+                value.map_or(Self::Unknown, Self::from)
+            }
+        }
+    )*};
 }
 
-impl<R: Into<RitoType>> From<R> for RitoTypeOrVirtual {
-    fn from(value: R) -> Self {
-        RitoTypeOrVirtual::RitoType(value.into())
-    }
-}
+impl_from_rito_type!(RitoType, ScalarType, ContainerType);
 
 impl Display for RitoTypeOrVirtual {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
