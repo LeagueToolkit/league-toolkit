@@ -1149,4 +1149,19 @@ mod hash_type {
             "hash[u64]"
         );
     }
+
+    #[test]
+    fn an_unresolved_value_keeps_its_declared_type() {
+        for kind in [
+            rito!(Container[U32]),
+            rito!(Map[Hash, String]),
+            rito!(Embedded),
+        ] {
+            let value = crate::ast::Value::Unresolved {
+                span: crate::span::Span::default(),
+                kind,
+            };
+            assert_eq!(value.rito_type(), Some(kind));
+        }
+    }
 }

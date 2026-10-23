@@ -336,6 +336,7 @@ impl Value {
     /// since values don't track the hash algo they came from.
     pub fn rito_type(&self) -> Option<RitoType> {
         Some(match self {
+            Value::Unresolved { kind, .. } => *kind,
             Value::Container { item_kind, .. } => ContainerType::Container(Some(*item_kind)).into(),
             Value::UnorderedContainer { item_kind, .. } => {
                 ContainerType::UnorderedContainer(Some(*item_kind)).into()
