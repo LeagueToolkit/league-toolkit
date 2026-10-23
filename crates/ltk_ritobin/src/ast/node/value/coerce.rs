@@ -38,13 +38,11 @@ impl CanCoerce for RitoType {
         if !self.base().can_coerce(from.base()) {
             return false;
         }
-        for i in 0..1 {
-            if (self.subtype(i).zip(from.subtype(i))).is_some_and(|(to, from)| !to.can_coerce(from))
-            {
-                return false;
-            }
-        }
-        true
+        (0..2).all(|i| {
+            self.subtype(i)
+                .zip(from.subtype(i))
+                .is_none_or(|(to, from)| to.can_coerce(from))
+        })
     }
 }
 

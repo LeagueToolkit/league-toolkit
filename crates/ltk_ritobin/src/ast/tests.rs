@@ -110,6 +110,13 @@ fn a_value_coerces_to_a_bare_option() {
 }
 
 #[test]
+fn a_map_value_subtype_is_checked_for_coercion() {
+    use crate::{ast::node::value::CanCoerce as _, rito};
+    assert!(rito!(Map[U32, String]).can_coerce(rito!(Map[U32, String])));
+    assert!(!rito!(Map[U32, String]).can_coerce(rito!(Map[U32, U32])));
+}
+
+#[test]
 fn list() {
     assert(
         r#"
