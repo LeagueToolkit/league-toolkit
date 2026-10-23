@@ -4,19 +4,30 @@ use ltk_meta::PropertyKind;
 
 use crate::{HashType, RitobinName as _, ScalarType};
 
+/// A ritobin container type and its subtypes.
+///
+/// A subtype is `None` where the type does not give it, as in a bare `list`.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum ContainerType {
+    /// `map[key,value]`
     Map {
+        /// The key type.
         key: Option<ScalarType>,
+        /// The value type.
         value: Option<ScalarType>,
     },
+    /// `list[item]`
     Container(Option<ScalarType>),
+    /// `list2[item]`
     UnorderedContainer(Option<ScalarType>),
+    /// `option[item]`
     Optional(Option<ScalarType>),
 }
 
 impl ContainerType {
-    /// Return the same type, but with any hash subtypes changed to use the given [`HashType`]s.
+    /// Returns the type with `hash_types` in its `hash` subtypes.
+    ///
+    /// The first subtype takes `hash_types[0]`. A map value takes `hash_types[1]`.
     pub fn with_hash_types(self, hash_types: [HashType; 2]) -> Self {
         match self {
             ContainerType::Map { key, value } => Self::Map {
@@ -34,11 +45,12 @@ impl ContainerType {
             }
         }
     }
-    /// Return the same type, but with any hash subtypes changed to use [`HashType::default`]
+    /// Returns the type with [`HashType::DEFAULT`] in each `hash` subtype.
     pub fn with_default_hash_types(self) -> Self {
         self.with_hash_types([HashType::DEFAULT, HashType::DEFAULT])
     }
 
+    /// Returns the [`PropertyKind`] of the container, without its subtypes.
     pub const fn base_kind(&self) -> PropertyKind {
         use PropertyKind as K;
         match self {
@@ -49,7 +61,7 @@ impl ContainerType {
         }
     }
 
-    /// Get the base kind & subtypes as [`PropertyKind`]s.
+    /// Returns the kind of the container and the kinds of its subtypes.
     pub fn into_kind_parts(self) -> (PropertyKind, [Option<PropertyKind>; 2]) {
         use PropertyKind as K;
         match self {
@@ -101,6 +113,10 @@ impl Display for ContainerType {
 }
 
 impl ContainerType {
+    /// Returns the container type of `base` with `subtypes`.
+    ///
+    /// Returns `None` if `base` is not a container kind. A subtype that is not a scalar kind is
+    /// `None` in the result.
     pub fn from_parts(base: PropertyKind, subtypes: [Option<PropertyKind>; 2]) -> Option<Self> {
         Some(match base {
             PropertyKind::Container => {
@@ -119,6 +135,11 @@ impl ContainerType {
             _ => return None,
         })
     }
+    /// Returns the container type of `base` with `subtypes`.
+    ///
+    /// # Errors
+    /// Returns [`BadContainerType`] if `base` is not a container kind, if the subtype count does
+    /// not fit `base`, if a subtype is a container kind, or if a map key is not a valid key kind.
     pub const fn try_from_parts(
         base: PropertyKind,
         subtypes: (PropertyKind, Option<PropertyKind>),
@@ -197,24 +218,40 @@ impl ContainerType {
     }
 }
 
+/// The error for a container type that cannot be built from its parts.
 #[derive(thiserror::Error, Debug)]
 pub enum BadContainerType {
+    /// The base kind is not a container kind.
     #[error("{got:?} is not a container type")]
-    NonContainerBase { got: PropertyKind },
-
-    #[error("{base:?} expects {expected} subtypes, got {got}")]
-    BadSubtypeCount {
-        base: PropertyKind,
-        got: u8,
-        expected: u8,
-    },
-    #[error("cannot hold {got:?} in {base:?} - containers can only hold scalars.")]
-    NonScalarSubtype {
-        base: PropertyKind,
+    NonContainerBase {
+        /// The base kind.
         got: PropertyKind,
     },
+
+    /// The subtype count does not fit the base kind.
+    #[error("{base:?} expects {expected} subtypes, got {got}")]
+    BadSubtypeCount {
+        /// The base kind.
+        base: PropertyKind,
+        /// The subtype count given.
+        got: u8,
+        /// The subtype count of `base`.
+        expected: u8,
+    },
+    /// A subtype is a container kind. A container holds scalars only.
+    #[error("cannot hold {got:?} in {base:?} - containers can only hold scalars.")]
+    NonScalarSubtype {
+        /// The base kind.
+        base: PropertyKind,
+        /// The subtype kind.
+        got: PropertyKind,
+    },
+    /// The map key kind is not a valid key kind.
     #[error("{got:?} is not a valid map key")]
-    BadMapKey { got: PropertyKind },
+    BadMapKey {
+        /// The key kind.
+        got: PropertyKind,
+    },
 }
 
 impl From<ContainerType> for PropertyKind {
@@ -224,6 +261,9 @@ impl From<ContainerType> for PropertyKind {
 }
 
 impl ContainerType {
+    /// Returns whether `self` and `other` are the same container type.
+    ///
+    /// A subtype that is `None` on either side matches any subtype. Hash types compare in full.
     pub fn equivalent_to(&self, other: &Self) -> bool {
         match (self, other) {
             (
