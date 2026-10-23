@@ -1,7 +1,4 @@
-use std::{
-    fmt::{LowerHex, Write},
-    iter::once,
-};
+use std::fmt::{LowerHex, Write};
 
 use ltk_hash::{BinHash, HashValue, WadHash};
 use ltk_meta::{
@@ -14,7 +11,7 @@ use crate::{
     cst::{Child, ChildRange, Cst, ErrorRange, Kind, Node, NodeId, TokenId},
     hash_algorithm_name, hash_width_name,
     parse::{Error, Token, TokenKind as Tok},
-    rito, HashProvider, HashType, PropertyValueExt as _, RitoType, RitobinName as _,
+    rito, FloatLiteral, HashProvider, HashType, PropertyValueExt as _, RitoType, RitobinName as _,
 };
 use crate::{span::Span, ScalarType};
 
@@ -290,22 +287,23 @@ impl<H: HashProvider> Builder<H> {
             PropertyValueEnum::I16(n) => self.number(**n),
             PropertyValueEnum::I32(n) => self.number(**n),
             PropertyValueEnum::I64(n) => self.number(**n),
-            PropertyValueEnum::F32(n) => self.number(**n),
+            PropertyValueEnum::F32(n) => self.number(FloatLiteral(**n)),
             PropertyValueEnum::Vector2(v) => {
-                let items = self.number_items(v.to_array());
+                let items = self.number_items(v.to_array().into_iter().map(FloatLiteral));
                 self.vector_block(items)
             }
             PropertyValueEnum::Vector3(v) => {
-                let items = self.number_items(v.to_array());
+                let items = self.number_items(v.to_array().into_iter().map(FloatLiteral));
                 self.vector_block(items)
             }
             PropertyValueEnum::Vector4(v) => {
-                let items = self.number_items(v.to_array());
+                let items = self.number_items(v.to_array().into_iter().map(FloatLiteral));
                 self.vector_block(items)
             }
             PropertyValueEnum::Matrix44(v) => {
                 // ritobin is row-major, glam::Mat4 is column-major
-                let items = self.number_items(v.transpose().to_cols_array());
+                let items =
+                    self.number_items(v.transpose().to_cols_array().into_iter().map(FloatLiteral));
                 self.tree(Kind::BlockMatrix, items)
             }
             PropertyValueEnum::Color(v) => {
