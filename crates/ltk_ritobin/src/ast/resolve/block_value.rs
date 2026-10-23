@@ -64,21 +64,16 @@ impl<'a> Builder<'a> {
                 }
                 .into())
             }
-            RitoType::Container(C::Container(item_kind) | C::UnorderedContainer(item_kind)) => {
-                let item_kind = item_kind.unwrap_or_default();
-                let items = self.resolve_body_items(block, hint, hint_span);
-                Ok(match hint.base() {
-                    K::Container => Value::Container {
-                        item_kind,
-                        items,
-                        span: block.span,
-                    },
-                    K::UnorderedContainer => Value::UnorderedContainer {
-                        item_kind,
-                        items,
-                        span: block.span,
-                    },
-                    _ => unreachable!(),
+            RitoType::Container(C::Container(item_kind)) => Ok(Value::Container {
+                item_kind: item_kind.unwrap_or_default(),
+                items: self.resolve_body_items(block, hint, hint_span),
+                span: block.span,
+            }),
+            RitoType::Container(C::UnorderedContainer(item_kind)) => {
+                Ok(Value::UnorderedContainer {
+                    item_kind: item_kind.unwrap_or_default(),
+                    items: self.resolve_body_items(block, hint, hint_span),
+                    span: block.span,
                 })
             }
             RitoType::Container(C::Optional(item_kind)) => {

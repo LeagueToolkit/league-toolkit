@@ -367,33 +367,29 @@ impl RitoType {
     ///
     /// A `hash` is zero at the width of its hash type. A container is empty.
     pub fn make_default(&self) -> PropertyValueEnum {
-        let subtype = |n: usize| self.subtype(n).unwrap_or_default().kind();
+        use ContainerType as C;
+        use PropertyValueEnum as P;
+        let kind = |item: Option<ScalarType>| item.unwrap_or_default().kind();
 
-        if let Some(hash_type) = self.hash_type() {
-            return PropertyValueEnum::Hash(values::Hash::new(hash_type.from_hash(0)));
-        }
-
-        match self.base() {
-            PropertyKind::Map => PropertyValueEnum::Map(
-                values::Map::empty(subtype(0), subtype(1)).unwrap_or_default(),
-            ),
-            PropertyKind::UnorderedContainer => {
-                PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(
-                    values::Container::empty(subtype(0)).unwrap_or_default(),
+        match *self {
+            RitoType::Scalar(ScalarType::Hash(hash_type)) => {
+                P::Hash(values::Hash::new(hash_type.from_hash(0)))
+            }
+            RitoType::Scalar(scalar) => scalar.kind().default_value(),
+            RitoType::Container(C::Map { key, value }) => {
+                P::Map(values::Map::empty(kind(key), kind(value)).unwrap_or_default())
+            }
+            RitoType::Container(C::Container(item)) => {
+                P::Container(values::Container::empty(kind(item)).unwrap_or_default())
+            }
+            RitoType::Container(C::UnorderedContainer(item)) => {
+                P::UnorderedContainer(values::UnorderedContainer(
+                    values::Container::empty(kind(item)).unwrap_or_default(),
                 ))
             }
-            PropertyKind::Container => PropertyValueEnum::Container(
-                values::Container::empty(subtype(0)).unwrap_or_default(),
-            ),
-            PropertyKind::Optional => {
-                PropertyValueEnum::Optional(values::Optional::empty(subtype(0)).unwrap_or_default())
+            RitoType::Container(C::Optional(item)) => {
+                P::Optional(values::Optional::empty(kind(item)).unwrap_or_default())
             }
-
-            PropertyKind::Hash => {
-                unreachable!("earlier if let should avoid this");
-            }
-
-            kind => kind.default_value(),
         }
     }
 }

@@ -145,13 +145,7 @@ impl<'a> Builder<'a> {
         };
 
         let value = value.map(|value| match desired_kind {
-            Some(TypeExpr::Resolved(kind)) => {
-                let coerce = value.try_coerce_to(kind);
-                match coerce {
-                    Ok(value) => value,
-                    Err(value) => value,
-                }
-            }
+            Some(TypeExpr::Resolved(kind)) => value.coerce_to(kind),
             _ => value,
         });
 

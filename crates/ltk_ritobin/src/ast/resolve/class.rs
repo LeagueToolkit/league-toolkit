@@ -1,5 +1,4 @@
 use ltk_hash::{BinHash, Hash as _};
-use ltk_meta::PropertyKind;
 
 use crate::{
     ast::{
@@ -10,7 +9,7 @@ use crate::{
     },
     cst::{ChildrenExt as _, Kind},
     parse::{Token, TokenKind},
-    rito, Node, RitoType,
+    rito, Node, RitoType, ScalarType,
 };
 
 impl<'a> Builder<'a> {
@@ -56,15 +55,19 @@ impl<'a> Builder<'a> {
         };
         let class_hash = self.resolve_class_hash(name_token)?;
 
-        if !matches!(hint.base(), PropertyKind::Struct | PropertyKind::Embedded) {
-            return Err(TypeMismatch {
-                span: name_token.span,
-                expected: hint.into(),
-                expected_span: None,
-                got: RitoTypeOrVirtual::StructOrEmbedded,
+        let wrap = match hint {
+            RitoType::Scalar(ScalarType::Struct) => Value::Struct,
+            RitoType::Scalar(ScalarType::Embedded) => Value::Embedded,
+            _ => {
+                return Err(TypeMismatch {
+                    span: name_token.span,
+                    expected: hint.into(),
+                    expected_span: None,
+                    got: RitoTypeOrVirtual::StructOrEmbedded,
+                }
+                .into())
             }
-            .into());
-        }
+        };
 
         let properties = match children.find_tree(self.cst, Kind::Block) {
             Some(block) => self.resolve_body_properties(block, hint),
@@ -77,10 +80,6 @@ impl<'a> Builder<'a> {
             properties,
         };
 
-        Ok(match hint.base() {
-            PropertyKind::Struct => Value::Struct(ast_struct),
-            PropertyKind::Embedded => Value::Embedded(ast_struct),
-            _ => unreachable!(),
-        })
+        Ok(wrap(ast_struct))
     }
 }
