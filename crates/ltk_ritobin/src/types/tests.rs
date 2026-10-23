@@ -23,6 +23,17 @@ fn a_type_prints_its_ritobin_spelling() {
 }
 
 #[test]
+fn a_map_with_one_usable_subtype_has_neither() {
+    let bare = RitoType::from_property_kind(K::Map);
+    assert_eq!(
+        RitoType::from_parts(K::Map, [Some(K::Container), Some(K::U32)]),
+        bare
+    );
+    assert_eq!(RitoType::from_parts(K::Map, [Some(K::U32), None]), bare);
+    assert_eq!(bare.to_string(), "map");
+}
+
+#[test]
 fn a_missing_subtype_matches_any_subtype() {
     let bare = RitoType::from_property_kind(K::Container);
     assert!(bare.equivalent_to(&rito!(Container[U32])));

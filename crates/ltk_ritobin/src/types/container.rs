@@ -6,16 +6,12 @@ use crate::{HashType, RitobinName as _, ScalarType};
 
 /// A ritobin container type and its subtypes.
 ///
-/// A subtype is `None` where the type does not give it, as in a bare `list`.
+/// A subtype is `None` where the type does not give it, as in a bare `list`. A map gives both
+/// subtypes or neither.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum ContainerType {
-    /// `map[key,value]`
-    Map {
-        /// The key type.
-        key: Option<ScalarType>,
-        /// The value type.
-        value: Option<ScalarType>,
-    },
+    /// `map[key,value]`, holding the key type and the value type in that order.
+    Map(Option<(ScalarType, ScalarType)>),
     /// `list[item]`
     Container(Option<ScalarType>),
     /// `list2[item]`, the type the client names `OrderedList`.
@@ -33,10 +29,12 @@ impl ContainerType {
     /// The first subtype takes `hash_types[0]`. A map value takes `hash_types[1]`.
     pub fn with_hash_types(self, hash_types: [HashType; 2]) -> Self {
         match self {
-            ContainerType::Map { key, value } => Self::Map {
-                key: key.map(|k| k.with_hash_type(hash_types[0])),
-                value: value.map(|k| k.with_hash_type(hash_types[1])),
-            },
+            ContainerType::Map(types) => Self::Map(types.map(|(key, value)| {
+                (
+                    key.with_hash_type(hash_types[0]),
+                    value.with_hash_type(hash_types[1]),
+                )
+            })),
             ContainerType::Container(sub) => {
                 Self::Container(sub.map(|sub| sub.with_hash_type(hash_types[0])))
             }
@@ -57,7 +55,7 @@ impl ContainerType {
     pub const fn base_kind(&self) -> PropertyKind {
         use PropertyKind as K;
         match self {
-            ContainerType::Map { .. } => K::Map,
+            ContainerType::Map(..) => K::Map,
             ContainerType::Container(..) => K::Container,
             ContainerType::OrderedList(..) => K::UnorderedContainer,
             ContainerType::Optional(..) => K::Optional,
@@ -67,9 +65,9 @@ impl ContainerType {
     /// Returns the `n`th subtype, if present.
     pub const fn subtype(&self, n: usize) -> Option<ScalarType> {
         match self {
-            Self::Map { key, value } => match n {
-                0 => *key,
-                1 => *value,
+            Self::Map(Some((key, value))) => match n {
+                0 => Some(*key),
+                1 => Some(*value),
                 _ => None,
             },
             Self::Container(sub) if n == 0 => *sub,
@@ -84,11 +82,8 @@ impl Display for ContainerType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let base = self.base_kind().to_rito_name();
         match self {
-            Self::Map { key, value } => match (key, value) {
-                (Some(key), Some(value)) => write!(f, "{base}[{key},{value}]"),
-                (Some(key), None) | (None, Some(key)) => write!(f, "{base}[{key}]"),
-                (None, None) => write!(f, "{base}"),
-            },
+            Self::Map(Some((key, value))) => write!(f, "{base}[{key},{value}]"),
+            Self::Map(None) => write!(f, "{base}"),
             Self::Container(item) | Self::OrderedList(item) | Self::Optional(item) => match item {
                 Some(item) => write!(f, "{base}[{item}]"),
                 None => write!(f, "{base}"),
@@ -101,7 +96,7 @@ impl ContainerType {
     /// Returns the container type of `base` with `subtypes`.
     ///
     /// Returns `None` if `base` is not a container kind. A subtype that is not a scalar kind is
-    /// `None` in the result.
+    /// `None` in the result. A map that lacks either subtype has neither.
     pub fn from_parts(base: PropertyKind, subtypes: [Option<PropertyKind>; 2]) -> Option<Self> {
         let [first, second] =
             subtypes.map(|sub| sub.and_then(|k| ScalarType::try_from_kind(k).ok()));
@@ -109,10 +104,7 @@ impl ContainerType {
             PropertyKind::Container => Self::Container(first),
             PropertyKind::UnorderedContainer => Self::OrderedList(first),
             PropertyKind::Optional => Self::Optional(first),
-            PropertyKind::Map => Self::Map {
-                key: first,
-                value: second,
-            },
+            PropertyKind::Map => Self::Map(first.zip(second)),
             _ => return None,
         })
     }
@@ -169,10 +161,7 @@ impl ContainerType {
                         })
                     }
                 };
-                Ok(Self::Map {
-                    key: Some(key),
-                    value: Some(value),
-                })
+                Ok(Self::Map(Some((key, value))))
             }
             got => Err(E::NonContainerBase { got }),
         }
@@ -227,19 +216,7 @@ impl ContainerType {
     /// A subtype that is `None` on either side matches any subtype. Hash types compare in full.
     pub fn equivalent_to(&self, other: &Self) -> bool {
         match (self, other) {
-            (
-                Self::Map {
-                    key: l_key,
-                    value: l_value,
-                },
-                Self::Map {
-                    key: r_key,
-                    value: r_value,
-                },
-            ) => {
-                l_key.zip(*r_key).is_none_or(|(a, b)| a == b)
-                    && l_value.zip(*r_value).is_none_or(|(a, b)| a == b)
-            }
+            (Self::Map(l0), Self::Map(r0)) => l0.zip(*r0).is_none_or(|(a, b)| a == b),
             (Self::Container(l0), Self::Container(r0)) => l0.zip(*r0).is_none_or(|(a, b)| a == b),
             (Self::OrderedList(l0), Self::OrderedList(r0)) => {
                 l0.zip(*r0).is_none_or(|(a, b)| a == b)

@@ -52,9 +52,8 @@ impl<'a> Builder<'a> {
             RitoType::Scalar(
                 hint @ (S::Vector2 | S::Vector3 | S::Vector4 | S::Color | S::Matrix44),
             ) => Ok(self.resolve_listlike(block, hint, hint_span)),
-            RitoType::Container(C::Map { key, value }) => {
-                let key_kind = key.unwrap_or_default();
-                let value_kind = value.unwrap_or_default();
+            RitoType::Container(C::Map(types)) => {
+                let (key_kind, value_kind) = types.unwrap_or_default();
                 let entries = self.resolve_body_map_entries(block, hint, hint_span);
                 Ok(Map {
                     key_kind,

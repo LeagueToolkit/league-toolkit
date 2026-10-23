@@ -197,12 +197,15 @@ impl Value {
         use ScalarType as S;
         match kind {
             RitoType::Container(container) => match container {
-                C::Map { key, value } => Value::Map(Map {
-                    key_kind: key.unwrap_or_default(),
-                    value_kind: value.unwrap_or_default(),
-                    entries: Vec::new(),
-                    span,
-                }),
+                C::Map(types) => {
+                    let (key_kind, value_kind) = types.unwrap_or_default();
+                    Value::Map(Map {
+                        key_kind,
+                        value_kind,
+                        entries: Vec::new(),
+                        span,
+                    })
+                }
                 C::Container(item) => Value::Container {
                     item_kind: item.unwrap_or_default(),
                     items: Vec::new(),

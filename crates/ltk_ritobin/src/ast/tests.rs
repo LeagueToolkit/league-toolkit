@@ -679,7 +679,7 @@ fn a_bare_value_in_a_map_is_reported() {
             d,
             Diagnostic::UnexpectedItem {
                 expected: ItemShape::Entry,
-                parent: RitoType::Container(ContainerType::Map { .. }),
+                parent: RitoType::Container(ContainerType::Map(..)),
                 ..
             }
         )

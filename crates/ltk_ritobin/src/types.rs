@@ -176,10 +176,7 @@ impl RitoType {
             PropertyKind::Container => Self::Container(C::Container(None)),
             PropertyKind::UnorderedContainer => Self::Container(C::OrderedList(None)),
             PropertyKind::Optional => Self::Container(C::Optional(None)),
-            PropertyKind::Map => Self::Container(C::Map {
-                key: None,
-                value: None,
-            }),
+            PropertyKind::Map => Self::Container(C::Map(None)),
         }
     }
 }
@@ -303,10 +300,7 @@ impl RitoType {
 
     /// Returns the type `map[key,value]`.
     pub const fn map(key: ScalarType, value: ScalarType) -> Self {
-        Self::Container(ContainerType::Map {
-            key: Some(key),
-            value: Some(value),
-        })
+        Self::Container(ContainerType::Map(Some((key, value))))
     }
 
     /// Returns the [`PropertyKind`] of the type. A container returns its kind without subtypes.
@@ -324,7 +318,10 @@ impl RitoType {
         match self {
             RitoType::Scalar(_) => None,
             RitoType::Container(container) => match container {
-                ContainerType::Map { value, .. } => *value,
+                ContainerType::Map(types) => match types {
+                    Some((_, value)) => Some(*value),
+                    None => None,
+                },
                 ContainerType::Container(value) => *value,
                 ContainerType::OrderedList(value) => *value,
                 ContainerType::Optional(value) => *value,
@@ -366,8 +363,9 @@ impl RitoType {
                 P::Hash(values::Hash::new(hash_type.from_hash(0)))
             }
             RitoType::Scalar(scalar) => scalar.kind().default_value(),
-            RitoType::Container(C::Map { key, value }) => {
-                P::Map(values::Map::empty(kind(key), kind(value)).unwrap_or_default())
+            RitoType::Container(C::Map(types)) => {
+                let (key, value) = types.unwrap_or_default();
+                P::Map(values::Map::empty(key.kind(), value.kind()).unwrap_or_default())
             }
             RitoType::Container(C::Container(item)) => {
                 P::Container(values::Container::empty(kind(item)).unwrap_or_default())
@@ -421,10 +419,10 @@ impl PropertyValueExt for PropertyValueEnum {
             PropertyValueEnum::Hash(hash) => {
                 ScalarType::Hash(hash_type_for_width(hash.width())).into()
             }
-            PropertyValueEnum::Map(map) => ContainerType::Map {
-                key: item(map.key_kind(), map.key_hash_width()),
-                value: item(map.value_kind(), map.value_hash_width()),
-            }
+            PropertyValueEnum::Map(map) => ContainerType::Map(
+                item(map.key_kind(), map.key_hash_width())
+                    .zip(item(map.value_kind(), map.value_hash_width())),
+            )
             .into(),
             PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(container)) => {
                 ContainerType::OrderedList(item(container.item_kind(), container.hash_width()))
