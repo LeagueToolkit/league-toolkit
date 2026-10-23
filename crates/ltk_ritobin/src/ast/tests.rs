@@ -1164,4 +1164,21 @@ mod hash_type {
             assert_eq!(value.rito_type(), Some(kind));
         }
     }
+
+    #[test]
+    fn a_value_type_holds_the_default_hash_type() {
+        let xxh3 = ScalarType::Hash(HashType::new(HashWidth::W8, HashAlgorithm::Xxh3));
+        let span = crate::span::Span::default();
+        let list = crate::ast::Value::Container {
+            item_kind: xxh3,
+            items: Vec::new(),
+            span,
+        };
+        let unresolved = crate::ast::Value::Unresolved {
+            span,
+            kind: xxh3.into(),
+        };
+        assert_eq!(list.rito_type(), Some(rito!(Container[Hash])));
+        assert_eq!(unresolved.rito_type(), Some(rito!(Hash)));
+    }
 }

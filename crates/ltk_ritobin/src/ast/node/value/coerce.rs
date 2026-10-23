@@ -67,7 +67,12 @@ impl Value {
             RitoType::Scalar(ScalarType::Hash(hash_type)) => {
                 return self.try_coerce_to_hash(hash_type)
             }
-            to if self.rito_type().is_some_and(|k| k.equivalent_to(&to)) => self,
+            to if self
+                .rito_type()
+                .is_some_and(|k| k.equivalent_to(&to.with_default_hash_types())) =>
+            {
+                self
+            }
             // Unknown values can be coerced into any value (as an unresolved variant)
             to if self.kind().is_none() => Self::Unresolved {
                 span: self.span(),

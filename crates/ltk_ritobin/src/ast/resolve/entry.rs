@@ -157,12 +157,11 @@ impl<'a> Builder<'a> {
 
         match (desired_kind, value.as_ref()) {
             (Some(TypeExpr::Resolved(kind)), Some(value)) => {
-                // a value doesn't preserve hash algo, so erase it here.
-                // coercion makes sure we have the declared width.
-                if value.rito_type().is_some_and(|k| {
-                    !k.with_default_hash_types()
-                        .equivalent_to(&kind.with_default_hash_types())
-                }) {
+                // a value does not record its hasher, and coercion gave it the declared width
+                if value
+                    .rito_type()
+                    .is_some_and(|k| !k.equivalent_to(&kind.with_default_hash_types()))
+                {
                     self.push(Diagnostic::unwrap(
                         TypeMismatch {
                             span: value.span(),

@@ -332,10 +332,11 @@ impl Value {
         }
     }
 
-    /// Returns the type of the value. Hash values use [`crate::HashType::default`],
-    /// since values don't track the hash algo they came from.
+    /// Returns the type of the value. Each `hash` slot holds [`crate::HashType::DEFAULT`].
+    ///
+    /// A value does not record the hasher that computed it.
     pub fn rito_type(&self) -> Option<RitoType> {
-        Some(match self {
+        let rito_type: RitoType = match self {
             Value::Unresolved { kind, .. } => *kind,
             Value::Container { item_kind, .. } => ContainerType::Container(Some(*item_kind)).into(),
             Value::UnorderedContainer { item_kind, .. } => {
@@ -348,7 +349,8 @@ impl Value {
             }) => RitoType::map(*key_kind, *value_kind),
             Value::Optional { item_kind, .. } => ContainerType::Optional(*item_kind).into(),
             _ => RitoType::try_from_scalar(self.kind()?).ok()?,
-        })
+        };
+        Some(rito_type.with_default_hash_types())
     }
 }
 

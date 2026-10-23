@@ -241,8 +241,7 @@ impl<'a> Builder<'a> {
                             match entry.value.as_ref() {
                                 Some(value)
                                     if value.rito_type().is_some_and(|k| {
-                                        k.with_default_hash_types()
-                                            != value_kind.with_default_hash_type()
+                                        k != value_kind.with_default_hash_type()
                                     }) =>
                                 {
                                     self.push(D::unwrap(
