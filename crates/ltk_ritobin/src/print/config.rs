@@ -66,6 +66,25 @@ impl Default for PrintConfig<()> {
     }
 }
 
+impl WrapConfig {
+    pub fn canonical() -> Self {
+        Self {
+            line_width: None,
+            inline_structs: false,
+            inline_lists: false,
+        }
+    }
+}
+impl PrintConfig<()> {
+    pub fn canonical() -> Self {
+        Self {
+            indent_size: 4,
+            wrap: WrapConfig::canonical(),
+            hashes: (),
+        }
+    }
+}
+
 impl<H: HashProvider> PrintConfig<H> {
     pub fn wrap(mut self, wrap: WrapConfig) -> Self {
         self.wrap = wrap;
