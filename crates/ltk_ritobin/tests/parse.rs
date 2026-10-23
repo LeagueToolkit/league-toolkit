@@ -41,7 +41,6 @@ fn print_equal(text: &str) {
 }
 
 #[test]
-#[ignore]
 fn edge_prop() {
     print_equal(&fixture("edge-prop").1);
 }
