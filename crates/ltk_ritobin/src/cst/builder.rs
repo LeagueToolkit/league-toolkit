@@ -338,14 +338,19 @@ impl<H: HashProvider> Builder<H> {
                 self.tree(Kind::TypeArgList, children)
             }
             PropertyValueEnum::Embedded(values::Embedded(s)) | PropertyValueEnum::Struct(s) => {
-                let k = self.hash_type_lit(s.class_hash);
-                let children = s
-                    .properties
-                    .iter()
-                    .map(|(k, v)| self.property_to_cst(*k, v))
-                    .collect();
-                let children = self.block(children);
-                self.tree(Kind::Class, [k, children])
+                if *s.class_hash == 0 && s.properties.is_empty() {
+                    let null = self.token(Tok::Null);
+                    self.tree(Kind::Class, [null])
+                } else {
+                    let k = self.hash_type_lit(s.class_hash);
+                    let children = s
+                        .properties
+                        .iter()
+                        .map(|(k, v)| self.property_to_cst(*k, v))
+                        .collect();
+                    let children = self.block(children);
+                    self.tree(Kind::Class, [k, children])
+                }
             }
 
             PropertyValueEnum::Optional(optional) => {
