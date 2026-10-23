@@ -182,20 +182,6 @@ impl RitoType {
 }
 
 impl RitoType {
-    /// Returns the scalar type `kind`.
-    #[inline(always)]
-    #[must_use]
-    pub const fn scalar(kind: ScalarType) -> Self {
-        Self::Scalar(kind)
-    }
-
-    /// Returns the container type `kind`.
-    #[inline(always)]
-    #[must_use]
-    pub const fn container(kind: ContainerType) -> Self {
-        Self::Container(kind)
-    }
-
     /// Returns the scalar type. Returns `None` for a container.
     pub const fn as_scalar(self) -> Option<ScalarType> {
         match self {
@@ -307,8 +293,8 @@ impl RitoType {
     }
 
     /// Returns the type `list[item]`.
-    pub const fn ordered_list(value_type: ScalarType) -> Self {
-        Self::Container(ContainerType::Container(Some(value_type)))
+    pub const fn list(item: ScalarType) -> Self {
+        Self::Container(ContainerType::Container(Some(item)))
     }
 
     /// Returns the type `map[key,value]`.

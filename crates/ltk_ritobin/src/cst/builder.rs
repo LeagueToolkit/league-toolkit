@@ -511,7 +511,7 @@ impl<H: HashProvider> Builder<H> {
             .map(|item| self.tree(Kind::ListItem, [item]))
             .collect();
         let items = self.block(items);
-        self.entry(key, RitoType::ordered_list(item_kind), items)
+        self.entry(key, RitoType::list(item_kind), items)
     }
 
     fn linked_to_cst(&mut self, dependencies: &[String]) -> Child {

@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use ltk_meta::PropertyKind;
 
-use crate::{HashType, RitobinName as _};
+use crate::{HashType, RitoType, RitobinName as _};
 
 /// A ritobin type that is not a container.
 ///
@@ -151,32 +151,9 @@ impl ScalarType {
     /// # Errors
     /// Returns [`BadScalarType`] if `kind` is a container kind.
     pub const fn try_from_kind(kind: PropertyKind) -> Result<Self, BadScalarType> {
-        use PropertyKind as K;
-        Ok(match kind {
-            K::None => Self::None,
-            K::Bool => Self::Bool,
-            K::I8 => Self::I8,
-            K::U8 => Self::U8,
-            K::I16 => Self::I16,
-            K::U16 => Self::U16,
-            K::I32 => Self::I32,
-            K::U32 => Self::U32,
-            K::I64 => Self::I64,
-            K::U64 => Self::U64,
-            K::F32 => Self::F32,
-            K::Vector2 => Self::Vector2,
-            K::Vector3 => Self::Vector3,
-            K::Vector4 => Self::Vector4,
-            K::Matrix44 => Self::Matrix44,
-            K::Color => Self::Color,
-            K::String => Self::String,
-            K::WadChunkLink => Self::WadChunkLink,
-            K::Struct => Self::Struct,
-            K::Embedded => Self::Embedded,
-            K::ObjectLink => Self::ObjectLink,
-            K::BitBool => Self::BitBool,
-            K::Hash => Self::Hash(HashType::DEFAULT),
-            kind => return Err(BadScalarType(kind)),
-        })
+        match RitoType::from_property_kind(kind) {
+            RitoType::Scalar(scalar) => Ok(scalar),
+            RitoType::Container(_) => Err(BadScalarType(kind)),
+        }
     }
 }

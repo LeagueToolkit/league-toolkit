@@ -61,22 +61,6 @@ impl ContainerType {
         }
     }
 
-    /// Returns the kind of the container and the kinds of its subtypes.
-    pub fn into_kind_parts(self) -> (PropertyKind, [Option<PropertyKind>; 2]) {
-        use PropertyKind as K;
-        match self {
-            ContainerType::Map { key, value } => (
-                K::Map,
-                [key.map(ScalarType::kind), value.map(ScalarType::kind)],
-            ),
-            ContainerType::Container(item) => (K::Container, [item.map(ScalarType::kind), None]),
-            ContainerType::UnorderedContainer(item) => {
-                (K::UnorderedContainer, [item.map(ScalarType::kind), None])
-            }
-            ContainerType::Optional(item) => (K::Optional, [item.map(ScalarType::kind), None]),
-        }
-    }
-
     /// Returns the `n`th subtype, if present.
     pub const fn subtype(&self, n: usize) -> Option<ScalarType> {
         match self {
@@ -118,19 +102,15 @@ impl ContainerType {
     /// Returns `None` if `base` is not a container kind. A subtype that is not a scalar kind is
     /// `None` in the result.
     pub fn from_parts(base: PropertyKind, subtypes: [Option<PropertyKind>; 2]) -> Option<Self> {
+        let [first, second] =
+            subtypes.map(|sub| sub.and_then(|k| ScalarType::try_from_kind(k).ok()));
         Some(match base {
-            PropertyKind::Container => {
-                Self::Container(subtypes[0].and_then(|k| ScalarType::try_from_kind(k).ok()))
-            }
-            PropertyKind::UnorderedContainer => Self::UnorderedContainer(
-                subtypes[0].and_then(|k| ScalarType::try_from_kind(k).ok()),
-            ),
-            PropertyKind::Optional => {
-                Self::Optional(subtypes[0].and_then(|k| ScalarType::try_from_kind(k).ok()))
-            }
+            PropertyKind::Container => Self::Container(first),
+            PropertyKind::UnorderedContainer => Self::UnorderedContainer(first),
+            PropertyKind::Optional => Self::Optional(first),
             PropertyKind::Map => Self::Map {
-                key: subtypes[0].and_then(|k| ScalarType::try_from_kind(k).ok()),
-                value: subtypes[1].and_then(|k| ScalarType::try_from_kind(k).ok()),
+                key: first,
+                value: second,
             },
             _ => return None,
         })
@@ -145,46 +125,26 @@ impl ContainerType {
         subtypes: (PropertyKind, Option<PropertyKind>),
     ) -> Result<Self, BadContainerType> {
         use BadContainerType as E;
+        let item = match base {
+            PropertyKind::Container | PropertyKind::UnorderedContainer | PropertyKind::Optional => {
+                if subtypes.1.is_some() {
+                    return Err(E::BadSubtypeCount {
+                        base,
+                        got: 2,
+                        expected: 1,
+                    });
+                }
+                match ScalarType::try_from_kind(subtypes.0) {
+                    Ok(item) => Some(item),
+                    Err(e) => return Err(E::NonScalarSubtype { base, got: e.0 }),
+                }
+            }
+            _ => None,
+        };
         match base {
-            PropertyKind::Container => {
-                if subtypes.1.is_some() {
-                    return Err(E::BadSubtypeCount {
-                        base,
-                        got: 2,
-                        expected: 1,
-                    });
-                }
-                match ScalarType::try_from_kind(subtypes.0) {
-                    Ok(item) => Ok(Self::Container(Some(item))),
-                    Err(e) => Err(E::NonScalarSubtype { base, got: e.0 }),
-                }
-            }
-            PropertyKind::UnorderedContainer => {
-                if subtypes.1.is_some() {
-                    return Err(E::BadSubtypeCount {
-                        base,
-                        got: 2,
-                        expected: 1,
-                    });
-                }
-                match ScalarType::try_from_kind(subtypes.0) {
-                    Ok(item) => Ok(Self::UnorderedContainer(Some(item))),
-                    Err(e) => Err(E::NonScalarSubtype { base, got: e.0 }),
-                }
-            }
-            PropertyKind::Optional => {
-                if subtypes.1.is_some() {
-                    return Err(E::BadSubtypeCount {
-                        base,
-                        got: 2,
-                        expected: 1,
-                    });
-                }
-                match ScalarType::try_from_kind(subtypes.0) {
-                    Ok(item) => Ok(Self::Optional(Some(item))),
-                    Err(e) => Err(E::NonScalarSubtype { base, got: e.0 }),
-                }
-            }
+            PropertyKind::Container => Ok(Self::Container(item)),
+            PropertyKind::UnorderedContainer => Ok(Self::UnorderedContainer(item)),
+            PropertyKind::Optional => Ok(Self::Optional(item)),
             PropertyKind::Map => {
                 if !subtypes.0.is_valid_map_key() {
                     return Err(E::BadMapKey { got: subtypes.0 });
