@@ -10,13 +10,12 @@
 //! ```rust
 //! use ltk_ritobin::{Cst, Print as _};
 //!
-//! let text = r#"
-//! #PROP_text
+//! let text = r#"#PROP_text
 //! type: string = "PROP"
 //! version: u32 = 3
 //! linked: list[string] = { }
 //! entries: map[hash, embed] = { }
-//! "#.trim();
+//! "#;
 //!
 //! let cst = Cst::parse(text);
 //! assert!(cst.errors.is_empty());
@@ -27,7 +26,7 @@
 //! // Write back to text
 //! let output = partial.bin.print().unwrap();
 //!
-//! assert_eq!(text, output);
+//! assert_eq!(output, text);
 //! ```
 //!
 //! # Converting `.bin` to ritobin

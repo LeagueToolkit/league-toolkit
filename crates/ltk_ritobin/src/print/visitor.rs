@@ -641,6 +641,9 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                     self.list_stack.last_mut().unwrap(/* Safety: guaranteed by if let */).idx += 1;
                 }
             }
+            Kind::File => {
+                self.line()?;
+            }
             _ => {}
         }
         Ok(())
