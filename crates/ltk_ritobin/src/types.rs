@@ -102,7 +102,7 @@ impl RitobinName for PropertyKind {
 macro_rules! rito {
     ($kind:ident) => {
         const {
-            match $crate::RitoType::try_from_scalar(ltk_meta::PropertyKind::$kind) {
+            match $crate::RitoType::try_from_scalar($crate::__private::PropertyKind::$kind) {
                 Ok(t) => t,
                 Err(_) => panic!("invalid simple rito type"),
             }
@@ -111,8 +111,8 @@ macro_rules! rito {
     ($kind:ident [ $sub:ident ]) => {
         const {
             match $crate::RitoType::try_from_parts(
-                ltk_meta::PropertyKind::$kind,
-                [Some(ltk_meta::PropertyKind::$sub), None],
+                $crate::__private::PropertyKind::$kind,
+                [Some($crate::__private::PropertyKind::$sub), None],
             ) {
                 Ok(t) => t,
                 Err(_) => panic!("invalid rito type"),
@@ -122,10 +122,10 @@ macro_rules! rito {
     ($kind:ident [ $a:ident, $b:ident ]) => {
         const {
             match $crate::RitoType::try_from_parts(
-                ltk_meta::PropertyKind::$kind,
+                $crate::__private::PropertyKind::$kind,
                 [
-                    Some(ltk_meta::PropertyKind::$a),
-                    Some(ltk_meta::PropertyKind::$b),
+                    Some($crate::__private::PropertyKind::$a),
+                    Some($crate::__private::PropertyKind::$b),
                 ],
             ) {
                 Ok(t) => t,

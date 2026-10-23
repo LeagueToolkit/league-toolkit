@@ -138,6 +138,12 @@ pub use hashes::*;
 pub use types::*;
 
 pub use cst::Cst;
+
+/// Items that `rito!` names through `$crate`. Not part of the public API.
+#[doc(hidden)]
+pub mod __private {
+    pub use ltk_meta::PropertyKind;
+}
 pub use cst::Node;
 pub use print::Print;
 
