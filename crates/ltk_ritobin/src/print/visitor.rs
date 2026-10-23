@@ -421,7 +421,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                     grp,
                 });
             }
-            Kind::ListItemBlock => {
+            Kind::BlockLiteral => {
                 self.softline()?;
                 let grp = self.begin_group(None)?;
 
@@ -459,7 +459,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                     .iter()
                     .filter(|n| {
                         n.tree(ctx.cst)
-                            .is_some_and(|t| matches!(t.kind, Kind::ListItem | Kind::ListItemBlock))
+                            .is_some_and(|t| matches!(t.kind, Kind::ListItem | Kind::BlockLiteral))
                     })
                     .count();
                 let struct_len = tree
@@ -535,7 +535,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                 self.list_stack.pop();
                 self.end_group()?;
             }
-            Kind::ListItemBlock | Kind::Block => {
+            Kind::BlockLiteral | Kind::Block => {
                 self.dedent(4)?;
                 let list = self.list_stack.pop();
                 if list.is_some_and(|list| list.len > 0) || self.config.empty_block_spaces {
