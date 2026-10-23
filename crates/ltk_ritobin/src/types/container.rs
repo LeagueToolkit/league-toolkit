@@ -18,8 +18,11 @@ pub enum ContainerType {
     },
     /// `list[item]`
     Container(Option<ScalarType>),
-    /// `list2[item]`
-    UnorderedContainer(Option<ScalarType>),
+    /// `list2[item]`, the type the client names `OrderedList`.
+    ///
+    /// It is serialized the same as [`ContainerType::Container`]. It has no fixed size. Its
+    /// [`PropertyKind`] is [`PropertyKind::UnorderedContainer`].
+    OrderedList(Option<ScalarType>),
     /// `option[item]`
     Optional(Option<ScalarType>),
 }
@@ -37,8 +40,8 @@ impl ContainerType {
             ContainerType::Container(sub) => {
                 Self::Container(sub.map(|sub| sub.with_hash_type(hash_types[0])))
             }
-            ContainerType::UnorderedContainer(sub) => {
-                Self::UnorderedContainer(sub.map(|sub| sub.with_hash_type(hash_types[0])))
+            ContainerType::OrderedList(sub) => {
+                Self::OrderedList(sub.map(|sub| sub.with_hash_type(hash_types[0])))
             }
             ContainerType::Optional(sub) => {
                 Self::Optional(sub.map(|sub| sub.with_hash_type(hash_types[0])))
@@ -56,7 +59,7 @@ impl ContainerType {
         match self {
             ContainerType::Map { .. } => K::Map,
             ContainerType::Container(..) => K::Container,
-            ContainerType::UnorderedContainer(..) => K::UnorderedContainer,
+            ContainerType::OrderedList(..) => K::UnorderedContainer,
             ContainerType::Optional(..) => K::Optional,
         }
     }
@@ -70,7 +73,7 @@ impl ContainerType {
                 _ => None,
             },
             Self::Container(sub) if n == 0 => *sub,
-            Self::UnorderedContainer(sub) if n == 0 => *sub,
+            Self::OrderedList(sub) if n == 0 => *sub,
             Self::Optional(sub) if n == 0 => *sub,
             _ => None,
         }
@@ -86,12 +89,10 @@ impl Display for ContainerType {
                 (Some(key), None) | (None, Some(key)) => write!(f, "{base}[{key}]"),
                 (None, None) => write!(f, "{base}"),
             },
-            Self::Container(item) | Self::UnorderedContainer(item) | Self::Optional(item) => {
-                match item {
-                    Some(item) => write!(f, "{base}[{item}]"),
-                    None => write!(f, "{base}"),
-                }
-            }
+            Self::Container(item) | Self::OrderedList(item) | Self::Optional(item) => match item {
+                Some(item) => write!(f, "{base}[{item}]"),
+                None => write!(f, "{base}"),
+            },
         }
     }
 }
@@ -106,7 +107,7 @@ impl ContainerType {
             subtypes.map(|sub| sub.and_then(|k| ScalarType::try_from_kind(k).ok()));
         Some(match base {
             PropertyKind::Container => Self::Container(first),
-            PropertyKind::UnorderedContainer => Self::UnorderedContainer(first),
+            PropertyKind::UnorderedContainer => Self::OrderedList(first),
             PropertyKind::Optional => Self::Optional(first),
             PropertyKind::Map => Self::Map {
                 key: first,
@@ -143,7 +144,7 @@ impl ContainerType {
         };
         match base {
             PropertyKind::Container => Ok(Self::Container(item)),
-            PropertyKind::UnorderedContainer => Ok(Self::UnorderedContainer(item)),
+            PropertyKind::UnorderedContainer => Ok(Self::OrderedList(item)),
             PropertyKind::Optional => Ok(Self::Optional(item)),
             PropertyKind::Map => {
                 if !subtypes.0.is_valid_map_key() {
@@ -240,7 +241,7 @@ impl ContainerType {
                     && l_value.zip(*r_value).is_none_or(|(a, b)| a == b)
             }
             (Self::Container(l0), Self::Container(r0)) => l0.zip(*r0).is_none_or(|(a, b)| a == b),
-            (Self::UnorderedContainer(l0), Self::UnorderedContainer(r0)) => {
+            (Self::OrderedList(l0), Self::OrderedList(r0)) => {
                 l0.zip(*r0).is_none_or(|(a, b)| a == b)
             }
             (Self::Optional(l0), Self::Optional(r0)) => l0.zip(*r0).is_none_or(|(a, b)| a == b),

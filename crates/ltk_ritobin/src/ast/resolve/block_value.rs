@@ -69,13 +69,11 @@ impl<'a> Builder<'a> {
                 items: self.resolve_body_items(block, hint, hint_span),
                 span: block.span,
             }),
-            RitoType::Container(C::UnorderedContainer(item_kind)) => {
-                Ok(Value::UnorderedContainer {
-                    item_kind: item_kind.unwrap_or_default(),
-                    items: self.resolve_body_items(block, hint, hint_span),
-                    span: block.span,
-                })
-            }
+            RitoType::Container(C::OrderedList(item_kind)) => Ok(Value::UnorderedContainer {
+                item_kind: item_kind.unwrap_or_default(),
+                items: self.resolve_body_items(block, hint, hint_span),
+                span: block.span,
+            }),
             RitoType::Container(C::Optional(item_kind)) => {
                 let item_kind = item_kind.unwrap_or_default();
                 if matches!(

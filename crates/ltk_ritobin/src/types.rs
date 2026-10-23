@@ -174,7 +174,7 @@ impl RitoType {
             PropertyKind::Hash => Self::Scalar(S::Hash(HashType::DEFAULT)),
 
             PropertyKind::Container => Self::Container(C::Container(None)),
-            PropertyKind::UnorderedContainer => Self::Container(C::UnorderedContainer(None)),
+            PropertyKind::UnorderedContainer => Self::Container(C::OrderedList(None)),
             PropertyKind::Optional => Self::Container(C::Optional(None)),
             PropertyKind::Map => Self::Container(C::Map {
                 key: None,
@@ -326,7 +326,7 @@ impl RitoType {
             RitoType::Container(container) => match container {
                 ContainerType::Map { value, .. } => *value,
                 ContainerType::Container(value) => *value,
-                ContainerType::UnorderedContainer(value) => *value,
+                ContainerType::OrderedList(value) => *value,
                 ContainerType::Optional(value) => *value,
             },
         }
@@ -372,7 +372,7 @@ impl RitoType {
             RitoType::Container(C::Container(item)) => {
                 P::Container(values::Container::empty(kind(item)).unwrap_or_default())
             }
-            RitoType::Container(C::UnorderedContainer(item)) => {
+            RitoType::Container(C::OrderedList(item)) => {
                 P::UnorderedContainer(values::UnorderedContainer(
                     values::Container::empty(kind(item)).unwrap_or_default(),
                 ))
@@ -427,11 +427,8 @@ impl PropertyValueExt for PropertyValueEnum {
             }
             .into(),
             PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(container)) => {
-                ContainerType::UnorderedContainer(item(
-                    container.item_kind(),
-                    container.hash_width(),
-                ))
-                .into()
+                ContainerType::OrderedList(item(container.item_kind(), container.hash_width()))
+                    .into()
             }
             PropertyValueEnum::Container(container) => {
                 ContainerType::Container(item(container.item_kind(), container.hash_width())).into()

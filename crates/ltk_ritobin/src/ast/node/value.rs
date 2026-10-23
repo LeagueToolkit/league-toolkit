@@ -208,7 +208,7 @@ impl Value {
                     items: Vec::new(),
                     span,
                 },
-                C::UnorderedContainer(item) => Value::UnorderedContainer {
+                C::OrderedList(item) => Value::UnorderedContainer {
                     item_kind: item.unwrap_or_default(),
                     items: Vec::new(),
                     span,
@@ -340,7 +340,7 @@ impl Value {
             Value::Unresolved { kind, .. } => *kind,
             Value::Container { item_kind, .. } => ContainerType::Container(Some(*item_kind)).into(),
             Value::UnorderedContainer { item_kind, .. } => {
-                ContainerType::UnorderedContainer(Some(*item_kind)).into()
+                ContainerType::OrderedList(Some(*item_kind)).into()
             }
             Value::Map(Map {
                 key_kind,
