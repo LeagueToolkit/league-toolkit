@@ -23,7 +23,7 @@ fn assert_cst(text: &str) -> Cst {
 }
 
 fn print_equal(text: &str) {
-    let config = PrintConfig::default();
+    let config = PrintConfig::canonical();
 
     let cst = assert_cst(text);
     let bin = cst.build_bin(text).into_result().unwrap();
