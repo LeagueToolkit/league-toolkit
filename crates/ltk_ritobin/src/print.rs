@@ -137,7 +137,7 @@ mod test {
     #[test]
     fn dont_inline_lists_with_comments() {
         assert_pretty(
-            r#"linked: list[string] = { "a", "b" # asd 
+            r#"linked: list[string] = { "a", "b" # asd
 }"#,
             r#"linked: list[string] = {
     "a"

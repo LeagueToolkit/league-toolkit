@@ -655,10 +655,10 @@ impl<'a, W: Write> CstVisitor<'a, W> {
         let token = ctx.cst.token(token).unwrap();
         let parent = ctx.node(parent).unwrap();
 
-        let txt = self.src[token.span].trim();
+        let txt = &self.src[token.span];
         let print_value = token.kind.print_value();
 
-        if txt.is_empty() && print_value.is_none() {
+        if txt.trim().is_empty() && print_value.is_none() {
             return Ok(());
         }
 
