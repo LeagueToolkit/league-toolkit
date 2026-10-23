@@ -1,5 +1,5 @@
 use crate::{
-    ast::{diagnostics::DiagnosticWithSpan, Ast},
+    ast::{annotation::Annotations, diagnostics::DiagnosticWithSpan, Ast},
     cst::Cst,
 };
 
@@ -13,6 +13,7 @@ impl Ast {
             cst,
             text,
             diagnostics: Vec::new(),
+            annotations: Annotations::default(),
         };
         ctx.build()
     }
@@ -23,6 +24,7 @@ pub(super) struct Builder<'a> {
     pub cst: &'a Cst,
     pub text: &'a str,
     pub diagnostics: Vec<DiagnosticWithSpan>,
+    pub(super) annotations: Annotations,
 }
 
 impl<'a> Builder<'a> {

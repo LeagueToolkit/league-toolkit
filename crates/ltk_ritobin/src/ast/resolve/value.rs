@@ -6,6 +6,7 @@ use crate::{
             Diagnostic::{self},
             MaybeSpanDiag,
         },
+        resolve::literals::ExpectedType,
         Value,
     },
     cst::Kind,
@@ -18,30 +19,30 @@ impl<'a> Builder<'a> {
         &mut self,
         text: &str,
         token: &Token,
-        kind_hint: Option<impl Into<RitoType>>,
-        kind_hint_span: Option<Span>,
+        expected_type: Option<ExpectedType>,
+        expected_type_span: Option<Span>,
     ) -> Value {
-        let kind_hint = kind_hint.map(|h| h.into());
-        match Value::eval(text, token, kind_hint, kind_hint_span) {
+        match Value::eval(text, token, expected_type, expected_type_span) {
             Ok(value) => value,
             Err(e) => {
                 self.push(Diagnostic::from(e).default_span(token.span));
-                kind_hint
-                    .map(|k| Value::Unresolved {
+                match expected_type {
+                    Some(ExpectedType::Exact(kind)) => Value::Unresolved {
                         span: token.span,
-                        kind: k,
-                    })
-                    .unwrap_or(Value::Unknown(token.span))
+                        kind,
+                    },
+                    _ => Value::Unknown(token.span),
+                }
             }
         }
     }
     pub(crate) fn resolve_value(
         &mut self,
         wrapper: &Node,
-        hint: Option<impl Into<RitoType>>,
-        hint_span: Option<Span>,
+        numeric_hint: Option<impl Into<ExpectedType>>,
+        numeric_hint_span: Option<Span>,
     ) -> Result<Value, Diagnostic> {
-        let hint = hint.map(|h| h.into());
+        let numeric_hint = numeric_hint.map(|h| h.into());
 
         let Some(child) = wrapper.children.get(self.cst).first() else {
             return Err(Diagnostic::CustomSpan(
@@ -57,22 +58,22 @@ impl<'a> Builder<'a> {
         };
         match node.kind {
             Kind::Class => {
-                let Some(hint) = hint else {
+                let Some(ExpectedType::Exact(kind)) = numeric_hint else {
                     return Err(Diagnostic::CustomSpan(
                         "Cannot resolve class block with no type hint",
                         node.span,
                     ));
                 };
-                self.resolve_class(node, hint)
+                self.resolve_class(node, kind)
             }
             Kind::Block => {
-                let Some(hint) = hint else {
+                let Some(ExpectedType::Exact(kind)) = numeric_hint else {
                     return Err(Diagnostic::CustomSpan(
                         "Cannot resolve block with no type hint",
                         node.span,
                     ));
                 };
-                self.resolve_block_value(node, hint, hint_span)
+                self.resolve_block_value(node, kind, numeric_hint_span)
                     .map_err(|e| e.fallback(node.span).diagnostic)
             }
             Kind::Literal => {
@@ -88,16 +89,13 @@ impl<'a> Builder<'a> {
                         wrapper.span,
                     ));
                 };
-                Ok(self.resolve_literal(self.text, token, hint, hint_span))
+                Ok(self.resolve_literal(self.text, token, numeric_hint, numeric_hint_span))
             }
             Kind::ErrorTree => Ok(Value::Unknown(node.span)),
-            kind => {
-                eprintln!("cannot resolve {kind:?}");
-                Err(Diagnostic::CustomSpan(
-                    "[resolve_value] cannot resolve this node kind",
-                    node.span,
-                ))
-            }
+            _ => Err(Diagnostic::CustomSpan(
+                "[resolve_value] cannot resolve this node kind",
+                node.span,
+            )),
         }
     }
 

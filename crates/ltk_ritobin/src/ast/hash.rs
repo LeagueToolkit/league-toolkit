@@ -24,6 +24,8 @@ pub enum Originally {
     String,
     /// A `Name` token (`helloWorld`), the text of that token was hashed
     Name,
+    /// A `Null` token. `pointer` & `embed` can be constructed from `null`.
+    Null,
 }
 
 impl<H> HashedLiteral<H> {

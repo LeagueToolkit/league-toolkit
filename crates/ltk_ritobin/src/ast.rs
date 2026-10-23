@@ -1,3 +1,4 @@
+pub mod annotation;
 pub mod builder;
 pub mod diagnostics;
 pub mod hash;
@@ -13,10 +14,15 @@ mod tests;
 
 pub use crate::Spanned;
 pub use node::{Object, Property, RootEntry, RootPatch, Value};
+
 pub use to_bin::PartialBin;
 
 use crate::{
-    ast::{diagnostics::DiagnosticWithSpan, node::roots::Roots},
+    ast::{
+        annotation::{Annotations, FromAnnotation, Resolved},
+        diagnostics::DiagnosticWithSpan,
+        node::roots::Roots,
+    },
     Cst,
 };
 
@@ -26,14 +32,22 @@ pub(crate) type Ptr<T> = Box<T>;
 pub(crate) type Ptr<T> = std::sync::Arc<T>;
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "span_print", derive(crate::span::DebugSpans))]
 pub struct Ast {
     pub roots: Roots,
+    pub annotations: Annotations,
     pub diagnostics: Vec<DiagnosticWithSpan>,
 }
 
 impl Ast {
     pub fn root_entries(&self) -> impl Iterator<Item = &RootEntry> {
         self.roots.entries().unwrap_or_default().iter()
+    }
+
+    /// Shorthand for `self.annotations.resolve(text)`. See [`FromAnnotation`].
+    #[must_use]
+    pub fn resolve_annotations<T: FromAnnotation>(&self, text: &str) -> Resolved<T, T::Error> {
+        self.annotations.resolve(text)
     }
 }
 

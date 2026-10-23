@@ -1,0 +1,62 @@
+#PROP_text
+type: string = "PTCH"
+version: u32 = 3
+linked: list[string] = {
+    "DATA/Characters/Ahri/Ahri.bin"
+}
+entries: map[hash,embed] = {
+    0x00000001 = 0x10000000 {
+        0x00000001: f32 = 1e+05
+        0x00000002: pointer = null
+    }
+}
+patches: map[hash,embed] = {
+    0x00000000 = patch {
+        path: string = ""
+        value: u32 = 0
+    }
+    0x00000001 = patch {
+        path: string = "mSpellCalculations.Damage[0].mCoefficient"
+        value: f32 = 2.315781e-05
+    }
+    0x00000002 = patch {
+        path: string = " path with spaces "
+        value: string = "ConstantShadow\\"
+    }
+    0x00000003 = patch {
+        path: string = "end\\"
+        value: pointer = null
+    }
+    0x00000004 = patch {
+        path: string = "embed"
+        value: embed = 0x00000050 {
+            0x00000001: mtx44 = {
+                1, 0, 0, 0
+                0, -8.742278e-08, -0.99999994, 0
+                0, 0.99999994, -8.742278e-08, 0
+                0, 0, 0, 1
+            }
+        }
+    }
+    0x00000005 = patch {
+        path: string = "list"
+        value: list[string] = {
+            " a "
+            ""
+        }
+    }
+    0x00000006 = patch {
+        path: string = "map"
+        value: map[hash,pointer] = {
+            0x00000001 = null
+        }
+    }
+    0x00000007 = patch {
+        path: string = "option"
+        value: option[f32] = {}
+    }
+    0xffffffff = patch {
+        path: string = "vec"
+        value: vec4 = { nan, inf, -inf, -0 }
+    }
+}

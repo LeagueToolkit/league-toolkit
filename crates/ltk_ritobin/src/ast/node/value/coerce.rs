@@ -2,7 +2,7 @@ use ltk_hash::{BinHash, Hash as _, HashValue, WadHash};
 use ltk_meta::PropertyKind;
 
 use crate::{
-    ast::{node::Value, Ptr},
+    ast::{node::Value, Object, Ptr},
     ContainerType, HashType, RitoType, ScalarType,
 };
 
@@ -110,6 +110,22 @@ impl Value {
                 },
                 ScalarType::Bool => match self {
                     Self::BitBool(bool) => Self::Bool(bool),
+                    _ => return Err(self),
+                },
+                ScalarType::Struct => match self {
+                    Self::None(span) => Self::Struct(Object {
+                        class_hash: HashedLiteral::new(span, Originally::Null, 0.into()),
+                        span,
+                        properties: vec![],
+                    }),
+                    _ => return Err(self),
+                },
+                ScalarType::Embedded => match self {
+                    Self::None(span) => Self::Embedded(Object {
+                        class_hash: HashedLiteral::new(span, Originally::Null, 0.into()),
+                        span,
+                        properties: vec![],
+                    }),
                     _ => return Err(self),
                 },
                 _ => return Err(self),

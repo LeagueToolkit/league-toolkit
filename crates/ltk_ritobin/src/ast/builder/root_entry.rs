@@ -26,6 +26,7 @@ pub struct RawRootProperty {
 
 impl<'a> Builder<'a> {
     pub(crate) fn build(mut self) -> Ast {
+        self.attach_annotations(self.cst.root());
         let mut all = self.resolve_roots();
         let mut roots = Roots::default();
 
@@ -44,6 +45,7 @@ impl<'a> Builder<'a> {
 
         Ast {
             roots,
+            annotations: self.annotations,
             diagnostics: self.diagnostics,
         }
     }
@@ -201,7 +203,7 @@ impl<'a> Builder<'a> {
 
     fn resolve_root(&mut self, node: &Node, idx: usize) -> Option<Root> {
         match node.kind {
-            Kind::Comment | Kind::ErrorTree => return None,
+            Kind::Comment | Kind::ErrorTree | Kind::Annotation => return None,
             Kind::Entry => match self.resolve_entry(node, None, None) {
                 Ok(entry) => {
                     let kind = RootKind::from_value(&entry.key);

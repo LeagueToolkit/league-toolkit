@@ -12,6 +12,7 @@ use crate::{
     ScalarType, Spanned,
 };
 
+#[derive(Debug)]
 pub struct PartialBin {
     pub bin: Bin,
     pub diagnostics: Vec<DiagnosticWithSpan>,

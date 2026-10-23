@@ -1,6 +1,6 @@
 use ltk_meta::PropertyKind;
 
-use crate::span::Span;
+use crate::{ast::diagnostics::RitoTypeOrVirtual, span::Span};
 use crate::{
     ast::{
         builder::Builder,
@@ -9,6 +9,7 @@ use crate::{
             MaybeSpanDiag, TypeMismatch,
         },
         node::TypeExpr,
+        resolve::literals::ExpectedType,
         Value,
     },
     cst::{ChildrenExt as _, Kind},
@@ -29,14 +30,31 @@ impl<'a> Builder<'a> {
         parent_value_kind: Option<RitoType>,
         parent_type_span: Option<Span>,
     ) -> Result<Value, Diagnostic> {
-        let token = key_node
+        use Diagnostic as D;
+        let node = key_node
             .children
             .get(self.cst)
             .first()
-            .ok_or(Diagnostic::InvalidHash(key_node.span))?
-            .token(self.cst);
+            .ok_or(D::CustomSpan(
+                "[resolve_entry_key] no children",
+                key_node.span,
+            ))?;
 
-        Ok(match token {
+        let key_kind = parent_value_kind.and_then(|k| k.subtype(0));
+        if let Some(block) = node
+            .tree(self.cst)
+            .filter(|tree| tree.kind == Kind::BlockKey)
+        {
+            let key_kind = key_kind.ok_or(D::CustomSpan(
+                "[resolve_entry_key] no block key type",
+                key_node.span,
+            ))?;
+            return self
+                .resolve_block_value(block, key_kind, parent_type_span)
+                .map_err(|e| e.diagnostic);
+        }
+
+        Ok(match node.token(self.cst) {
             Some(Token {
                 kind: TokenKind::Name,
                 span,
@@ -68,11 +86,17 @@ impl<'a> Builder<'a> {
             Some(token) => self.resolve_literal(
                 self.text,
                 token,
-                parent_value_kind.and_then(|k| k.subtype(0)),
+                parent_value_kind
+                    .and_then(|k| k.subtype(0))
+                    .map(ExpectedType::from),
                 parent_type_span,
             ),
-            // TODO: change this error
-            None => return Err(Diagnostic::InvalidHash(key_node.span)),
+            None => {
+                return Err(D::CustomSpan(
+                    "[resolve_entry_key] node not a token",
+                    key_node.span,
+                ))
+            }
         })
     }
 
@@ -104,7 +128,9 @@ impl<'a> Builder<'a> {
 
         let value = match self.resolve_value(
             value_node,
-            desired_kind.and_then(|k| k.as_resolved()),
+            desired_kind
+                .and_then(|k| k.as_resolved())
+                .map(ExpectedType::from),
             type_span,
         ) {
             Ok(v) => Some(v),

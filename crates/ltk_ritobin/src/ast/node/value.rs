@@ -105,6 +105,15 @@ pub struct MapEntry {
     pub value: Option<Value>,
 }
 
+impl MapEntry {
+    pub fn span(&self) -> Span {
+        match self.value.as_ref() {
+            Some(value) => self.key.span().cover(value.span()),
+            None => self.key.span(),
+        }
+    }
+}
+
 impl Value {
     #[inline(always)]
     #[must_use]

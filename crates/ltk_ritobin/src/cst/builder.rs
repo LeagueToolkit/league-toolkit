@@ -5,7 +5,7 @@ use std::{
 
 use ltk_hash::{BinHash, HashValue, WadHash};
 use ltk_meta::{
-    path::PropertyPath, property::values, Bin, BinObject, BinOverride, PropertyKind, PropertyPatch,
+    path::PropertyPath, property::values, Bin, BinObject, BinOverride, PropertyPatch,
     PropertyValueEnum,
 };
 
@@ -148,9 +148,9 @@ impl<H: HashProvider> Builder<H> {
         Child::Token(id)
     }
 
-    fn spanned_hexlit<T: LowerHex>(&mut self, v: T) -> Child {
+    fn spanned_hexlit(&mut self, v: impl LowerHex, width: usize) -> Child {
         let start = self.buf.len() as u32;
-        write!(self.buf, "0x{v:x}").unwrap();
+        write!(self.buf, "0x{v:0>0$x}", width).unwrap();
         let end = self.buf.len() as u32;
         let id = TokenId(self.tokens.len().try_into().unwrap());
         self.tokens.push(Token {
@@ -167,7 +167,7 @@ impl<H: HashProvider> Builder<H> {
     fn hash_hash_lit(&mut self, h: BinHash) -> Child {
         match self.hashes.lookup_hash(h).map(|h| format!("\"{h}\"")) {
             Some(h) => self.spanned_token(Tok::String, h),
-            None => self.spanned_hexlit(h),
+            None => self.spanned_hexlit(h, 8),
         }
     }
     /// Writes a `hash` value. Writes an 8-byte value as a hex literal of 16 digits. The hashtable
@@ -175,25 +175,25 @@ impl<H: HashProvider> Builder<H> {
     fn hash_value_lit(&mut self, h: HashValue) -> Child {
         match h.try_as_bin_hash() {
             Some(h) => self.hash_hash_lit(h),
-            None => self.spanned_hexlit(h),
+            None => self.spanned_hexlit(h, h.width().bytes() * 2),
         }
     }
     fn hash_type_lit(&mut self, h: BinHash) -> Child {
         match self.hashes.lookup_type(h).map(|h| h.to_string()) {
             Some(h) => self.spanned_token(Tok::Name, h),
-            None => self.spanned_hexlit(h),
+            None => self.spanned_hexlit(h, 8),
         }
     }
     fn hash_field_lit(&mut self, h: BinHash) -> Child {
         match self.hashes.lookup_field(h).map(|h| h.to_string()) {
             Some(h) => self.spanned_token(Tok::Name, h),
-            None => self.spanned_hexlit(h),
+            None => self.spanned_hexlit(h, 8),
         }
     }
     fn hash_entry_lit(&mut self, h: BinHash) -> Child {
         match self.hashes.lookup_entry(h).map(|h| format!("\"{h}\"")) {
             Some(h) => self.spanned_token(Tok::String, h),
-            None => self.spanned_hexlit(h),
+            None => self.spanned_hexlit(h, 8),
         }
     }
     /// Writes a `link` value. A link stores the path hash of an object, so the name is looked up
@@ -206,13 +206,13 @@ impl<H: HashProvider> Builder<H> {
             .map(|h| format!("\"{h}\""));
         match name {
             Some(h) => self.spanned_token(Tok::String, h),
-            None => self.spanned_hexlit(h),
+            None => self.spanned_hexlit(h, 8),
         }
     }
     fn hash_wad_lit(&mut self, h: WadHash) -> Child {
         match self.hashes.lookup_wad(h).map(|h| format!("\"{h}\"")) {
             Some(h) => self.spanned_token(Tok::String, h),
-            None => self.spanned_hexlit(h),
+            None => self.spanned_hexlit(h, 16),
         }
     }
 
@@ -338,14 +338,19 @@ impl<H: HashProvider> Builder<H> {
                 self.tree(Kind::TypeArgList, children)
             }
             PropertyValueEnum::Embedded(values::Embedded(s)) | PropertyValueEnum::Struct(s) => {
-                let k = self.hash_type_lit(s.class_hash);
-                let children = s
-                    .properties
-                    .iter()
-                    .map(|(k, v)| self.property_to_cst(*k, v))
-                    .collect();
-                let children = self.block(children);
-                self.tree(Kind::Class, [k, children])
+                if *s.class_hash == 0 && s.properties.is_empty() {
+                    let null = self.token(Tok::Null);
+                    self.tree(Kind::Class, [null])
+                } else {
+                    let k = self.hash_type_lit(s.class_hash);
+                    let children = s
+                        .properties
+                        .iter()
+                        .map(|(k, v)| self.property_to_cst(*k, v))
+                        .collect();
+                    let children = self.block(children);
+                    self.tree(Kind::Class, [k, children])
+                }
             }
 
             PropertyValueEnum::Optional(optional) => {
@@ -600,7 +605,7 @@ impl<H: HashProvider> Builder<H> {
 #[cfg(test)]
 mod test {
     use glam::Vec2;
-    use ltk_meta::{property::values, Bin, BinObject};
+    use ltk_meta::{property::values, Bin, BinObject, PropertyKind};
 
     use super::*;
     use crate::{print::CstPrinter, HashMapProvider};
@@ -639,7 +644,9 @@ mod test {
         );
         let bin2 = partial2.bin;
 
-        pretty_assertions::assert_eq!(bin2, bin);
+        let bin = format!("{bin:#?}");
+        let bin2 = format!("{bin2:#?}");
+        pretty_assertions::assert_str_eq!(bin2, bin);
     }
 
     #[test]
@@ -672,6 +679,10 @@ mod test {
                         .property(0x66, values::Hash::new(123123))
                         .property(0x99, values::F32::new(-45.45345))
                         .property(0x98, values::F32::new(199999.))
+                        .property(0x97, values::F32::new(f32::NAN))
+                        .property(0x96, values::F32::new(-f32::NAN))
+                        .property(0x95, values::F32::new(f32::INFINITY))
+                        .property(0x94, values::F32::new(f32::NEG_INFINITY))
                         .build(),
                 )
                 .build(),

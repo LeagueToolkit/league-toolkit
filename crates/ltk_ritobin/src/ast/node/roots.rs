@@ -86,14 +86,11 @@ impl Roots {
     }
 
     pub fn missing(&self) -> impl Iterator<Item = RootKind> + use<'_> {
-        [
-            RootKind::Version,
-            RootKind::Type,
-            RootKind::Linked,
-            RootKind::Entries,
-        ]
-        .into_iter()
-        .filter(|k| !self.contains(*k))
+        let linked_needed = self.version.is_none_or(|v| v.value >= 2);
+        [RootKind::Version, RootKind::Type, RootKind::Entries]
+            .into_iter()
+            .chain(linked_needed.then_some(RootKind::Linked))
+            .filter(|k| !self.contains(*k))
     }
 }
 

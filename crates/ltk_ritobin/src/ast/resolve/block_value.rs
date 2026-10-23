@@ -5,6 +5,7 @@ use crate::{
         builder::Builder,
         diagnostics::{Diagnostic as D, MaybeSpanDiag, TypeMismatch},
         node::{Map, MapEntry},
+        resolve::literals::ExpectedType,
         Property, Value,
     },
     cst::Kind,
@@ -120,9 +121,13 @@ impl<'a> Builder<'a> {
                         continue;
                     };
                     match node.kind {
-                        Kind::Comment => continue,
+                        Kind::Comment | Kind::Annotation => continue,
                         Kind::ListItem => {
-                            match self.resolve_value(node, Some(item_kind), hint_span) {
+                            match self.resolve_value(
+                                node,
+                                Some(ExpectedType::from(item_kind)),
+                                hint_span,
+                            ) {
                                 Ok(v) => match v.try_coerce_to(item_kind) {
                                     Ok(coerced) => value = Some(coerced),
                                     Err(v) => self.push(D::unwrap(
@@ -180,7 +185,7 @@ impl<'a> Builder<'a> {
                 continue;
             };
             match node.kind {
-                Kind::Comment => continue,
+                Kind::Comment | Kind::Annotation => continue,
                 Kind::Entry => match self.resolve_entry(node, Some(hint), None) {
                     Ok(entry) => match entry.key.try_coerce_to_bin_hash() {
                         Ok(hash) => properties.push(Property {
@@ -200,15 +205,16 @@ impl<'a> Builder<'a> {
                     },
                     Err(e) => self.push(e.fallback(node.span)),
                 },
-                Kind::ListItem | Kind::ListItemBlock => self.push(
-                    D::UnexpectedItem {
-                        span: node.trimmed_span(self.cst),
-                        parent: hint,
-                        expected: crate::ItemShape::Entry,
-                    }
-                    .unwrap(),
-                ),
-                _ => {}
+                _ => {
+                    self.push(
+                        D::UnexpectedItem {
+                            span: node.trimmed_span(self.cst),
+                            parent: hint,
+                            expected: crate::ItemShape::Entry,
+                        }
+                        .unwrap(),
+                    );
+                }
             }
         }
         properties
@@ -228,7 +234,7 @@ impl<'a> Builder<'a> {
                 continue;
             };
             match node.kind {
-                Kind::Comment => continue,
+                Kind::Comment | Kind::Annotation => continue,
                 Kind::Entry => match self.resolve_entry(node, Some(hint), hint_span) {
                     Ok(entry) => match entry.key.try_coerce_to(key_hint) {
                         Ok(key) => {
@@ -270,15 +276,16 @@ impl<'a> Builder<'a> {
                     },
                     Err(e) => self.push(e.fallback(node.span)),
                 },
-                Kind::ListItem | Kind::ListItemBlock => self.push(
-                    D::UnexpectedItem {
-                        span: node.trimmed_span(self.cst),
-                        parent: hint,
-                        expected: crate::ItemShape::Entry,
-                    }
-                    .unwrap(),
-                ),
-                _ => {}
+                _ => {
+                    self.push(
+                        D::UnexpectedItem {
+                            span: node.trimmed_span(self.cst),
+                            parent: hint,
+                            expected: crate::ItemShape::Entry,
+                        }
+                        .unwrap(),
+                    );
+                }
             }
         }
         entries
@@ -297,10 +304,10 @@ impl<'a> Builder<'a> {
                 continue;
             };
             match node.kind {
-                Kind::Comment => continue,
+                Kind::Comment | Kind::Annotation => continue,
                 Kind::ListItem => {
                     match self
-                        .resolve_value(node, Some(item_kind), hint_span)
+                        .resolve_value(node, Some(ExpectedType::from(item_kind)), hint_span)
                         .and_then(|value| {
                             value.try_coerce_to(item_kind).map_err(|value| {
                                 TypeMismatch {
@@ -324,15 +331,16 @@ impl<'a> Builder<'a> {
                         Err(e) => self.push(e.fallback(node.span)),
                     }
                 }
-                Kind::Entry => self.push(
-                    D::UnexpectedItem {
-                        span: node.trimmed_span(self.cst),
-                        parent: hint,
-                        expected: crate::ItemShape::Value,
-                    }
-                    .unwrap(),
-                ),
-                _ => {}
+                _ => {
+                    self.push(
+                        D::UnexpectedItem {
+                            span: node.trimmed_span(self.cst),
+                            parent: hint,
+                            expected: crate::ItemShape::Value,
+                        }
+                        .unwrap(),
+                    );
+                }
             }
         }
         items
