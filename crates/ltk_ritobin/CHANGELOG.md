@@ -5,6 +5,76 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_ritobin-v0.11.0...ltk_ritobin-v0.12.0) - 2026-10-23
+
+### Added
+
+- *(ltk_ritobin)* support blocks as keys
+- *(ltk_ritobin)* support exponents, nan & inf in lexer
+- *(ltk_ritobin)* annotations as a side table with a consumer resolve API
+- *(ltk_ritobin)* TrailingAnnotations diagnostic
+- *(ltk_ritobin)* ast annotations w/ monadic api
+- *(ltk_ritobin)* print annotatations
+- *(ltk_ritobin)* parse annotations
+
+### Fixed
+
+- *(ltk_ritobin)* require both map subtypes
+- *(ltk_ritobin)* check every subtype in can_coerce
+- *(ltk_ritobin)* drop unwrap from type conversions
+- *(ltk_ritobin)* coerce value to bare option
+- *(ltk_ritobin)* erase hash types in value types
+- *(ltk_ritobin)* keep unresolved value type
+- *(ltk_ritobin)* clear clippy warnings
+- *(ltk_ritobin)* 0x0 class with no props prints as `null`
+- *(ltk_ritobin)* 0 pad hashes when building cst
+- *(ltk_ritobin)* proper hash type handling in entry key resolution
+- *(ltk_ritobin)* better errors
+- *(ltk_ritobin)* only require linked entry when version >= 3
+- *(ltk_ritobin)* coerce null to struct/embedded
+- *(ltk_ritobin)* parse null as a literal
+- *(ltk_ritobin)* string lex escaping logic
+- *(ltk_ritobin)* Null in ends_value
+- *(ltk_ritobin)* impl Debug for PartialBin
+- *(ltk_ritobin)* [**breaking**] pass config to cst printer when using BinPrinter
+- *(ltk_ritobin)* always report UnexpectedItem when resolving blocks
+- *(ltk_ritobin)* match upstream
+- *(ltk_ritobin)* match upstream
+- *(ltk_ritobin)* an annotation on a map entry is on the entry, not its key
+- *(ltk_ritobin)* drop Option from try_resolve_annotation return type
+- *(ltk_ritobin)* span crate leftovers
+- *(ltk_ritobin)* annotation reduce impl
+- *(ltk_ritobin)* always apply annotations to next node
+- *(ltk_ritobin)* better Value::eval behaviour
+
+### Other
+
+- *(ltk_ritobin)* rename list2 type to OrderedList
+- *(ltk_ritobin)* cover type construction and printing
+- *(ltk_ritobin)* resolve rito macro paths through crate
+- *(ltk_ritobin)* derive common traits on type items
+- *(ltk_ritobin)* convert to type expressions explicitly
+- *(ltk_ritobin)* scope hash types to subtypes
+- *(ltk_ritobin)* collapse type constructors
+- *(ltk_ritobin)* match type shape directly
+- *(ltk_ritobin)* resolve hints through concrete inner fns
+- *(ltk_ritobin)* document type items
+- *(ltk_ritobin)* cover numeric mismatch inside option
+- (disabled for now) cst/bin snapshot tests + differential test
+- *(ltk_ritobin)* remove unused file
+- *(ltk_ritobin)* add nan/inf to numerics rtt, make rtt compare w/ Debug
+- *(ltk_ritobin)* add canonical samples
+- remove old parse_sample test file
+- Merge branch 'ritobin/hash-types' into ritobin/annotations
+- *(ltk_ritobin)* RitoType overhaul
+- Merge branch 'main' into ritobin/annotations
+- *(ltk_ritobin)* drop the str::parse comparison on AnnotationRef::resolve
+- *(ltk_ritobin)* FromAnnotation::from_annotation is resolve
+- *(ltk_ritobin)* tweak doc comments
+- *(ltk_ritobin)* FromAnnotation is total
+- *(ltk_ritobin)* allow -> expect
+- *(ltk_ritobin)* remove debug log
+
 ## [0.11.0](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_ritobin-v0.10.2...ltk_ritobin-v0.11.0) - 2026-10-21
 
 ### Added
