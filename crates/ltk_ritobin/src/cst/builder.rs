@@ -9,14 +9,14 @@ use ltk_meta::{
     PropertyValueEnum,
 };
 
-use crate::span::Span;
 use crate::{
     ast::node::root::FileKind,
     cst::{Child, ChildRange, Cst, ErrorRange, Kind, Node, NodeId, TokenId},
     hash_algorithm_name, hash_width_name,
     parse::{Error, Token, TokenKind as Tok},
-    HashProvider, HashType, PropertyValueExt as _, RitoType, RitobinName as _,
+    rito, HashProvider, HashType, PropertyValueExt as _, RitoType, RitobinName as _,
 };
+use crate::{span::Span, ScalarType};
 
 #[derive(Default)]
 pub struct Builder<H: HashProvider> {
@@ -387,13 +387,16 @@ impl<H: HashProvider> Builder<H> {
     }
 
     fn rito_type(&mut self, rito_type: RitoType) -> Child {
-        let mut children = self.kind_name(rito_type.base, rito_type.hash_types[0]);
+        let mut children = match rito_type.as_scalar() {
+            Some(scalar) => self.scalar_type(scalar),
+            None => vec![self.spanned_token(Tok::Name, rito_type.base().to_rito_name())],
+        };
 
-        if let Some(sub) = rito_type.subtypes[0] {
-            let name = self.kind_name(sub, rito_type.hash_types[1]);
+        if let Some(sub) = rito_type.subtype(0) {
+            let name = self.scalar_type(sub);
             let mut args = vec![self.token(Tok::LBrack), self.tree(Kind::TypeArg, name)];
-            if let Some(sub) = rito_type.subtypes[1] {
-                let name = self.kind_name(sub, rito_type.hash_types[2]);
+            if let Some(sub) = rito_type.subtype(1) {
+                let name = self.scalar_type(sub);
                 args.push(self.tree(Kind::TypeArg, name));
             }
             args.push(self.token(Tok::RBrack));
@@ -405,17 +408,19 @@ impl<H: HashProvider> Builder<H> {
 
     /// Returns the name token of `kind`. Adds the argument list `[width]` or
     /// `[width,algorithm]` if `kind` is `hash` and `hash_type` is not [`HashType::DEFAULT`].
-    fn kind_name(&mut self, kind: PropertyKind, hash_type: HashType) -> Vec<Child> {
-        let mut children = vec![self.spanned_token(Tok::Name, kind.to_rito_name())];
-        if kind == PropertyKind::Hash && hash_type != HashType::DEFAULT {
-            let width = self.spanned_token(Tok::Name, hash_width_name(hash_type.width));
-            let mut args = vec![self.token(Tok::LBrack), self.tree(Kind::TypeArg, [width])];
-            if let Some(algorithm) = hash_type.algorithm {
-                let algorithm = self.spanned_token(Tok::Name, hash_algorithm_name(algorithm));
-                args.push(self.tree(Kind::TypeArg, [algorithm]));
+    fn scalar_type(&mut self, scalar: ScalarType) -> Vec<Child> {
+        let mut children = vec![self.spanned_token(Tok::Name, scalar.kind().to_rito_name())];
+        if let ScalarType::Hash(hash_type) = scalar {
+            if hash_type != HashType::DEFAULT {
+                let width = self.spanned_token(Tok::Name, hash_width_name(hash_type.width));
+                let mut args = vec![self.token(Tok::LBrack), self.tree(Kind::TypeArg, [width])];
+                if let Some(algorithm) = hash_type.algorithm {
+                    let algorithm = self.spanned_token(Tok::Name, hash_algorithm_name(algorithm));
+                    args.push(self.tree(Kind::TypeArg, [algorithm]));
+                }
+                args.push(self.token(Tok::RBrack));
+                children.push(self.tree(Kind::TypeArgList, args));
             }
-            args.push(self.token(Tok::RBrack));
-            children.push(self.tree(Kind::TypeArgList, args));
         }
         children
     }
@@ -486,22 +491,22 @@ impl<H: HashProvider> Builder<H> {
         let comment = self.tree(Kind::Comment, vec![comment]);
 
         let type_entry = self.string(format!("\"{file_kind}\""));
-        let type_entry = self.entry("type", RitoType::simple(PropertyKind::String), type_entry);
+        let type_entry = self.entry("type", rito!(String), type_entry);
 
         let version = self.number("3");
-        let version = self.entry("version", RitoType::simple(PropertyKind::U32), version);
+        let version = self.entry("version", rito!(U32), version);
 
         [comment, type_entry, version]
     }
 
     /// A root holding a list of `items`, each wrapped as a list item.
-    fn list_root(&mut self, key: &str, item_kind: PropertyKind, items: Vec<Child>) -> Child {
+    fn list_root(&mut self, key: &str, item_kind: ScalarType, items: Vec<Child>) -> Child {
         let items = items
             .into_iter()
             .map(|item| self.tree(Kind::ListItem, [item]))
             .collect();
         let items = self.block(items);
-        self.entry(key, RitoType::container(item_kind), items)
+        self.entry(key, RitoType::ordered_list(item_kind), items)
     }
 
     fn linked_to_cst(&mut self, dependencies: &[String]) -> Child {
@@ -512,7 +517,7 @@ impl<H: HashProvider> Builder<H> {
                 self.tree(Kind::Literal, [lit])
             })
             .collect();
-        self.list_root("linked", PropertyKind::String, linked)
+        self.list_root("linked", ScalarType::String, linked)
     }
 
     fn entries_to_cst<'o>(&mut self, objects: impl IntoIterator<Item = &'o BinObject>) -> Child {
@@ -522,11 +527,7 @@ impl<H: HashProvider> Builder<H> {
             .collect();
 
         let entries = self.block(entries);
-        self.entry(
-            "entries",
-            RitoType::map(PropertyKind::Hash, PropertyKind::Embedded),
-            entries,
-        )
+        self.entry("entries", rito!(Map[Hash,Embedded]), entries)
     }
 
     fn bin_to_cst(&mut self, bin: &Bin) {
@@ -550,11 +551,7 @@ impl<H: HashProvider> Builder<H> {
             .map(|record| self.patch_to_cst(record))
             .collect();
         let records = self.block(records);
-        let records = self.entry(
-            "patches",
-            RitoType::map(PropertyKind::Hash, PropertyKind::Embedded),
-            records,
-        );
+        let records = self.entry("patches", rito!(Map[Hash, Embedded]), records);
 
         let mut roots = vec![comment, type_entry, version, linked, entries, records];
         if !patch.deleted.is_empty() {
@@ -563,7 +560,7 @@ impl<H: HashProvider> Builder<H> {
                 .iter()
                 .map(|hash| self.hash_entry_lit(*hash))
                 .collect();
-            roots.push(self.list_root("deleted", PropertyKind::Hash, deleted));
+            roots.push(self.list_root("deleted", ScalarType::Hash(Default::default()), deleted));
         }
 
         self.set_file_roots(roots);
@@ -574,7 +571,7 @@ impl<H: HashProvider> Builder<H> {
         let object = self.hash_entry_lit(record.object_hash);
 
         let path = self.path_literal(&record.path);
-        let path = self.named_field("path", RitoType::simple(PropertyKind::String), path);
+        let path = self.named_field("path", rito!(String), path);
 
         let value = self.value_to_cst(&record.value);
         let value = self.named_field("value", record.value.rito_type(), value);

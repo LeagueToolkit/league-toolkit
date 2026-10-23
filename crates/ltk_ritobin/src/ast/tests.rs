@@ -8,7 +8,7 @@ use crate::{
         node::root::RootKind,
         resolve::literals::{ParseNumericError, ValueEvalError},
     },
-    Cst, ItemShape, RitoType,
+    ContainerType, Cst, ItemShape, RitoType, ScalarType,
 };
 
 pub(super) fn wrap(input: &str) -> String {
@@ -164,7 +164,7 @@ fn numeric_parse_error() {
         matches!(
             errs[0].diagnostic,
             Diagnostic::ValueEvalError(ValueEvalError::ParseNumericError(ParseNumericError {
-                expected: PropertyKind::U8,
+                expected: ScalarType::U8,
                 ..
             }))
         ),
@@ -366,10 +366,7 @@ fn missing_class_name_in_a_list_item_is_reported() {
             matches!(
                 d,
                 Diagnostic::MissingClassName {
-                    expected: RitoType {
-                        base: PropertyKind::Embedded,
-                        ..
-                    },
+                    expected: RitoType::Scalar(ScalarType::Embedded),
                     ..
                 }
             )
@@ -397,10 +394,7 @@ fn missing_class_name_in_a_map_entry_is_reported() {
             matches!(
                 d,
                 Diagnostic::MissingClassName {
-                    expected: RitoType {
-                        base: PropertyKind::Struct,
-                        ..
-                    },
+                    expected: RitoType::Scalar(ScalarType::Struct),
                     ..
                 }
             )
@@ -486,10 +480,7 @@ fn a_bare_value_in_a_class_body_is_reported() {
                 d,
                 Diagnostic::UnexpectedItem {
                     expected: ItemShape::Entry,
-                    parent: RitoType {
-                        base: PropertyKind::Embedded,
-                        ..
-                    },
+                    parent: RitoType::Scalar(ScalarType::Embedded),
                     ..
                 }
             )
@@ -641,10 +632,7 @@ fn an_entry_in_a_list_is_reported() {
             d,
             Diagnostic::UnexpectedItem {
                 expected: ItemShape::Value,
-                parent: RitoType {
-                    base: PropertyKind::Container,
-                    ..
-                },
+                parent: RitoType::Container(ContainerType::Container(..)),
                 ..
             }
         )
@@ -658,10 +646,7 @@ fn a_bare_value_in_a_map_is_reported() {
             d,
             Diagnostic::UnexpectedItem {
                 expected: ItemShape::Entry,
-                parent: RitoType {
-                    base: PropertyKind::Map,
-                    ..
-                },
+                parent: RitoType::Container(ContainerType::Map { .. }),
                 ..
             }
         )
@@ -675,10 +660,7 @@ fn an_entry_in_an_option_is_reported() {
             d,
             Diagnostic::UnexpectedItem {
                 expected: ItemShape::Value,
-                parent: RitoType {
-                    base: PropertyKind::Optional,
-                    ..
-                },
+                parent: RitoType::Container(ContainerType::Optional(..)),
                 ..
             }
         )
@@ -691,16 +673,10 @@ fn bad_option_coerce_is_reported() {
         matches!(
             d,
             Diagnostic::TypeMismatch(TypeMismatch {
-                expected: RitoTypeOrVirtual::RitoType(RitoType {
-                    base: PropertyKind::Optional,
-                    subtypes: [Some(PropertyKind::U32), None],
-                    ..
-                }),
-                got: RitoTypeOrVirtual::RitoType(RitoType {
-                    base: PropertyKind::Optional,
-                    subtypes: [Some(PropertyKind::Bool), None],
-                    ..
-                }),
+                expected: RitoTypeOrVirtual::RitoType(RitoType::Container(
+                    ContainerType::Optional(Some(ScalarType::U32))
+                )),
+                got: RitoTypeOrVirtual::RitoType(RitoType::Scalar(ScalarType::Bool)),
                 ..
             })
         )
@@ -714,10 +690,7 @@ fn a_property_name_that_cannot_be_hashed_is_reported() {
         matches!(
             d,
             Diagnostic::TypeMismatch(TypeMismatch {
-                expected: RitoTypeOrVirtual::RitoType(RitoType {
-                    base: PropertyKind::Hash,
-                    ..
-                }),
+                expected: RitoTypeOrVirtual::RitoType(RitoType::Scalar(ScalarType::Hash(..))),
                 ..
             })
         )
@@ -757,10 +730,7 @@ fn a_quoted_property_name_is_reported() {
         matches!(
             d,
             Diagnostic::QuotedPropertyName {
-                parent: RitoType {
-                    base: PropertyKind::Embedded,
-                    ..
-                },
+                parent: RitoType::Scalar(ScalarType::Embedded),
                 ..
             }
         )
@@ -933,7 +903,7 @@ mod hash_type {
     use ltk_hash::{HashAlgorithm, HashValue, HashWidth};
 
     use super::*;
-    use crate::{rito_hasher, HashType};
+    use crate::{rito, rito_hasher, HashType};
 
     fn xxh3(width: HashWidth, text: &str) -> HashValue {
         rito_hasher(width, HashAlgorithm::Xxh3).hash_str(text)
@@ -1161,16 +1131,21 @@ mod hash_type {
 
     #[test]
     fn rito_type_display_writes_hash_type() {
-        let mut rito = RitoType::map(PropertyKind::Hash, PropertyKind::Hash);
-        rito.hash_types[1] = HashType::new(HashWidth::W8, HashAlgorithm::Xxh3);
-        rito.hash_types[2] = HashType::width_only(HashWidth::W4);
+        let rito = rito!(Map[Hash, Hash]).with_hash_types([
+            HashType::new(HashWidth::W8, HashAlgorithm::Xxh3),
+            HashType::width_only(HashWidth::W4),
+        ]);
         assert_eq!(rito.to_string(), "map[hash[u64,xxh3],hash[u32]]");
         assert_eq!(
-            RitoType::hash(HashType::new(HashWidth::W4, HashAlgorithm::Fnv1a32)).to_string(),
+            RitoType::from(ScalarType::from(HashType::new(
+                HashWidth::W4,
+                HashAlgorithm::Fnv1a32
+            )))
+            .to_string(),
             "hash"
         );
         assert_eq!(
-            RitoType::hash(HashType::width_only(HashWidth::W8)).to_string(),
+            RitoType::from(ScalarType::from(HashType::width_only(HashWidth::W8))).to_string(),
             "hash[u64]"
         );
     }

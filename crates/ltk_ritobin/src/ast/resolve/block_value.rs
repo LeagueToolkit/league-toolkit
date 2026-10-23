@@ -1,6 +1,5 @@
 use ltk_meta::PropertyKind;
 
-use crate::span::Span;
 use crate::{
     ast::{
         builder::Builder,
@@ -9,21 +8,25 @@ use crate::{
         Property, Value,
     },
     cst::Kind,
-    Node, RitoType,
+    ContainerType, Node, RitoType, ScalarType,
 };
+use crate::{rito, span::Span};
 
 impl<'a> Builder<'a> {
     /// Attempt to resolve a `Block`/`ListItemBlock` node to a value
     pub(crate) fn resolve_block_value(
         &mut self,
         block: &Node,
-        hint: RitoType,
+        hint: impl Into<RitoType>,
         hint_span: Option<Span>,
     ) -> Result<Value, MaybeSpanDiag> {
+        use ContainerType as C;
         use PropertyKind as K;
+        use ScalarType as S;
 
-        match hint.base {
-            K::Struct | K::Embedded => {
+        let hint = hint.into();
+        match hint {
+            RitoType::Scalar(S::Struct | S::Embedded) => {
                 self.push(
                     D::MissingClassName {
                         span: block.open_brace_span(self.cst),
@@ -34,15 +37,15 @@ impl<'a> Builder<'a> {
 
                 Ok(Value::Unresolved {
                     span: block.span,
-                    kind: hint.base,
+                    kind: hint,
                 })
             }
-            K::Vector2 | K::Vector3 | K::Vector4 | K::Color | K::Matrix44 => {
-                Ok(self.resolve_listlike(block, hint.base, hint_span))
-            }
-            K::Map => {
-                let key_kind = hint.subtype(0);
-                let value_kind = hint.subtype(1);
+            RitoType::Scalar(
+                hint @ (S::Vector2 | S::Vector3 | S::Vector4 | S::Color | S::Matrix44),
+            ) => Ok(self.resolve_listlike(block, hint, hint_span)),
+            RitoType::Container(C::Map { key, value }) => {
+                let key_kind = key.unwrap_or_default();
+                let value_kind = value.unwrap_or_default();
                 let entries = self.resolve_body_map_entries(block, hint, hint_span);
                 Ok(Map {
                     key_kind,
@@ -52,10 +55,10 @@ impl<'a> Builder<'a> {
                 }
                 .into())
             }
-            K::Container | K::UnorderedContainer => {
-                let item_kind = hint.subtype(0);
+            RitoType::Container(C::Container(item_kind) | C::UnorderedContainer(item_kind)) => {
+                let item_kind = item_kind.unwrap_or_default();
                 let items = self.resolve_body_items(block, hint, hint_span);
-                Ok(match hint.base {
+                Ok(match hint.base() {
                     K::Container => Value::Container {
                         item_kind,
                         items,
@@ -69,11 +72,10 @@ impl<'a> Builder<'a> {
                     _ => unreachable!(),
                 })
             }
-            K::Optional => {
-                let item_kind = hint.subtype(0);
-                let item_hint = hint.item(0);
+            RitoType::Container(C::Optional(item_kind)) => {
+                let item_kind = item_kind.unwrap_or_default();
                 if matches!(
-                    item_kind,
+                    item_kind.kind(),
                     K::Vector2 | K::Vector3 | K::Vector4 | K::Color | K::Matrix44
                 ) {
                     let content: Vec<&Node> = block
@@ -88,7 +90,7 @@ impl<'a> Builder<'a> {
                     // block, the same shape a listlike takes as a `list[vec3]` item.
                     if let [only] = content[..] {
                         if only.kind == Kind::ListItemBlock {
-                            let inner = self.resolve_list_item_block(only, item_hint, hint_span)?;
+                            let inner = self.resolve_list_item_block(only, item_kind, hint_span)?;
                             return Ok(Value::Optional {
                                 item_kind: Some(item_kind),
                                 value: Some(Box::new(inner)),
@@ -105,7 +107,7 @@ impl<'a> Builder<'a> {
                         });
                     }
                     // an optional listlike spells its components flat, same as a bare listlike
-                    let inner = self.resolve_listlike(block, item_kind, hint_span);
+                    let inner = self.resolve_listlike(block, item_kind.into(), hint_span);
                     return Ok(Value::Optional {
                         item_kind: Some(item_kind),
                         value: Some(Box::new(inner)),
@@ -120,13 +122,13 @@ impl<'a> Builder<'a> {
                     match node.kind {
                         Kind::Comment => continue,
                         Kind::ListItem => {
-                            match self.resolve_value(node, Some(item_hint), hint_span) {
-                                Ok(v) => match v.try_coerce_to(item_hint) {
+                            match self.resolve_value(node, Some(item_kind), hint_span) {
+                                Ok(v) => match v.try_coerce_to(item_kind) {
                                     Ok(coerced) => value = Some(coerced),
                                     Err(v) => self.push(D::unwrap(
                                         TypeMismatch {
                                             span: v.span(),
-                                            expected: item_hint.into(),
+                                            expected: item_kind.into(),
                                             expected_span: hint_span,
                                             got: v.rito_type().into(),
                                         }
@@ -137,7 +139,7 @@ impl<'a> Builder<'a> {
                             }
                         }
                         Kind::ListItemBlock => {
-                            match self.resolve_list_item_block(node, item_hint, hint_span) {
+                            match self.resolve_list_item_block(node, item_kind, hint_span) {
                                 Ok(v) => value = Some(v),
                                 Err(e) => self.push(e.fallback(node.span)),
                             }
@@ -189,7 +191,7 @@ impl<'a> Builder<'a> {
                         Err(value) => self.push(D::unwrap(
                             TypeMismatch {
                                 span: value.span(),
-                                expected: RitoType::simple(PropertyKind::Hash).into(),
+                                expected: rito!(Hash).into(),
                                 expected_span: None,
                                 got: value.rito_type().into(),
                             }
@@ -218,8 +220,8 @@ impl<'a> Builder<'a> {
         hint: RitoType,
         hint_span: Option<Span>,
     ) -> Vec<MapEntry> {
-        let key_hint = hint.item(0);
-        let value_kind = hint.subtype(1);
+        let key_hint = hint.subtype(0).unwrap_or_default();
+        let value_kind = hint.subtype(1).unwrap_or_default();
         let mut entries = Vec::new();
         for child in block.children.get(self.cst).iter() {
             let Some(node) = child.tree(self.cst) else {
@@ -231,11 +233,16 @@ impl<'a> Builder<'a> {
                     Ok(entry) => match entry.key.try_coerce_to(key_hint) {
                         Ok(key) => {
                             match entry.value.as_ref() {
-                                Some(value) if value.kind().is_some_and(|k| k != value_kind) => {
+                                Some(value)
+                                    if value.rito_type().is_some_and(|k| {
+                                        k.with_default_hash_types()
+                                            != value_kind.with_default_hash_type()
+                                    }) =>
+                                {
                                     self.push(D::unwrap(
                                         TypeMismatch {
                                             span: value.span(),
-                                            expected: hint.item(1).into(),
+                                            expected: hint.subtype(1).into(),
                                             expected_span: hint_span,
                                             got: value.rito_type().into(),
                                         }
@@ -283,8 +290,7 @@ impl<'a> Builder<'a> {
         hint: RitoType,
         hint_span: Option<Span>,
     ) -> Vec<Value> {
-        let item_kind = hint.subtype(0);
-        let item_hint = hint.item(0);
+        let item_kind = hint.subtype(0).unwrap_or_default();
         let mut items = Vec::new();
         for child in block.children.get(self.cst).iter() {
             let Some(node) = child.tree(self.cst) else {
@@ -294,12 +300,12 @@ impl<'a> Builder<'a> {
                 Kind::Comment => continue,
                 Kind::ListItem => {
                     match self
-                        .resolve_value(node, Some(item_hint), hint_span)
+                        .resolve_value(node, Some(item_kind), hint_span)
                         .and_then(|value| {
-                            value.try_coerce_to(item_hint).map_err(|value| {
+                            value.try_coerce_to(item_kind).map_err(|value| {
                                 TypeMismatch {
                                     span: value.span(),
-                                    expected: item_hint.into(),
+                                    expected: item_kind.into(),
                                     expected_span: hint_span,
                                     got: value.rito_type().into(),
                                 }
@@ -313,7 +319,7 @@ impl<'a> Builder<'a> {
                     }
                 }
                 Kind::ListItemBlock => {
-                    match self.resolve_list_item_block(node, item_hint, hint_span) {
+                    match self.resolve_list_item_block(node, item_kind, hint_span) {
                         Ok(v) => items.push(v),
                         Err(e) => self.push(e.fallback(node.span)),
                     }
@@ -321,7 +327,7 @@ impl<'a> Builder<'a> {
                 Kind::Entry => self.push(
                     D::UnexpectedItem {
                         span: node.trimmed_span(self.cst),
-                        parent: RitoType::container(item_kind),
+                        parent: hint,
                         expected: crate::ItemShape::Value,
                     }
                     .unwrap(),

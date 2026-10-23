@@ -11,7 +11,7 @@ use crate::{
         },
         Property, RootPatch, Value,
     },
-    RitoType, Spanned,
+    rito, RitoType, Spanned,
 };
 
 use super::Builder;
@@ -178,7 +178,7 @@ impl Builder<'_> {
                 self.push(D::unwrap(
                     TypeMismatch {
                         span: value.span(),
-                        expected: RitoType::simple(PropertyKind::String).into(),
+                        expected: rito!(String).into(),
                         expected_span: None,
                         got: value.rito_type().into(),
                     }

@@ -3,7 +3,6 @@ use std::{borrow::Cow, fmt::Display, num::IntErrorKind};
 use ltk_hash::{BinHash, WadHash};
 use ltk_meta::PropertyKind;
 
-use crate::span::Span;
 use crate::{
     ast::{
         diagnostics::{Diagnostic, RitoTypeOrVirtual, TypeMismatch},
@@ -14,6 +13,7 @@ use crate::{
     parse::{Token, TokenKind},
     RitoType, Spanned, SpannedExt,
 };
+use crate::{span::Span, ScalarType};
 
 use ValueEvalError as E;
 
@@ -36,7 +36,7 @@ impl Value {
 
 #[derive(Debug, thiserror::Error, Clone, Copy)]
 pub struct ParseNumericError {
-    pub expected: PropertyKind,
+    pub expected: ScalarType,
     pub error: Option<std::num::IntErrorKind>,
     pub span: Span,
 }
@@ -51,17 +51,13 @@ impl Display for ParseNumericError {
             Some(IntErrorKind::Zero) => "number would be zero",
             _ => "invalid literal",
         };
-        write!(
-            f,
-            "Could not parse {} - {reason}",
-            RitoType::simple(self.expected)
-        )
+        write!(f, "Could not parse {} - {reason}", self.expected)
     }
 }
 
 fn parse_int<T: std::str::FromStr<Err = std::num::ParseIntError>>(
     txt: &str,
-    kind_hint: PropertyKind,
+    kind_hint: ScalarType,
     span: Span,
     wrap: impl FnOnce(T, Span) -> Value,
 ) -> Result<Value, ParseNumericError> {
@@ -116,6 +112,7 @@ impl Value {
         numeric_hint_span: Option<Span>,
     ) -> Result<Self, ValueEvalError> {
         use PropertyKind as K;
+        use ScalarType as S;
         Ok(match token {
             Token {
                 kind: TokenKind::String,
@@ -158,40 +155,43 @@ impl Value {
                     false => Cow::Borrowed(txt),
                 };
 
-                let kind_hint = match kind_hint.base {
-                    K::Optional => kind_hint.value_subtype().unwrap_or(kind_hint.base),
+                let kind_hint = match kind_hint.base() {
+                    K::Optional => kind_hint
+                        .value_subtype()
+                        .map(|k| k.kind())
+                        .unwrap_or(kind_hint.base()),
                     base => base,
                 };
 
                 match kind_hint {
-                    K::U8 => parse_int::<u8>(&txt, kind_hint, *span, |v, s| {
-                        Self::U8(Spanned::new(s, v))
-                    })?,
-                    K::U16 => parse_int::<u16>(&txt, kind_hint, *span, |v, s| {
-                        Self::U16(Spanned::new(s, v))
-                    })?,
-                    K::U32 => parse_int::<u32>(&txt, kind_hint, *span, |v, s| {
-                        Self::U32(Spanned::new(s, v))
-                    })?,
-                    K::U64 => parse_int::<u64>(&txt, kind_hint, *span, |v, s| {
-                        Self::U64(Spanned::new(s, v))
-                    })?,
-                    K::I8 => parse_int::<i8>(&txt, kind_hint, *span, |v, s| {
-                        Self::I8(Spanned::new(s, v))
-                    })?,
-                    K::I16 => parse_int::<i16>(&txt, kind_hint, *span, |v, s| {
-                        Self::I16(Spanned::new(s, v))
-                    })?,
-                    K::I32 => parse_int::<i32>(&txt, kind_hint, *span, |v, s| {
-                        Self::I32(Spanned::new(s, v))
-                    })?,
-                    K::I64 => parse_int::<i64>(&txt, kind_hint, *span, |v, s| {
-                        Self::I64(Spanned::new(s, v))
-                    })?,
+                    K::U8 => {
+                        parse_int::<u8>(&txt, S::U8, *span, |v, s| Self::U8(Spanned::new(s, v)))?
+                    }
+                    K::U16 => {
+                        parse_int::<u16>(&txt, S::U16, *span, |v, s| Self::U16(Spanned::new(s, v)))?
+                    }
+                    K::U32 => {
+                        parse_int::<u32>(&txt, S::U32, *span, |v, s| Self::U32(Spanned::new(s, v)))?
+                    }
+                    K::U64 => {
+                        parse_int::<u64>(&txt, S::U64, *span, |v, s| Self::U64(Spanned::new(s, v)))?
+                    }
+                    K::I8 => {
+                        parse_int::<i8>(&txt, S::I8, *span, |v, s| Self::I8(Spanned::new(s, v)))?
+                    }
+                    K::I16 => {
+                        parse_int::<i16>(&txt, S::I16, *span, |v, s| Self::I16(Spanned::new(s, v)))?
+                    }
+                    K::I32 => {
+                        parse_int::<i32>(&txt, S::I32, *span, |v, s| Self::I32(Spanned::new(s, v)))?
+                    }
+                    K::I64 => {
+                        parse_int::<i64>(&txt, S::I64, *span, |v, s| Self::I64(Spanned::new(s, v)))?
+                    }
                     K::F32 => Self::F32(Spanned::new(
                         *span,
                         txt.parse().map_err(|_| ParseNumericError {
-                            expected: kind_hint,
+                            expected: S::F32,
                             error: None,
                             span: *span,
                         })?,
@@ -199,7 +199,7 @@ impl Value {
                     _ => {
                         return Err(TypeMismatch {
                             span: *span,
-                            expected: RitoType::simple(kind_hint).into(),
+                            expected: numeric_hint.into(),
                             expected_span: numeric_hint_span,
                             got: RitoTypeOrVirtual::numeric(),
                         }
