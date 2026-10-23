@@ -489,18 +489,18 @@ impl<H: HashProvider> Builder<H> {
         }
     }
 
-    /// The `#PROP_text` or `#PTCH_text` comment, then the `type` and `version` roots.
-    fn header_to_cst(&mut self, file_kind: FileKind) -> [Child; 3] {
-        let comment = self.spanned_token(Tok::Comment, format!("#{file_kind}_text"));
-        let comment = self.tree(Kind::Comment, vec![comment]);
+    /// The `#PROP_text` or `#PTCH_text` magic comment, then the `type` and `version` roots.
+    fn header_to_cst(&mut self, file_kind: FileKind, version: u32) -> [Child; 3] {
+        let magic = self.spanned_token(Tok::Comment, format!("#{file_kind}_text"));
+        let magic = self.tree(Kind::Comment, vec![magic]);
 
         let type_entry = self.string(format!("\"{file_kind}\""));
         let type_entry = self.entry("type", rito!(String), type_entry);
 
-        let version = self.number("3");
+        let version = self.number(version);
         let version = self.entry("version", rito!(U32), version);
 
-        [comment, type_entry, version]
+        [magic, type_entry, version]
     }
 
     /// A root holding a list of `items`, each wrapped as a list item.
@@ -536,16 +536,21 @@ impl<H: HashProvider> Builder<H> {
 
     fn bin_to_cst(&mut self, bin: &Bin) {
         self.file_node();
-        let [comment, type_entry, version] = self.header_to_cst(FileKind::Prop);
-        let linked = self.linked_to_cst(&bin.dependencies);
+        let [magic, type_entry, version] = self.header_to_cst(FileKind::Prop, bin.version);
+        let mut roots = vec![magic, type_entry, version];
+        if bin.version >= 2 {
+            let linked = self.linked_to_cst(&bin.dependencies);
+            roots.push(linked);
+        }
         let entries = self.entries_to_cst(bin.objects.values());
+        roots.push(entries);
 
-        self.set_file_roots([comment, type_entry, version, linked, entries]);
+        self.set_file_roots(roots);
     }
 
     fn override_to_cst(&mut self, patch: &BinOverride) {
         self.file_node();
-        let [comment, type_entry, version] = self.header_to_cst(FileKind::Patch);
+        let [magic, type_entry, version] = self.header_to_cst(FileKind::Patch, 3);
         let linked = self.linked_to_cst(&[]);
         let entries = self.entries_to_cst(patch.objects.values());
 
@@ -557,7 +562,7 @@ impl<H: HashProvider> Builder<H> {
         let records = self.block(records);
         let records = self.entry("patches", rito!(Map[Hash, Embedded]), records);
 
-        let mut roots = vec![comment, type_entry, version, linked, entries, records];
+        let mut roots = vec![magic, type_entry, version, linked, entries, records];
         if !patch.deleted.is_empty() {
             let deleted = patch
                 .deleted
