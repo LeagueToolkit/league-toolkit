@@ -1177,7 +1177,7 @@ mod hash_type {
 
     #[test]
     fn rito_type_display_writes_hash_type() {
-        let rito = rito!(Map[Hash, Hash]).with_hash_types([
+        let rito = rito!(Map[Hash, Hash]).with_subtype_hash_types([
             HashType::new(HashWidth::W8, HashAlgorithm::Xxh3),
             HashType::width_only(HashWidth::W4),
         ]);

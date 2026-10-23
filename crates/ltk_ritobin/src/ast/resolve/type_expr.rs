@@ -144,7 +144,7 @@ impl<'a> Builder<'a> {
             None => [None, None],
         };
 
-        Ok(RitoType::from_parts(base, subtypes).with_hash_types(hash_types))
+        Ok(RitoType::from_parts(base, subtypes).with_subtype_hash_types(hash_types))
     }
 
     /// Returns the `TypeArg` nodes of a `TypeArgList` node.

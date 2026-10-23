@@ -245,13 +245,14 @@ impl RitoType {
             RitoType::Container(container) => Self::Container(container.with_default_hash_types()),
         }
     }
-    /// Returns the type with `hash_types` in its `hash` slots.
+
+    /// Returns the type with `hash_types` in its `hash` subtypes.
     ///
-    /// A scalar takes `hash_types[0]`. A container takes `hash_types[0]` for its first subtype
-    /// and `hash_types[1]` for a map value.
-    pub fn with_hash_types(self, hash_types: [HashType; 2]) -> Self {
+    /// The first subtype takes `hash_types[0]`. A map value takes `hash_types[1]`. A scalar is
+    /// returned unchanged.
+    pub fn with_subtype_hash_types(self, hash_types: [HashType; 2]) -> Self {
         match self {
-            RitoType::Scalar(scalar) => Self::Scalar(scalar.with_hash_type(hash_types[0])),
+            RitoType::Scalar(_) => self,
             RitoType::Container(container) => {
                 Self::Container(container.with_hash_types(hash_types))
             }
