@@ -65,10 +65,12 @@ impl Print for BinOverride {
         writer: &mut W,
         config: PrintConfig<H>,
     ) -> Result<usize, PrintError> {
+        let (config, hashes) = config.take_hashes();
         let (cst, buf) = cst::builder::Builder::new()
-            .with_hashes(config.hashes)
+            .with_hashes(hashes)
+            .with_vector_form(config.wrap.vector_form)
             .build_override(self);
-        CstPrinter::new(&buf, writer, Default::default()).print(&cst)
+        CstPrinter::new(&buf, writer, config).print(&cst)
     }
 }
 
