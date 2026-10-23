@@ -6,10 +6,12 @@ use crate::{BadContainerType, BadScalarType, ContainerType, ScalarType};
 ///
 /// The type `hash[width,algorithm]` gives the stored width and the hash function of a `hash`,
 /// for example `hash[u64,xxh3]`. The type `hash` is `hash[u32,fnv1a]`. The type `hash[width]`
-/// gives the width alone; see [`HashType`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// gives the width alone; see [`crate::HashType`].
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum RitoType {
+    /// A type that is not a container.
     Scalar(ScalarType),
+    /// A `list`, `list2`, `option` or `map`, with its subtypes.
     Container(ContainerType),
 }
 
@@ -31,10 +33,13 @@ impl PartialEq<ContainerType> for RitoType {
     }
 }
 
-#[derive(thiserror::Error, Debug)]
+/// The error for a type that cannot be built from a base kind and its subtypes.
+#[derive(thiserror::Error, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BadRitoType {
+    /// No subtypes are given, and the base kind is a container kind.
     #[error("No subtypes given, but {0}")]
     BadScalarType(#[from] BadScalarType),
+    /// Subtypes are given, and they do not build a container type.
     #[error("Subtypes given, but {0}")]
     BadContainerType(#[from] BadContainerType),
 }

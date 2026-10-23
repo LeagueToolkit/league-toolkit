@@ -13,7 +13,7 @@ use crate::{
         hash::{HashedLiteral, Originally},
         Object,
     },
-    ContainerType, RitoType, RitobinName, Spanned,
+    ContainerType, RitoType, Spanned,
 };
 use crate::{span::Span, ScalarType};
 
@@ -197,24 +197,27 @@ impl Value {
         use ScalarType as S;
         match kind {
             RitoType::Container(container) => match container {
-                C::Map { key, value } => Value::Map(Map {
-                    key_kind: key.unwrap_or_default().into(),
-                    value_kind: value.unwrap_or_default().into(),
-                    entries: Vec::new(),
-                    span,
-                }),
+                C::Map(types) => {
+                    let (key_kind, value_kind) = types.unwrap_or_default();
+                    Value::Map(Map {
+                        key_kind,
+                        value_kind,
+                        entries: Vec::new(),
+                        span,
+                    })
+                }
                 C::Container(item) => Value::Container {
-                    item_kind: item.unwrap_or_default().into(),
+                    item_kind: item.unwrap_or_default(),
                     items: Vec::new(),
                     span,
                 },
-                C::UnorderedContainer(item) => Value::UnorderedContainer {
-                    item_kind: item.unwrap_or_default().into(),
+                C::OrderedList(item) => Value::UnorderedContainer {
+                    item_kind: item.unwrap_or_default(),
                     items: Vec::new(),
                     span,
                 },
                 C::Optional(item) => Value::Optional {
-                    item_kind: item.into(),
+                    item_kind: item,
                     value: None,
                     span,
                 },
@@ -332,13 +335,15 @@ impl Value {
         }
     }
 
-    /// Returns the type of the value. Hash values use [`crate::HashType::default`],
-    /// since values don't track the hash algo they came from.
+    /// Returns the type of the value. Each `hash` slot holds [`crate::HashType::DEFAULT`].
+    ///
+    /// A value does not record the hasher that computed it.
     pub fn rito_type(&self) -> Option<RitoType> {
-        Some(match self {
+        let rito_type: RitoType = match self {
+            Value::Unresolved { kind, .. } => *kind,
             Value::Container { item_kind, .. } => ContainerType::Container(Some(*item_kind)).into(),
             Value::UnorderedContainer { item_kind, .. } => {
-                ContainerType::UnorderedContainer(Some(*item_kind)).into()
+                ContainerType::OrderedList(Some(*item_kind)).into()
             }
             Value::Map(Map {
                 key_kind,
@@ -347,7 +352,8 @@ impl Value {
             }) => RitoType::map(*key_kind, *value_kind),
             Value::Optional { item_kind, .. } => ContainerType::Optional(*item_kind).into(),
             _ => RitoType::try_from_scalar(self.kind()?).ok()?,
-        })
+        };
+        Some(rito_type.with_default_hash_types())
     }
 }
 

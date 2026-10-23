@@ -2,42 +2,72 @@ use std::fmt::Display;
 
 use ltk_meta::PropertyKind;
 
-use crate::{HashType, RitobinName as _};
+use crate::{HashType, RitoType, RitobinName as _};
 
+/// A ritobin type that is not a container.
+///
+/// A container holds scalars only. Each variant names the [`PropertyKind`] of the same name.
 #[derive(Debug, Default, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum ScalarType {
+    /// `none`
     #[default]
     None,
+    /// `bool`
     Bool,
+    /// `i8`
     I8,
+    /// `u8`
     U8,
+    /// `i16`
     I16,
+    /// `u16`
     U16,
+    /// `i32`
     I32,
+    /// `u32`
     U32,
+    /// `i64`
     I64,
+    /// `u64`
     U64,
+    /// `f32`
     F32,
+    /// `vec2`
     Vector2,
+    /// `vec3`
     Vector3,
+    /// `vec4`
     Vector4,
+    /// `mtx44`
     Matrix44,
+    /// `rgba`
     Color,
+    /// `string`
     String,
+    /// `file`
     WadChunkLink,
+    /// `pointer`
     Struct,
+    /// `embed`
     Embedded,
+    /// `link`
     ObjectLink,
+    /// `flag`
     BitBool,
+    /// `hash`, with its width and hash function.
     Hash(HashType),
 }
 
 impl ScalarType {
-    /// Return the same type, but with the [`Self::Hash`] changed to use [`HashType::default`]
+    /// Returns the type with [`HashType::DEFAULT`] if it is `hash`.
+    ///
+    /// Any other type is returned unchanged.
     pub const fn with_default_hash_type(self) -> Self {
         self.with_hash_type(HashType::DEFAULT)
     }
-    /// Return the same type, but with the [`Self::Hash`] changed to use the given [`HashType`]
+    /// Returns the type with `hash_type` if it is `hash`.
+    ///
+    /// Any other type is returned unchanged.
     pub const fn with_hash_type(self, hash_type: HashType) -> Self {
         match self {
             ScalarType::Hash(_) => Self::Hash(hash_type),
@@ -45,7 +75,7 @@ impl ScalarType {
         }
     }
 
-    /// The hash type, if we are [`Self::Hash`]
+    /// Returns the hash type of a `hash`. Returns `None` for any other type.
     pub const fn hash_type(&self) -> Option<HashType> {
         match self {
             ScalarType::Hash(hash_type) => Some(*hash_type),
@@ -82,10 +112,12 @@ impl From<HashType> for ScalarType {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
+/// The error for a [`PropertyKind`] that is a container kind, where a scalar is required.
+#[derive(Debug, thiserror::Error, Clone, Copy, PartialEq, Eq)]
 #[error("{0:?} is not a scalar type")]
 pub struct BadScalarType(pub PropertyKind);
 impl ScalarType {
+    /// Returns the [`PropertyKind`] of the type.
     pub const fn kind(self) -> PropertyKind {
         use PropertyKind as K;
         match self {
@@ -114,33 +146,14 @@ impl ScalarType {
             ScalarType::Hash(_) => K::Hash,
         }
     }
+    /// Returns the scalar type of `kind`. A `hash` holds [`HashType::DEFAULT`].
+    ///
+    /// # Errors
+    /// Returns [`BadScalarType`] if `kind` is a container kind.
     pub const fn try_from_kind(kind: PropertyKind) -> Result<Self, BadScalarType> {
-        use PropertyKind as K;
-        Ok(match kind {
-            K::None => Self::None,
-            K::Bool => Self::Bool,
-            K::I8 => Self::I8,
-            K::U8 => Self::U8,
-            K::I16 => Self::I16,
-            K::U16 => Self::U16,
-            K::I32 => Self::I32,
-            K::U32 => Self::U32,
-            K::I64 => Self::I64,
-            K::U64 => Self::U64,
-            K::F32 => Self::F32,
-            K::Vector2 => Self::Vector2,
-            K::Vector3 => Self::Vector3,
-            K::Vector4 => Self::Vector4,
-            K::Matrix44 => Self::Matrix44,
-            K::Color => Self::Color,
-            K::String => Self::String,
-            K::WadChunkLink => Self::WadChunkLink,
-            K::Struct => Self::Struct,
-            K::Embedded => Self::Embedded,
-            K::ObjectLink => Self::ObjectLink,
-            K::BitBool => Self::BitBool,
-            K::Hash => Self::Hash(HashType::DEFAULT),
-            kind => return Err(BadScalarType(kind)),
-        })
+        match RitoType::from_property_kind(kind) {
+            RitoType::Scalar(scalar) => Ok(scalar),
+            RitoType::Container(_) => Err(BadScalarType(kind)),
+        }
     }
 }

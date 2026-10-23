@@ -42,8 +42,15 @@ impl<'a> Builder<'a> {
         numeric_hint: Option<impl Into<ExpectedType>>,
         numeric_hint_span: Option<Span>,
     ) -> Result<Value, Diagnostic> {
-        let numeric_hint = numeric_hint.map(|h| h.into());
+        self.resolve_value_inner(wrapper, numeric_hint.map(Into::into), numeric_hint_span)
+    }
 
+    fn resolve_value_inner(
+        &mut self,
+        wrapper: &Node,
+        numeric_hint: Option<ExpectedType>,
+        numeric_hint_span: Option<Span>,
+    ) -> Result<Value, Diagnostic> {
         let Some(child) = wrapper.children.get(self.cst).first() else {
             return Err(Diagnostic::CustomSpan(
                 "[resolve_value] node has no children",

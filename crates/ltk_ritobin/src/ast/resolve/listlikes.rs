@@ -1,5 +1,3 @@
-use ltk_meta::PropertyKind;
-
 use crate::{
     ast::{
         builder::Builder,
@@ -7,7 +5,7 @@ use crate::{
         Value,
     },
     cst::{Child, Cst, Kind, Node},
-    RitoType, ScalarType, Spanned,
+    ScalarType, Spanned,
 };
 use crate::{rito, span::Span};
 

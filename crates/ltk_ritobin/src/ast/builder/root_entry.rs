@@ -96,7 +96,7 @@ impl<'a> Builder<'a> {
         if let Some(RootValue::Value(value)) = root.value.as_ref() {
             if let Some(got) = value
                 .rito_type()
-                .filter(|got| !got.equivalent_to(&expected_type))
+                .filter(|got| !got.equivalent_to(&expected_type.with_default_hash_types()))
             {
                 self.push(D::unwrap(
                     TypeMismatch {

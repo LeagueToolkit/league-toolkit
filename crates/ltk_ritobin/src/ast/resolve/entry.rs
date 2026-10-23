@@ -1,6 +1,6 @@
 use ltk_meta::PropertyKind;
 
-use crate::{ast::diagnostics::RitoTypeOrVirtual, span::Span};
+use crate::span::Span;
 use crate::{
     ast::{
         builder::Builder,
@@ -145,24 +145,17 @@ impl<'a> Builder<'a> {
         };
 
         let value = value.map(|value| match desired_kind {
-            Some(TypeExpr::Resolved(kind)) => {
-                let coerce = value.try_coerce_to(kind);
-                match coerce {
-                    Ok(value) => value,
-                    Err(value) => value,
-                }
-            }
+            Some(TypeExpr::Resolved(kind)) => value.coerce_to(kind),
             _ => value,
         });
 
         match (desired_kind, value.as_ref()) {
             (Some(TypeExpr::Resolved(kind)), Some(value)) => {
-                // a value doesn't preserve hash algo, so erase it here.
-                // coercion makes sure we have the declared width.
-                if value.rito_type().is_some_and(|k| {
-                    !k.with_default_hash_types()
-                        .equivalent_to(&kind.with_default_hash_types())
-                }) {
+                // a value does not record its hasher, and coercion gave it the declared width
+                if value
+                    .rito_type()
+                    .is_some_and(|k| !k.equivalent_to(&kind.with_default_hash_types()))
+                {
                     self.push(Diagnostic::unwrap(
                         TypeMismatch {
                             span: value.span(),

@@ -21,11 +21,19 @@ impl<'a> Builder<'a> {
         hint: impl Into<RitoType>,
         hint_span: Option<Span>,
     ) -> Result<Value, MaybeSpanDiag> {
+        self.resolve_block_value_inner(block, hint.into(), hint_span)
+    }
+
+    fn resolve_block_value_inner(
+        &mut self,
+        block: &Node,
+        hint: RitoType,
+        hint_span: Option<Span>,
+    ) -> Result<Value, MaybeSpanDiag> {
         use ContainerType as C;
         use PropertyKind as K;
         use ScalarType as S;
 
-        let hint = hint.into();
         match hint {
             RitoType::Scalar(S::Struct | S::Embedded) => {
                 self.push(
@@ -44,9 +52,8 @@ impl<'a> Builder<'a> {
             RitoType::Scalar(
                 hint @ (S::Vector2 | S::Vector3 | S::Vector4 | S::Color | S::Matrix44),
             ) => Ok(self.resolve_listlike(block, hint, hint_span)),
-            RitoType::Container(C::Map { key, value }) => {
-                let key_kind = key.unwrap_or_default();
-                let value_kind = value.unwrap_or_default();
+            RitoType::Container(C::Map(types)) => {
+                let (key_kind, value_kind) = types.unwrap_or_default();
                 let entries = self.resolve_body_map_entries(block, hint, hint_span);
                 Ok(Map {
                     key_kind,
@@ -56,23 +63,16 @@ impl<'a> Builder<'a> {
                 }
                 .into())
             }
-            RitoType::Container(C::Container(item_kind) | C::UnorderedContainer(item_kind)) => {
-                let item_kind = item_kind.unwrap_or_default();
-                let items = self.resolve_body_items(block, hint, hint_span);
-                Ok(match hint.base() {
-                    K::Container => Value::Container {
-                        item_kind,
-                        items,
-                        span: block.span,
-                    },
-                    K::UnorderedContainer => Value::UnorderedContainer {
-                        item_kind,
-                        items,
-                        span: block.span,
-                    },
-                    _ => unreachable!(),
-                })
-            }
+            RitoType::Container(C::Container(item_kind)) => Ok(Value::Container {
+                item_kind: item_kind.unwrap_or_default(),
+                items: self.resolve_body_items(block, hint, hint_span),
+                span: block.span,
+            }),
+            RitoType::Container(C::OrderedList(item_kind)) => Ok(Value::UnorderedContainer {
+                item_kind: item_kind.unwrap_or_default(),
+                items: self.resolve_body_items(block, hint, hint_span),
+                span: block.span,
+            }),
             RitoType::Container(C::Optional(item_kind)) => {
                 let item_kind = item_kind.unwrap_or_default();
                 if matches!(
@@ -108,7 +108,7 @@ impl<'a> Builder<'a> {
                         });
                     }
                     // an optional listlike spells its components flat, same as a bare listlike
-                    let inner = self.resolve_listlike(block, item_kind.into(), hint_span);
+                    let inner = self.resolve_listlike(block, item_kind, hint_span);
                     return Ok(Value::Optional {
                         item_kind: Some(item_kind),
                         value: Some(Box::new(inner)),
@@ -241,8 +241,7 @@ impl<'a> Builder<'a> {
                             match entry.value.as_ref() {
                                 Some(value)
                                     if value.rito_type().is_some_and(|k| {
-                                        k.with_default_hash_types()
-                                            != value_kind.with_default_hash_type()
+                                        k != value_kind.with_default_hash_type()
                                     }) =>
                                 {
                                     self.push(D::unwrap(

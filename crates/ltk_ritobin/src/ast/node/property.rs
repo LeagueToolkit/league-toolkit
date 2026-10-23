@@ -3,7 +3,7 @@ use ltk_hash::BinHash;
 use crate::span::Span;
 use crate::{
     ast::{diagnostics::RitoTypeOrVirtual, hash::HashedLiteral, node::Value},
-    RitoType, Spanned,
+    ContainerType, RitoType, ScalarType, Spanned,
 };
 
 #[derive(Debug, Clone)]
@@ -57,8 +57,20 @@ impl PartialEq<TypeExpr> for RitoType {
     }
 }
 
-impl<R: Into<RitoType>> From<R> for TypeExpr {
-    fn from(value: R) -> Self {
+impl From<RitoType> for TypeExpr {
+    fn from(value: RitoType) -> Self {
+        Self::Resolved(value)
+    }
+}
+
+impl From<ScalarType> for TypeExpr {
+    fn from(value: ScalarType) -> Self {
+        Self::Resolved(value.into())
+    }
+}
+
+impl From<ContainerType> for TypeExpr {
+    fn from(value: ContainerType) -> Self {
         Self::Resolved(value.into())
     }
 }

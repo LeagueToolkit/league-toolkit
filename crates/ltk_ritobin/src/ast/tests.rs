@@ -84,6 +84,39 @@ fn option_coerce() {
 }
 
 #[test]
+fn a_value_coerces_to_a_bare_option() {
+    let span = crate::span::Span::default();
+    let bare = RitoType::Container(ContainerType::Optional(None));
+
+    let wrapped = crate::ast::Value::bool(span, true).try_coerce_to(bare);
+    assert!(
+        matches!(
+            wrapped,
+            Ok(crate::ast::Value::Optional {
+                item_kind: Some(ScalarType::Bool),
+                value: Some(_),
+                ..
+            })
+        ),
+        "{wrapped:?}"
+    );
+
+    let list = crate::ast::Value::Container {
+        item_kind: ScalarType::U32,
+        items: Vec::new(),
+        span,
+    };
+    assert!(list.try_coerce_to(bare).is_err());
+}
+
+#[test]
+fn a_map_value_subtype_is_checked_for_coercion() {
+    use crate::{ast::node::value::CanCoerce as _, rito};
+    assert!(rito!(Map[U32, String]).can_coerce(rito!(Map[U32, String])));
+    assert!(!rito!(Map[U32, String]).can_coerce(rito!(Map[U32, U32])));
+}
+
+#[test]
 fn list() {
     assert(
         r#"
@@ -646,7 +679,7 @@ fn a_bare_value_in_a_map_is_reported() {
             d,
             Diagnostic::UnexpectedItem {
                 expected: ItemShape::Entry,
-                parent: RitoType::Container(ContainerType::Map { .. }),
+                parent: RitoType::Container(ContainerType::Map(..)),
                 ..
             }
         )
@@ -679,6 +712,19 @@ fn bad_option_coerce_is_reported() {
                 got: RitoTypeOrVirtual::RitoType(RitoType::Scalar(ScalarType::Bool)),
                 ..
             })
+        )
+    });
+}
+
+#[test]
+fn a_number_in_an_option_reports_the_item_type() {
+    assert_one_err(r#"0x1: option[string] = 5"#, |d| {
+        matches!(
+            d,
+            Diagnostic::ValueEvalError(ValueEvalError::TypeMismatch(TypeMismatch {
+                expected: RitoTypeOrVirtual::RitoType(RitoType::Scalar(ScalarType::String)),
+                ..
+            }))
         )
     });
 }
@@ -1131,7 +1177,7 @@ mod hash_type {
 
     #[test]
     fn rito_type_display_writes_hash_type() {
-        let rito = rito!(Map[Hash, Hash]).with_hash_types([
+        let rito = rito!(Map[Hash, Hash]).with_subtype_hash_types([
             HashType::new(HashWidth::W8, HashAlgorithm::Xxh3),
             HashType::width_only(HashWidth::W4),
         ]);
@@ -1148,5 +1194,37 @@ mod hash_type {
             RitoType::from(ScalarType::from(HashType::width_only(HashWidth::W8))).to_string(),
             "hash[u64]"
         );
+    }
+
+    #[test]
+    fn an_unresolved_value_keeps_its_declared_type() {
+        for kind in [
+            rito!(Container[U32]),
+            rito!(Map[Hash, String]),
+            rito!(Embedded),
+        ] {
+            let value = crate::ast::Value::Unresolved {
+                span: crate::span::Span::default(),
+                kind,
+            };
+            assert_eq!(value.rito_type(), Some(kind));
+        }
+    }
+
+    #[test]
+    fn a_value_type_holds_the_default_hash_type() {
+        let xxh3 = ScalarType::Hash(HashType::new(HashWidth::W8, HashAlgorithm::Xxh3));
+        let span = crate::span::Span::default();
+        let list = crate::ast::Value::Container {
+            item_kind: xxh3,
+            items: Vec::new(),
+            span,
+        };
+        let unresolved = crate::ast::Value::Unresolved {
+            span,
+            kind: xxh3.into(),
+        };
+        assert_eq!(list.rito_type(), Some(rito!(Container[Hash])));
+        assert_eq!(unresolved.rito_type(), Some(rito!(Hash)));
     }
 }

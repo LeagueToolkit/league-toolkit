@@ -38,13 +38,11 @@ impl CanCoerce for RitoType {
         if !self.base().can_coerce(from.base()) {
             return false;
         }
-        for i in 0..1 {
-            if (self.subtype(i).zip(from.subtype(i))).is_some_and(|(to, from)| !to.can_coerce(from))
-            {
-                return false;
-            }
-        }
-        true
+        (0..2).all(|i| {
+            self.subtype(i)
+                .zip(from.subtype(i))
+                .is_none_or(|(to, from)| to.can_coerce(from))
+        })
     }
 }
 
@@ -67,7 +65,12 @@ impl Value {
             RitoType::Scalar(ScalarType::Hash(hash_type)) => {
                 return self.try_coerce_to_hash(hash_type)
             }
-            to if self.rito_type().is_some_and(|k| k.equivalent_to(&to)) => self,
+            to if self
+                .rito_type()
+                .is_some_and(|k| k.equivalent_to(&to.with_default_hash_types())) =>
+            {
+                self
+            }
             // Unknown values can be coerced into any value (as an unresolved variant)
             to if self.kind().is_none() => Self::Unresolved {
                 span: self.span(),
@@ -79,6 +82,17 @@ impl Value {
                 span: self.span(),
                 value: Some(Ptr::new(self.try_coerce_to(RitoType::from(item_kind))?)),
             },
+            // a bare `option` takes the type of the value it wraps
+            RitoType::Container(ContainerType::Optional(None)) => {
+                let Some(item_kind) = self.rito_type().and_then(RitoType::as_scalar) else {
+                    return Err(self);
+                };
+                Self::Optional {
+                    item_kind: Some(item_kind),
+                    span: self.span(),
+                    value: Some(Ptr::new(self)),
+                }
+            }
 
             RitoType::Scalar(scalar) => match scalar {
                 ScalarType::ObjectLink => match self {
