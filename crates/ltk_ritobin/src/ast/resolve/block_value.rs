@@ -21,11 +21,19 @@ impl<'a> Builder<'a> {
         hint: impl Into<RitoType>,
         hint_span: Option<Span>,
     ) -> Result<Value, MaybeSpanDiag> {
+        self.resolve_block_value_inner(block, hint.into(), hint_span)
+    }
+
+    fn resolve_block_value_inner(
+        &mut self,
+        block: &Node,
+        hint: RitoType,
+        hint_span: Option<Span>,
+    ) -> Result<Value, MaybeSpanDiag> {
         use ContainerType as C;
         use PropertyKind as K;
         use ScalarType as S;
 
-        let hint = hint.into();
         match hint {
             RitoType::Scalar(S::Struct | S::Embedded) => {
                 self.push(
