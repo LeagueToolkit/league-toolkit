@@ -564,14 +564,21 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                     // self.softline();
                 }
             }
-            Kind::ListItem | Kind::TypeArg | Kind::AnnotationArg => {
+            kind @ (Kind::ListItem | Kind::TypeArg | Kind::AnnotationArg) => {
                 if let Some(ctx) = self.list_stack.last() {
                     let last_item = ctx.idx + 1 == ctx.len;
 
                     if !last_item {
                         self.text_if(",", Mode::Flat)?;
-                        self.space()?;
-                        self.softline()?;
+                        match kind {
+                            Kind::ListItem | Kind::AnnotationArg => {
+                                self.softline()?;
+                            }
+                            Kind::TypeArg if self.config.type_expr_spaces => {
+                                self.space()?;
+                            }
+                            _ => {}
+                        }
                     }
 
                     self.list_stack.last_mut().unwrap(/* Safety: guaranteed by if let */).idx += 1;
