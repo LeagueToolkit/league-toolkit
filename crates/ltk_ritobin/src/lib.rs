@@ -126,6 +126,9 @@ extern crate self as ltk_ritobin;
 pub mod span;
 pub use span::Span;
 
+mod float;
+pub use float::FloatLiteral;
+
 pub mod ast;
 pub mod cst;
 pub mod escaping;
