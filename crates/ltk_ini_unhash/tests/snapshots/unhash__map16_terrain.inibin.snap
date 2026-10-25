@@ -1,0 +1,48 @@
+---
+source: crates/ltk_ini_unhash/tests/unhash.rs
+expression: ini
+---
+[Cheat]
+FOV=40.0
+
+[Editor]
+continuous_accum=0
+pressure_max=400
+pressure_min=40
+pressure_power=2
+tablet_enable=1
+undo_count=4
+
+[Environment]
+#DisablePointLights=1
+Lighting=0
+Renderer=baked
+ShadowBlur=1
+ShadowColor=97 55 124
+ShadowDynamicOnly=0
+
+[Fog]
+Blue=168
+Enable=0
+Green=44
+Max_height=-11.1111
+Max_opaque_height=89.8906
+Max_radius=1.0000
+Min_height=-1000.0000
+Min_opaque_height=-40000.0000
+Min_radius=0.4556
+Opacity=0
+Red=50
+UseOpacityMap=1
+
+[FoW]
+BlurKernelSigma=-1
+EdgeEnhancement=0
+EdgeTintPoint=0.5
+FadeFinish=-15000
+FadeStart=-100
+
+[Sun]
+AmbientLightColor=72 72 73
+SunDir=0.2967 -0.952 0.0751
+SunLightColor=246.0000 252.0000 250.0000

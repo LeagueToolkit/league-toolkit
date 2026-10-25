@@ -1,0 +1,18 @@
+[package]
+name = "ltk_ini_unhash"
+version = "0.1.0"
+edition = "2021"
+description = "Section and property names for the keys of inibin and troybin files"
+license = "Apache-2.0"
+readme = "../../README.md"
+
+[lints]
+workspace = true
+
+[dependencies]
+ltk_hash = { version = "0.5.1", path = "../ltk_hash" }
+ltk_ini = { version = "0.1.0", path = "../ltk_ini" }
+
+[dev-dependencies]
+glam = { workspace = true }
+insta = { workspace = true }

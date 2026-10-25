@@ -26,8 +26,8 @@ client functions that read them.
 ([section 8](#s8)). A caller accesses a value by key, or by section name and property name
 ([section 6](#s6)).
 
-`ltk_ini` contains no table of section names and property names. A caller that prints a file as
-ini text must provide the names. `Inibin::from_ini` reads ini text, which carries the names
+`ltk_ini` contains no table of section names and property names. `ltk_ini_unhash` names the keys
+of a file (`inibin-unhash.md`). `Inibin::from_ini` reads ini text, which carries the names
 ([section 9.1](#s9.1)).
 
 ## <a id="s2"></a>2. Vocabulary
@@ -372,6 +372,10 @@ It returns no error. Every value is a `Value::String`, and the typed getters con
   `ADDITIONAL_COMMENT_TOKENS`.
 - A repeated property takes the value of its last line.
 - The reader skips every other line, and a byte order mark at the start of the text.
+
+`ltk_ini_unhash::to_ini` writes ini text (`inibin-unhash.md`
+[section 5.4](inibin-unhash.md#s5.4)). `from_ini` of that text has the keys and the text of the
+values of the named file.
 
 ## <a id="s10"></a>10. Errors
 

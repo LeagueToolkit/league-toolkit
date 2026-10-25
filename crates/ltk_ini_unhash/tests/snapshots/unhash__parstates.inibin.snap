@@ -1,0 +1,134 @@
+---
+source: crates/ltk_ini_unhash/tests/unhash.rs
+expression: ini
+---
+[BattleFury]
+NumStates=1
+ShowPAR=1
+ShowRegen=0
+State0Color=255 0 0 255
+State0FadeColor=255 35 0 255
+State0VideoPrefix=bar_par_battlefury
+
+[BloodWell]
+NumStates=2
+ShowPAR=1
+ShowRegen=0
+State0Color=149 21 21 255
+State0FadeColor=124 16 16 255
+State0VideoPrefix=bar_par_bloodwell_active
+State1Color=218 203 203 255
+State1FadeColor=194 169 169 255
+State1VideoPrefix=bar_par_bloodwell_low
+
+[DragonFury]
+NumStates=2
+ShowPAR=1
+ShowRegen=1
+State0Color=255 128 64 255
+State0FadeColor=253 109 2 255
+State0VideoPrefix=bar_par_dragonfury_low
+State1Color=255 0 0 255
+State1FadeColor=255 33 7 255
+State1VideoPrefix=bar_par_dragonfury_active
+
+[Energy]
+NumStates=1
+ShowPAR=1
+ShowRegen=1
+State0Color=168 165 35 255
+State0FadeColor=255 255 51 255
+State0VideoPrefix=bar_par_energy
+
+[Ferocity]
+NumStates=2
+ShowPAR=1
+ShowRegen=0
+State0Color=155 155 155 255
+State0FadeColor=146 134 120 255
+State0VideoPrefix=bar_par_ferocity_low
+State1Color=255 140 0 255
+State1FadeColor=255 139 0 255
+State1VideoPrefix=bar_par_ferocity_active
+
+[GnarFury]
+NumStates=3
+ShowPAR=1
+ShowRegen=0
+State0Color=155 155 155 255
+State0FadeColor=170 201 199 255
+State0VideoPrefix=bar_par_tantrum_calm
+State1Color=255 255 0 255
+State1FadeColor=226 186 0 255
+State1VideoPrefix=bar_par_tantrum_warning
+State5Color=255 0 0 255
+State5FadeColor=255 11 11 255
+State5VideoPrefix=bar_par_tantrum_active
+
+[Heat]
+NumStates=5
+ShowPAR=1
+ShowRegen=0
+State0Color=169 247 229 255
+State0FadeColor=170 201 199 255
+State0VideoPrefix=bar_par_heat_low
+State1Color=255 255 0 255
+State1FadeColor=226 186 0 255
+State1VideoPrefix=bar_par_heat_warning
+State2Color=255 0 0 255
+State2FadeColor=255 11 11 255
+State2VideoPrefix=bar_par_heat_overheat
+
+[MP]
+NumStates=1
+ShowPAR=1
+ShowRegen=1
+State0Color=15 93 178 255
+State0FadeColor=0 200 255 255
+State0VideoPrefix=bar_par_mana
+
+[None]
+NumStates=1
+ShowPAR=0
+ShowRegen=0
+State0Color=0 0 0 255
+State0FadeColor=0 0 0 255
+State0VideoPrefix=bar_par_none
+
+[Other]
+NumStates=1
+ShowPAR=1
+ShowRegen=1
+State0Color=155 155 155 255
+State0FadeColor=146 134 120 255
+State0VideoPrefix=bar_par_ferocity_low
+
+[Rage]
+NumStates=2
+ShowPAR=1
+ShowRegen=1
+State0Color=155 155 155 255
+State0FadeColor=194 176 162 255
+State0VideoPrefix=bar_par_rage_low
+State1Color=255 0	0 255
+State1FadeColor=181 0 0 255
+State1VideoPrefix=bar_par_rage_active
+
+[Shield]
+NumStates=1
+ShowPAR=1
+ShowRegen=0
+State0Color=155 155 155 255
+State0FadeColor=249 250 250 255
+State0VideoPrefix=bar_par_shield
+
+[Wind]
+NumStates=2
+ShowPAR=1
+ShowRegen=0
+State0Color=40 60 128 255
+State0FadeColor=200 218 233 255
+State0VideoPrefix=bar_par_wind
+State1Color=221 224 227 255
+State1FadeColor=255 255 255 255
+State1VideoPrefix=bar_par_windShield
