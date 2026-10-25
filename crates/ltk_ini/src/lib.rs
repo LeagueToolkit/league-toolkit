@@ -53,16 +53,23 @@
 //! # Values
 //!
 //! [`Value`] has one variant for each of the 14 storage types of the format. The ini compiler
-//! stores each value in the smallest storage type that can store it. One property has different
-//! storage types in different files. The typed getters and the `to_*` methods of [`Value`] convert
-//! from every storage type that the client converts from. The `compact_*` constructors of
-//! [`Value`] select the smallest storage type.
+//! stores a value as a string, or as a number in the smallest storage type that can store it. One
+//! property has different storage types in different files. The typed getters and the `to_*`
+//! methods of [`Value`] convert from every storage type that the client converts from. The
+//! `compact_*` constructors of [`Value`] select the smallest storage type.
+//!
+//! # Ini text
+//!
+//! [`Inibin::from_ini`] reads ini text into an `Inibin`, with every value a string. The names of
+//! the text give the keys. By default a line that starts with `'`, `*`, `#`, `//` or `` ` `` is a
+//! property, as the ini compiler of old builds reads it ([`IniTextOptions`]).
 
 mod error;
 mod inibin;
 mod kind;
 mod scan;
 mod section;
+mod text;
 mod value;
 
 pub use error::{Error, Result};
@@ -70,4 +77,5 @@ pub use inibin::Inibin;
 pub use kind::ValueKind;
 pub use ltk_hash::IniHash;
 pub use section::{Section, SectionMut};
+pub use text::{IniTextOptions, ADDITIONAL_COMMENT_TOKENS};
 pub use value::Value;

@@ -69,6 +69,15 @@ fn fixed_array<const N: usize>(value: [f32; N]) -> Option<[u8; N]> {
     Some(fixed)
 }
 
+/// Returns `value` in the smallest integer storage type other than `U1`. A `U1` has a boolean
+/// read, and the other integer storage types have none.
+fn narrow_int(value: i64) -> Value {
+    match Value::compact_int(value) {
+        Value::U1(bit) => Value::U8(u8::from(bit)),
+        narrow => narrow,
+    }
+}
+
 impl Value {
     /// Returns the storage type of the value.
     #[must_use]
@@ -152,6 +161,44 @@ impl Value {
     #[must_use]
     pub fn compact_vec4(value: Vec4) -> Self {
         fixed_array(value.to_array()).map_or(Value::Vec4(value), Value::FixedVec4)
+    }
+
+    /// Returns the value in the smallest storage type from which every `to_*` method and the
+    /// [`Display`](fmt::Display) text read the same.
+    ///
+    /// An integer value becomes the smallest integer storage type other than `U1`. A float becomes
+    /// the [`compact_float`](Self::compact_float) of its number, and a vector the compact vector
+    /// of its components. The string `0` becomes `U1(false)` and the string `1` becomes
+    /// `U1(true)`. Every other value is unchanged: a string of another number has a
+    /// [`to_bool`](Self::to_bool) read, and a number other than a `U1` has none.
+    ///
+    /// ```
+    /// use ltk_ini::Value;
+    ///
+    /// assert_eq!(Value::I32(200).compact(), Value::U8(200));
+    /// assert_eq!(Value::F32(1.5).compact(), Value::Fixed(15));
+    /// assert_eq!(Value::from("1").compact(), Value::U1(true));
+    /// assert_eq!(Value::from("200").compact(), Value::from("200"));
+    /// ```
+    #[must_use]
+    pub fn compact(&self) -> Value {
+        match self {
+            Value::I64(value) => narrow_int(*value),
+            Value::I32(value) => narrow_int(i64::from(*value)),
+            Value::I16(value) => narrow_int(i64::from(*value)),
+            Value::U8(value) => narrow_int(i64::from(*value)),
+            Value::F32(value) => Value::compact_float(*value),
+            Value::Vec2(value) => Value::compact_vec2(*value),
+            Value::Vec3(value) => Value::compact_vec3(*value),
+            Value::Vec4(value) => Value::compact_vec4(*value),
+            Value::String(text) if text == "0" || text == "1" => Value::U1(text == "1"),
+            Value::String(_)
+            | Value::U1(_)
+            | Value::Fixed(_)
+            | Value::FixedVec2(_)
+            | Value::FixedVec3(_)
+            | Value::FixedVec4(_) => self.clone(),
+        }
     }
 
     /// Returns the string of a [`Value::String`]. Returns `None` for every other storage type.
@@ -358,6 +405,72 @@ mod tests {
         assert_eq!(Value::compact_int(-1), Value::I16(-1));
         assert_eq!(Value::compact_int(32_768), Value::I32(32_768));
         assert_eq!(Value::compact_int(1 << 40), Value::I64(1 << 40));
+    }
+
+    #[test]
+    fn compact_narrows_numbers() {
+        assert_eq!(Value::I64(1).compact(), Value::U8(1));
+        assert_eq!(Value::I32(300).compact(), Value::I16(300));
+        assert_eq!(Value::I32(-70_000).compact(), Value::I32(-70_000));
+        assert_eq!(Value::F32(2.5).compact(), Value::Fixed(25));
+        assert_eq!(Value::F32(-2.5).compact(), Value::F32(-2.5));
+        assert_eq!(
+            Value::Vec2(vec2(0.5, 1.0)).compact(),
+            Value::FixedVec2([5, 10])
+        );
+        assert_eq!(Value::Fixed(25).compact(), Value::Fixed(25));
+    }
+
+    #[test]
+    fn compact_converts_only_strings_0_and_1() {
+        assert_eq!(Value::from("0").compact(), Value::U1(false));
+        assert_eq!(Value::from("1").compact(), Value::U1(true));
+        for text in [
+            "10", "200", "123451", "0.5", "1.0", "0 1", "01", " 1", "glow", "",
+        ] {
+            assert_eq!(Value::from(text).compact(), Value::from(text), "{text:?}");
+        }
+    }
+
+    #[test]
+    fn compact_keeps_every_read() {
+        let reads = |value: &Value| {
+            (
+                value.to_string(),
+                value.to_i64(),
+                value.to_i32(),
+                value.to_f32().map(f32::to_bits),
+                value.to_bool(),
+                value.to_vec2().map(|v| v.to_array().map(f32::to_bits)),
+                value.to_vec3().map(|v| v.to_array().map(f32::to_bits)),
+                value.to_vec4().map(|v| v.to_array().map(f32::to_bits)),
+            )
+        };
+        let values = [
+            Value::I64(0),
+            Value::I64(1),
+            Value::I64(-5),
+            Value::I32(1),
+            Value::I32(255),
+            Value::I32(70_000),
+            Value::I16(0),
+            Value::U8(1),
+            Value::F32(0.0),
+            Value::F32(1.0),
+            Value::F32(0.65),
+            Value::F32(25.5),
+            Value::F32(-1.5),
+            Value::Vec2(vec2(0.5, 1.0)),
+            Value::Vec3(vec3(1.0, 2.0, 30.0)),
+            Value::Vec4(vec4(0.0, 0.1, 0.2, 0.3)),
+            Value::from("0"),
+            Value::from("1"),
+            Value::from("10"),
+            Value::from("0 0 0"),
+        ];
+        for value in values {
+            assert_eq!(reads(&value.compact()), reads(&value), "{value:?}");
+        }
     }
 
     #[test]
