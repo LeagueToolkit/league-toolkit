@@ -200,7 +200,10 @@ impl Inibin {
     /// Reads an inibin file of version 1 or version 2.
     ///
     /// Reads from the version byte to the end of the string data. Does not read bytes after the
-    /// string data.
+    /// string data, except after the header of a version 2 file with no values and no padding.
+    ///
+    /// Reads a version 2 file with a padded header: a zero `u16` before the `flags` field. A
+    /// `flags` field of 0 is padding if 2 more bytes follow it.
     ///
     /// A version 1 file stores every value as a string. Returns each value of a version 1 file
     /// as a [`Value::String`]. The typed getters convert the string.
@@ -247,7 +250,7 @@ impl Inibin {
 
     fn read_v2<R: Read + ?Sized>(reader: &mut R) -> Result<Self> {
         let string_data_len = reader.read_u16::<LE>()?;
-        let flags = reader.read_u16::<LE>()?;
+        let flags = read_flags(reader)?;
 
         let mut inibin = Self::new();
         let mut string_offsets = Vec::new();
@@ -263,12 +266,12 @@ impl Inibin {
             }
 
             match kind {
-                ValueKind::Bool => {
+                ValueKind::U1 => {
                     let mut bits = vec![0; count.div_ceil(8)];
                     reader.read_exact(&mut bits)?;
                     for (index, key) in keys.into_iter().enumerate() {
                         let bit = bits[index / 8] >> (index % 8) & 1;
-                        inibin.insert_new(key, Value::Bool(bit != 0))?;
+                        inibin.insert_new(key, Value::U1(bit != 0))?;
                     }
                 }
                 // The string data follows the last value set. `insert_strings` resolves the
@@ -386,10 +389,10 @@ impl Inibin {
             }
 
             match kind {
-                ValueKind::Bool => {
+                ValueKind::U1 => {
                     let mut bits = vec![0u8; set.len().div_ceil(8)];
                     for (index, (_, value)) in set.iter().enumerate() {
-                        if matches!(value, Value::Bool(true)) {
+                        if matches!(value, Value::U1(true)) {
                             bits[index / 8] |= 1 << (index % 8);
                         }
                     }
@@ -452,6 +455,34 @@ fn layout_strings(strings: &[&str]) -> (Vec<u8>, Vec<usize>) {
     (data, offsets)
 }
 
+/// Reads the `flags` field of a version 2 file.
+///
+/// A file with a padded header has a zero `u16` before `flags`. A `flags` field of 0 is followed
+/// by the end of the file or by the `flags` of a padded header. Reads the next 2 bytes as `flags`
+/// if `reader` returns them. Returns 0 at the end of `reader`.
+fn read_flags<R: Read + ?Sized>(reader: &mut R) -> Result<u16> {
+    let flags = reader.read_u16::<LE>()?;
+    if flags != 0 {
+        return Ok(flags);
+    }
+
+    let mut padded = [0; 2];
+    let mut len = 0;
+    while len < padded.len() {
+        match reader.read(&mut padded[len..]) {
+            Ok(0) => break,
+            Ok(read) => len += read,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    match len {
+        0 => Ok(0),
+        2 => Ok(u16::from_le_bytes(padded)),
+        _ => Err(io::Error::from(io::ErrorKind::UnexpectedEof).into()),
+    }
+}
+
 fn read_fixed<R: Read + ?Sized, const N: usize>(reader: &mut R) -> Result<[u8; N]> {
     let mut fixed = [0; N];
     reader.read_exact(&mut fixed)?;
@@ -479,7 +510,7 @@ fn read_value<R: Read + ?Sized>(reader: &mut R, kind: ValueKind) -> Result<Value
         ValueKind::FixedVec4 => Value::FixedVec4(read_fixed(reader)?),
         ValueKind::Vec4 => Value::Vec4(Vec4::from_array(read_floats(reader)?)),
         ValueKind::I64 => Value::I64(reader.read_i64::<LE>()?),
-        ValueKind::Bool | ValueKind::String => {
+        ValueKind::U1 | ValueKind::String => {
             unreachable!("a {kind:?} value has no fixed size")
         }
     })
@@ -507,7 +538,7 @@ fn write_value<W: Write + ?Sized>(writer: &mut W, value: &Value) -> Result<()> {
         Value::FixedVec4(fixed) => writer.write_all(fixed)?,
         Value::Vec4(value) => write_floats(writer, value.to_array())?,
         Value::I64(value) => writer.write_i64::<LE>(*value)?,
-        Value::Bool(_) | Value::String(_) => {
+        Value::U1(_) | Value::String(_) => {
             unreachable!("a {:?} value has no fixed size", value.kind())
         }
     }

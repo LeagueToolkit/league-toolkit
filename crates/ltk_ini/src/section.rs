@@ -205,7 +205,7 @@ mod tests {
         let mut glow = inibin.section_mut("glow");
         glow.insert("p-life", Value::Fixed(15));
         glow.insert("pass", Value::I16(-50));
-        glow.insert("flag", true);
+        glow.insert("flag", Value::U1(true));
         glow.insert("p-texture", "glow.dds");
         glow.insert("uv", Value::FixedVec2([5, 10]));
         glow.insert("p-vel", "0 2 0");

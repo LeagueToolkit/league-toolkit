@@ -16,6 +16,14 @@ fn read(bytes: &[u8]) -> Result<Inibin> {
     Inibin::from_reader(&mut &bytes[..])
 }
 
+/// Returns `bytes` with a padded header: a zero `u16` between `string_data_len` and `flags`.
+fn padded(bytes: &[u8]) -> Vec<u8> {
+    let mut padded = bytes[..3].to_vec();
+    padded.extend_from_slice(&[0, 0]);
+    padded.extend_from_slice(&bytes[3..]);
+    padded
+}
+
 fn write(inibin: &Inibin) -> Vec<u8> {
     let mut bytes = Vec::new();
     inibin.to_writer(&mut bytes).unwrap();
@@ -30,7 +38,7 @@ fn every_kind() -> Inibin {
         (3, Value::Fixed(15)),
         (4, Value::I16(-50)),
         (5, Value::U8(200)),
-        (6, Value::Bool(true)),
+        (6, Value::U1(true)),
         (7, Value::FixedVec3([8, 8, 8])),
         (8, Value::Vec3(vec3(30.0, 0.0, 0.25))),
         (9, Value::FixedVec2([10, 0])),
@@ -59,6 +67,39 @@ fn from_reader_reads_empty_file() {
 }
 
 #[test]
+fn from_reader_reads_padded_header() {
+    let bytes = padded(&write(&every_kind()));
+    let mut reader = bytes.as_slice();
+
+    let inibin = Inibin::from_reader(&mut reader).unwrap();
+
+    assert_eq!(inibin, every_kind());
+    assert!(reader.is_empty());
+}
+
+#[test]
+fn from_reader_reads_padded_empty_file() {
+    let bytes = [2, 0, 0, 0, 0, 0, 0];
+    let mut reader = bytes.as_slice();
+
+    assert_eq!(Inibin::from_reader(&mut reader).unwrap(), Inibin::new());
+    assert!(reader.is_empty());
+}
+
+#[test]
+fn from_reader_fails_on_one_byte_after_zero_flags() {
+    assert!(matches!(read(&[2, 0, 0, 0, 0, 0]), Err(Error::Io(_))));
+}
+
+#[test]
+fn from_reader_fails_on_truncated_padded_file() {
+    let bytes = padded(&write(&every_kind()));
+    for len in 0..bytes.len() {
+        assert!(matches!(read(&bytes[..len]), Err(Error::Io(_))), "{len}");
+    }
+}
+
+#[test]
 fn from_reader_reads_i64_set_before_string_data() {
     let flags = ValueKind::String.flag() | ValueKind::I64.flag();
     let mut body = Vec::new();
@@ -77,7 +118,7 @@ fn from_reader_reads_i64_set_before_string_data() {
 }
 
 #[test]
-fn from_reader_reads_bool_from_lowest_bit_first() {
+fn from_reader_reads_u1_from_lowest_bit_first() {
     let mut body = Vec::new();
     body.extend_from_slice(&10u16.to_le_bytes());
     for key in 0..10u32 {
@@ -85,11 +126,11 @@ fn from_reader_reads_bool_from_lowest_bit_first() {
     }
     body.extend_from_slice(&[0b0000_0101, 0b0000_0010]);
 
-    let inibin = read(&file(0, ValueKind::Bool.flag(), &body)).unwrap();
+    let inibin = read(&file(0, ValueKind::U1.flag(), &body)).unwrap();
 
     let set: Vec<u32> = inibin
         .iter()
-        .filter(|(_, value)| **value == Value::Bool(true))
+        .filter(|(_, value)| **value == Value::U1(true))
         .map(|(key, _)| key.0)
         .collect();
     assert_eq!(inibin.len(), 10);
@@ -327,8 +368,10 @@ fn to_writer_writes_sets_in_kind_order() {
 }
 
 #[test]
-fn to_writer_packs_bool_from_lowest_bit_first() {
-    let inibin: Inibin = (0..10u32).map(|key| (key, key % 3 == 0)).collect();
+fn to_writer_packs_u1_from_lowest_bit_first() {
+    let inibin: Inibin = (0..10u32)
+        .map(|key| (key, Value::U1(key % 3 == 0)))
+        .collect();
 
     let bytes = write(&inibin);
 
