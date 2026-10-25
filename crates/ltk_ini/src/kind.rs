@@ -17,8 +17,8 @@ pub enum ValueKind {
     I16 = 3,
     /// An unsigned 8-bit integer.
     U8 = 4,
-    /// A boolean. A file packs 8 booleans into one byte.
-    Bool = 5,
+    /// A 1-bit unsigned integer, 0 or 1. A file packs 8 values into one byte.
+    U1 = 5,
     /// 3 unsigned fixed-point numbers, one byte each.
     FixedVec3 = 6,
     /// 3 32-bit floats.
@@ -45,7 +45,7 @@ impl ValueKind {
         ValueKind::Fixed,
         ValueKind::I16,
         ValueKind::U8,
-        ValueKind::Bool,
+        ValueKind::U1,
         ValueKind::FixedVec3,
         ValueKind::Vec3,
         ValueKind::FixedVec2,

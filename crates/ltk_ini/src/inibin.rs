@@ -263,12 +263,12 @@ impl Inibin {
             }
 
             match kind {
-                ValueKind::Bool => {
+                ValueKind::U1 => {
                     let mut bits = vec![0; count.div_ceil(8)];
                     reader.read_exact(&mut bits)?;
                     for (index, key) in keys.into_iter().enumerate() {
                         let bit = bits[index / 8] >> (index % 8) & 1;
-                        inibin.insert_new(key, Value::Bool(bit != 0))?;
+                        inibin.insert_new(key, Value::U1(bit != 0))?;
                     }
                 }
                 // The string data follows the last value set. `insert_strings` resolves the
@@ -386,10 +386,10 @@ impl Inibin {
             }
 
             match kind {
-                ValueKind::Bool => {
+                ValueKind::U1 => {
                     let mut bits = vec![0u8; set.len().div_ceil(8)];
                     for (index, (_, value)) in set.iter().enumerate() {
-                        if matches!(value, Value::Bool(true)) {
+                        if matches!(value, Value::U1(true)) {
                             bits[index / 8] |= 1 << (index % 8);
                         }
                     }
@@ -479,7 +479,7 @@ fn read_value<R: Read + ?Sized>(reader: &mut R, kind: ValueKind) -> Result<Value
         ValueKind::FixedVec4 => Value::FixedVec4(read_fixed(reader)?),
         ValueKind::Vec4 => Value::Vec4(Vec4::from_array(read_floats(reader)?)),
         ValueKind::I64 => Value::I64(reader.read_i64::<LE>()?),
-        ValueKind::Bool | ValueKind::String => {
+        ValueKind::U1 | ValueKind::String => {
             unreachable!("a {kind:?} value has no fixed size")
         }
     })
@@ -507,7 +507,7 @@ fn write_value<W: Write + ?Sized>(writer: &mut W, value: &Value) -> Result<()> {
         Value::FixedVec4(fixed) => writer.write_all(fixed)?,
         Value::Vec4(value) => write_floats(writer, value.to_array())?,
         Value::I64(value) => writer.write_i64::<LE>(*value)?,
-        Value::Bool(_) | Value::String(_) => {
+        Value::U1(_) | Value::String(_) => {
             unreachable!("a {:?} value has no fixed size", value.kind())
         }
     }

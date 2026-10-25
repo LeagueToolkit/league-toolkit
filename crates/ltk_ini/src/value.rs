@@ -17,7 +17,7 @@ use crate::{scan, ValueKind};
 /// use ltk_ini::Value;
 ///
 /// assert_eq!(Value::Fixed(15).to_f32(), Some(1.5));
-/// assert_eq!(Value::Bool(true).to_i32(), Some(1));
+/// assert_eq!(Value::U1(true).to_i32(), Some(1));
 /// assert_eq!(Value::from("0 .5 1").to_vec3(), Some(glam::vec3(0.0, 0.5, 1.0)));
 /// ```
 #[derive(Debug, Clone, PartialEq)]
@@ -30,7 +30,9 @@ pub enum Value {
     Fixed(u8),
     I16(i16),
     U8(u8),
-    Bool(bool),
+    /// A 1-bit unsigned integer. `U1(true)` is `1` and `U1(false)` is `0`. The ini compiler
+    /// stores an integer or a float that is 0 or 1 as a `U1`. A `U1` is not a boolean.
+    U1(bool),
     /// 3 unsigned fixed-point numbers. `FixedVec3([0, 5, 10])` is `(0.0, 0.5, 1.0)`.
     FixedVec3([u8; 3]),
     Vec3(Vec3),
@@ -77,7 +79,7 @@ impl Value {
             Value::Fixed(_) => ValueKind::Fixed,
             Value::I16(_) => ValueKind::I16,
             Value::U8(_) => ValueKind::U8,
-            Value::Bool(_) => ValueKind::Bool,
+            Value::U1(_) => ValueKind::U1,
             Value::FixedVec3(_) => ValueKind::FixedVec3,
             Value::Vec3(_) => ValueKind::Vec3,
             Value::FixedVec2(_) => ValueKind::FixedVec2,
@@ -91,12 +93,12 @@ impl Value {
 
     /// Returns `value` in the smallest integer storage type that can store it.
     ///
-    /// Returns a [`Value::Bool`] for 0 and 1. The ini compiler stores 0 and 1 as booleans.
+    /// Returns a [`Value::U1`] for 0 and 1. The ini compiler stores 0 and 1 as a `U1`.
     ///
     /// ```
     /// use ltk_ini::Value;
     ///
-    /// assert_eq!(Value::compact_int(1), Value::Bool(true));
+    /// assert_eq!(Value::compact_int(1), Value::U1(true));
     /// assert_eq!(Value::compact_int(200), Value::U8(200));
     /// assert_eq!(Value::compact_int(-1), Value::I16(-1));
     /// assert_eq!(Value::compact_int(70_000), Value::I32(70_000));
@@ -104,7 +106,7 @@ impl Value {
     #[must_use]
     pub fn compact_int(value: i64) -> Self {
         if value == 0 || value == 1 {
-            Value::Bool(value == 1)
+            Value::U1(value == 1)
         } else if let Ok(value) = u8::try_from(value) {
             Value::U8(value)
         } else if let Ok(value) = i16::try_from(value) {
@@ -166,7 +168,7 @@ impl Value {
     /// Returns the value as the 64-bit integer that the client reads.
     ///
     /// Returns the number of an integer value. Returns the number of a float value, truncated
-    /// toward zero. Returns 0 or 1 for a boolean. Returns the integer at the start of a string.
+    /// toward zero. Returns 0 or 1 for a `U1`. Returns the integer at the start of a string.
     /// Returns 0 if the string does not start with an integer. Returns `None` for a vector.
     #[must_use]
     pub fn to_i64(&self) -> Option<i64> {
@@ -177,7 +179,7 @@ impl Value {
             Value::U8(value) => Some(i64::from(*value)),
             Value::F32(value) => Some(*value as i64),
             Value::Fixed(fixed) => Some(fixed_to_f32(*fixed) as i64),
-            Value::Bool(value) => Some(i64::from(*value)),
+            Value::U1(value) => Some(i64::from(*value)),
             Value::String(value) => Some(scan::atoi(value)),
             _ => None,
         }
@@ -197,7 +199,7 @@ impl Value {
 
     /// Returns the value as the float that the client reads.
     ///
-    /// Returns the number of a float value or an integer value. Returns 0.0 or 1.0 for a boolean.
+    /// Returns the number of a float value or an integer value. Returns 0.0 or 1.0 for a `U1`.
     /// Returns the float at the start of a string. Returns 0.0 if the string does not start with
     /// a float. Returns `None` for a vector.
     #[must_use]
@@ -209,7 +211,7 @@ impl Value {
             Value::I32(value) => Some(*value as f32),
             Value::I16(value) => Some(f32::from(*value)),
             Value::U8(value) => Some(f32::from(*value)),
-            Value::Bool(value) => Some(f32::from(u8::from(*value))),
+            Value::U1(value) => Some(f32::from(u8::from(*value))),
             Value::String(value) => Some(scan::atof(value)),
             _ => None,
         }
@@ -217,12 +219,12 @@ impl Value {
 
     /// Returns the value as the boolean that the client reads.
     ///
-    /// Returns the value of a boolean. Returns `true` for a string that starts with `1`. Returns
-    /// `false` for every other string. Returns `None` for every other storage type.
+    /// Returns `true` for a `U1` of 1. Returns `true` for a string that starts with `1`. Returns
+    /// `false` for every other `U1` and string. Returns `None` for every other storage type.
     #[must_use]
     pub fn to_bool(&self) -> Option<bool> {
         match self {
-            Value::Bool(value) => Some(*value),
+            Value::U1(value) => Some(*value),
             Value::String(value) => Some(value.starts_with('1')),
             _ => None,
         }
@@ -286,7 +288,7 @@ fn fmt_components<const N: usize>(f: &mut fmt::Formatter<'_>, value: [f32; N]) -
 
 /// Formats the value as ini text.
 ///
-/// Writes a boolean as `1` or `0`. Writes the components of a vector separated by one space.
+/// Writes a `U1` as `1` or `0`. Writes the components of a vector separated by one space.
 /// Writes a float with the fewest digits that parse back to the same `f32`.
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -296,7 +298,7 @@ impl fmt::Display for Value {
             Value::Fixed(fixed) => write!(f, "{}", fixed_to_f32(*fixed)),
             Value::I16(value) => write!(f, "{value}"),
             Value::U8(value) => write!(f, "{value}"),
-            Value::Bool(value) => write!(f, "{}", u8::from(*value)),
+            Value::U1(value) => write!(f, "{}", u8::from(*value)),
             Value::FixedVec3(fixed) => fmt_components(f, fixed.map(fixed_to_f32)),
             Value::Vec3(value) => fmt_components(f, value.to_array()),
             Value::FixedVec2(fixed) => fmt_components(f, fixed.map(fixed_to_f32)),
@@ -326,7 +328,7 @@ impl_from! {
     f32 => F32,
     i16 => I16,
     u8 => U8,
-    bool => Bool,
+    bool => U1,
     Vec3 => Vec3,
     Vec2 => Vec2,
     Vec4 => Vec4,
@@ -348,8 +350,8 @@ mod tests {
 
     #[test]
     fn compact_int_returns_smallest_integer_kind() {
-        assert_eq!(Value::compact_int(0), Value::Bool(false));
-        assert_eq!(Value::compact_int(1), Value::Bool(true));
+        assert_eq!(Value::compact_int(0), Value::U1(false));
+        assert_eq!(Value::compact_int(1), Value::U1(true));
         assert_eq!(Value::compact_int(2), Value::U8(2));
         assert_eq!(Value::compact_int(255), Value::U8(255));
         assert_eq!(Value::compact_int(256), Value::I16(256));
@@ -397,7 +399,7 @@ mod tests {
         assert_eq!(Value::U8(200).to_i32(), Some(200));
         assert_eq!(Value::F32(-2.9).to_i32(), Some(-2));
         assert_eq!(Value::Fixed(19).to_i32(), Some(1));
-        assert_eq!(Value::Bool(true).to_i32(), Some(1));
+        assert_eq!(Value::U1(true).to_i32(), Some(1));
         assert_eq!(Value::from("12 34").to_i32(), Some(12));
         assert_eq!(Value::from("Yes").to_i32(), Some(0));
         assert_eq!(Value::Vec2(vec2(1.0, 2.0)).to_i32(), None);
@@ -408,7 +410,7 @@ mod tests {
         assert_eq!(Value::F32(0.25).to_f32(), Some(0.25));
         assert_eq!(Value::Fixed(3).to_f32(), Some(0.3));
         assert_eq!(Value::I32(-5).to_f32(), Some(-5.0));
-        assert_eq!(Value::Bool(false).to_f32(), Some(0.0));
+        assert_eq!(Value::U1(false).to_f32(), Some(0.0));
         assert_eq!(Value::from("-.05").to_f32(), Some(-0.05));
         assert_eq!(Value::from("TRUE").to_f32(), Some(0.0));
         assert_eq!(Value::FixedVec2([1, 2]).to_f32(), None);
@@ -416,7 +418,8 @@ mod tests {
 
     #[test]
     fn to_bool_converts_like_client_getter() {
-        assert_eq!(Value::Bool(true).to_bool(), Some(true));
+        assert_eq!(Value::U1(true).to_bool(), Some(true));
+        assert_eq!(Value::U1(false).to_bool(), Some(false));
         assert_eq!(Value::from("1").to_bool(), Some(true));
         assert_eq!(Value::from("true").to_bool(), Some(false));
         assert_eq!(Value::from("").to_bool(), Some(false));
@@ -445,7 +448,7 @@ mod tests {
         assert_eq!(Value::I16(-80).to_string(), "-80");
         assert_eq!(Value::F32(1000.0).to_string(), "1000");
         assert_eq!(Value::Fixed(15).to_string(), "1.5");
-        assert_eq!(Value::Bool(true).to_string(), "1");
+        assert_eq!(Value::U1(true).to_string(), "1");
         assert_eq!(Value::FixedVec3([0, 20, 5]).to_string(), "0 2 0.5");
         assert_eq!(Value::Vec2(vec2(0.25, -1.0)).to_string(), "0.25 -1");
         assert_eq!(Value::from("Simple").to_string(), "Simple");

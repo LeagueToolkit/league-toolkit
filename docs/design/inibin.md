@@ -4,8 +4,8 @@ The API spec for binary ini files in `ltk_ini`: the wire format, the key hash, t
 conversions, and the rules of the reader and the writer.
 
 This document states the current behavior of `ltk_ini`. If the code and a section of this
-document disagree, the section is wrong and must be edited. ADR-0024, ADR-0025 and ADR-0026 record
-the alternatives of each decision. The rules table in [section 12](#s12) cites them.
+document disagree, the section is wrong and must be edited. ADR-0024 to ADR-0027 record the
+alternatives of each decision. The rules table in [section 12](#s12) cites them.
 
 ## <a id="s1"></a>1. Summary
 
@@ -44,6 +44,9 @@ ini text must provide the names. This document does not specify the ini text for
   discriminant of a `ValueKind` is the bit index of the storage type in the `flags` field.
 - **value set** - the keys and the values of one storage type in a file. A value set is a part
   of the wire format. The data model has no value set (ADR-0025).
+- **U1** - a 1-bit unsigned integer, 0 or 1. Storage type 5. The format has no boolean type. A
+  `U1` holds the value of an integer property or a float property that is 0 or 1. The type is
+  `Value::U1(bool)`, with `true` as 1 (ADR-0027).
 - **fixed-point byte** - an unsigned byte that stores a number in units of 0.1. The byte `15`
   stores `1.5`. The range is `0.0` to `25.5`.
 - **string data** - the bytes at the end of a file that contain every string. Each string has a
@@ -56,9 +59,9 @@ The rules of this document are derived from three sources.
 - **The client.** [Appendix A](#appendix-a) lists the functions of the 16.14 client that load a
   file, hash a key and read a value. The version 2 wire format of [section 4](#s4), the hash of
   [section 5](#s5) and every conversion of [section 8](#s8) are taken from those functions.
-- **The shipped files.** [Appendix B](#appendix-b) measures 7,495 files of two client builds.
-  The writer rules of [section 9](#s9) and the constructors of [section 7](#s7) are derived from
-  the measurements.
+- **The shipped files.** [Appendix B](#appendix-b) measures 7,495 files of two client builds,
+  and a corpus index of 109,712 distinct files. The writer rules of [section 9](#s9), the
+  constructors of [section 7](#s7) and the `U1` storage type are derived from the measurements.
 - **lolpytools.** The version 1 layout of [section 4.1](#s4.1) is taken from `read_1` in
   `lolpytools/inibin2.py`. lolpytools is the only source for version 1. No measured file has
   version 1. The 16.14 client does not branch on the version byte.
@@ -95,7 +98,7 @@ u32   keys[count]        ascending
 | 2  | `Fixed`     | `u8[count]`, each a fixed-point byte                                     |
 | 3  | `I16`       | `i16[count]`                                                             |
 | 4  | `U8`        | `u8[count]`                                                              |
-| 5  | `Bool`      | `u8[ceil(count / 8)]`. Value `i` is bit `i % 8` of byte `i / 8`.         |
+| 5  | `U1`        | `u8[ceil(count / 8)]`. Value `i` is bit `i % 8` of byte `i / 8`.         |
 | 6  | `FixedVec3` | `u8[3][count]`, each a fixed-point byte                                  |
 | 7  | `Vec3`      | `f32[3][count]`                                                          |
 | 8  | `FixedVec2` | `u8[2][count]`, each a fixed-point byte                                  |
@@ -201,17 +204,19 @@ section. `section` returns a view for any name, including a name that has no val
 
 `Value` has one variant for each storage type of [section 4](#s4). The variant has the name of
 the `ValueKind`. A fixed-point variant contains the stored fixed-point bytes: `Fixed(u8)`,
-`FixedVec2([u8; 2])`, `FixedVec3([u8; 3])`, `FixedVec4([u8; 4])`. The float vector variants
-contain `glam` vectors. `String` contains a `String`.
+`FixedVec2([u8; 2])`, `FixedVec3([u8; 3])`, `FixedVec4([u8; 4])`. `U1` contains a `bool`: `true`
+is 1 and `false` is 0. The float vector variants contain `glam` vectors. `String` contains a
+`String`.
 
 `Value::kind()` returns the `ValueKind`. `ValueKind::ALL` lists the storage types in file order.
 `ValueKind::flag()` returns the bit of a storage type in the `flags` field.
 
-`From` converts a Rust value to the variant of its own type: `i32`, `f32`, `i16`, `u8`, `bool`,
-`i64`, `Vec2`, `Vec3`, `Vec4`, `String` and `&str`. `From` never returns a fixed-point variant.
+`From` converts a Rust value to the variant of its own type: `i32`, `f32`, `i16`, `u8`, `i64`,
+`Vec2`, `Vec3`, `Vec4`, `String` and `&str`. `From` converts a `bool` to a `U1`. `From` never
+returns a fixed-point variant.
 
-`Display` writes the ini text of a value. It writes an integer in decimal and a boolean as `1`
-or `0`. It writes a float with the fewest digits that parse back to the same `f32`. It writes the
+`Display` writes the ini text of a value. It writes an integer in decimal, and a `U1` as `1` or
+`0`. It writes a float with the fewest digits that parse back to the same `f32`. It writes the
 components of a vector separated by one space.
 
 With the `serde` feature, `Inibin`, `Value`, `ValueKind` and `IniHash` implement `Serialize` and
@@ -220,11 +225,13 @@ With the `serde` feature, `Inibin`, `Value`, `ValueKind` and `IniHash` implement
 ## <a id="s7"></a>7. Compact constructors
 
 The ini compiler stores a number in the smallest storage type that can store it
-([appendix B](#appendix-b)). The constructors in the table select the same storage type.
+([appendix B](#appendix-b)). It stores an integer that is 0 or 1 as a `U1`. It stores a float
+that is 0.0 or 1.0 as a `U1` or as a `Fixed`. The constructors in the table select the smallest
+storage type.
 
 | Constructor            | Result                                                                       |
 | ---------------------- | ---------------------------------------------------------------------------- |
-| `compact_int(i64)`     | `Bool` for 0 and 1. Otherwise the first of `U8`, `I16`, `I32`, `I64` that can store the value. |
+| `compact_int(i64)`     | `U1` for 0 and 1. Otherwise the first of `U8`, `I16`, `I32`, `I64` that can store the value. |
 | `compact_float(f32)`   | `Fixed` if a fixed-point byte is equal to the value. Otherwise `F32`.        |
 | `compact_vec2`, `compact_vec3`, `compact_vec4` | The fixed-point variant if a fixed-point byte is equal to each component. Otherwise the float variant. |
 
@@ -240,12 +247,12 @@ getters of `Inibin` and `Section` return the value that the client getter of
 [appendix A](#appendix-a) returns. A method returns `None` when the client getter reports that
 the value is missing. In that case the caller of the client getter uses its default value.
 
-| Method            | `I64` `I32` `I16` `U8` | `F32` `Fixed`          | `Bool`       | `String`                         | Vector storage types |
+| Method            | `I64` `I32` `I16` `U8` | `F32` `Fixed`          | `U1`         | `String`                         | Vector storage types |
 | ----------------- | ---------------------- | ---------------------- | ------------ | -------------------------------- | -------------------- |
 | `to_i64`          | the number             | truncated toward zero  | 0 or 1       | `atoi`                           | `None`               |
 | `to_i32`          | the low 32 bits        | truncated toward zero  | 0 or 1       | `atoi`, the low 32 bits          | `None`               |
 | `to_f32`          | the number             | the number             | 0.0 or 1.0   | `atof`                           | `None`               |
-| `to_bool`         | `None`                 | `None`                 | the value    | `true` if the first byte is `1`  | `None`               |
+| `to_bool`         | `None`                 | `None`                 | `true` for 1 | `true` if the first byte is `1`  | `None`               |
 | `to_vec2` `to_vec3` `to_vec4` | `None`     | `None`                 | `None`       | `sscanf` of N floats             | The components, if the storage type has N components. Otherwise `None`. |
 | `as_str`          | `None`                 | `None`                 | `None`       | the string                       | `None`               |
 
@@ -287,7 +294,7 @@ was read from a version 1 file as a version 2 file with only a `String` value se
 
 - The writer omits the flag bit and the value set of a storage type that has no value.
 - The writer writes the keys of each value set in ascending order.
-- The writer sets the unused bits of the last byte of a `Bool` value set to 0.
+- The writer sets the unused bits of the last byte of a `U1` value set to 0.
 - The writer writes string data of the minimum length. It stores equal strings once. It stores
   a string that is a suffix of another string inside that string. It stores the other strings in
   ascending order of the first key that has the string.
@@ -347,7 +354,7 @@ file can differ from the shipped file.
 | I6  | `U8` is unsigned. | A signed `I8`. | The ini compiler stores 128 to 255 as `U8` and stores -1 as `I16`. | [section 4](#s4); [appendix B](#appendix-b) |
 | I7  | The typed getters and the `to_*` methods convert as the client getters do. | Returning a value only for its own storage type. | The ini compiler selects the storage type per file. A caller does not know the storage type. | [section 8](#s8) |
 | I8  | `to_i32` and `to_f32` convert a string that has no leading number to 0. | `None`. | The client getter reports a value and returns 0. | [section 8](#s8) |
-| I9  | `to_bool` returns `None` for an integer. | Converting a nonzero integer to `true`. | The client getter reads only the `Bool` value set and the `String` value set. | [section 8](#s8) |
+| I9  | `to_bool` returns `None` for an integer other than a `U1`. | Converting a nonzero integer to `true`. | The client getter reads only the `U1` value set and the `String` value set. | [section 8](#s8) |
 | I10 | `Display` writes a float with the fewest digits that parse back to the same `f32`. | The `%g` format of the client string getter. | `%g` writes 6 significant digits and discards the other digits. | [section 6.3](#s6.3) |
 | I11 | `From` keeps the type of its input. The `compact_*` constructors select the smallest storage type. | One conversion that always selects the smallest storage type. | A caller that replaces a value can keep the storage type of the value. | [section 6.3](#s6.3), [section 7](#s7) |
 | I12 | The writer orders the string data by key and stores a suffix inside the longer string. | The order of the ini compiler, which is the order of the ini text. | The file does not record the order of the ini text. String data of the minimum length fits in 65,535 bytes for every set of strings that any valid file contains. | [section 9](#s9) |
@@ -356,6 +363,7 @@ file can differ from the shipped file.
 | I15 | The crate contains no table of section names and property names. | A built-in dictionary. | A name table is data that changes with each game patch. | [section 1](#s1) |
 | I16 | The reader reads version 1 with the layout of lolpytools. | The layout of the C# reader. No version 1 reader. | The C# reader reads offsets and no keys. lolpytools reads a key and an offset for each entry. | [section 4.1](#s4.1); ADR-0026 |
 | I17 | A version 1 value is a `Value::String`. The writer writes only version 2. | Converting each string to a typed value in the reader, as lolpytools does. A version 1 writer. | The string is the stored value, and the typed getters convert it. The 16.14 client reads only the version 2 layout. | [section 9](#s9) |
+| I18 | Storage type 5 is `U1`, a 1-bit unsigned integer. `Value::U1` contains a `bool`. | `Bool`. `U1(u8)`. | The ini compiler stores integers and floats that are 0 or 1 in storage type 5. The format has no boolean type. | [section 2](#s2), [section 4](#s4); ADR-0027 |
 
 ## <a id="appendix-a"></a>Appendix A. Client functions
 
@@ -366,17 +374,17 @@ in that executable.
 | ------------- | -------------------------------------------------------------------------------------- |
 | `0x1016FBAC0` | Config object constructor. Calls the loader with the path, then with the default path.  |
 | `0x1016FB3F0` | Loader. Appends `bin` to the path. Reads the header, 14 value sets and the string data. |
-| `0x101700F30` | Reads the `Bool` value set: `ceil(count / 8)` bytes.                                    |
+| `0x101700F30` | Reads the `U1` value set: `ceil(count / 8)` bytes.                                      |
 | `0x101703350` | Reads the `String` value set: keys and `u16` offsets.                                   |
 | `0x1017036F0` | Reads the `I64` value set: keys and 8-byte values.                                      |
 | `0x1016FA740` | String getter by names. Contains the key hash inline, with `movsx` on each byte.        |
 | `0x1016FCD00` | Integer lookup. Searches `I64`, `I32`, `I16`, `U8` in that order.                       |
 | `0x1016FCA60` | Float lookup. Searches `F32`, then `Fixed`. Divides a `Fixed` byte by 10.               |
-| `0x1016FD700` | Integer getter. Tries the integer lookup, the float lookup, `Bool`, then `atoi` of `String`. |
-| `0x1016FC6B0` | Float getter. Tries the float lookup, the integer lookup, `Bool`, then `atof` of `String`. |
-| `0x1016FDAA0` | Boolean getter. Tries `Bool`, then compares the first byte of `String` with `1`.        |
+| `0x1016FD700` | Integer getter. Tries the integer lookup, the float lookup, `U1`, then `atoi` of `String`. |
+| `0x1016FC6B0` | Float getter. Tries the float lookup, the integer lookup, `U1`, then `atof` of `String`. |
+| `0x1016FDAA0` | Boolean getter. Tries `U1`, then compares the first byte of `String` with `1`.          |
 | `0x1016FD200` | 3-float getter. Tries `Vec3`, `FixedVec3` divided by 10, then `sscanf("%f %f %f")` of `String`. |
-| `0x1016FE2E0` | String getter by key. Tries `String`, an integer as `%lli`, a float as `%g`, `Bool` as `1` or `0`, then the vectors as `%g` lists. |
+| `0x1016FE2E0` | String getter by key. Tries `String`, an integer as `%lli`, a float as `%g`, `U1` as `1` or `0`, then the vectors as `%g` lists. |
 
 ## <a id="appendix-b"></a>Appendix B. Corpus measurements
 
@@ -397,7 +405,7 @@ values. The two clients ship no `.cfgbin` file.
 | Files with a key in two value sets or twice in one value set | 0        | 0            |
 | Files with bytes after the string data                   | 0            | 0            |
 | Files with string data bytes that no offset reaches      | 0            | 0            |
-| Files with a nonzero unused bit in the `Bool` value set  | 0            | 0            |
+| Files with a nonzero unused bit in the `U1` value set    | 0            | 0            |
 | Files with a string that is not ASCII                    | 0            | 0            |
 | Files with no values (5 bytes)                           | 4            | 4            |
 | Files that repeat a string offset                        | 1,409        | 4,699        |
@@ -416,3 +424,20 @@ values. The two clients ship no `.cfgbin` file.
 | Written files equal to the shipped file                  | 310          | 1,232        |
 | Written files shorter than the shipped file              | 409          | 4,245        |
 | Written files longer than the shipped file               | 0            | 0            |
+
+Measured on 2026-10-25. **Corpus index**: the `inibin-parse` index of the RADS archive, local
+client installs and every live build of the lol-census database up to 9.x. The index holds
+106,096 distinct version 2 files and 3,616 distinct version 1 files with 16,220,163 values.
+
+| Measurement                                                          | Count            |
+| -------------------------------------------------------------------- | ---------------- |
+| `U1` values                                                          | 2,436,557        |
+| Keys with a `U1` value in at least one file                          | 130,430          |
+| ... with a `U8` value from 2 to 255 in another file                  | 8,630            |
+| ... with an `I16` value in another file                              | 1,464            |
+| ... with an `I32` value in another file                              | 30               |
+| ... with a `Fixed` value in another file                             | 6,722            |
+| ... with an `F32` value in another file                              | 2,143            |
+| `I32`, `I16`, `U8` and `F32` values equal to 0 or 1                  | 0                |
+| `Fixed` values equal to 0.0 or 1.0                                   | 40,888           |
+| `String` values `true`, `false`, `yes`, `no`, `on` or `off`, any case | 32,408          |

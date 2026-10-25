@@ -42,7 +42,7 @@ fn from_reader_reads_every_value_of_troybin() {
     assert_eq!(inibin.get(0x89248720), Some(&Value::Fixed(15)));
     assert_eq!(inibin.get(0x41f79618), Some(&Value::I16(-50)));
     assert_eq!(inibin.get(0x7f3c4234), Some(&Value::U8(20)));
-    assert_eq!(inibin.get(0x354ff09f), Some(&Value::Bool(false)));
+    assert_eq!(inibin.get(0x354ff09f), Some(&Value::U1(false)));
     assert_eq!(inibin.get(0x3f1cf037), Some(&Value::FixedVec3([0, 200, 0])));
     assert_eq!(
         inibin.get(0xb02da149),

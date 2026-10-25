@@ -751,7 +751,8 @@ returns the key. The methods of `Inibin` take a key (`inibin.get(0x0616933a)`). 
 the hash is known.
 
 **Storage types**: The ini compiler of the game stores each value in the smallest storage type
-that can store it. `1` is a `Bool`, `1.5` is a `Fixed` and some vectors are a `String`. Read a
+that can store it. `1` is a `U1`, a 1-bit integer. `1.5` is a `Fixed` and some vectors are a
+`String`. The format has no boolean type. Read a
 value with the typed getters (`get_f32`, `get_i32`, `get_bool`, `get_vec3`, ...) or the `to_*`
 methods of `Value`. Match on `Value` only to inspect the storage type. `From` keeps the Rust type
 (`2.5` is an `F32`). The `Value::compact_*` constructors select the smallest storage type.
