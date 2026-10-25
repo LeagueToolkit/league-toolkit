@@ -29,6 +29,14 @@ const TROYBIN: &str = "global_item_travelsizeelixirofiron_buf.troybin";
 /// distinct strings.
 const INIBIN: &str = "aatroxbotsummonerspellsclassic.inibin";
 
+/// The file name of a shipped particle system with a padded header, from the macpbe release
+/// 0.0.0.142.
+const PADDED: &str = "shop_dagger_padded.troybin";
+
+/// The file name of the same particle system without padding, from the live release 0.0.0.74. The
+/// file is equal to [`PADDED`] without the zero `u16` at offset 3.
+const UNPADDED: &str = "shop_dagger.troybin";
+
 #[test]
 fn from_reader_reads_every_value_of_troybin() {
     let inibin = Inibin::from_reader(&mut read_fixture(TROYBIN).as_slice()).unwrap();
@@ -133,4 +141,25 @@ fn to_writer_writes_inibin_byte_for_byte() {
         .values()
         .all(|v| matches!(v.as_str(), Some("SummonerDot" | "SummonerExhaust"))));
     assert_eq!(write(&inibin), bytes);
+}
+
+#[test]
+fn from_reader_reads_padded_header_of_troybin() {
+    let padded = read_fixture(PADDED);
+    let unpadded = read_fixture(UNPADDED);
+    assert_eq!([&padded[..3], &padded[5..]].concat(), unpadded);
+
+    let mut reader = padded.as_slice();
+    let inibin = Inibin::from_reader(&mut reader).unwrap();
+
+    assert!(reader.is_empty());
+    assert_eq!(inibin.len(), 18);
+    assert_eq!(
+        inibin,
+        Inibin::from_reader(&mut unpadded.as_slice()).unwrap()
+    );
+    assert_eq!(
+        Inibin::from_reader(&mut write(&inibin).as_slice()).unwrap(),
+        inibin
+    );
 }

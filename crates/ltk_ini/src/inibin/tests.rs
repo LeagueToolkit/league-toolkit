@@ -16,6 +16,14 @@ fn read(bytes: &[u8]) -> Result<Inibin> {
     Inibin::from_reader(&mut &bytes[..])
 }
 
+/// Returns `bytes` with a padded header: a zero `u16` between `string_data_len` and `flags`.
+fn padded(bytes: &[u8]) -> Vec<u8> {
+    let mut padded = bytes[..3].to_vec();
+    padded.extend_from_slice(&[0, 0]);
+    padded.extend_from_slice(&bytes[3..]);
+    padded
+}
+
 fn write(inibin: &Inibin) -> Vec<u8> {
     let mut bytes = Vec::new();
     inibin.to_writer(&mut bytes).unwrap();
@@ -56,6 +64,39 @@ fn one_string(offset: u16, string_data: &[u8]) -> Vec<u8> {
 #[test]
 fn from_reader_reads_empty_file() {
     assert_eq!(read(&[2, 0, 0, 0, 0]).unwrap(), Inibin::new());
+}
+
+#[test]
+fn from_reader_reads_padded_header() {
+    let bytes = padded(&write(&every_kind()));
+    let mut reader = bytes.as_slice();
+
+    let inibin = Inibin::from_reader(&mut reader).unwrap();
+
+    assert_eq!(inibin, every_kind());
+    assert!(reader.is_empty());
+}
+
+#[test]
+fn from_reader_reads_padded_empty_file() {
+    let bytes = [2, 0, 0, 0, 0, 0, 0];
+    let mut reader = bytes.as_slice();
+
+    assert_eq!(Inibin::from_reader(&mut reader).unwrap(), Inibin::new());
+    assert!(reader.is_empty());
+}
+
+#[test]
+fn from_reader_fails_on_one_byte_after_zero_flags() {
+    assert!(matches!(read(&[2, 0, 0, 0, 0, 0]), Err(Error::Io(_))));
+}
+
+#[test]
+fn from_reader_fails_on_truncated_padded_file() {
+    let bytes = padded(&write(&every_kind()));
+    for len in 0..bytes.len() {
+        assert!(matches!(read(&bytes[..len]), Err(Error::Io(_))), "{len}");
+    }
 }
 
 #[test]

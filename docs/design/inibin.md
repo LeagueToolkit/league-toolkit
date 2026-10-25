@@ -63,8 +63,8 @@ The rules of this document are derived from three sources.
   and a corpus index of 109,712 distinct files. The writer rules of [section 9](#s9), the
   constructors of [section 7](#s7) and the `U1` storage type are derived from the measurements.
 - **lolpytools.** The version 1 layout of [section 4.1](#s4.1) is taken from `read_1` in
-  `lolpytools/inibin2.py`. lolpytools is the only source for version 1. No measured file has
-  version 1. The 16.14 client does not branch on the version byte.
+  `lolpytools/inibin2.py`. 3,610 version 1 files of the RADS archive have that layout
+  ([appendix B](#appendix-b)). The 16.14 client does not branch on the version byte.
 
 Two references differ from the client on version 2. The C# LeagueToolkit reader has 13 storage
 types and no `I64`. lolpytools reads the `I64` value set after the string data. The client reads
@@ -73,7 +73,8 @@ the `I64` value set before the string data.
 ## <a id="s4"></a>4. Wire format (normative)
 
 All integers are little-endian. The first byte of a file is the version. This section specifies
-version 2, which is the version of every shipped file. [Section 4.1](#s4.1) specifies version 1.
+version 2. [Section 4.1](#s4.1) specifies version 1 and [section 4.2](#s4.2) specifies the padded
+header of version 2.
 
 ```text
 u8    version            2
@@ -133,7 +134,26 @@ u8    string_data[string_data_len]
 ```
 
 A version 1 file has no storage types. Every value is a NUL-terminated string. This layout is
-the layout that lolpytools reads ([section 3](#s3)).
+the layout that lolpytools reads ([section 3](#s3)). Every version 1 file of the RADS archive has
+this layout ([appendix B](#appendix-b)).
+
+### <a id="s4.2"></a>4.2 Padded header
+
+The version 2 files of the RADS releases macpbe 0.0.0.142 to 0.0.0.143 and pbe 0.0.1.70 to
+0.0.1.71 have a zero `u16` between `string_data_len` and `flags`.
+
+```text
+u8    version            2
+u16   string_data_len
+u16   padding            0
+u16   flags
+      value sets
+u8    string_data[string_data_len]
+```
+
+The rest of the file is the layout of [section 4](#s4). A file with a padded header and no values
+is the 7 bytes `02 00 00 00 00 00 00`. A file without padding has no byte after a `flags` field
+of 0.
 
 ## <a id="s5"></a>5. The key hash
 
@@ -271,11 +291,16 @@ the value is missing. In that case the caller of the client getter uses its defa
 
 **Reading.** `Inibin::from_reader` takes a `Read` and does not need `Seek`. It reads the header,
 the value sets or entries, and `string_data_len` bytes of string data. It does not read bytes
-after the string data.
+after the string data. A file with no values and no padding is the one exception: the reader
+tries to read 2 bytes after its `flags` field.
 
 - A version byte of 2 selects the layout of [section 4](#s4). A version byte of 1 selects the
   layout of [section 4.1](#s4.1). The reader fails with `Error::UnsupportedVersion` for any other
   version byte (ADR-0026).
+- A `flags` field of 0 is followed by the `flags` field of a padded header
+  ([section 4.2](#s4.2)) or by the end of the file. The reader reads the next 2 bytes as the
+  `flags` field. A `flags` field of 0 at the end of the file is a file with no values. The reader
+  fails with `Error::Io` if 1 byte follows a `flags` field of 0.
 - The reader returns each value of a version 1 file as a `Value::String` that contains the bytes
   of the file. The typed getters convert the string ([section 8](#s8)).
 - The reader fails with `Error::DuplicateKey` if a key occurs twice, in one value set or in two
@@ -289,8 +314,9 @@ after the string data.
   be inside another string.
 - The reader fails with `Error::Io` if the file is truncated.
 
-**Writing.** `Inibin::to_writer` takes a `Write` and writes version 2. It writes an `Inibin` that
-was read from a version 1 file as a version 2 file with only a `String` value set.
+**Writing.** `Inibin::to_writer` takes a `Write` and writes version 2 without padding. It writes
+an `Inibin` that was read from a version 1 file as a version 2 file with only a `String` value
+set.
 
 - The writer omits the flag bit and the value set of a storage type that has no value.
 - The writer writes the keys of each value set in ascending order.
@@ -303,7 +329,7 @@ was read from a version 1 file as a version 2 file with only a `String` value se
   fails with `Error::NulInString` if a string contains a NUL byte.
 
 If a shipped file is read and written without edits, the written file is equal to the shipped
-file up to the string offsets. The written file is not longer than the shipped file
+file without its padding up to the string offsets. The written file is not longer than the shipped file
 ([appendix B](#appendix-b)). The ini compiler orders the string data by the order of the ini
 text. The file does not record that order. The string offsets and the string data of the written
 file can differ from the shipped file.
@@ -329,18 +355,20 @@ file can differ from the shipped file.
 - **Unit tests** in `src/` build files byte by byte. They cover each rule of [section 9](#s9),
   each error of [section 10](#s10), each cell of the table in [section 8](#s8) and each
   constructor of [section 7](#s7).
-- **Version 1 tests** build their files from the layout of [section 4.1](#s4.1). No shipped file
-  has version 1.
-- **Fixture tests** in `tests/fixtures.rs` read two shipped files of the 16.20 client.
-  `global_item_travelsizeelixirofiron_buf.troybin` has values of every storage type except `I64`.
-  It stores `p-life` as `F32` for one emitter and as `Fixed` for another emitter.
-  `aatroxbotsummonerspellsclassic.inibin` has repeated strings. The writer writes it byte for
-  byte.
+- **Version 1 tests** build their files from the layout of [section 4.1](#s4.1).
+- **Fixture tests** in `tests/fixtures.rs` read four shipped files.
+  `global_item_travelsizeelixirofiron_buf.troybin` (16.20) has values of every storage type
+  except `I64`. It stores `p-life` as `F32` for one emitter and as `Fixed` for another emitter.
+  `aatroxbotsummonerspellsclassic.inibin` (16.20) has repeated strings. The writer writes it byte
+  for byte. `shop_dagger_padded.troybin` (macpbe 0.0.0.142) has a padded header.
+  `shop_dagger.troybin` (live 0.0.0.74) is the same file without padding. The two files read to
+  equal values.
 - **The corpus test** in `tests/corpus.rs` is ignored by default. It reads and writes every
   `.inibin`, `.troybin` and `.cfgbin` file in the directory that `LTK_INI_DIR` names. The test
   fails if a file does not read to its last byte, if the written file is longer than the shipped
   file, or if the written file does not read back with the same values. The test also fails if
-  the written file differs from the shipped file before the string offsets.
+  the written file differs from the shipped file before the string offsets. The test compares
+  a file with a padded header without its padding.
 
 ## <a id="s12"></a>12. Rules
 
@@ -361,9 +389,10 @@ file can differ from the shipped file.
 | I13 | The writer sorts the keys of each value set. | Insertion order. | The client finds a key with a binary search. | [section 4](#s4) |
 | I14 | A string is a UTF-8 `String`. | A byte string. | Every string of the measured files is ASCII. | [section 9](#s9); [appendix B](#appendix-b) |
 | I15 | The crate contains no table of section names and property names. | A built-in dictionary. | A name table is data that changes with each game patch. | [section 1](#s1) |
-| I16 | The reader reads version 1 with the layout of lolpytools. | The layout of the C# reader. No version 1 reader. | The C# reader reads offsets and no keys. lolpytools reads a key and an offset for each entry. | [section 4.1](#s4.1); ADR-0026 |
+| I16 | The reader reads version 1 with the layout of lolpytools. | The layout of the C# reader. No version 1 reader. | The C# reader reads offsets and no keys. lolpytools reads a key and an offset for each entry. Every shipped version 1 file has the layout of lolpytools. | [section 4.1](#s4.1); ADR-0026 |
 | I17 | A version 1 value is a `Value::String`. The writer writes only version 2. | Converting each string to a typed value in the reader, as lolpytools does. A version 1 writer. | The string is the stored value, and the typed getters convert it. The 16.14 client reads only the version 2 layout. | [section 9](#s9) |
 | I18 | Storage type 5 is `U1`, a 1-bit unsigned integer. `Value::U1` contains a `bool`. | `Bool`. `U1(u8)`. | The ini compiler stores integers and floats that are 0 or 1 in storage type 5. The format has no boolean type. | [section 2](#s2), [section 4](#s4); ADR-0027 |
+| I19 | The reader reads a padded header. A `flags` field of 0 that 2 bytes follow is padding. The writer writes no padding. | Rejecting a padded header. Reading a padded header as a file with no values. Recording the padding in `Inibin`. | Shipped files have a padded header. A file without padding has no byte after a `flags` field of 0. The 16.14 client reads no padding. | [section 4.2](#s4.2), [section 9](#s9) |
 
 ## <a id="appendix-a"></a>Appendix A. Client functions
 
@@ -441,3 +470,17 @@ client installs and every live build of the lol-census database up to 9.x. The i
 | `I32`, `I16`, `U8` and `F32` values equal to 0 or 1                  | 0                |
 | `Fixed` values equal to 0.0 or 1.0                                   | 40,888           |
 | `String` values `true`, `false`, `yes`, `no`, `on` or `off`, any case | 32,408          |
+| Distinct version 2 files with a padded header                        | 10,805           |
+
+Measured on 2026-10-25. **Reader comparison**: `ltk_ini` and the `inibin-parse` reader read every
+`.inibin` and `.troybin` file of the RADS archive manifests and of local client installs. The
+files are 101,321 distinct files.
+
+| Measurement                                                          | Count            |
+| -------------------------------------------------------------------- | ---------------- |
+| Version 2 files without padding that read to equal values            | 86,906           |
+| Version 2 files with a padded header that read to equal values       | 10,805           |
+| Version 1 files that read to equal values                            | 3,610            |
+| Files that fail to read with `ltk_ini`                               | 0                |
+| Files with flag bit 13                                               | 0                |
+| Files of macpbe 0.0.0.142 that read, write and read back with equal values | 11,413 of 11,413 |

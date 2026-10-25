@@ -200,7 +200,10 @@ impl Inibin {
     /// Reads an inibin file of version 1 or version 2.
     ///
     /// Reads from the version byte to the end of the string data. Does not read bytes after the
-    /// string data.
+    /// string data, except after the header of a version 2 file with no values and no padding.
+    ///
+    /// Reads a version 2 file with a padded header: a zero `u16` before the `flags` field. A
+    /// `flags` field of 0 is padding if 2 more bytes follow it.
     ///
     /// A version 1 file stores every value as a string. Returns each value of a version 1 file
     /// as a [`Value::String`]. The typed getters convert the string.
@@ -247,7 +250,7 @@ impl Inibin {
 
     fn read_v2<R: Read + ?Sized>(reader: &mut R) -> Result<Self> {
         let string_data_len = reader.read_u16::<LE>()?;
-        let flags = reader.read_u16::<LE>()?;
+        let flags = read_flags(reader)?;
 
         let mut inibin = Self::new();
         let mut string_offsets = Vec::new();
@@ -450,6 +453,34 @@ fn layout_strings(strings: &[&str]) -> (Vec<u8>, Vec<usize>) {
         offsets[index] = offsets[holder] + strings[holder].len() - string.len();
     }
     (data, offsets)
+}
+
+/// Reads the `flags` field of a version 2 file.
+///
+/// A file with a padded header has a zero `u16` before `flags`. A `flags` field of 0 is followed
+/// by the end of the file or by the `flags` of a padded header. Reads the next 2 bytes as `flags`
+/// if `reader` returns them. Returns 0 at the end of `reader`.
+fn read_flags<R: Read + ?Sized>(reader: &mut R) -> Result<u16> {
+    let flags = reader.read_u16::<LE>()?;
+    if flags != 0 {
+        return Ok(flags);
+    }
+
+    let mut padded = [0; 2];
+    let mut len = 0;
+    while len < padded.len() {
+        match reader.read(&mut padded[len..]) {
+            Ok(0) => break,
+            Ok(read) => len += read,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    match len {
+        0 => Ok(0),
+        2 => Ok(u16::from_le_bytes(padded)),
+        _ => Err(io::Error::from(io::ErrorKind::UnexpectedEof).into()),
+    }
 }
 
 fn read_fixed<R: Read + ?Sized, const N: usize>(reader: &mut R) -> Result<[u8; N]> {

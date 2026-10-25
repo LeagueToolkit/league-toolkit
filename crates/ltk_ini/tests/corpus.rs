@@ -8,7 +8,8 @@
 //!
 //! The test fails if a file does not read to its last byte, if the written file is longer than
 //! the file, or if the written file does not read back with the same values. The test also fails
-//! if the bytes before the string offsets differ between the file and the written file.
+//! if the bytes before the string offsets differ between the file and the written file. The test
+//! compares a file with a padded header without its padding.
 
 use std::path::{Path, PathBuf};
 
@@ -55,6 +56,14 @@ fn inibin_round_trips_every_file_in_ini_dir() {
         let inibin =
             Inibin::from_reader(&mut reader).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
         assert!(reader.is_empty(), "{}: unread bytes", path.display());
+
+        // A padded header has a zero `u16` at offset 3. `to_writer` writes no padding.
+        let padded = bytes.len() > 5 && bytes[0] == 2 && bytes[3..5] == [0, 0];
+        let bytes = if padded {
+            [&bytes[..3], &bytes[5..]].concat()
+        } else {
+            bytes
+        };
 
         let mut written = Vec::new();
         inibin
