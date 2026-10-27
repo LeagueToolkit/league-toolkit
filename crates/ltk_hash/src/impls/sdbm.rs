@@ -3,6 +3,19 @@
 //! The multiplier is 65599. The client converts ASCII uppercase letters to lowercase and adds
 //! each byte as a signed 8-bit integer.
 
+/// The multiplier of the SDBM hash.
+///
+/// The hash is linear in its state: the hash of `input` from the state `s` is
+/// `s * MULTIPLIER^len + hash_lower(input)`.
+pub const MULTIPLIER: u32 = 65599;
+
+/// Returns the SDBM hash of `byte`, starting from the hash state `hash`. Converts an ASCII
+/// uppercase letter to lowercase before hashing.
+pub const fn hash_lower_byte(hash: u32, byte: u8) -> u32 {
+    hash.wrapping_mul(MULTIPLIER)
+        .wrapping_add(byte.to_ascii_lowercase() as i8 as u32)
+}
+
 /// Returns the SDBM hash of the bytes of `input`. Converts ASCII uppercase letters to lowercase
 /// before hashing.
 pub const fn hash_lower(input: &str) -> u32 {
@@ -18,8 +31,7 @@ pub const fn hash_lower_from(hash: u32, input: &str) -> u32 {
     let mut hash = hash;
     let mut i = 0;
     while i < bytes.len() {
-        let byte = bytes[i].to_ascii_lowercase();
-        hash = hash.wrapping_mul(65599).wrapping_add(byte as i8 as u32);
+        hash = hash_lower_byte(hash, bytes[i]);
         i += 1;
     }
     hash

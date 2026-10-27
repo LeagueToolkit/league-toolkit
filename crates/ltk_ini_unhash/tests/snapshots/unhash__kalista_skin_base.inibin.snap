@@ -1,0 +1,54 @@
+---
+source: crates/ltk_ini_unhash/tests/unhash.rs
+expression: ini
+---
+[ContextualAction]
+RuleConfigFile=Kalista_Base.cac
+
+[IdleParticles]
+NumberOfParticles=13
+Particle1=Kalista_Base_Idle_Spear_Avatar.troy BUFFBONE_GLB_GROUND_LOC
+Particle2=Kalista_Base_Idle_Glow.troy R_Buffbone_Cstm_Arm1
+Particle3=Kalista_Base_Idle_Glow.troy R_Buffbone_Cstm_Arm2
+Particle4=Kalista_Base_Idle_Glow.troy R_Buffbone_Cstm_Arm3
+Particle5=Kalista_Base_Idle_Glow.troy L_Buffbone_Cstm_Arm1
+Particle6=Kalista_Base_Idle_Glow.troy L_Buffbone_Cstm_Arm2
+Particle7=Kalista_Base_Idle_Glow.troy L_Buffbone_Cstm_Arm3
+Particle8=Kalista_Base_Idle_Glow.troy R_Buffbone_Cstm_Leg1
+Particle9=Kalista_Base_Idle_Glow.troy R_Buffbone_Cstm_Leg2
+Particle10=Kalista_Base_Idle_Glow.troy R_Buffbone_Cstm_Leg3
+Particle11=Kalista_Base_Idle_Glow.troy L_Buffbone_Cstm_Leg1
+Particle12=Kalista_Base_Idle_Glow.troy L_Buffbone_Cstm_Leg2
+Particle13=Kalista_Base_Idle_Glow.troy L_Buffbone_Cstm_Leg3
+
+[MeshSkin]
+Animations=Kalista.blnd
+BrushAlphaOverride=0.5
+ChampionSkinID=429000
+ChampionSkinName=Kalista
+Fresnel=0.2
+FresnelBlue=0.3
+FresnelGreen=0.6
+FresnelRed=0.1
+GlossTexture=Kalista_base_TX_GM.dds
+MaterialOverride0SubMesh=Altar_Spear
+MaterialOverride0Texture=KalistaAltar_Base_TX_CM.dds
+MaterialOverride1SubMesh=Spear
+MaterialOverride1Texture=Kalista_SpearSubmesh_TX_CM.dds
+OverrideBoundingBox=130 270 130
+ReflectionFresnel=0.1
+ReflectionFresnelGreen=0.3
+ReflectionFresnelRed=0.1
+ReflectionFresnlBlue=0.1
+ReflectionMap=Kalista_base_TX_RM.dds
+ReflectionOpacityDirect=0.2
+ReflectionOpacityGlancing=0.05
+SelfIllumination=0.7
+SimpleSkin=Kalista.skn
+Skeleton=Kalista.skl
+SkinScale=0.82
+SubmeshesToHide=Altar_Spear
+SubmeshMouseOversToHide=Spear
+SubmeshShadowsToHide=Spear
+Texture=Kalista_Base_TX_CM.dds
+YOffset=-0.5

@@ -4,8 +4,8 @@ The API spec for binary ini files in `ltk_ini`: the wire format, the key hash, t
 conversions, and the rules of the reader and the writer.
 
 This document states the current behavior of `ltk_ini`. If the code and a section of this
-document disagree, the section is wrong and must be edited. ADR-0024 to ADR-0027 record the
-alternatives of each decision. The rules table in [section 12](#s12) cites them.
+document disagree, the section is wrong and must be edited. ADR-0024 to ADR-0027 and ADR-0029
+record the alternatives of each decision. The rules table in [section 12](#s12) cites them.
 
 ## <a id="s1"></a>1. Summary
 
@@ -26,8 +26,9 @@ client functions that read them.
 ([section 8](#s8)). A caller accesses a value by key, or by section name and property name
 ([section 6](#s6)).
 
-`ltk_ini` contains no table of section names and property names. A caller that prints a file as
-ini text must provide the names. This document does not specify the ini text format.
+`ltk_ini` contains no table of section names and property names. `ltk_ini_unhash` names the keys
+of a file (`inibin-unhash.md`). `Inibin::from_ini` reads ini text, which carries the names
+([section 9.1](#s9.1)).
 
 ## <a id="s2"></a>2. Vocabulary
 
@@ -244,8 +245,9 @@ With the `serde` feature, `Inibin`, `Value`, `ValueKind` and `IniHash` implement
 
 ## <a id="s7"></a>7. Compact constructors
 
-The ini compiler stores a number in the smallest storage type that can store it
-([appendix B](#appendix-b)). It stores an integer that is 0 or 1 as a `U1`. It stores a float
+The ini compiler stores a value as a string, or as a number in the smallest storage type that can
+store it ([appendix B](#appendix-b)). The text of a value does not determine which values are a
+string. It stores an integer that is 0 or 1 as a `U1`. It stores a float
 that is 0.0 or 1.0 as a `U1` or as a `Fixed`. The constructors in the table select the smallest
 storage type.
 
@@ -257,6 +259,24 @@ storage type.
 
 A fixed-point byte `b` is equal to a float `v` if `b as f32 / 10.0 == v` and `v` does not have a
 negative sign. A compact constructor returns a value that converts back to its input exactly.
+
+### <a id="s7.1"></a>7.1 Compaction
+
+`Value::compact` returns the value in the smallest storage type from which every `to_*` method of
+[section 8](#s8) and the `Display` text read the same. `Inibin::compact` compacts each value of
+the file (ADR-0030).
+
+| Value | Compacted |
+| ----- | --------- |
+| `I64`, `I32`, `I16`, `U8` | The first of `U8`, `I16`, `I32`, `I64` that can store the number. |
+| `F32` | `compact_float` of the number. |
+| `Vec2`, `Vec3`, `Vec4` | `compact_vec2`, `compact_vec3`, `compact_vec4` of the components. |
+| `String("0")`, `String("1")` | `U1(false)`, `U1(true)`. |
+| Every other value | The value. |
+
+The boolean read of `to_bool` sets the limits. A `U1` has a boolean read, and the other numeric
+storage types have none: an integer 0 or 1 becomes a `U8`, not a `U1`. A string has a boolean
+read: a string of a number other than 0 and 1 stays a string.
 
 ## <a id="s8"></a>8. Conversions
 
@@ -334,6 +354,29 @@ file without its padding up to the string offsets. The written file is not longe
 text. The file does not record that order. The string offsets and the string data of the written
 file can differ from the shipped file.
 
+### <a id="s9.1"></a>9.1 Ini text
+
+`Inibin::from_ini` takes ini text as a `&str` and an `IniTextOptions`, and returns an `Inibin`.
+It returns no error. Every value is a `Value::String`, and the typed getters convert it
+([section 8](#s8), ADR-0029).
+
+- The text from the first `;` of a line to the end of the line is a comment. The ini compiler cuts
+  an inline comment from a value: `30 ; Burn total damage` is the value `30`.
+- A line `[name]` starts the section `name`. A property before the first section is in the
+  section with the empty name.
+- A line with `=` is a property. The text before the first `=` is the property name, and the text
+  after it is the value. Both lose the whitespace around them.
+- A line that starts with `'`, `*`, `#`, `//` or `` ` `` is a property, with the prefix in its
+  name: the ini compiler of old builds stores such a line as a property. With
+  `IniTextOptions::additional_comment_tokens`, such a line is a comment. The constant is
+  `ADDITIONAL_COMMENT_TOKENS`.
+- A repeated property takes the value of its last line.
+- The reader skips every other line, and a byte order mark at the start of the text.
+
+`ltk_ini_unhash::to_ini` writes ini text (`inibin-unhash.md`
+[section 5.4](inibin-unhash.md#s5.4)). `from_ini` of that text has the keys and the text of the
+values of the named file.
+
 ## <a id="s10"></a>10. Errors
 
 `ltk_ini::Error` is `#[non_exhaustive]`. `ltk_ini::Result<T>` is the alias.
@@ -393,6 +436,11 @@ file can differ from the shipped file.
 | I17 | A version 1 value is a `Value::String`. The writer writes only version 2. | Converting each string to a typed value in the reader, as lolpytools does. A version 1 writer. | The string is the stored value, and the typed getters convert it. The 16.14 client reads only the version 2 layout. | [section 9](#s9) |
 | I18 | Storage type 5 is `U1`, a 1-bit unsigned integer. `Value::U1` contains a `bool`. | `Bool`. `U1(u8)`. | The ini compiler stores integers and floats that are 0 or 1 in storage type 5. The format has no boolean type. | [section 2](#s2), [section 4](#s4); ADR-0027 |
 | I19 | The reader reads a padded header. A `flags` field of 0 that 2 bytes follow is padding. The writer writes no padding. | Rejecting a padded header. Reading a padded header as a file with no values. Recording the padding in `Inibin`. | Shipped files have a padded header. A file without padding has no byte after a `flags` field of 0. The 16.14 client reads no padding. | [section 4.2](#s4.2), [section 9](#s9) |
+| I20 | `from_ini` stores every value as a `Value::String`. | The storage types of the `compact_*` constructors. | The text does not determine which values the ini compiler keeps as a string. A string property with a numeric value stays a string. | [section 9.1](#s9.1); ADR-0029 |
+| I21 | `from_ini` cuts a line at its first `;`. | A comment only at the start of a line. | The ini compiler stores a value without its inline comment. | [section 9.1](#s9.1); [appendix B](#appendix-b) |
+| I22 | By default `from_ini` reads a line that starts with `'`, `*`, `#`, `//` or `` ` `` as a property. `additional_comment_tokens` reads it as a comment. | Always a comment. | The ini compiler of old builds stores such a line as a property, and shipped files hold the keys. | [section 9.1](#s9.1) |
+| I23 | `from_ini` skips a line without `=` that is not a section, and a repeated property takes its last value. | An error. | The ini compiler stores no key for a line without `=`. No measured text repeats a property. | [section 9.1](#s9.1); [appendix B](#appendix-b) |
+| I24 | `compact` converts a value only into a storage type with the same reads. | Converting each string whose number has the same text. Converting like the compiler. | A compacted file reads the same for the client. The boolean getter reads a string and a `U1`, and no other storage type. | [section 7.1](#s7.1); ADR-0030 |
 
 ## <a id="appendix-a"></a>Appendix A. Client functions
 
@@ -484,3 +532,29 @@ files are 101,321 distinct files.
 | Files that fail to read with `ltk_ini`                               | 0                |
 | Files with flag bit 13                                               | 0                |
 | Files of macpbe 0.0.0.142 that read, write and read back with equal values | 11,413 of 11,413 |
+
+Measured on 2026-10-25. **Ini text**: the RADS archive holds 4,452 ini text files (`.ini`,
+`.troy`, `.cfg`) next to the binary file of the same path in the same release. 477 of the pairs
+are distinct. The text of 476 pairs gives every key of the binary.
+
+| Measurement                                                          | Count            |
+| -------------------------------------------------------------------- | ---------------- |
+| Values with an inline `;` comment, stored without the comment        | 316 of 316       |
+| Values with whitespace around them, stored trimmed                   | 912 of 912       |
+| Lines without `=` that are a key of the binary                       | 0 of 444         |
+| Repeated properties                                                  | 0                |
+| Numeric values with the storage type of the `compact_*` constructors | 24,838 of 37,374 |
+| Numeric values stored as a `String`                                  | 11,955 of 37,374 |
+| Float values `0.0` stored as a `U1`                                  | 580              |
+
+Measured on 2026-10-25. **Compaction**: `Value::compact` of each value of 20,000 distinct
+`.inibin` and `.troybin` files of the RADS archive, and `Inibin::compact` of `from_ini` of the 477
+ini text pairs.
+
+| Measurement                                                          | Count              |
+| -------------------------------------------------------------------- | ------------------ |
+| Values of the 20,000 files                                           | 1,921,070          |
+| Values that compaction changes (all `String` to `U1`)                | 378,786            |
+| Values with a `to_*` read or a text that compaction changes          | 0                  |
+| Written bytes of the 477 text pairs: strings, compacted, compiled    | 383,408; 366,526; 440,936 |
+| Compacted values of the text pairs with the compiled storage type    | 23,378 of 41,749   |

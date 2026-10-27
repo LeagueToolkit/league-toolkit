@@ -187,6 +187,14 @@ impl Inibin {
         self.values.iter_mut()
     }
 
+    /// Stores each value in the smallest storage type from which every read is the same
+    /// ([`Value::compact`]).
+    pub fn compact(&mut self) {
+        for value in self.values.values_mut() {
+            *value = value.compact();
+        }
+    }
+
     /// Returns an iterator over the keys, in ascending order.
     pub fn keys(&self) -> btree_map::Keys<'_, IniHash, Value> {
         self.values.keys()

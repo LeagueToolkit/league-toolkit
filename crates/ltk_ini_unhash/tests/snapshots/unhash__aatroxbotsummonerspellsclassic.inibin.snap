@@ -1,0 +1,27 @@
+---
+source: crates/ltk_ini_unhash/tests/unhash.rs
+expression: ini
+---
+[BotSummonerSpellDataeADVANCED]
+SummonerSpell1=SummonerDot
+SummonerSpell2=SummonerExhaust
+
+[BotSummonerSpellDataeINTERMEDIATE]
+SummonerSpell1=SummonerDot
+SummonerSpell2=SummonerExhaust
+
+[BotSummonerSpellDataeINTRO]
+SummonerSpell1=SummonerDot
+SummonerSpell2=SummonerExhaust
+
+[BotSummonerSpellDataeNEWBIE]
+SummonerSpell1=SummonerDot
+SummonerSpell2=SummonerExhaust
+
+[BotSummonerSpellDataeTUTORIAL]
+SummonerSpell1=SummonerDot
+SummonerSpell2=SummonerExhaust
+
+[BotSummonerSpellDataeUBER]
+SummonerSpell1=SummonerDot
+SummonerSpell2=SummonerExhaust
