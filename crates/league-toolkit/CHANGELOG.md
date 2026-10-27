@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.44](https://github.com/LeagueToolkit/league-toolkit/compare/league-toolkit-v0.2.43...league-toolkit-v0.2.44) - 2026-10-27
+
+### Other
+
+- updated the following local packages: ltk_hash, ltk_ini, ltk_anim, ltk_meta, ltk_wad
+
 ## [0.2.43](https://github.com/LeagueToolkit/league-toolkit/compare/league-toolkit-v0.2.42...league-toolkit-v0.2.43) - 2026-10-12
 
 ### Added

@@ -1,6 +1,6 @@
 [package]
 name = "ltk_ini"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Inibin and troybin reading/writing for League Toolkit"
 license = "Apache-2.0"
@@ -19,7 +19,7 @@ glam = { workspace = true }
 
 serde = { workspace = true, optional = true }
 
-ltk_hash = { version = "0.5.1", path = "../ltk_hash" }
+ltk_hash = { version = "0.5.2", path = "../ltk_hash" }
 
 [dev-dependencies]
 serde_json = { workspace = true }

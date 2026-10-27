@@ -10,8 +10,8 @@ readme = "../../README.md"
 workspace = true
 
 [dependencies]
-ltk_hash = { version = "0.5.1", path = "../ltk_hash" }
-ltk_ini = { version = "0.1.0", path = "../ltk_ini" }
+ltk_hash = { version = "0.5.2", path = "../ltk_hash" }
+ltk_ini = { version = "0.2.0", path = "../ltk_ini" }
 
 [dev-dependencies]
 glam = { workspace = true }
