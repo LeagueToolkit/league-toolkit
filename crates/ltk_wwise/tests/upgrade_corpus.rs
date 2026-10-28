@@ -79,6 +79,7 @@ fn refusal_key(refusal: UpgradeRefusal) -> String {
     match refusal {
         UpgradeRefusal::Kind { kind, .. } => format!("kind {}", kind.0),
         UpgradeRefusal::ActionClass { class, .. } => format!("action class {class:#06x}"),
+        UpgradeRefusal::Chunk { tag } => format!("chunk {}", tag.escape_ascii()),
         other => format!("{other:?}"),
     }
 }

@@ -4,9 +4,9 @@ mod common;
 
 use common::fixture;
 use ltk_wwise::{
-    bank::{BankHeader, BankType, BankVersion},
+    bank::{BankHeader, BankType, BankVersion, RawSection, Section},
     hierarchy::{Object, ObjectKind},
-    Bank, BankId, Error, ObjectId, SourceId, UpgradeRefusal,
+    Bank, BankId, Error, Hierarchy, ObjectId, SourceId, UpgradeRefusal,
 };
 
 fn read(name: &str) -> Bank {
@@ -137,6 +137,42 @@ fn refusal(bank: &Bank) -> UpgradeRefusal {
         Err(Error::Upgrade(refusal)) => refusal,
         other => panic!("expected a refusal, got {other:?}"),
     }
+}
+
+#[test]
+fn a_legacy_bank_with_a_chunk_kept_as_bytes_is_refused() {
+    let mut bank = read("events_v134.bnk");
+    bank.sections_mut().push(Section::Raw(RawSection {
+        tag: *b"STID",
+        data: vec![0; 4],
+    }));
+
+    assert_eq!(refusal(&bank), UpgradeRefusal::Chunk { tag: *b"STID" });
+    assert_eq!(
+        UpgradeRefusal::Chunk { tag: *b"STID" }.to_string(),
+        "chunk STID has no upgrade transform"
+    );
+}
+
+#[test]
+fn a_refusal_is_reported_before_an_object_that_does_not_decode() {
+    let legacy = read("events_v134.bnk");
+    let mut hierarchy = Hierarchy::new();
+    hierarchy.push(Object::new(ObjectKind::SOUND, vec![1, 0, 0, 0, 0xFF]).unwrap());
+    for object in legacy.hierarchy().unwrap().objects() {
+        hierarchy.push(object.clone());
+    }
+    hierarchy.push(Object::new(ObjectKind::MUSIC_TRACK, vec![2, 0, 0, 0]).unwrap());
+    let mut bank = Bank::new(legacy.header().clone());
+    bank.sections_mut().push(Section::Hierarchy(hierarchy));
+
+    assert_eq!(
+        refusal(&bank),
+        UpgradeRefusal::Kind {
+            id: ObjectId(2),
+            kind: ObjectKind::MUSIC_TRACK
+        }
+    );
 }
 
 #[test]

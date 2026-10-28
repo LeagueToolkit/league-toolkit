@@ -46,6 +46,12 @@ pub enum UpgradeRefusal {
         /// The class of the action: `action_type & 0xFF00`.
         class: u16,
     },
+    /// A chunk that the bank keeps as bytes: a [`Section::Raw`].
+    #[error("chunk {} has no upgrade transform", .tag.escape_ascii())]
+    Chunk {
+        /// The tag of the chunk.
+        tag: [u8; 4],
+    },
 }
 
 impl Bank {
@@ -57,9 +63,10 @@ impl Bank {
     ///
     /// # Errors
     ///
-    /// - [`Error::Upgrade`] when the version is not 132, 134 or 145, an object is of a kind
-    ///   without an upgrade transform, or an action is of a class without a version 145
-    ///   counterpart.
+    /// - [`Error::Upgrade`] when the version is not 132, 134 or 145, a chunk is kept as bytes,
+    ///   an object is of a kind without an upgrade transform, or an action is of a class without
+    ///   a version 145 counterpart. The upgrade finds every refusal before it transforms an
+    ///   object.
     /// - [`Error::Layout`] when a payload does not decode at the version of the bank, or the
     ///   upgraded payload does not decode at version 145.
     /// - [`Error::ActionClass`] when an action is of a class outside the table of its version.
@@ -68,15 +75,8 @@ impl Bank {
         if version == BankVersion::V145 {
             return Ok(self.clone());
         }
-        if !matches!(version, BankVersion::V132 | BankVersion::V134) {
-            return Err(Error::Upgrade(UpgradeRefusal::Version(version)));
-        }
-        for section in self.sections() {
-            if let Section::Hierarchy(hierarchy) = section {
-                if let Some(refusal) = hierarchy.objects().iter().find_map(refusal) {
-                    return Err(Error::Upgrade(refusal));
-                }
-            }
+        if let Some(refusal) = bank_refusal(self) {
+            return Err(Error::Upgrade(refusal));
         }
 
         let mut bank = Bank::new(upgrade_header(self.header()));
@@ -108,6 +108,22 @@ fn upgrade_header(legacy: &BankHeader) -> BankHeader {
     header.alt_values = legacy.alt_values;
     header.project_id = legacy.project_id;
     header
+}
+
+/// Returns the first refusal of the bank `bank` below version 145, or `None` when the upgrade
+/// transforms it.
+///
+/// The scan tests the version, then each section in file order. It transforms nothing.
+fn bank_refusal(bank: &Bank) -> Option<UpgradeRefusal> {
+    let version = bank.header().version;
+    if !matches!(version, BankVersion::V132 | BankVersion::V134) {
+        return Some(UpgradeRefusal::Version(version));
+    }
+    bank.sections().iter().find_map(|section| match section {
+        Section::Media(_) => None,
+        Section::Hierarchy(hierarchy) => hierarchy.objects().iter().find_map(refusal),
+        Section::Raw(raw) => Some(UpgradeRefusal::Chunk { tag: raw.tag }),
+    })
 }
 
 /// Returns the refusal of `object`, or `None` when the upgrade transforms it.
@@ -146,10 +162,9 @@ fn upgrade_hierarchy(legacy: &Hierarchy, version: BankVersion) -> Result<Hierarc
 }
 
 /// Returns the object `legacy` of a bank of the version `version` with a version 145 payload.
+///
+/// `legacy` is an object without a refusal.
 fn upgrade_object(legacy: &Object, version: BankVersion) -> Result<Object> {
-    if let Some(refusal) = refusal(legacy) {
-        return Err(Error::Upgrade(refusal));
-    }
     match legacy.kind() {
         ObjectKind::STATE => Ok(legacy.clone()),
         ObjectKind::ATTENUATION => upgrade_attenuation(legacy),

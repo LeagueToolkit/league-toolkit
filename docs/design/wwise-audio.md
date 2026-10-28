@@ -976,10 +976,18 @@ pub enum UpgradeRefusal {
     /// An action of a class without a version 145 counterpart.
     #[error("action {id} of class {class:#06x} has no version 145 counterpart")]
     ActionClass { id: ObjectId, class: u16 },
+    /// A chunk that the bank keeps as bytes: a `Section::Raw`.
+    #[error("chunk {} has no upgrade transform", .tag.escape_ascii())]
+    Chunk { tag: [u8; 4] },
 }
 ```
 
 A version 145 bank upgrades to an equal bank. A version 132 or 134 bank upgrades as follows.
+
+**Chunks.** A `Section::Media` and a `Section::Hierarchy` upgrade. A `Section::Raw` is refused.
+The layouts of the other chunks are not compared across versions. Every shipped legacy bank is
+`BKHD` and `HIRC`, or `BKHD`, `DIDX` and `DATA` with an optional `HIRC`
+([appendix B](#appendix-b)).
 
 **Header.** Version 145. `alignment` 16 when it is 0. Bank type 0. Zero hash. No padding. The
 other fields keep their values. The writer writes the zero padding that starts `DATA` on the media
@@ -1004,8 +1012,10 @@ shipped version 145 attenuations set it. The upgrade cannot recover it.
 **Media.** A media index is unchanged. It is written with the alignment of the new header
 ([section 7.3](#s7.3)).
 
+`upgrade` finds every refusal before it transforms an object: the version, then each section in
+file order, then each object of a hierarchy in order. A refusal returns `Error::Upgrade`.
 `upgrade` decodes every object of the output with the current layouts. A failure returns the
-error and no bank. A refusal returns `Error::Upgrade`.
+error and no bank.
 
 ## <a id="s12"></a>12. Audio paths
 
@@ -1237,7 +1247,7 @@ test calls a private layout function.
 | W8  | `ObjectKind`, `BankVersion`, `BankType`, `StreamType`, `ActionType` and `WemCodec` are newtypes with constants. | Exhaustive enums. | A file carries values that the crate does not name. A Wwise upgrade adds values. | [section 6.2](#s6.2), [section 8.2](#s8.2) |
 | W9  | A typed object decodes only when its layout consumes the whole payload. | Decoding the leading fields and ignoring the rest. | A layout error desynchronizes the client reader for every later object. | [section 9.8](#s9.8) |
 | W10 | The upgrade fills new curve slots with `0xFE`. | `0xFF`. | `0xFF` disables obstruction, occlusion, diffraction and transmission in the version 145 reader. | [section 11](#s11) |
-| W11 | The upgrade refuses music kinds, kinds 8 and 15 to 22, and version 125. | Passing them through. | The version 145 reader reads payloads in sequence. One payload of the old layout corrupts every later object. | [section 11](#s11) |
+| W11 | The upgrade refuses music kinds, kinds 8 and 15 to 22, chunks kept as bytes, and version 125. | Passing them through. | The version 145 reader reads payloads in sequence. One payload of the old layout corrupts every later object. | [section 11](#s11) |
 | W12 | A package holds one entry per key. | Keeping duplicate keys. | The client registers each entry under its key in one map. | [section 5.3](#s5.3) |
 | W13 | `ltk_wwise` does not depend on `ltk_meta`. | A typed `BankUnit` in the crate. | `ltk_meta` holds no schema. | [section 12](#s12); ADR-0006 |
 | W14 | The crate does not decode audio. | A Vorbis or Opus decoder. | The decoders are large dependencies. A mod replaces media with files that the Wwise tool encodes. | [section 13](#s13) |
