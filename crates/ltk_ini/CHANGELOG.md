@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_ini-v0.1.0...ltk_ini-v0.2.0) - 2026-10-27
+
+### Added
+
+- *(ltk_ini)* read ini text
+- *(ltk_ini)* [**breaking**] name storage type 5 U1
+
+### Fixed
+
+- *(ltk_ini)* read padded header
+
 ## [0.1.0](https://github.com/LeagueToolkit/league-toolkit/releases/tag/ltk_ini-v0.1.0) - 2026-10-12
 
 ### Added
