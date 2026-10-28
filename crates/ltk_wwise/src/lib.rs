@@ -28,3 +28,4 @@ pub use hierarchy::Hierarchy;
 pub use ids::{BankId, ObjectId, SourceId};
 pub use media::MediaIndex;
 pub use package::{MountedPackage, Package};
+pub use upgrade::UpgradeRefusal;

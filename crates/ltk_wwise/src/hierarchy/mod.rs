@@ -12,7 +12,7 @@ use crate::{bank::write_chunk_header, Error, ObjectId, Result};
 mod action;
 mod container;
 mod event;
-mod layout;
+pub(crate) mod layout;
 mod node;
 mod sound;
 mod sources;

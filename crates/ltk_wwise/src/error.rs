@@ -1,6 +1,9 @@
 use std::io;
 
-use crate::{bank::BankVersion, hierarchy::ObjectKind, package::PackageKey, ObjectId, SourceId};
+use crate::{
+    bank::BankVersion, hierarchy::ObjectKind, package::PackageKey, upgrade::UpgradeRefusal,
+    ObjectId, SourceId,
+};
 
 /// The result type of `ltk_wwise`.
 pub type Result<T, E = Error> = std::result::Result<T, E>;
@@ -79,6 +82,10 @@ pub enum Error {
     /// An action of a class outside the table of the generation of the bank version.
     #[error("{id}: unknown action class {class:#06x}")]
     ActionClass { id: ObjectId, class: u16 },
+
+    /// The upgrade does not rewrite the bank.
+    #[error("upgrade refused: {0:?}")]
+    Upgrade(UpgradeRefusal),
 
     /// A WEM is not a RIFF `WAVE` file with a `fmt ` and a `data` chunk.
     #[error("invalid WEM: {0}")]
