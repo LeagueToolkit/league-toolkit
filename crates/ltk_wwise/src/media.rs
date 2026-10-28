@@ -19,8 +19,8 @@ const RECORD_LEN: usize = 12;
 
 /// The media of a bank, by source ID.
 ///
-/// A media index that the caller does not edit writes its `DIDX` and `DATA` bodies as read.
-/// Two media indexes are equal when they hold the same media under the same source IDs.
+/// A media index that the caller does not edit, and whose offsets as read are multiples of the
+/// media alignment of the bank, writes its `DIDX` and `DATA` bodies as read. Two media indexes are equal when they hold the same media under the same source IDs.
 #[derive(Debug, Clone)]
 pub struct MediaIndex {
     repr: Repr,
@@ -165,48 +165,62 @@ impl MediaIndex {
         })
     }
 
-    /// Writes the `DIDX` and `DATA` chunks. An edited index places media on `alignment`.
+    /// Returns the bodies as read when the writer writes them unchanged at `alignment`.
+    ///
+    /// The writer writes the bodies as read for an unedited index whose offsets as read are
+    /// multiples of `alignment`.
+    fn as_read(&self, alignment: u32) -> Option<(&[u8], &[u8])> {
+        let Repr::Read { didx, data, ranges } = &self.repr else {
+            return None;
+        };
+        let alignment = alignment.max(1) as usize;
+        ranges
+            .values()
+            .all(|range| range.start.is_multiple_of(alignment))
+            .then_some((didx.as_slice(), data.as_slice()))
+    }
+
+    /// Writes the `DIDX` and `DATA` chunks.
+    ///
+    /// An unedited index whose offsets are multiples of `alignment` writes its bodies as read.
+    /// Every other index places its media on `alignment`.
     pub(crate) fn write(&self, writer: &mut impl Write, alignment: u32) -> Result<()> {
-        match &self.repr {
-            Repr::Read { didx, data, .. } => {
+        match self.as_read(alignment) {
+            Some((didx, data)) => {
                 write_chunk_header(writer, DIDX, didx.len())?;
                 writer.write_all(didx)?;
                 write_chunk_header(writer, DATA, data.len())?;
                 writer.write_all(data)?;
             }
-            Repr::Owned(media) => write_laid_out(writer, media, u64::from(alignment.max(1)))?,
+            None => self.write_laid_out(writer, u64::from(alignment.max(1)))?,
         }
         Ok(())
     }
-}
 
-/// Writes `media` in ascending source ID order, each media at a multiple of `alignment`.
-fn write_laid_out(
-    writer: &mut impl Write,
-    media: &BTreeMap<SourceId, Vec<u8>>,
-    alignment: u64,
-) -> Result<()> {
-    let mut didx = Vec::with_capacity(media.len() * RECORD_LEN);
-    let mut end = 0u64;
-    for (source, data) in media {
-        let offset = end.next_multiple_of(alignment);
-        end = offset + data.len() as u64;
-        for field in [source.0, to_u32(offset)?, to_u32(data.len() as u64)?] {
-            didx.extend_from_slice(&field.to_le_bytes());
+    /// Writes the media in ascending source ID order, each media at a multiple of `alignment`.
+    fn write_laid_out(&self, writer: &mut impl Write, alignment: u64) -> Result<()> {
+        let mut didx = Vec::with_capacity(self.len() * RECORD_LEN);
+        let mut end = 0u64;
+        for (source, data) in self.iter() {
+            let offset = end.next_multiple_of(alignment);
+            end = offset + data.len() as u64;
+            for field in [source.0, to_u32(offset)?, to_u32(data.len() as u64)?] {
+                didx.extend_from_slice(&field.to_le_bytes());
+            }
         }
-    }
-    write_chunk_header(writer, DIDX, didx.len())?;
-    writer.write_all(&didx)?;
+        write_chunk_header(writer, DIDX, didx.len())?;
+        writer.write_all(&didx)?;
 
-    write_chunk_header(writer, DATA, to_u32(end)? as usize)?;
-    let mut written = 0u64;
-    for data in media.values() {
-        let offset = written.next_multiple_of(alignment);
-        io::copy(&mut io::repeat(0).take(offset - written), writer)?;
-        writer.write_all(data)?;
-        written = offset + data.len() as u64;
+        write_chunk_header(writer, DATA, to_u32(end)? as usize)?;
+        let mut written = 0u64;
+        for (_, data) in self.iter() {
+            let offset = written.next_multiple_of(alignment);
+            io::copy(&mut io::repeat(0).take(offset - written), writer)?;
+            writer.write_all(data)?;
+            written = offset + data.len() as u64;
+        }
+        Ok(())
     }
-    Ok(())
 }
 
 /// Converts a `DATA` offset or size to its `u32` field.

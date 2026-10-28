@@ -1,7 +1,7 @@
 //! The rewrite of a version 132 or 134 bank as a version 145 bank.
 //!
-//! The upgrade rebuilds the header, transforms the payload of each object and lays out the media
-//! again. It refuses every bank that it cannot convert exactly.
+//! The upgrade rebuilds the header and transforms the payload of each object. The media index
+//! keeps its media. It refuses every bank that it cannot convert exactly.
 
 use crate::{
     bank::{BankHeader, BankVersion, Section},
@@ -9,7 +9,7 @@ use crate::{
         layout::{Generation, Put, Reader, Step},
         Object, ObjectKind, Typed,
     },
-    Bank, Error, Hierarchy, MediaIndex, ObjectId, Result,
+    Bank, Error, Hierarchy, ObjectId, Result,
 };
 
 /// The `alignment` of an upgraded header whose legacy `alignment` is 0.
@@ -52,8 +52,8 @@ impl Bank {
     /// Returns the bank rewritten at version 145.
     ///
     /// A version 145 bank upgrades to an equal bank. A version 132 or 134 bank gets a version
-    /// 145 header, version 145 payloads and its media laid out on the alignment of the new
-    /// header. Every object of the output decodes with the version 145 layouts.
+    /// 145 header and version 145 payloads. Its media index keeps its media, and the writer
+    /// writes it with the alignment of the new header. Every object of the output decodes with the version 145 layouts.
     ///
     /// # Errors
     ///
@@ -82,7 +82,7 @@ impl Bank {
         let mut bank = Bank::new(upgrade_header(self.header()));
         for section in self.sections() {
             let section = match section {
-                Section::Media(media) => Section::Media(relaid(media)),
+                Section::Media(media) => Section::Media(media.clone()),
                 Section::Hierarchy(hierarchy) => {
                     Section::Hierarchy(upgrade_hierarchy(hierarchy, version)?)
                 }
@@ -108,15 +108,6 @@ fn upgrade_header(legacy: &BankHeader) -> BankHeader {
     header.alt_values = legacy.alt_values;
     header.project_id = legacy.project_id;
     header
-}
-
-/// Returns a media index of the media of `media` that the writer lays out again.
-fn relaid(media: &MediaIndex) -> MediaIndex {
-    let mut out = MediaIndex::new();
-    for (source, data) in media.iter() {
-        out.insert(source, data.to_vec());
-    }
-    out
 }
 
 /// Returns the refusal of `object`, or `None` when the upgrade transforms it.

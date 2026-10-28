@@ -525,8 +525,9 @@ compared.
 
 ### <a id="s7.3"></a>7.3 Writing
 
-A media index that the caller does not edit writes its `DIDX` and `DATA` bodies as read. An edited
-media index writes:
+A media index writes its `DIDX` and `DATA` bodies as read when the caller does not edit it and
+each media offset that it read is a multiple of the media alignment of the bank. Every other media
+index writes:
 
 - the records in ascending source ID order;
 - each media at the first multiple of the media alignment of the bank at or after the end of the

@@ -165,6 +165,20 @@ fn edited_media_of_a_legacy_bank_aligns_to_16() {
 }
 
 #[test]
+fn an_unedited_media_index_lays_out_again_only_when_its_offsets_miss_the_alignment() {
+    let mut bank = read(&media_bank(&[(1, 0, 3), (2, 16, 5)], 21));
+    bank.header_mut().version = BankVersion::V145;
+
+    bank.header_mut().alignment = 8;
+    assert_eq!(didx_records(&write(&bank)), [(1, 0, 3), (2, 16, 5)]);
+
+    bank.header_mut().alignment = 32;
+    let bytes = write(&bank);
+    assert_eq!(didx_records(&bytes), [(1, 0, 3), (2, 32, 5)]);
+    assert_eq!(chunk_body(&bytes, b"DATA").len(), 37);
+}
+
+#[test]
 fn a_media_only_bank_is_a_current_user_bank_named_after_its_file() {
     let mut media = MediaIndex::new();
     media.insert(SourceId(7), b"RIFF".to_vec());
@@ -323,7 +337,7 @@ fn the_reader_rejects_two_records_of_one_source_id() {
 
 #[test]
 fn the_reader_accepts_records_in_any_order_and_writes_them_back_as_read() {
-    let bytes = media_bank(&[(9, 4, 4), (1, 0, 4)], 8);
+    let bytes = media_bank(&[(9, 16, 4), (1, 0, 4)], 20);
     let bank = read(&bytes);
     let ids: Vec<_> = bank.media().unwrap().iter().map(|(id, _)| id.0).collect();
     assert_eq!(ids, [1, 9]);
