@@ -1,6 +1,6 @@
 use std::io;
 
-use crate::package::PackageKey;
+use crate::{package::PackageKey, SourceId};
 
 /// The result type of `ltk_wwise`.
 pub type Result<T, E = Error> = std::result::Result<T, E>;
@@ -30,6 +30,24 @@ pub enum Error {
     /// index in the offset table.
     #[error("package entry {name} ends after the end of the package")]
     EntryOutOfBounds { name: String },
+
+    /// The first chunk of a bank is not `BKHD`, or `BKHD` is shorter than its version requires.
+    ///
+    /// `BKHD` is 20 bytes or longer. From version 143, it is 40 bytes or longer.
+    #[error("invalid bank header")]
+    InvalidHeader,
+
+    /// A chunk of a bank ends after the end of the bank.
+    #[error("chunk {tag:?} at offset {offset} ends after the end of the bank")]
+    ChunkOverrun { tag: [u8; 4], offset: u64 },
+
+    /// A record of `DIDX` names media that ends after the end of `DATA`.
+    #[error("media {source_id} ends after the end of DATA")]
+    MediaOutOfBounds { source_id: SourceId },
+
+    /// Two records of `DIDX` have one source ID.
+    #[error("two media have the source ID {0}")]
+    DuplicateSource(SourceId),
 
     /// A WEM is not a RIFF `WAVE` file with a `fmt ` and a `data` chunk.
     #[error("invalid WEM: {0}")]
