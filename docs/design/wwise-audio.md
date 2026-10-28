@@ -1185,3 +1185,7 @@ alignment 16. 204 are version 134 with alignment 0. Each media offset is a multi
 **Retail 16.x, `Ahri.en_US.wad.client`, 2026-10-28.** Every package is `r3d2` version 1. Entry
 records and media start on 8-byte boundaries. The data region starts at the end of the last entry
 record. The file ends at the end of the last media.
+
+**Retail 16.x, `DATA/FINAL`, 2026-10-28.** 1400 packages, 108,728 media. Every media has a `fmt `
+and a `data` chunk. Every media is `WemCodec::VORBIS`. 54,503 media are mono and 54,225 are
+stereo.
