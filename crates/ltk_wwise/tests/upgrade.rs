@@ -111,14 +111,17 @@ fn the_version_134_media_bank_upgrades_with_its_media_unchanged_at_alignment_16(
     };
     assert_eq!(media(&upgraded), media(&legacy));
 
-    // BKHD (8 + 40 bytes), then the DIDX records of source ID, offset and size.
+    // BKHD (8 + 40 bytes and 4 bytes of padding), then the DIDX records of source ID, offset
+    // and size, then DATA. The DATA body starts at 80.
     let bytes = write(&upgraded);
-    assert_eq!(&bytes[48..52], b"DIDX");
-    let didx_len = u32::from_le_bytes(bytes[52..56].try_into().unwrap()) as usize;
-    for record in bytes[56..56 + didx_len].as_chunks::<12>().0 {
+    assert_eq!(&bytes[52..56], b"DIDX");
+    let didx_len = u32::from_le_bytes(bytes[56..60].try_into().unwrap()) as usize;
+    for record in bytes[60..60 + didx_len].as_chunks::<12>().0 {
         let offset = u32::from_le_bytes(record[4..8].try_into().unwrap());
         assert_eq!(offset % 16, 0, "media offset {offset}");
     }
+    assert_eq!(&bytes[60 + didx_len..64 + didx_len], b"DATA");
+    assert_eq!(68 + didx_len, 80);
 }
 
 /// Returns the version 134 event bank with `object` appended to its hierarchy.

@@ -137,7 +137,7 @@ impl Hierarchy {
     }
 
     /// Returns the length of the encoded body.
-    fn encoded_len(&self) -> usize {
+    pub(crate) fn encoded_len(&self) -> usize {
         self.objects.iter().fold(COUNT_LEN, |len, object| {
             len + OBJECT_HEADER_LEN + object.payload.len()
         })

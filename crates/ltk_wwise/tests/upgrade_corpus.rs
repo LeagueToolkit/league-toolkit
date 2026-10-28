@@ -46,7 +46,14 @@ fn verify(upgraded: &Bank, counts: &mut Counts) -> Result<(), String> {
         .to_writer(&mut bytes)
         .map_err(|e| format!("write: {e}"))?;
     let reread = Bank::from_reader(&mut &bytes[..]).map_err(|e| format!("reread: {e}"))?;
-    if reread != *upgraded {
+    // The writer replaces the padding of `BKHD` with the zeros that align `DATA`.
+    let padding = &reread.header().padding;
+    if padding.iter().any(|&byte| byte != 0) || padding.len() >= 16 {
+        return Err(format!("writes the BKHD padding {padding:?}"));
+    }
+    let mut expected = upgraded.clone();
+    expected.header_mut().padding = padding.clone();
+    if reread != expected {
         return Err("rereads to a different bank".to_owned());
     }
     reread.check().map_err(|r| format!("check: {r}"))?;
@@ -59,8 +66,9 @@ fn verify(upgraded: &Bank, counts: &mut Counts) -> Result<(), String> {
     }
     if reread.media().is_some() {
         counts.media_banks += 1;
-        if data_body_offset(&bytes).is_some_and(|offset| offset % 16 == 0) {
-            counts.data_on_16 += 1;
+        match data_body_offset(&bytes) {
+            Some(offset) if offset % 16 == 0 => counts.data_on_16 += 1,
+            offset => return Err(format!("DATA body at {offset:?}")),
         }
     }
     Ok(())

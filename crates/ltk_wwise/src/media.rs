@@ -180,6 +180,14 @@ impl MediaIndex {
             .then_some((didx.as_slice(), data.as_slice()))
     }
 
+    /// Returns the length of the `DIDX` body that [`MediaIndex::write`] writes at `alignment`.
+    pub(crate) fn didx_len(&self, alignment: u32) -> usize {
+        match self.as_read(alignment) {
+            Some((didx, _)) => didx.len(),
+            None => self.len() * RECORD_LEN,
+        }
+    }
+
     /// Writes the `DIDX` and `DATA` chunks.
     ///
     /// An unedited index whose offsets are multiples of `alignment` writes its bodies as read.

@@ -4,7 +4,7 @@ mod common;
 
 use common::fixture;
 use ltk_wwise::{
-    bank::{BankHeader, BankType, BankVersion, Rejection, Section},
+    bank::{BankHeader, BankType, BankVersion, RawSection, Rejection, Section},
     Bank, BankId, Error, MediaIndex, SourceId,
 };
 
@@ -150,7 +150,9 @@ fn edited_media_is_laid_out_in_source_order_on_the_media_alignment() {
         media.iter().map(|(id, _)| id.0).collect::<Vec<_>>(),
         [5, 879168912, 4_000_000_000]
     );
-    assert_eq!(reread.header(), original.header());
+    let mut header = original.header().clone();
+    header.padding = vec![0; 12];
+    assert_eq!(*reread.header(), header);
 }
 
 #[test]
@@ -178,11 +180,68 @@ fn an_unedited_media_index_lays_out_again_only_when_its_offsets_miss_the_alignme
     assert_eq!(chunk_body(&bytes, b"DATA").len(), 37);
 }
 
+/// Returns the file offset of the first `DATA` body of the bank `bytes`.
+fn data_offset(bytes: &[u8]) -> usize {
+    chunk_body(bytes, b"DATA").as_ptr() as usize - bytes.as_ptr() as usize
+}
+
+#[test]
+fn the_writer_pads_bkhd_with_zeros_to_start_data_on_the_media_alignment() {
+    let mut media = MediaIndex::new();
+    media.insert(SourceId(7), b"RIFF".to_vec());
+    let mut bank = Bank::media_only("a.bnk", media);
+    // BKHD 8 + 40, DIDX 8 + 12 and the DATA header 8 end at 76.
+    assert_eq!(data_offset(&write(&bank)), 80);
+
+    // A STID chunk of 8 + 5 bytes before the media ends the DATA header at 89.
+    bank.sections_mut().insert(
+        0,
+        Section::Raw(RawSection {
+            tag: *b"STID",
+            data: vec![0; 5],
+        }),
+    );
+    let bytes = write(&bank);
+    assert_eq!(data_offset(&bytes), 96);
+    assert_eq!(read(&bytes).header().padding, [0; 7]);
+
+    // The fixture with three media: a DIDX of 36 bytes ends the DATA header at 100.
+    let mut bank = read(&fixture("media_v145.bnk"));
+    let media = bank.media_mut().unwrap();
+    media.insert(SourceId(5), vec![1]);
+    media.insert(SourceId(6), vec![2]);
+    let bytes = write(&bank);
+    assert_eq!(data_offset(&bytes), 112);
+    assert_eq!(read(&bytes).header().padding, [0; 12]);
+}
+
+#[test]
+fn the_writer_keeps_padding_that_starts_data_on_the_media_alignment() {
+    // Without padding, the DATA header of the fixture ends at 76.
+    let mut bank = read(&fixture("media_v145.bnk"));
+    for kept in [4, 20] {
+        bank.header_mut().padding = vec![0xAA; kept];
+        assert_eq!(read(&write(&bank)).header().padding, vec![0xAA; kept]);
+    }
+
+    bank.header_mut().padding = vec![0xAA; 8];
+    assert_eq!(read(&write(&bank)).header().padding, [0; 4]);
+}
+
+#[test]
+fn a_bank_without_media_writes_its_padding_as_is() {
+    let mut bank = read(&fixture("events_v145.bnk"));
+    bank.header_mut().padding = vec![0xAA; 3];
+
+    assert_eq!(read(&write(&bank)).header().padding, [0xAA; 3]);
+}
+
 #[test]
 fn a_media_only_bank_is_a_current_user_bank_named_after_its_file() {
     let mut media = MediaIndex::new();
     media.insert(SourceId(7), b"RIFF".to_vec());
     let bank = Bank::media_only("sett_base_sfx_audio.bnk", media);
+    assert!(bank.header().padding.is_empty());
 
     let reread = read(&write(&bank));
     let header = reread.header();
@@ -195,7 +254,8 @@ fn a_media_only_bank_is_a_current_user_bank_named_after_its_file() {
         (0, 0, 0)
     );
     assert_eq!(header.hash, [0; 16]);
-    assert!(header.padding.is_empty());
+    // BKHD 8 + 40, DIDX 8 + 12 and the DATA header 8 end at 76: 4 bytes of padding give 80.
+    assert_eq!(header.padding, [0; 4]);
     assert_eq!(reread.sections().len(), 1);
     assert_eq!(reread.media().unwrap().get(SourceId(7)), Some(&b"RIFF"[..]));
     assert_eq!(reread.check(), Ok(()));
@@ -261,13 +321,19 @@ fn chunk(tag: &[u8; 4], body: &[u8]) -> Vec<u8> {
 }
 
 /// Returns a version 134 bank of a `DIDX` of `records` and a `DATA` of `data_len` bytes.
+///
+/// The `BKHD` padding starts the `DATA` body at a multiple of 16, as in every shipped bank.
 fn media_bank(records: &[(u32, u32, u32)], data_len: usize) -> Vec<u8> {
     let didx: Vec<u8> = records
         .iter()
         .flat_map(|&(id, offset, size)| [id, offset, size])
         .flat_map(u32::to_le_bytes)
         .collect();
-    let mut bytes = fixture("events_v134.bnk")[..32].to_vec();
+    // The 20 bytes of the version 134 fields of the fixture, after the chunk header.
+    let mut header = fixture("events_v134.bnk")[8..28].to_vec();
+    let unpadded = 8 + header.len() + 8 + didx.len() + 8;
+    header.resize(header.len() + unpadded.next_multiple_of(16) - unpadded, 0);
+    let mut bytes = chunk(b"BKHD", &header);
     bytes.extend(chunk(b"DIDX", &didx));
     bytes.extend(chunk(b"DATA", &vec![0; data_len]));
     bytes

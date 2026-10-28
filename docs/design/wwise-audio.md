@@ -387,10 +387,15 @@ impl BankType {
 ```
 
 The writer writes the first 20 bytes, then `bank_type` and `hash` when `version` is 143 or
-higher, then `padding`. The chunk size is the sum. A shipped body carries 0, 4, 8 or 12 bytes of
-padding: 20 to 32 bytes at a legacy version, 40 to 52 bytes at version 145. In every shipped
-media bank, the `DATA` body starts at a multiple of 16 from the start of the file
-([appendix B](#appendix-b)).
+higher, then the padding. The chunk size is the sum.
+
+In a bank with a `Section::Media`, the `DATA` body of the first media index starts at a multiple
+of `media_alignment()` from the start of the file. The writer writes `padding` when it gives that
+start. Otherwise it writes the shortest run of zero bytes that gives it, in place of `padding`. A
+bank without a `Section::Media` writes `padding` as is. A shipped body carries 0, 4, 8 or 12 bytes
+of padding: 20 to 32 bytes at a legacy version, 40 to 52 bytes at version 145. In every shipped
+media bank, the `DATA` body starts at a multiple of 16 from the start of the file, and the writer
+keeps the padding ([appendix B](#appendix-b)).
 
 The reader rejects a `BKHD` body shorter than 20 bytes, and a body shorter than 40 bytes at
 version 143 or higher. The client reads `bank_type` and `hash` from the stream at version 143
@@ -449,7 +454,8 @@ A `DIDX` chunk followed by a `DATA` chunk is one `Section::Media`. A `DIDX` with
 it, and a `DATA` without a `DIDX` before it, are `Section::Raw`. A `HIRC` chunk is
 `Section::Hierarchy`. Every other chunk is `Section::Raw`, in its file position. The writer writes
 `BKHD`, then the sections in order. A bank that the caller does not edit writes back byte for
-byte.
+byte when its `DATA` start satisfies [section 6.2](#s6.2) and its media offsets satisfy
+[section 7.3](#s7.3). Every shipped bank does ([appendix B](#appendix-b)).
 
 ### <a id="s6.4"></a>6.4 Client acceptance
 
@@ -535,6 +541,8 @@ index writes:
 - zero bytes in each gap;
 - a `DATA` body that ends at the end of the last media.
 
+The `BKHD` padding places the `DATA` body in the file ([section 6.2](#s6.2)).
+
 ### <a id="s7.4"></a>7.4 Media-only bank
 
 ```rust
@@ -546,7 +554,8 @@ impl Bank {
 
 The header has version 145, the bank ID `BankId::from_name(name)`, alignment 16, bank type 0, zero
 for every other field, and no padding. The sections are one `Section::Media`. The bank passes
-`Bank::check`.
+`Bank::check`. The writer writes the zero padding that starts `DATA` at a multiple of 16
+([section 6.2](#s6.2)).
 
 ## <a id="s8"></a>8. Hierarchy
 
@@ -973,7 +982,8 @@ pub enum UpgradeRefusal {
 A version 145 bank upgrades to an equal bank. A version 132 or 134 bank upgrades as follows.
 
 **Header.** Version 145. `alignment` 16 when it is 0. Bank type 0. Zero hash. No padding. The
-other fields keep their values.
+other fields keep their values. The writer writes the zero padding that starts `DATA` on the media
+alignment ([section 6.2](#s6.2)).
 
 **Objects.**
 
@@ -991,7 +1001,8 @@ The version 134 reader applies the project obstruction and occlusion curves to e
 The zero byte of an attenuation is the value of a zero-initialized version 134 object. 765 of 4000
 shipped version 145 attenuations set it. The upgrade cannot recover it.
 
-**Media.** A media index is unchanged. It is written with the alignment of the new header.
+**Media.** A media index is unchanged. It is written with the alignment of the new header
+([section 7.3](#s7.3)).
 
 `upgrade` decodes every object of the output with the current layouts. A failure returns the
 error and no bank. A refusal returns `Error::Upgrade`.
@@ -1221,7 +1232,7 @@ test calls a private layout function.
 | W3  | The bank ID comes from the file name. The header `bank_id` is data. | Validating the header ID against the name. | The client registers a bank under the hash of the name and never reads the header ID. 18 shipped banks carry a different header ID. | [section 4.2](#s4.2), [section 6.2](#s6.2) |
 | W4  | The reader reads chunks in sequence and fails on an overrun. | A rescan for the next tag. | The client reads in sequence. Nine shipped version 125 banks fail in the client. | [section 6.1](#s6.1) |
 | W5  | Reading does not check client acceptance. `Bank::check` does. | Rejecting a legacy event bank in the reader. | A tool inspects and upgrades a bank that the client rejects. | [section 6.4](#s6.4) |
-| W6  | An unedited bank, media index and package write back byte for byte. | Normalizing on write. | A mod changes only the bytes that it edits. | [section 5.5](#s5.5), [section 6.3](#s6.3), [section 7.3](#s7.3) |
+| W6  | An unedited package writes back byte for byte. An unedited bank and media index write back byte for byte when their media start on the media alignment (W15). | Normalizing on write. | A mod changes only the bytes that it edits. | [section 5.5](#s5.5), [section 6.3](#s6.3), [section 7.3](#s7.3) |
 | W7  | Every hierarchy object keeps its payload as bytes. Typed objects are decoded on request. | A typed enum for every kind in `Hierarchy`. | Kinds 8 and 10 to 22 have no checked layout. A raw payload round-trips every kind. | [section 8](#s8), [section 9.8](#s9.8) |
 | W8  | `ObjectKind`, `BankVersion`, `BankType`, `StreamType`, `ActionType` and `WemCodec` are newtypes with constants. | Exhaustive enums. | A file carries values that the crate does not name. A Wwise upgrade adds values. | [section 6.2](#s6.2), [section 8.2](#s8.2) |
 | W9  | A typed object decodes only when its layout consumes the whole payload. | Decoding the leading fields and ignoring the rest. | A layout error desynchronizes the client reader for every later object. | [section 9.8](#s9.8) |
@@ -1230,6 +1241,7 @@ test calls a private layout function.
 | W12 | A package holds one entry per key. | Keeping duplicate keys. | The client registers each entry under its key in one map. | [section 5.3](#s5.3) |
 | W13 | `ltk_wwise` does not depend on `ltk_meta`. | A typed `BankUnit` in the crate. | `ltk_meta` holds no schema. | [section 12](#s12); ADR-0006 |
 | W14 | The crate does not decode audio. | A Vorbis or Opus decoder. | The decoders are large dependencies. A mod replaces media with files that the Wwise tool encodes. | [section 13](#s13) |
+| W15 | The writer starts the `DATA` body of a media bank at a multiple of the media alignment from the start of the file. The `BKHD` padding places it. | Writing the padding as read after an edit. | Every shipped media bank starts `DATA` at a multiple of 16. An edited `DIDX`, a media-only bank and an upgraded header move `DATA`. | [section 6.2](#s6.2), [section 7.3](#s7.3) |
 
 ## <a id="appendix-a"></a>Appendix A. Client functions
 

@@ -1,5 +1,6 @@
 //! Wwise SoundBanks (`.bnk`): the chunk stream, the `BKHD` header and client acceptance.
 use std::{
+    borrow::Cow,
     fmt,
     io::{self, Read, Write},
 };
@@ -168,19 +169,18 @@ impl BankHeader {
         Ok(header)
     }
 
-    /// Returns the length of the encoded body.
-    fn encoded_len(&self) -> usize {
-        let fields = if self.is_typed() {
+    /// Returns the length of the decoded fields of the body: the body without the padding.
+    fn fields_len(&self) -> usize {
+        if self.is_typed() {
             TYPED_HEADER_LEN
         } else {
             BASE_HEADER_LEN
-        };
-        fields + self.padding.len()
+        }
     }
 
-    /// Writes the `BKHD` chunk.
-    fn write(&self, writer: &mut impl Write) -> Result<()> {
-        write_chunk_header(writer, BKHD, self.encoded_len())?;
+    /// Writes the `BKHD` chunk with `padding` after the decoded fields.
+    fn write(&self, writer: &mut impl Write, padding: &[u8]) -> Result<()> {
+        write_chunk_header(writer, BKHD, self.fields_len() + padding.len())?;
         writer.write_u32::<LE>(self.version.0)?;
         writer.write_u32::<LE>(self.bank_id.0)?;
         writer.write_u32::<LE>(self.language_id)?;
@@ -191,7 +191,7 @@ impl BankHeader {
             writer.write_u32::<LE>(self.bank_type.0)?;
             writer.write_all(&self.hash)?;
         }
-        writer.write_all(&self.padding)?;
+        writer.write_all(padding)?;
         Ok(())
     }
 }
@@ -259,11 +259,26 @@ impl Bank {
 
     /// Writes `BKHD`, then the sections in order.
     ///
+    /// In a bank with a media index, the `DATA` body of the first media index starts at a
+    /// multiple of [`BankHeader::media_alignment`] from the start of the file. The writer keeps
+    /// the padding of the header when it gives that start. Otherwise it writes the shortest run
+    /// of zero bytes that gives it in place of the padding. A bank without a media index writes
+    /// the padding as is.
+    ///
     /// # Errors
     ///
     /// - [`Error::Io`] when the writer fails, or a chunk is longer than `u32::MAX` bytes.
     pub fn to_writer(&self, writer: &mut impl Write) -> Result<()> {
-        self.header.write(writer)?;
+        let alignment = self.header.media_alignment();
+        let padding = match self.data_offset_without_padding(alignment) {
+            Some(start)
+                if !(start + self.header.padding.len()).is_multiple_of(alignment as usize) =>
+            {
+                Cow::Owned(vec![0; start.next_multiple_of(alignment as usize) - start])
+            }
+            Some(_) | None => Cow::Borrowed(self.header.padding.as_slice()),
+        };
+        self.header.write(writer, &padding)?;
         for section in &self.sections {
             match section {
                 Section::Media(media) => media.write(writer, self.header.media_alignment())?,
@@ -275,6 +290,25 @@ impl Bank {
             }
         }
         Ok(())
+    }
+
+    /// Returns the file offset of the `DATA` body of the first media index when `BKHD` has no
+    /// padding, or `None` for a bank without a media index.
+    ///
+    /// `alignment` is the media alignment that the media index is written with.
+    fn data_offset_without_padding(&self, alignment: u32) -> Option<usize> {
+        let chunk_header = CHUNK_HEADER_LEN as usize;
+        let mut offset = chunk_header + self.header.fields_len();
+        for section in &self.sections {
+            match section {
+                Section::Media(media) => {
+                    return Some(offset + 2 * chunk_header + media.didx_len(alignment));
+                }
+                Section::Hierarchy(hierarchy) => offset += chunk_header + hierarchy.encoded_len(),
+                Section::Raw(raw) => offset += chunk_header + raw.data.len(),
+            }
+        }
+        None
     }
 
     /// Returns the header.
