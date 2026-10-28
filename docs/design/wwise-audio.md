@@ -384,8 +384,14 @@ impl BankType {
 ```
 
 The writer writes the first 20 bytes, then `bank_type` and `hash` when `version` is 143 or
-higher, then `padding`. The chunk size is the sum. A legacy bank ships a 24-byte body: 20 bytes
-and 4 bytes of padding. A version 145 bank ships a 40-byte body with no padding.
+higher, then `padding`. The chunk size is the sum. A shipped body carries 0, 4, 8 or 12 bytes of
+padding: 20 to 32 bytes at a legacy version, 40 to 52 bytes at version 145. In every shipped
+media bank, the `DATA` body starts at a multiple of 16 from the start of the file
+([appendix B](#appendix-b)).
+
+The reader rejects a `BKHD` body shorter than 20 bytes, and a body shorter than 40 bytes at
+version 143 or higher. The client reads `bank_type` and `hash` from the stream at version 143
+or higher, then skips the chunk size minus 40 bytes.
 
 The client reads `version` and `alignment`, and one bit of `alt_values`. The client does not read
 `bank_id`, `language_id`, `project_id` or `hash`.
@@ -1062,7 +1068,7 @@ pub enum Error {
     DuplicateKey(PackageKey),
     #[error("package entry {name} ends after the end of the package")]
     EntryOutOfBounds { name: String },
-    /// The first chunk of a bank is not `BKHD`, or `BKHD` is shorter than 20 bytes.
+    /// The first chunk of a bank is not `BKHD`, or `BKHD` is shorter than its version requires.
     #[error("invalid bank header")]
     InvalidHeader,
     #[error("chunk {tag:?} at offset {offset} ends after the end of the bank")]
@@ -1185,6 +1191,21 @@ kinds 1 to 7, 9 and 14 close exactly under the layouts of [section 9](#s9).
 **Retail 16.x, five WADs (`Ahri`, `Zed`, `Sett`, `Global`, `Map11`), 2026-10-28.** 679 media
 banks. Every `DIDX` lists its records in ascending source ID order. 475 are version 145 with
 alignment 16. 204 are version 134 with alignment 0. Each media offset is a multiple of 16.
+
+**Retail 16.x, `DATA/FINAL`, `ltk_wwise` `bank_corpus`, 2026-10-28.** 9057 banks. 9039 read
+and write back byte for byte. 18 version 125 banks fail to read with `ChunkOverrun`: nine carry
+10 bytes between `DIDX` and `DATA`, nine carry 30 bytes after `HIRC`.
+
+| Version | Banks read | `BKHD` body sizes (banks) |
+| --- | --- | --- |
+| 145 | 8214 | 40 (5715), 44 (550), 48 (1409), 52 (540) |
+| 134 | 823 | 20 (156), 24 (343), 28 (168), 32 (156) |
+| 132 | 2 | 24 (1), 32 (1) |
+
+3644 media indexes hold 155,830 media. Every `DIDX` lists its records in ascending source ID
+order. In every media index, each media offset is a multiple of the media alignment, and the
+`DATA` body starts at a multiple of 16 from the start of the file. 13 readable legacy banks carry
+`HIRC` (12 at version 134, 1 at version 132), and each fails `Bank::check` with `LegacyChunk`.
 
 **Retail 16.x, `Ahri.en_US.wad.client`, 2026-10-28.** Every package is `r3d2` version 1. Entry
 records and media start on 8-byte boundaries. The data region starts at the end of the last entry
