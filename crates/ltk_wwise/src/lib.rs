@@ -24,3 +24,4 @@ pub mod wem;
 
 pub use error::{Error, Result};
 pub use ids::{BankId, ObjectId, SourceId};
+pub use package::{MountedPackage, Package};
