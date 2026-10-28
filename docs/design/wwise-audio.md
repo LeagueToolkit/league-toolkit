@@ -1207,6 +1207,25 @@ order. In every media index, each media offset is a multiple of the media alignm
 `DATA` body starts at a multiple of 16 from the start of the file. 13 readable legacy banks carry
 `HIRC` (12 at version 134, 1 at version 132), and each fails `Bank::check` with `LegacyChunk`.
 
+**Retail 16.x, `DATA/FINAL`, `ltk_wwise` `hierarchy_corpus`, 2026-10-28.** 4525 hierarchies in
+the 9039 readable banks: 4512 at version 145, 12 at version 134, 1 at version 132. Every `HIRC`
+framing ends at the end of its chunk, and every bank with a hierarchy writes back byte for byte.
+800,146 objects. No object is kind 15 or kind 20.
+
+| Kind | Objects | Kind | Objects |
+| --- | --- | --- | --- |
+| 1 `STATE` | 5921 | 12 `MUSIC_SWITCH_CONTAINER` | 429 |
+| 2 `SOUND` | 300,842 | 13 `MUSIC_RANDOM_SEQUENCE_CONTAINER` | 628 |
+| 3 `ACTION` | 171,557 | 14 `ATTENUATION` | 16,299 |
+| 4 `EVENT` | 145,210 | 16 | 54 |
+| 5 `RANDOM_SEQUENCE_CONTAINER` | 117,788 | 17 | 1982 |
+| 6 `SWITCH_CONTAINER` | 4191 | 18 | 22 |
+| 7 `ACTOR_MIXER` | 27,640 | 19 | 2 |
+| 8 `BUS` | 940 | 21 | 4 |
+| 9 `LAYER_CONTAINER` | 1325 | 22 | 163 |
+| 10 `MUSIC_SEGMENT` | 2147 | | |
+| 11 `MUSIC_TRACK` | 3002 | | |
+
 **Retail 16.x, `Ahri.en_US.wad.client`, 2026-10-28.** Every package is `r3d2` version 1. Entry
 records and media start on 8-byte boundaries. The data region starts at the end of the last entry
 record. The file ends at the end of the last media.
