@@ -1229,7 +1229,8 @@ test calls a private layout function.
   - every object of a typed kind in a version 132, 134 or 145 bank decodes, and encodes back to
     its payload;
   - every legacy bank with a chunk other than `DIDX` or `DATA` fails `Bank::check`;
-  - every version 132 and 134 bank without a refused kind upgrades.
+  - every version 132 and 134 bank without a refusal upgrades, reads back to an equal bank, and
+    starts its `DATA` body at a multiple of 16.
 
   The tests print their counts. [Appendix B](#appendix-b) records them. `ltk_mapgeo`
   `write_corpus` is the model.
@@ -1364,9 +1365,9 @@ object, the other a kind 17 object. 593 upgraded banks hold a media index. In 11
 records and media start on 8-byte boundaries. The data region starts at the end of the last entry
 record. The file ends at the end of the last media.
 
-**Retail 16.x, `DATA/FINAL`, 2026-10-28.** 1400 packages, 108,728 media. Every media has a `fmt `
-and a `data` chunk. Every media is `WemCodec::VORBIS`. 54,503 media are mono and 54,225 are
-stereo.
+**Retail 16.x, `DATA/FINAL`, `wem_corpus`, 2026-10-28.** 1401 packages, 108,888 media: the
+packages and entries of `package_corpus`. Every media has a `fmt ` and a `data` chunk. Every
+media is `WemCodec::VORBIS`. 54,663 media are mono and 54,225 are stereo.
 
 **Retail 16.x, `DATA/FINAL`, `package_corpus`, 2026-10-28.** 1401 packages, none empty, 108,888
 entries, 5,486,548,946 bytes. Every package writes back byte for byte. Every entry key equals the
