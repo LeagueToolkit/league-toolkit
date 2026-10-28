@@ -327,6 +327,7 @@ fn the_chunks_after_a_media_index_are_read_in_file_order() {
         .iter()
         .map(|section| match section {
             Section::Media(_) => *b"DIDX",
+            Section::Hierarchy(_) => *b"HIRC",
             Section::Raw(raw) => raw.tag,
         })
         .collect();

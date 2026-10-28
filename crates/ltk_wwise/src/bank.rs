@@ -7,8 +7,9 @@ use std::{
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 
 use crate::{
+    hierarchy::HIRC,
     media::{DATA, DIDX},
-    BankId, Error, MediaIndex, Result,
+    BankId, Error, Hierarchy, MediaIndex, Result,
 };
 
 /// The tag of the header chunk.
@@ -222,6 +223,8 @@ impl Bank {
     /// - [`Error::ChunkOverrun`] when a chunk ends after the end of the input.
     /// - [`Error::MediaOutOfBounds`] when a `DIDX` record ends after the end of `DATA`.
     /// - [`Error::DuplicateSource`] when two `DIDX` records have one source ID.
+    /// - [`Error::Framing`] when the objects of `HIRC` do not end at the end of the chunk.
+    /// - [`Error::PayloadTooShort`] when an object of `HIRC` is shorter than an object ID.
     /// - [`Error::Io`] when the reader fails.
     pub fn from_reader(reader: &mut impl Read) -> Result<Self> {
         let mut chunks = ChunkReader::new(reader);
@@ -243,6 +246,7 @@ impl Bank {
                     next = chunks.next_chunk()?;
                     Section::Media(MediaIndex::decode(chunk.body, data.body)?)
                 }
+                None if chunk.tag == HIRC => Section::Hierarchy(Hierarchy::decode(&chunk.body)?),
                 None => Section::Raw(RawSection {
                     tag: chunk.tag,
                     data: chunk.body,
@@ -263,6 +267,7 @@ impl Bank {
         for section in &self.sections {
             match section {
                 Section::Media(media) => media.write(writer, self.header.media_alignment())?,
+                Section::Hierarchy(hierarchy) => hierarchy.write(writer)?,
                 Section::Raw(raw) => {
                     write_chunk_header(writer, raw.tag, raw.data.len())?;
                     writer.write_all(&raw.data)?;
@@ -328,14 +333,13 @@ impl Bank {
         }
         if version.is_legacy() {
             for section in &self.sections {
-                if let Section::Raw(raw) = section {
-                    if raw.tag != DIDX && raw.tag != DATA {
-                        return Err(Rejection::LegacyChunk {
-                            version,
-                            tag: raw.tag,
-                        });
-                    }
-                }
+                let tag = match section {
+                    Section::Media(_) => continue,
+                    Section::Hierarchy(_) => HIRC,
+                    Section::Raw(raw) if raw.tag == DIDX || raw.tag == DATA => continue,
+                    Section::Raw(raw) => raw.tag,
+                };
+                return Err(Rejection::LegacyChunk { version, tag });
             }
         }
         Ok(())
@@ -345,7 +349,7 @@ impl Bank {
     pub fn media(&self) -> Option<&MediaIndex> {
         self.sections.iter().find_map(|section| match section {
             Section::Media(media) => Some(media),
-            Section::Raw(_) => None,
+            Section::Hierarchy(_) | Section::Raw(_) => None,
         })
     }
 
@@ -353,7 +357,23 @@ impl Bank {
     pub fn media_mut(&mut self) -> Option<&mut MediaIndex> {
         self.sections.iter_mut().find_map(|section| match section {
             Section::Media(media) => Some(media),
-            Section::Raw(_) => None,
+            Section::Hierarchy(_) | Section::Raw(_) => None,
+        })
+    }
+
+    /// Returns the first hierarchy.
+    pub fn hierarchy(&self) -> Option<&Hierarchy> {
+        self.sections.iter().find_map(|section| match section {
+            Section::Hierarchy(hierarchy) => Some(hierarchy),
+            Section::Media(_) | Section::Raw(_) => None,
+        })
+    }
+
+    /// Returns the first hierarchy for editing.
+    pub fn hierarchy_mut(&mut self) -> Option<&mut Hierarchy> {
+        self.sections.iter_mut().find_map(|section| match section {
+            Section::Hierarchy(hierarchy) => Some(hierarchy),
+            Section::Media(_) | Section::Raw(_) => None,
         })
     }
 }
@@ -363,6 +383,8 @@ impl Bank {
 pub enum Section {
     /// A `DIDX` chunk and the `DATA` chunk after it.
     Media(MediaIndex),
+    /// A `HIRC` chunk.
+    Hierarchy(Hierarchy),
     /// Any other chunk, kept as bytes.
     Raw(RawSection),
 }

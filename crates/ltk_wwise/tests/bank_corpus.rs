@@ -142,7 +142,8 @@ fn every_shipped_bank_writes_back_byte_for_byte() {
 
         let other_chunk = bank.sections().iter().any(|section| match section {
             Section::Raw(raw) => &raw.tag != b"DIDX" && &raw.tag != b"DATA",
-            _ => false,
+            Section::Hierarchy(_) => true,
+            Section::Media(_) => false,
         });
         if header.version.is_legacy() && other_chunk {
             counts.legacy_with_other_chunk += 1;

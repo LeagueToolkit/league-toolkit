@@ -24,6 +24,7 @@ pub mod wem;
 
 pub use bank::Bank;
 pub use error::{Error, Result};
+pub use hierarchy::Hierarchy;
 pub use ids::{BankId, ObjectId, SourceId};
 pub use media::MediaIndex;
 pub use package::{MountedPackage, Package};

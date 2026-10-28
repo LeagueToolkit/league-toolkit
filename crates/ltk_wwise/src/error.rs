@@ -49,6 +49,17 @@ pub enum Error {
     #[error("two media have the source ID {0}")]
     DuplicateSource(SourceId),
 
+    /// The objects of `HIRC` do not end at the end of the chunk.
+    ///
+    /// `offset` is the end of the framing that the counts and sizes give: past `len` when an
+    /// object runs past the chunk, short of `len` when bytes follow the last object.
+    #[error("hierarchy framing ends at {offset}, the chunk ends at {len}")]
+    Framing { offset: usize, len: usize },
+
+    /// An object payload is shorter than 4 bytes, the length of an object ID.
+    #[error("object payload of {0} bytes is shorter than an ID")]
+    PayloadTooShort(usize),
+
     /// A WEM is not a RIFF `WAVE` file with a `fmt ` and a `data` chunk.
     #[error("invalid WEM: {0}")]
     Wem(&'static str),
