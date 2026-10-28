@@ -255,6 +255,11 @@ reader rejects an entry record or a media that ends after the end of the file. T
 named `#<index>`, its index in the offset table. An offset table that ends after the end of the
 file and a name that is not valid UTF-16 are `Io` errors.
 
+`from_reader` reads the header and the entry records, then each media into its own buffer in
+ascending offset order, and skips the padding between them. It stops at the end of the last
+media. A package whose media overlap, or start inside the bytes of the header and the records,
+is read to its end into one buffer first.
+
 ### <a id="s5.4"></a>5.4 `MountedPackage`
 
 ```rust

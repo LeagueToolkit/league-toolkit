@@ -9,7 +9,7 @@
 use std::{
     collections::HashSet,
     fmt,
-    io::{self, Cursor, Read, Seek, SeekFrom, Write},
+    io::{self, Read, Seek, SeekFrom, Write},
     mem,
 };
 
@@ -28,6 +28,10 @@ const HEADER_LEN: u64 = 12;
 const RECORD_HEADER_LEN: u64 = 12;
 /// The alignment of each entry record and each media.
 const ALIGNMENT: u64 = 8;
+/// The largest buffer that the reader reserves for one media before it reads the media.
+///
+/// A media size comes from the file. The buffer grows past this bound as the bytes arrive.
+const MAX_RESERVE: u64 = 16 * 1024 * 1024;
 
 /// The key under which the client registers a package entry.
 ///
@@ -96,6 +100,11 @@ impl Package {
 
     /// Reads a package from `reader`.
     ///
+    /// The reader reads the header and the entry records, then each media into its own buffer in
+    /// ascending offset order. It stops at the end of the last media. A package whose media
+    /// overlap, or start inside the bytes of the records, is read to its end into one buffer
+    /// first.
+    ///
     /// # Errors
     ///
     /// - [`Error::InvalidMagic`] when the file does not start with `r3d2`.
@@ -106,24 +115,38 @@ impl Package {
     /// - [`Error::Io`] when the reader fails, the offset table ends after the end of the file, or
     ///   a name is not valid UTF-16.
     pub fn from_reader(reader: &mut impl Read) -> Result<Self> {
-        let mut bytes = Vec::new();
-        reader.read_to_end(&mut bytes)?;
-        let records = read_records(&mut Cursor::new(bytes.as_slice()))?;
+        let mut prefix = Prefix {
+            reader,
+            bytes: Vec::new(),
+        };
+        let records = read_records(|offset, len| prefix.fetch(offset, len), None)?;
+
+        let mut order: Vec<usize> = (0..records.len()).collect();
+        order.sort_by_key(|&index| records[index].offset);
+        let start = prefix.bytes.len() as u64;
+        let ascending = order
+            .iter()
+            .try_fold(start, |end, &index| {
+                let record = &records[index];
+                let offset = u64::from(record.offset);
+                (offset >= end).then_some(offset + u64::from(record.size))
+            })
+            .is_some();
+        let media = if ascending {
+            prefix.stream_media(&records, &order)?
+        } else {
+            prefix.buffer_media(&records)?
+        };
+
         let entries = records
             .into_iter()
-            .map(|record| {
-                let start = to_usize(u64::from(record.offset))?;
-                let end = start + to_usize(u64::from(record.size))?;
-                match bytes.get(start..end) {
-                    Some(data) => Ok(PackageEntry {
-                        name: record.name,
-                        key: record.key,
-                        data: data.to_vec(),
-                    }),
-                    None => Err(Error::EntryOutOfBounds { name: record.name }),
-                }
+            .zip(media)
+            .map(|(record, data)| PackageEntry {
+                name: record.name,
+                key: record.key,
+                data,
             })
-            .collect::<Result<_>>()?;
+            .collect();
         Ok(Self { entries })
     }
 
@@ -287,7 +310,19 @@ impl<R: Read + Seek> MountedPackage<R> {
     /// The errors of [`Package::from_reader`]. The media bounds are checked against the length of
     /// `source`.
     pub fn mount(mut source: R) -> Result<Self> {
-        let entries = read_records(&mut source)?;
+        let len = source.seek(SeekFrom::End(0))?;
+        let entries = read_records(
+            |offset, size| {
+                if offset + size > len {
+                    return Ok(None);
+                }
+                source.seek(SeekFrom::Start(offset))?;
+                let mut bytes = vec![0; to_usize(size)?];
+                source.read_exact(&mut bytes)?;
+                Ok(Some(bytes))
+            },
+            Some(len),
+        )?;
         Ok(Self { source, entries })
     }
 
@@ -367,34 +402,39 @@ impl MountedEntry {
     }
 }
 
-/// Reads the header and the entry records of the package in `source`.
-fn read_records(source: &mut (impl Read + Seek)) -> Result<Vec<MountedEntry>> {
-    let len = source.seek(SeekFrom::End(0))?;
-    source.seek(SeekFrom::Start(0))?;
-
-    let mut magic = [0; 4];
-    source.read_exact(&mut magic)?;
-    if magic != MAGIC {
+/// Reads the header and the entry records of a package.
+///
+/// `fetch(offset, len)` returns the `len` bytes of the package at `offset`, or `None` when the
+/// package ends before them. `len` is the length of the package when the caller knows it. The
+/// media bounds are checked against it.
+fn read_records(
+    mut fetch: impl FnMut(u64, u64) -> Result<Option<Vec<u8>>>,
+    len: Option<u64>,
+) -> Result<Vec<MountedEntry>> {
+    let header_eof = || io::Error::new(io::ErrorKind::UnexpectedEof, "package header is cut");
+    let magic = fetch(0, 4)?.ok_or_else(header_eof)?;
+    let Ok(found) = <[u8; 4]>::try_from(magic.as_slice()) else {
+        return Err(header_eof().into());
+    };
+    if found != MAGIC {
         return Err(Error::InvalidMagic {
             expected: MAGIC,
-            found: magic,
+            found,
         });
     }
-    let version = source.read_u32::<LE>()?;
+    let fields = fetch(4, HEADER_LEN - 4)?.ok_or_else(header_eof)?;
+    let mut fields = fields.as_slice();
+    let version = fields.read_u32::<LE>()?;
     if version != VERSION {
         return Err(Error::PackageVersion(version));
     }
-    let count = source.read_u32::<LE>()?;
-    let table_len = 4 * u64::from(count);
-    if HEADER_LEN + table_len > len {
-        return Err(io::Error::new(
+    let count = fields.read_u32::<LE>()?;
+    let table = fetch(HEADER_LEN, 4 * u64::from(count))?.ok_or_else(|| {
+        io::Error::new(
             io::ErrorKind::UnexpectedEof,
             "package offset table ends after the end of the package",
         )
-        .into());
-    }
-    let mut table = vec![0; to_usize(table_len)?];
-    source.read_exact(&mut table)?;
+    })?;
     let mut table = table.as_slice();
 
     let mut keys = HashSet::with_capacity(table.len() / 4);
@@ -404,19 +444,13 @@ fn read_records(source: &mut (impl Read + Seek)) -> Result<Vec<MountedEntry>> {
         let record_out_of_bounds = || Error::EntryOutOfBounds {
             name: format!("#{index}"),
         };
-        if record_offset + RECORD_HEADER_LEN > len {
-            return Err(record_out_of_bounds());
-        }
-        source.seek(SeekFrom::Start(record_offset))?;
-        let offset = source.read_u32::<LE>()?;
-        let size = source.read_u32::<LE>()?;
-        let name_len = source.read_u32::<LE>()?;
-        let name_bytes = 2 * u64::from(name_len);
-        if record_offset + RECORD_HEADER_LEN + name_bytes > len {
-            return Err(record_out_of_bounds());
-        }
-        let mut name = vec![0; to_usize(name_bytes)?];
-        source.read_exact(&mut name)?;
+        let record = fetch(record_offset, RECORD_HEADER_LEN)?.ok_or_else(record_out_of_bounds)?;
+        let mut record = record.as_slice();
+        let offset = record.read_u32::<LE>()?;
+        let size = record.read_u32::<LE>()?;
+        let name_len = record.read_u32::<LE>()?;
+        let name = fetch(record_offset + RECORD_HEADER_LEN, 2 * u64::from(name_len))?
+            .ok_or_else(record_out_of_bounds)?;
         let units: Vec<u16> = name
             .as_chunks::<2>()
             .0
@@ -426,7 +460,7 @@ fn read_records(source: &mut (impl Read + Seek)) -> Result<Vec<MountedEntry>> {
         let name = String::from_utf16(&units)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
-        if u64::from(offset) + u64::from(size) > len {
+        if len.is_some_and(|len| u64::from(offset) + u64::from(size) > len) {
             return Err(Error::EntryOutOfBounds { name });
         }
         let key = PackageKey::from_name(&name);
@@ -441,6 +475,76 @@ fn read_records(source: &mut (impl Read + Seek)) -> Result<Vec<MountedEntry>> {
         });
     }
     Ok(entries)
+}
+
+/// The bytes of a package that [`Package::from_reader`] has read, and the rest of the input.
+struct Prefix<'a, R> {
+    reader: &'a mut R,
+    /// The bytes from the start of the package.
+    bytes: Vec<u8>,
+}
+
+impl<R: Read> Prefix<'_, R> {
+    /// Returns the `len` bytes at `offset`, or `None` when the input ends before them.
+    ///
+    /// The prefix reads the input up to the end of the bytes and keeps every byte that it reads.
+    fn fetch(&mut self, offset: u64, len: u64) -> Result<Option<Vec<u8>>> {
+        let end = offset + len;
+        let read = self.bytes.len() as u64;
+        if end > read {
+            (&mut *self.reader)
+                .take(end - read)
+                .read_to_end(&mut self.bytes)?;
+        }
+        Ok(self
+            .bytes
+            .get(to_usize(offset)?..to_usize(end)?)
+            .map(<[u8]>::to_vec))
+    }
+
+    /// Reads the media of `records` from the input into one buffer each, in the order `order`.
+    ///
+    /// `order` lists the records in ascending offset order. No media starts before the end of
+    /// the previous media, or before the end of the prefix.
+    fn stream_media(&mut self, records: &[MountedEntry], order: &[usize]) -> Result<Vec<Vec<u8>>> {
+        let mut media = vec![Vec::new(); records.len()];
+        let mut position = self.bytes.len() as u64;
+        for &index in order {
+            let record = &records[index];
+            let offset = u64::from(record.offset);
+            let size = u64::from(record.size);
+            let gap = offset - position;
+            let skipped = io::copy(&mut (&mut *self.reader).take(gap), &mut io::sink())?;
+            let mut data = Vec::with_capacity(to_usize(size.min(MAX_RESERVE))?);
+            (&mut *self.reader).take(size).read_to_end(&mut data)?;
+            if skipped != gap || data.len() as u64 != size {
+                return Err(Error::EntryOutOfBounds {
+                    name: record.name.clone(),
+                });
+            }
+            media[index] = data;
+            position = offset + size;
+        }
+        Ok(media)
+    }
+
+    /// Reads the input to its end and copies the media of `records` out of the bytes.
+    fn buffer_media(&mut self, records: &[MountedEntry]) -> Result<Vec<Vec<u8>>> {
+        self.reader.read_to_end(&mut self.bytes)?;
+        records
+            .iter()
+            .map(|record| {
+                let start = to_usize(u64::from(record.offset))?;
+                let end = start + to_usize(u64::from(record.size))?;
+                self.bytes
+                    .get(start..end)
+                    .map(<[u8]>::to_vec)
+                    .ok_or_else(|| Error::EntryOutOfBounds {
+                        name: record.name.clone(),
+                    })
+            })
+            .collect()
+    }
 }
 
 /// Reads the media of `entry` from `source`.

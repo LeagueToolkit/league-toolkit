@@ -222,6 +222,54 @@ fn reader_rejects_an_offset_table_that_ends_after_the_end_of_the_file() {
     assert!(matches!(error, Error::Io(e) if e.kind() == io::ErrorKind::UnexpectedEof));
 }
 
+/// A reader that fails every read.
+struct Failing;
+
+impl io::Read for Failing {
+    fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
+        Err(io::Error::other("read past the end of the package"))
+    }
+}
+
+#[test]
+fn reader_reads_no_further_than_the_end_of_the_last_media() {
+    let bytes = common::fixture("package.wpk");
+
+    let package = Package::from_reader(&mut io::Read::chain(bytes.as_slice(), Failing)).unwrap();
+
+    assert_eq!(write(&package), bytes);
+}
+
+/// Returns the bytes of [`two_wems`] with the data offset and size of each record replaced.
+fn two_wems_with_media(spans: [(u32, u32); 2]) -> Vec<u8> {
+    let mut bytes = write(&two_wems());
+    for (record, (offset, size)) in [24, 48].into_iter().zip(spans) {
+        bytes[record..record + 4].copy_from_slice(&offset.to_le_bytes());
+        bytes[record + 4..record + 8].copy_from_slice(&size.to_le_bytes());
+    }
+    bytes
+}
+
+#[test]
+fn reader_reads_media_in_any_order_and_media_that_entries_share() {
+    // The media of `22.wem` at 72..77 before the media of `1.wem` at 80..89.
+    let swapped = two_wems_with_media([(80, 9), (72, 5)]);
+    let package = Package::from_reader(&mut swapped.as_slice()).unwrap();
+    assert_eq!(package.wem(SourceId(1)), Some(&b"RIFF22222"[..]));
+    assert_eq!(package.wem(SourceId(22)), Some(&b"RIFF1"[..]));
+
+    // Both entries name the media at 72..77.
+    let shared = two_wems_with_media([(72, 5), (72, 5)]);
+    let package = Package::from_reader(&mut shared.as_slice()).unwrap();
+    assert_eq!(package.wem(SourceId(1)), Some(&b"RIFF1"[..]));
+    assert_eq!(package.wem(SourceId(22)), Some(&b"RIFF1"[..]));
+
+    // The media of `1.wem` names the bytes of the offset table.
+    let in_table = two_wems_with_media([(12, 8), (80, 9)]);
+    let package = Package::from_reader(&mut in_table.as_slice()).unwrap();
+    assert_eq!(package.wem(SourceId(1)), Some(&in_table[12..20]));
+}
+
 #[test]
 fn mounted_fixture_lists_the_entries_and_reads_the_media_of_the_read_package() {
     let bytes = common::fixture("package.wpk");
