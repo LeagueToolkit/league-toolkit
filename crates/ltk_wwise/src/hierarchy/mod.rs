@@ -15,6 +15,7 @@ mod event;
 mod layout;
 mod node;
 mod sound;
+mod sources;
 mod typed;
 
 pub use action::{Action, ActionType};
@@ -22,6 +23,7 @@ pub use container::Container;
 pub use event::Event;
 pub use node::NodeBase;
 pub use sound::{BankSource, Sound, StreamType};
+pub use sources::{event_sources, EventSource};
 pub use typed::Typed;
 
 /// The tag of the hierarchy chunk.
