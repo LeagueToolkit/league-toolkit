@@ -9,6 +9,7 @@ Shipped files of the retail 16.x client, the smallest of each shape.
 | `media_v145.bnk` | `Map22.wad.client` | version 145, `BKHD` `DIDX` `DATA`, one media |
 | `events_v134.bnk` | `Map22.wad.client` `8fc9adcb677d5298` | version 134, `BKHD` `HIRC`, kinds 2, 3, 4, 5, 7, 14 |
 | `events_v145.bnk` | `Map22.wad.client` | version 145, `BKHD` `HIRC`, kinds 2, 3, 4, 5, 7, 14 |
+| `package.wpk` | `Map22.wad.client` `1009b74f7b2ce352` | `r3d2` version 1, two WEM entries |
 
 `events_v145.bnk` and `media_v145.bnk` are a pair: `media_v145.bnk` holds every data bank source of
 `events_v145.bnk`.
