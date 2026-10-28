@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.45](https://github.com/LeagueToolkit/league-toolkit/compare/league-toolkit-v0.2.44...league-toolkit-v0.2.45) - 2026-10-28
+
+### Added
+
+- *(ltk_wwise)* add crate and fnv1 hash
+
 ## [0.2.44](https://github.com/LeagueToolkit/league-toolkit/compare/league-toolkit-v0.2.43...league-toolkit-v0.2.44) - 2026-10-27
 
 ### Other
