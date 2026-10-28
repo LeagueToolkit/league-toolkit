@@ -244,10 +244,13 @@ impl PackageEntry {
 }
 ```
 
-A package holds at most one entry per key. `insert` of a new key appends the entry. The reader
-rejects a file with two entries of one key ([section 14](#s14)). The reader rejects a magic other
-than `r3d2` and a version other than 1. The reader rejects an entry record or a media that ends
-after the end of the file.
+A package holds at most one entry per key. `insert` of a new key appends the entry. `remove` keeps
+the order of the other entries. The reader rejects a file with two entries of one key
+([section 14](#s14)). The reader rejects a magic other than `r3d2` and a version other than 1. The
+reader rejects an entry record or a media that ends after the end of the file. The
+`EntryOutOfBounds` error names the entry. An entry whose record ends after the end of the file is
+named `#<index>`, its index in the offset table. An offset table that ends after the end of the
+file and a name that is not valid UTF-16 are `Io` errors.
 
 ### <a id="s5.4"></a>5.4 `MountedPackage`
 
@@ -288,7 +291,8 @@ chunks in the source.
 ### <a id="s5.5"></a>5.5 Writing
 
 `Package::to_writer` writes the layout of [section 5.1](#s5.1) with the entries in order. A package
-read from a shipped file writes back byte for byte ([appendix B](#appendix-b)).
+read from a shipped file writes back byte for byte ([appendix B](#appendix-b)). A package with an
+offset or a size above `u32::MAX` is an `Io` error.
 
 ## <a id="s6"></a>6. Bank
 
@@ -1189,3 +1193,7 @@ record. The file ends at the end of the last media.
 **Retail 16.x, `DATA/FINAL`, 2026-10-28.** 1400 packages, 108,728 media. Every media has a `fmt `
 and a `data` chunk. Every media is `WemCodec::VORBIS`. 54,503 media are mono and 54,225 are
 stereo.
+
+**Retail 16.x, `DATA/FINAL`, `package_corpus`, 2026-10-28.** 1401 packages, none empty, 108,888
+entries, 5,486,548,946 bytes. Every package writes back byte for byte. Every entry key equals the
+source ID of its name. Every media is a RIFF file with the form type `WAVE`.
