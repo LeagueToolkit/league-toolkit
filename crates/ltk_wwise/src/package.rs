@@ -16,7 +16,7 @@ use std::{
 use byteorder::{ReadBytesExt as _, WriteBytesExt as _, LE};
 use ltk_hash::elf;
 
-use crate::{Error, Result, SourceId};
+use crate::{error::to_u32, Error, Result, SourceId};
 
 /// The magic of a package.
 const MAGIC: [u8; 4] = *b"r3d2";
@@ -165,7 +165,7 @@ impl Package {
 
         writer.write_all(&MAGIC)?;
         writer.write_u32::<LE>(VERSION)?;
-        writer.write_u32::<LE>(to_u32(self.entries.len() as u64)?)?;
+        writer.write_u32::<LE>(to_u32(self.entries.len(), "package entry count")?)?;
         for slot in &layout.slots {
             writer.write_u32::<LE>(slot.record_offset)?;
         }
@@ -174,7 +174,7 @@ impl Package {
         for (entry, slot) in self.entries.iter().zip(&layout.slots) {
             position = pad(writer, position, u64::from(slot.record_offset))?;
             writer.write_u32::<LE>(slot.data_offset)?;
-            writer.write_u32::<LE>(to_u32(entry.data.len() as u64)?)?;
+            writer.write_u32::<LE>(to_u32(entry.data.len(), "package media size")?)?;
             writer.write_u32::<LE>(slot.name_len)?;
             let mut name = Vec::with_capacity(entry.name.len() * 2);
             for unit in entry.name.encode_utf16() {
@@ -586,18 +586,18 @@ impl Layout {
             let record_offset = record_end.next_multiple_of(ALIGNMENT);
             record_end = record_offset + RECORD_HEADER_LEN + 2 * name_len;
             slots.push(Slot {
-                record_offset: to_u32(record_offset)?,
+                record_offset: to_u32(record_offset, "package record offset")?,
                 data_offset: 0,
-                name_len: to_u32(name_len)?,
+                name_len: to_u32(name_len, "package entry name length")?,
             });
         }
         let mut data_end = record_end;
         for (entry, slot) in entries.iter().zip(&mut slots) {
             let data_offset = data_end.next_multiple_of(ALIGNMENT);
             data_end = data_offset + entry.data.len() as u64;
-            slot.data_offset = to_u32(data_offset)?;
+            slot.data_offset = to_u32(data_offset, "package media offset")?;
         }
-        to_u32(data_end)?;
+        to_u32(data_end, "package length")?;
         Ok(Self { table_end, slots })
     }
 }
@@ -606,16 +606,6 @@ impl Layout {
 fn pad(writer: &mut impl Write, position: u64, target: u64) -> Result<u64> {
     io::copy(&mut io::repeat(0).take(target - position), writer)?;
     Ok(target)
-}
-
-/// Converts an offset or a size of the package to a `u32`.
-fn to_u32(value: u64) -> io::Result<u32> {
-    u32::try_from(value).map_err(|_| {
-        io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("package offset or size {value} exceeds u32::MAX"),
-        )
-    })
 }
 
 /// Converts an offset or a size of the package to a `usize`.

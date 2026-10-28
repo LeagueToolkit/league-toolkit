@@ -6,7 +6,7 @@ use std::{
     ops::Range,
 };
 
-use crate::{bank::write_chunk_header, Error, Result, SourceId};
+use crate::{bank::write_chunk_header, error::to_u32, Error, Result, SourceId};
 
 /// The tag of the media index chunk.
 pub(crate) const DIDX: [u8; 4] = *b"DIDX";
@@ -212,14 +212,18 @@ impl MediaIndex {
         for (source, data) in self.iter() {
             let offset = end.next_multiple_of(alignment);
             end = offset + data.len() as u64;
-            for field in [source.0, to_u32(offset)?, to_u32(data.len() as u64)?] {
+            for field in [
+                source.0,
+                to_u32(offset, "media offset")?,
+                to_u32(data.len(), "media size")?,
+            ] {
                 didx.extend_from_slice(&field.to_le_bytes());
             }
         }
         write_chunk_header(writer, DIDX, didx.len())?;
         writer.write_all(&didx)?;
 
-        write_chunk_header(writer, DATA, to_u32(end)? as usize)?;
+        write_chunk_header(writer, DATA, to_u32(end, "DATA size")? as usize)?;
         let mut written = 0u64;
         for (_, data) in self.iter() {
             let offset = written.next_multiple_of(alignment);
@@ -229,14 +233,4 @@ impl MediaIndex {
         }
         Ok(())
     }
-}
-
-/// Converts a `DATA` offset or size to its `u32` field.
-fn to_u32(value: u64) -> Result<u32> {
-    u32::try_from(value).map_err(|_| {
-        Error::Io(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("media offset {value} is larger than u32::MAX"),
-        ))
-    })
 }

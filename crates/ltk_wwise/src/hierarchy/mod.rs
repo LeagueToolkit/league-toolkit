@@ -1,13 +1,9 @@
 //! The `HIRC` hierarchy: objects, typed layouts and the event query.
-use std::{
-    fmt,
-    io::{self, Write},
-    mem,
-};
+use std::{fmt, io::Write, mem};
 
 use byteorder::{WriteBytesExt, LE};
 
-use crate::{bank::write_chunk_header, Error, ObjectId, Result};
+use crate::{bank::write_chunk_header, error::to_u32, Error, ObjectId, Result};
 
 mod action;
 mod container;
@@ -154,16 +150,6 @@ impl Hierarchy {
         }
         Ok(())
     }
-}
-
-/// Returns `value` as a `u32` field, or an error that names the field `what`.
-fn to_u32(value: usize, what: &str) -> io::Result<u32> {
-    u32::try_from(value).map_err(|_| {
-        io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("{what} of {value} is larger than u32::MAX"),
-        )
-    })
 }
 
 /// One hierarchy object: a kind and a payload whose first `u32` is the object ID.

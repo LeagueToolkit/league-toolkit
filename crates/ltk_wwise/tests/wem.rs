@@ -1,18 +1,22 @@
 mod common;
-mod wpk_media;
 
 use std::time::Duration;
 
-use ltk_wwise::wem::{WemCodec, WemInfo};
+use ltk_wwise::{
+    wem::{WemCodec, WemInfo},
+    Package,
+};
 
 /// Returns the bytes of the entry `name` of the package `data`.
-fn media<'a>(data: &'a [u8], name: &str) -> &'a [u8] {
-    wpk_media::entries(data)
-        .expect("package entry table is in bounds")
-        .into_iter()
-        .find(|(entry, _)| entry == name)
+fn media(data: &[u8], name: &str) -> Vec<u8> {
+    Package::from_reader(&mut &data[..])
+        .expect("read package")
+        .entries()
+        .iter()
+        .find(|entry| entry.name() == name)
         .unwrap_or_else(|| panic!("package has no entry {name}"))
-        .1
+        .data()
+        .to_vec()
 }
 
 #[test]
@@ -20,7 +24,7 @@ fn reads_the_format_of_a_packaged_vorbis_wem() {
     let package = common::fixture("package.wpk");
     let wem = media(&package, "380333190.wem");
 
-    let info = WemInfo::from_bytes(wem).unwrap();
+    let info = WemInfo::from_bytes(&wem).unwrap();
 
     assert_eq!(
         info,

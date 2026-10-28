@@ -1,9 +1,23 @@
-use std::io;
+use std::{fmt, io};
 
 use crate::{
     bank::BankVersion, hierarchy::ObjectKind, package::PackageKey, upgrade::UpgradeRefusal,
     ObjectId, SourceId,
 };
+
+/// Returns `value` as a `u32` field, or an `InvalidInput` error that names the field `what`.
+pub(crate) fn to_u32<T>(value: T, what: &str) -> io::Result<u32>
+where
+    T: Copy + fmt::Display,
+    u32: TryFrom<T>,
+{
+    u32::try_from(value).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("{what} {value} exceeds u32::MAX"),
+        )
+    })
+}
 
 /// The result type of `ltk_wwise`.
 pub type Result<T, E = Error> = std::result::Result<T, E>;
