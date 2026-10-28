@@ -75,6 +75,20 @@ fn media_banks_expose_their_media_by_source_id() {
     }
 }
 
+#[test]
+fn a_read_media_index_equals_a_built_one_with_the_same_media() {
+    let bank = read(&fixture("media_v145.bnk"));
+    let read_index = bank.media().unwrap();
+    let mut built = MediaIndex::new();
+    for (source, data) in read_index.iter() {
+        built.insert(source, data.to_vec());
+    }
+
+    assert_eq!(*read_index, built);
+    built.insert(SourceId(1), vec![0]);
+    assert_ne!(*read_index, built);
+}
+
 /// Returns the body of the first chunk `tag` of the bank `bytes`.
 fn chunk_body<'a>(bytes: &'a [u8], tag: &[u8; 4]) -> &'a [u8] {
     let mut rest = bytes;

@@ -519,6 +519,10 @@ impl MediaIndex {
 The reader rejects a record whose media ends after the end of `DATA`. The reader rejects two
 records of one source ID. The reader accepts records in any order.
 
+Two media indexes are equal when they hold the same media under the same source IDs. A read
+index and a built index of the same media are equal. The layout of the bodies as read is not
+compared.
+
 ### <a id="s7.3"></a>7.3 Writing
 
 A media index that the caller does not edit writes its `DIDX` and `DATA` bodies as read. An edited

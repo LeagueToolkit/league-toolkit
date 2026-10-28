@@ -46,14 +46,8 @@ fn verify(upgraded: &Bank, counts: &mut Counts) -> Result<(), String> {
         .to_writer(&mut bytes)
         .map_err(|e| format!("write: {e}"))?;
     let reread = Bank::from_reader(&mut &bytes[..]).map_err(|e| format!("reread: {e}"))?;
-    // A read media index and a built one with the same media compare unequal. The bytes
-    // compare the content.
-    let mut rewritten = Vec::new();
-    reread
-        .to_writer(&mut rewritten)
-        .map_err(|e| format!("rewrite: {e}"))?;
-    if rewritten != bytes {
-        return Err("rereads to a bank that writes different bytes".to_owned());
+    if reread != *upgraded {
+        return Err("rereads to a different bank".to_owned());
     }
     reread.check().map_err(|r| format!("check: {r}"))?;
     if let Some(hierarchy) = reread.hierarchy() {

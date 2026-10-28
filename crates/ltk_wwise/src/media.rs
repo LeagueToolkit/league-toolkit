@@ -20,13 +20,23 @@ const RECORD_LEN: usize = 12;
 /// The media of a bank, by source ID.
 ///
 /// A media index that the caller does not edit writes its `DIDX` and `DATA` bodies as read.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Two media indexes are equal when they hold the same media under the same source IDs.
+#[derive(Debug, Clone)]
 pub struct MediaIndex {
     repr: Repr,
 }
 
+/// Compares the media by source ID. The layout of the bodies as read is not compared.
+impl PartialEq for MediaIndex {
+    fn eq(&self, other: &Self) -> bool {
+        self.len() == other.len() && self.iter().eq(other.iter())
+    }
+}
+
+impl Eq for MediaIndex {}
+
 /// The storage of a media index.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 enum Repr {
     /// The bodies as read. `ranges` holds the span of each media in `data`.
     Read {
