@@ -1252,6 +1252,13 @@ with the version of its bank and encodes back to its payload: 768,553 objects, n
 | 7 `ACTOR_MIXER` | 78 | 5 | 27,557 |
 | 9 `LAYER_CONTAINER` | 3 | 6 | 1316 |
 
+**Retail 16.x, `DATA/FINAL`, `ltk_wwise` `upgrade_corpus`, 2026-10-28.** 825 readable legacy
+banks: 823 at version 134, 2 at version 132. 823 upgrade: 822 at version 134, 1 at version 132.
+Each upgraded bank writes, reads back to the same bytes, passes `Bank::check`, and every object
+decodes with the current layouts. 2 are refused, one at each version: one bank holds a kind 11
+object, the other a kind 17 object. 593 upgraded banks hold a media index. In 112 of them the
+`DATA` body starts at a multiple of 16 from the start of the file.
+
 **Retail 16.x, `Ahri.en_US.wad.client`, 2026-10-28.** Every package is `r3d2` version 1. Entry
 records and media start on 8-byte boundaries. The data region starts at the end of the last entry
 record. The file ends at the end of the last media.
