@@ -42,6 +42,7 @@ wad = ["dep:ltk_wad"]
 hash = ["dep:ltk_hash"]
 rst = ["dep:ltk_rst"]
 ini = ["dep:ltk_ini"]
+wwise = ["dep:ltk_wwise"]
 
 [dependencies]
 ltk_anim = { version = "0.3.13", path = "../ltk_anim", optional = true }
@@ -54,6 +55,7 @@ ltk_wad = { version = "0.5.11", path = "../ltk_wad", optional = true }
 ltk_hash = { version = "0.5.2", path = "../ltk_hash", optional = true }
 ltk_rst = { version = "0.2.3", path = "../ltk_rst", optional = true }
 ltk_ini = { version = "0.2.0", path = "../ltk_ini", optional = true }
+ltk_wwise = { version = "0.1.0", path = "../ltk_wwise", optional = true }
 
 [dev-dependencies]
 image = { version = "0.25.2", default-features = false }

@@ -1,0 +1,21 @@
+[package]
+name = "ltk_wwise"
+version = "0.1.0"
+edition = "2021"
+description = "Wwise bank and WPK package reading/writing for League Toolkit"
+license = "Apache-2.0"
+readme = "../../README.md"
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+byteorder = { workspace = true }
+
+ltk_hash = { version = "0.5.1", path = "../ltk_hash" }
+
+[dev-dependencies]
+insta = { workspace = true }
+
+ltk_wad = { path = "../ltk_wad" }
