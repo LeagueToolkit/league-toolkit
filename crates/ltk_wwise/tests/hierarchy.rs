@@ -258,28 +258,28 @@ fn the_reader_rejects_a_payload_shorter_than_an_id() {
 }
 
 #[test]
-fn object_kinds_display_the_names_of_their_constants() {
+fn object_kinds_display_their_wwise_names_in_camel_case() {
     let named = [
-        (ObjectKind::STATE, "STATE"),
-        (ObjectKind::SOUND, "SOUND"),
-        (ObjectKind::ACTION, "ACTION"),
-        (ObjectKind::EVENT, "EVENT"),
+        (ObjectKind::STATE, "State"),
+        (ObjectKind::SOUND, "Sound"),
+        (ObjectKind::ACTION, "Action"),
+        (ObjectKind::EVENT, "Event"),
         (
             ObjectKind::RANDOM_SEQUENCE_CONTAINER,
-            "RANDOM_SEQUENCE_CONTAINER",
+            "RandomSequenceContainer",
         ),
-        (ObjectKind::SWITCH_CONTAINER, "SWITCH_CONTAINER"),
-        (ObjectKind::ACTOR_MIXER, "ACTOR_MIXER"),
-        (ObjectKind::BUS, "BUS"),
-        (ObjectKind::LAYER_CONTAINER, "LAYER_CONTAINER"),
-        (ObjectKind::MUSIC_SEGMENT, "MUSIC_SEGMENT"),
-        (ObjectKind::MUSIC_TRACK, "MUSIC_TRACK"),
-        (ObjectKind::MUSIC_SWITCH_CONTAINER, "MUSIC_SWITCH_CONTAINER"),
+        (ObjectKind::SWITCH_CONTAINER, "SwitchContainer"),
+        (ObjectKind::ACTOR_MIXER, "ActorMixer"),
+        (ObjectKind::BUS, "Bus"),
+        (ObjectKind::LAYER_CONTAINER, "LayerContainer"),
+        (ObjectKind::MUSIC_SEGMENT, "MusicSegment"),
+        (ObjectKind::MUSIC_TRACK, "MusicTrack"),
+        (ObjectKind::MUSIC_SWITCH_CONTAINER, "MusicSwitchContainer"),
         (
             ObjectKind::MUSIC_RANDOM_SEQUENCE_CONTAINER,
-            "MUSIC_RANDOM_SEQUENCE_CONTAINER",
+            "MusicRandomSequenceContainer",
         ),
-        (ObjectKind::ATTENUATION, "ATTENUATION"),
+        (ObjectKind::ATTENUATION, "Attenuation"),
     ];
     for (value, (kind, name)) in (1..).zip(named) {
         assert_eq!(kind, ObjectKind(value));

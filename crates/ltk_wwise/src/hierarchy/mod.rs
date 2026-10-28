@@ -220,7 +220,11 @@ impl Object {
 /// ```
 /// use ltk_wwise::hierarchy::ObjectKind;
 ///
-/// assert_eq!(ObjectKind::EVENT.to_string(), "EVENT");
+/// assert_eq!(ObjectKind::EVENT.to_string(), "Event");
+/// assert_eq!(
+///     ObjectKind::RANDOM_SEQUENCE_CONTAINER.to_string(),
+///     "RandomSequenceContainer"
+/// );
 /// assert_eq!(ObjectKind(17).to_string(), "kind(17)");
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -256,29 +260,30 @@ impl ObjectKind {
     /// An attenuation: 14.
     pub const ATTENUATION: Self = Self(14);
 
-    /// Returns the name of the constant of the kind, or `None` for an unnamed kind.
+    /// Returns the Wwise name of the kind in CamelCase, or `None` for an unnamed kind.
     fn name(self) -> Option<&'static str> {
         Some(match self {
-            Self::STATE => "STATE",
-            Self::SOUND => "SOUND",
-            Self::ACTION => "ACTION",
-            Self::EVENT => "EVENT",
-            Self::RANDOM_SEQUENCE_CONTAINER => "RANDOM_SEQUENCE_CONTAINER",
-            Self::SWITCH_CONTAINER => "SWITCH_CONTAINER",
-            Self::ACTOR_MIXER => "ACTOR_MIXER",
-            Self::BUS => "BUS",
-            Self::LAYER_CONTAINER => "LAYER_CONTAINER",
-            Self::MUSIC_SEGMENT => "MUSIC_SEGMENT",
-            Self::MUSIC_TRACK => "MUSIC_TRACK",
-            Self::MUSIC_SWITCH_CONTAINER => "MUSIC_SWITCH_CONTAINER",
-            Self::MUSIC_RANDOM_SEQUENCE_CONTAINER => "MUSIC_RANDOM_SEQUENCE_CONTAINER",
-            Self::ATTENUATION => "ATTENUATION",
+            Self::STATE => "State",
+            Self::SOUND => "Sound",
+            Self::ACTION => "Action",
+            Self::EVENT => "Event",
+            Self::RANDOM_SEQUENCE_CONTAINER => "RandomSequenceContainer",
+            Self::SWITCH_CONTAINER => "SwitchContainer",
+            Self::ACTOR_MIXER => "ActorMixer",
+            Self::BUS => "Bus",
+            Self::LAYER_CONTAINER => "LayerContainer",
+            Self::MUSIC_SEGMENT => "MusicSegment",
+            Self::MUSIC_TRACK => "MusicTrack",
+            Self::MUSIC_SWITCH_CONTAINER => "MusicSwitchContainer",
+            Self::MUSIC_RANDOM_SEQUENCE_CONTAINER => "MusicRandomSequenceContainer",
+            Self::ATTENUATION => "Attenuation",
             _ => return None,
         })
     }
 }
 
-/// Writes the name of the constant, or `kind(N)` for a kind that the crate does not name.
+/// Writes the Wwise name of the kind in CamelCase, or `kind(N)` for a kind that the crate does
+/// not name.
 impl fmt::Display for ObjectKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.name() {

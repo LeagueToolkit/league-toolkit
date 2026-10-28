@@ -615,8 +615,8 @@ impl ObjectKind {
 }
 ```
 
-`ObjectKind` implements `Display` with the name of each constant, and `kind(N)` for any other
-value. Kinds 15 to 22 exist in the version 145 reader. The crate names none of them.
+`ObjectKind` implements `Display` with the Wwise name of each named kind in CamelCase (`Sound`,
+`RandomSequenceContainer`, `MusicRandomSequenceContainer`), and `kind(N)` for any other value. Kinds 15 to 22 exist in the version 145 reader. The crate names none of them.
 
 The client function `SoundBank_ExtractEventIds` collects the IDs of kind 4 objects of a bank. It
 reads only a bank whose path contains `_events` ([section 12](#s12)).
