@@ -1,6 +1,6 @@
 [package]
 name = "ltk_anim"
-version = "0.3.13"
+version = "0.3.14"
 edition = "2021"
 description = "Animation formats support for League Toolkit"
 license = "Apache-2.0"
@@ -18,7 +18,7 @@ bytemuck = { workspace = true }
 
 glam = { workspace = true }
 
-ltk_hash = { version = "0.5.2", path = "../ltk_hash/" }
+ltk_hash = { version = "0.5.3", path = "../ltk_hash/" }
 ltk_io_ext = { version = "0.4.9", path = "../ltk_io_ext" }
 
 [dev-dependencies]

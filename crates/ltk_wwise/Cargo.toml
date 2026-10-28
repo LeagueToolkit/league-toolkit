@@ -13,7 +13,7 @@ workspace = true
 thiserror = { workspace = true }
 byteorder = { workspace = true }
 
-ltk_hash = { version = "0.5.1", path = "../ltk_hash" }
+ltk_hash = { version = "0.5.3", path = "../ltk_hash" }
 
 [dev-dependencies]
 insta = { workspace = true }

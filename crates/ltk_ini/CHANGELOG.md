@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_ini-v0.2.0...ltk_ini-v0.2.1) - 2026-10-28
+
+### Other
+
+- updated the following local packages: ltk_hash
+
 ## [0.2.0](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_ini-v0.1.0...ltk_ini-v0.2.0) - 2026-10-27
 
 ### Added
