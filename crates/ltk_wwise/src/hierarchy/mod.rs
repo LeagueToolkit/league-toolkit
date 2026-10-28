@@ -9,6 +9,21 @@ use byteorder::{WriteBytesExt, LE};
 
 use crate::{bank::write_chunk_header, Error, ObjectId, Result};
 
+mod action;
+mod container;
+mod event;
+mod layout;
+mod node;
+mod sound;
+mod typed;
+
+pub use action::{Action, ActionType};
+pub use container::Container;
+pub use event::Event;
+pub use node::NodeBase;
+pub use sound::{BankSource, Sound, StreamType};
+pub use typed::Typed;
+
 /// The tag of the hierarchy chunk.
 pub(crate) const HIRC: [u8; 4] = *b"HIRC";
 

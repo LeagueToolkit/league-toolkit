@@ -635,7 +635,8 @@ Version 125 payloads do not close under these layouts. Single pad bytes occur be
 objects.
 
 The grammar below is normative. `var` is a 7-bit big-endian varint: each byte contributes its low
-7 bits, most significant group first, and a byte with bit 7 clear ends the value. Fields marked
+7 bits, most significant group first, and a byte with bit 7 clear ends the value. A `var` above
+`u32::MAX` is a layout error. The writer writes a `var` in the fewest bytes. Fields marked
 **current** exist only in the current generation.
 
 ### <a id="s9.2"></a>9.2 Shared blocks
@@ -805,6 +806,8 @@ impl ActionType {
 }
 ```
 
+`ActionType` implements `Display` as four hexadecimal digits: `0x0403`.
+
 ### <a id="s9.6"></a>9.6 Event
 
 ```text
@@ -892,10 +895,18 @@ impl Typed {
 ```
 
 `decode` succeeds only when the layout consumes the whole payload. Otherwise it returns
-`Error::Layout` with the kind, the ID and the byte offset at which the layout stopped. Decoding
-then encoding with the same version gives the original payload. Encoding with the other
-generation writes zero into each **current** field and drops it for the legacy generation. A
-caller edits an object by decoding it, changing a field, encoding it and passing it to
+`Error::Layout` with the kind, the ID and the byte offset at which the layout stopped. The offset
+is past the payload length when the layout needs more bytes than the payload holds. It is short
+of the payload length when bytes follow the end of the layout. An action class outside the table
+of the generation returns `Error::ActionClass`.
+
+Decoding then encoding with the same version gives the original payload. Encoding with the other
+generation writes zero into each **current** field and drops it for the legacy generation.
+`encode` decodes its output at `version` and returns the decoding error. The fields kept as bytes
+belong to the action class and the container kind of the decode. A `Container` of a kind other
+than 5, 6, 7 and 9 returns `Error::Layout` at offset 0.
+
+A caller edits an object by decoding it, changing a field, encoding it and passing it to
 `Hierarchy::replace`. The other objects keep their bytes.
 
 ## <a id="s10"></a>10. Event sources

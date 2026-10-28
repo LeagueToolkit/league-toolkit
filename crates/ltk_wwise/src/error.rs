@@ -1,6 +1,6 @@
 use std::io;
 
-use crate::{package::PackageKey, SourceId};
+use crate::{bank::BankVersion, hierarchy::ObjectKind, package::PackageKey, ObjectId, SourceId};
 
 /// The result type of `ltk_wwise`.
 pub type Result<T, E = Error> = std::result::Result<T, E>;
@@ -59,6 +59,26 @@ pub enum Error {
     /// An object payload is shorter than 4 bytes, the length of an object ID.
     #[error("object payload of {0} bytes is shorter than an ID")]
     PayloadTooShort(usize),
+
+    /// The bank version has no payload layouts. Version 132, 134 and 145 have layouts.
+    #[error("no payload layouts for bank version {0:?}")]
+    UnsupportedLayout(BankVersion),
+
+    /// A layout did not consume the payload exactly.
+    ///
+    /// `offset` is the end of the layout: past `len` when the layout needs more bytes than the
+    /// payload holds, short of `len` when bytes follow the end of the layout.
+    #[error("{kind} {id}: layout stops at byte {offset} of {len}")]
+    Layout {
+        kind: ObjectKind,
+        id: ObjectId,
+        offset: usize,
+        len: usize,
+    },
+
+    /// An action of a class outside the table of the generation of the bank version.
+    #[error("{id}: unknown action class {class:#06x}")]
+    ActionClass { id: ObjectId, class: u16 },
 
     /// A WEM is not a RIFF `WAVE` file with a `fmt ` and a `data` chunk.
     #[error("invalid WEM: {0}")]
