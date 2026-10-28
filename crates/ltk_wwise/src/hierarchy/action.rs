@@ -9,6 +9,9 @@ use super::layout::{Generation, Put, Reader, Step, Stop};
 /// The class of a Play action.
 const PLAY_CLASS: u16 = 0x0400;
 
+/// The offset of the `u16` action type in an action payload, after the object ID.
+const ACTION_TYPE_OFFSET: usize = 4;
+
 /// The fade curve of an action that [`Action::play`] returns.
 const PLAY_FADE_CURVE: u8 = 4;
 
@@ -162,6 +165,14 @@ impl ActionType {
     /// Returns `true` for the class `0x0400`, Play.
     pub fn is_play(self) -> bool {
         self.class() == PLAY_CLASS
+    }
+
+    /// Returns the action type of the action payload `payload`: the `u16` after the ID.
+    ///
+    /// Returns `None` for a payload shorter than 6 bytes.
+    pub(crate) fn of_payload(payload: &[u8]) -> Option<Self> {
+        let bytes = payload.get(ACTION_TYPE_OFFSET..)?.first_chunk::<2>()?;
+        Some(Self(u16::from_le_bytes(*bytes)))
     }
 }
 

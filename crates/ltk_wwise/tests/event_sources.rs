@@ -174,6 +174,40 @@ fn a_non_play_action_gives_nothing() {
 }
 
 #[test]
+fn a_non_play_action_that_does_not_decode_gives_nothing_and_does_not_stop_the_query() {
+    let mut trailing_byte = stop(10, 30).into_payload();
+    trailing_byte.push(0);
+    let mut unknown_class = stop(11, 30).into_payload();
+    unknown_class[4..6].copy_from_slice(&0x2a00u16.to_le_bytes());
+    let bank = bank([
+        event(1, &[10, 11, 12]),
+        Object::new(ObjectKind::ACTION, trailing_byte).expect("payload holds an ID"),
+        Object::new(ObjectKind::ACTION, unknown_class).expect("payload holds an ID"),
+        play(12, 31),
+        sound(30, 300),
+        sound(31, 310),
+    ]);
+
+    let sources = event_sources(&[&bank], ObjectId(1)).expect("query");
+
+    assert_eq!(sounds_and_sources(&sources), [(31, 310)]);
+}
+
+#[test]
+fn the_first_object_of_an_id_in_a_bank_gives_its_media() {
+    let bank = bank([
+        event(1, &[10]),
+        play(10, 30),
+        sound(30, 300),
+        sound(30, 999),
+    ]);
+
+    let sources = event_sources(&[&bank], ObjectId(1)).expect("query");
+
+    assert_eq!(sounds_and_sources(&sources), [(30, 300)]);
+}
+
+#[test]
 fn an_object_decodes_with_the_version_of_the_bank_that_holds_it() {
     let legacy = read("events_v134.bnk");
     let target = legacy

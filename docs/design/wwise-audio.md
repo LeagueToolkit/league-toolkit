@@ -944,13 +944,17 @@ pub struct EventSource {
 pub fn event_sources(banks: &[&Bank], event: ObjectId) -> Result<Vec<EventSource>>;
 ```
 
-The query finds an object by ID in the banks in order and takes the first match. It decodes each
-object with the version of the bank that holds it. From the event it follows each action of the
-class Play to its target. A Sound gives one `EventSource`. A container gives the sources of its
+The query finds an object by ID in the banks in order and takes the first match: the first bank
+that holds the ID, and the first object of the ID in that bank. It indexes the objects of the
+banks by ID once per call. It decodes each object with the version of the bank that holds it.
+From the event it follows each action of the class Play to its target. It reads the class of an
+action from bytes 4 to 6 of its payload. An action of another class is not decoded and gives
+nothing. A Sound gives one `EventSource`. A container gives the sources of its
 children in order. Every other kind gives nothing. An object that no bank holds gives nothing. The
 query visits each object once. The result is in the order of the walk, depth first. An event that
 no bank holds gives an empty list. An ID whose first match is not an event gives an empty list. A
-decoding error stops the query and returns the error.
+decoding error of the event, a Play action, a Sound or a container stops the query and returns
+the error.
 
 `stream_type` names the file that holds the media: a media index for `DATA_BANK`, a package for
 `STREAMING`, both for `PREFETCH`.

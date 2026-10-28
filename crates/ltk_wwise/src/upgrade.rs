@@ -7,7 +7,7 @@ use crate::{
     bank::{BankHeader, BankVersion, Section},
     hierarchy::{
         layout::{Generation, Put, Reader, Step},
-        Object, ObjectKind, Typed,
+        ActionType, Object, ObjectKind, Typed,
     },
     Bank, Error, Hierarchy, ObjectId, Result,
 };
@@ -17,9 +17,6 @@ const DEFAULT_ALIGNMENT: u16 = 16;
 
 /// The action classes of the legacy generation without a version 145 counterpart.
 const LEGACY_ONLY_CLASSES: [u16; 3] = [0x1500, 0x1600, 0x1700];
-
-/// The offset of the `u16` action type in an action payload, after the object ID.
-const ACTION_TYPE_OFFSET: usize = 4;
 
 /// A reason the upgrade does not rewrite a bank.
 ///
@@ -139,11 +136,7 @@ fn refusal(object: &Object) -> Option<UpgradeRefusal> {
         | ObjectKind::LAYER_CONTAINER
         | ObjectKind::ATTENUATION => None,
         ObjectKind::ACTION => {
-            let action_type = object
-                .payload()
-                .get(ACTION_TYPE_OFFSET..)?
-                .first_chunk::<2>()?;
-            let class = u16::from_le_bytes(*action_type) & 0xFF00;
+            let class = ActionType::of_payload(object.payload())?.class();
             LEGACY_ONLY_CLASSES
                 .contains(&class)
                 .then_some(UpgradeRefusal::ActionClass { id, class })

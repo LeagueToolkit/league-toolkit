@@ -1,10 +1,10 @@
 //! The event query: the media that an event plays.
 
-use std::collections::HashSet;
+use std::collections::{hash_map::Entry, HashMap, HashSet};
 
 use crate::{bank::BankVersion, Bank, ObjectId, Result, SourceId};
 
-use super::{Object, ObjectKind, StreamType, Typed};
+use super::{ActionType, Object, ObjectKind, StreamType, Typed};
 
 /// One media that an event plays.
 ///
@@ -23,9 +23,11 @@ pub struct EventSource {
 
 /// Returns the media that the event `event` plays, from the hierarchies of `banks`.
 ///
-/// The query finds an object by ID in the banks in order and takes the first match. It decodes
-/// each object with the version of the bank that holds it. From the event it follows each action
-/// of the class Play to its target. A Sound gives one [`EventSource`]. A container gives the
+/// The query finds an object by ID in the banks in order and takes the first match. It indexes
+/// the objects of `banks` by ID once per call. It decodes each object with the version of the
+/// bank that holds it. From the event it follows each action of the class Play to its target.
+/// It reads the class of an action from bytes 4 to 6 of its payload and does not decode an
+/// action of another class. A Sound gives one [`EventSource`]. A container gives the
 /// sources of its children in order. Every other kind gives nothing. An object that no bank holds
 /// gives nothing.
 ///
@@ -42,7 +44,8 @@ pub struct EventSource {
 ///
 /// # Errors
 ///
-/// The first error that decoding a visited object returns:
+/// The first error that decoding a visited object returns. An action of a class other than Play
+/// is not decoded and returns no error.
 ///
 /// - [`Error::UnsupportedLayout`](crate::Error::UnsupportedLayout) for a bank version other than
 ///   132, 134 and 145.
@@ -52,7 +55,9 @@ pub struct EventSource {
 ///   the generation.
 pub fn event_sources(banks: &[&Bank], event: ObjectId) -> Result<Vec<EventSource>> {
     let mut sources = Vec::new();
-    let Some((object, version)) = find(banks, event) else {
+    let objects = index(banks);
+    let find = |id: ObjectId| objects.get(&id).copied();
+    let Some((object, version)) = find(event) else {
         return Ok(sources);
     };
     let Some(Typed::Event(event)) = decode_as(object, version, Role::Event)? else {
@@ -65,7 +70,7 @@ pub fn event_sources(banks: &[&Bank], event: ObjectId) -> Result<Vec<EventSource
         if !visited.insert(id) {
             continue;
         }
-        let Some((object, version)) = find(banks, id) else {
+        let Some((object, version)) = find(id) else {
             continue;
         };
         match decode_as(object, version, role)? {
@@ -109,8 +114,15 @@ impl Role {
 }
 
 /// Decodes `object` at `version` when its kind fits `role`, or returns `None`.
+///
+/// An action of a class other than Play is not decoded and gives `None`.
 fn decode_as(object: &Object, version: BankVersion, role: Role) -> Result<Option<Typed>> {
     if !role.fits(object.kind()) {
+        return Ok(None);
+    }
+    if role == Role::Action
+        && ActionType::of_payload(object.payload()).is_some_and(|action| !action.is_play())
+    {
         return Ok(None);
     }
     object.decode(version)
@@ -129,11 +141,22 @@ fn push(
     pending.extend(unvisited.map(|&id| (id, role)));
 }
 
-/// Returns the first object with the ID `id` in the hierarchies of `banks`, and the version of
-/// the bank that holds it.
-fn find<'a>(banks: &[&'a Bank], id: ObjectId) -> Option<(&'a Object, BankVersion)> {
-    banks.iter().find_map(|bank| {
-        let object = bank.hierarchy()?.get(id)?;
-        Some((object, bank.header().version))
-    })
+/// Returns the objects of the hierarchies of `banks` by ID, each with the version of the bank
+/// that holds it.
+///
+/// An ID maps to its first object in the first bank that holds it.
+fn index<'a>(banks: &[&'a Bank]) -> HashMap<ObjectId, (&'a Object, BankVersion)> {
+    let mut objects = HashMap::new();
+    for bank in banks {
+        let Some(hierarchy) = bank.hierarchy() else {
+            continue;
+        };
+        let version = bank.header().version;
+        for object in hierarchy.objects() {
+            if let Entry::Vacant(slot) = objects.entry(object.id()) {
+                slot.insert((object, version));
+            }
+        }
+    }
+    objects
 }
