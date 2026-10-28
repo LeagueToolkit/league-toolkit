@@ -13,4 +13,8 @@ pub enum Error {
     /// The first bytes are not the magic of the format.
     #[error("Invalid magic: expected {expected:?}, found {found:?}")]
     InvalidMagic { expected: [u8; 4], found: [u8; 4] },
+
+    /// A WEM is not a RIFF `WAVE` file with a `fmt ` and a `data` chunk.
+    #[error("invalid WEM: {0}")]
+    Wem(&'static str),
 }
