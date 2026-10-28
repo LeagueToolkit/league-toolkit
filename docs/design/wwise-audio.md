@@ -1237,6 +1237,20 @@ framing ends at the end of its chunk, and every bank with a hierarchy writes bac
 | 10 `MUSIC_SEGMENT` | 2147 | | |
 | 11 `MUSIC_TRACK` | 3002 | | |
 
+**Retail 16.x, `DATA/FINAL`, `ltk_wwise` `typed_corpus`, 2026-10-28.** 4525 hierarchies: 4512
+at version 145, 12 at version 134, 1 at version 132. Every object of kinds 2 to 7 and 9 decodes
+with the version of its bank and encodes back to its payload: 768,553 objects, no failure.
+
+| Kind | Version 132 | Version 134 | Version 145 |
+| --- | --- | --- | --- |
+| 2 `SOUND` | 573 | 61 | 300,208 |
+| 3 `ACTION` | 429 | 172 | 170,956 |
+| 4 `EVENT` | 259 | 109 | 144,842 |
+| 5 `RANDOM_SEQUENCE_CONTAINER` | 273 | 20 | 117,495 |
+| 6 `SWITCH_CONTAINER` | 1 | 0 | 4190 |
+| 7 `ACTOR_MIXER` | 78 | 5 | 27,557 |
+| 9 `LAYER_CONTAINER` | 3 | 6 | 1316 |
+
 **Retail 16.x, `Ahri.en_US.wad.client`, 2026-10-28.** Every package is `r3d2` version 1. Entry
 records and media start on 8-byte boundaries. The data region starts at the end of the last entry
 record. The file ends at the end of the last media.
