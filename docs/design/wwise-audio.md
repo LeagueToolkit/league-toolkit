@@ -929,7 +929,8 @@ object with the version of the bank that holds it. From the event it follows eac
 class Play to its target. A Sound gives one `EventSource`. A container gives the sources of its
 children in order. Every other kind gives nothing. An object that no bank holds gives nothing. The
 query visits each object once. The result is in the order of the walk, depth first. An event that
-no bank holds gives an empty list. A decoding error stops the query and returns the error.
+no bank holds gives an empty list. An ID whose first match is not an event gives an empty list. A
+decoding error stops the query and returns the error.
 
 `stream_type` names the file that holds the media: a media index for `DATA_BANK`, a package for
 `STREAMING`, both for `PREFETCH`.
