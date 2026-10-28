@@ -3,8 +3,6 @@
 //! The upgrade rebuilds the header, transforms the payload of each object and lays out the media
 //! again. It refuses every bank that it cannot convert exactly.
 
-use std::fmt;
-
 use crate::{
     bank::{BankHeader, BankVersion, Section},
     hierarchy::{
@@ -26,12 +24,14 @@ const ACTION_TYPE_OFFSET: usize = 4;
 /// A reason the upgrade does not rewrite a bank.
 ///
 /// [`Bank::upgrade`] returns it as [`Error::Upgrade`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, thiserror::Error)]
 #[non_exhaustive]
 pub enum UpgradeRefusal {
     /// The version is not 132, 134 or 145.
+    #[error("bank version {0} is not 132, 134 or 145")]
     Version(BankVersion),
     /// An object of a kind without an upgrade transform.
+    #[error("object {id} of kind {kind} has no upgrade transform")]
     Kind {
         /// The ID of the object.
         id: ObjectId,
@@ -39,25 +39,13 @@ pub enum UpgradeRefusal {
         kind: ObjectKind,
     },
     /// An action of a class without a version 145 counterpart.
+    #[error("action {id} of class {class:#06x} has no version 145 counterpart")]
     ActionClass {
         /// The ID of the action.
         id: ObjectId,
         /// The class of the action: `action_type & 0xFF00`.
         class: u16,
     },
-}
-
-impl fmt::Display for UpgradeRefusal {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Version(version) => write!(f, "bank version {version} is not 132, 134 or 145"),
-            Self::Kind { id, kind } => write!(f, "{kind} {id} has no upgrade transform"),
-            Self::ActionClass { id, class } => write!(
-                f,
-                "action {id} of class {class:#06x} has no version 145 counterpart"
-            ),
-        }
-    }
 }
 
 impl Bank {

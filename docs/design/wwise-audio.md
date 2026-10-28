@@ -195,6 +195,9 @@ impl PackageKey {
     /// Returns the key of the entry name `name`.
     pub fn from_name(name: &str) -> Self;
 }
+
+/// Writes the decimal value.
+impl fmt::Display for PackageKey { /* ... */ }
 ```
 
 The key of a name is the leading run of ASCII decimal digits of the name, read as a `u64`. When
@@ -452,14 +455,17 @@ byte.
 
 ```rust
 /// A condition under which the client rejects a bank.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, thiserror::Error)]
 #[non_exhaustive]
 pub enum Rejection {
     /// The version is below 118 or above 145.
+    #[error("bank version {0} is not 118 to 145")]
     Version(BankVersion),
     /// A legacy version and a chunk other than `DIDX` or `DATA`.
+    #[error("legacy bank version {version} has a {} chunk", .tag.escape_ascii())]
     LegacyChunk { version: BankVersion, tag: [u8; 4] },
     /// A bank type other than 0, 30 or 31.
+    #[error("bank type {0} is not 0, 30 or 31")]
     BankType(BankType),
 }
 ```
@@ -944,14 +950,17 @@ impl Bank {
 }
 
 /// A reason the upgrade does not rewrite a bank.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, thiserror::Error)]
 #[non_exhaustive]
 pub enum UpgradeRefusal {
     /// The version is not 132, 134 or 145.
+    #[error("bank version {0} is not 132, 134 or 145")]
     Version(BankVersion),
     /// An object of a kind without an upgrade transform.
+    #[error("object {id} of kind {kind} has no upgrade transform")]
     Kind { id: ObjectId, kind: ObjectKind },
     /// An action of a class without a version 145 counterpart.
+    #[error("action {id} of class {class:#06x} has no version 145 counterpart")]
     ActionClass { id: ObjectId, class: u16 },
 }
 ```
@@ -1064,49 +1073,105 @@ compressed codecs.
 ## <a id="s14"></a>14. Errors
 
 ```rust
+/// The result type of `ltk_wwise`.
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
+/// An error from reading, decoding, encoding or writing a Wwise file.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum Error {
     #[error(transparent)]
-    Io(#[from] std::io::Error),
+    Io(#[from] io::Error),
+
     /// The first bytes are not the magic of the format.
-    #[error("invalid magic: expected {expected:?}, found {found:?}")]
+    #[error(
+        "invalid magic: expected {}, found {}",
+        .expected.escape_ascii(),
+        .found.escape_ascii()
+    )]
     InvalidMagic { expected: [u8; 4], found: [u8; 4] },
+
+    /// The version of a package is not 1.
     #[error("unsupported package version {0}")]
     PackageVersion(u32),
-    #[error("two package entries have the key {0:?}")]
+
+    /// Two entries of a package have one key.
+    #[error("two package entries have the key {0}")]
     DuplicateKey(PackageKey),
+
+    /// An entry record or a media ends after the end of the package.
+    ///
+    /// `name` is the entry name. An entry whose record does not fit is named `#<index>`, its
+    /// index in the offset table.
     #[error("package entry {name} ends after the end of the package")]
     EntryOutOfBounds { name: String },
+
     /// The first chunk of a bank is not `BKHD`, or `BKHD` is shorter than its version requires.
+    ///
+    /// `BKHD` is 20 bytes or longer. From version 143, it is 40 bytes or longer.
     #[error("invalid bank header")]
     InvalidHeader,
-    #[error("chunk {tag:?} at offset {offset} ends after the end of the bank")]
+
+    /// A chunk of a bank ends after the end of the bank.
+    #[error(
+        "chunk {} at offset {offset} ends after the end of the bank",
+        .tag.escape_ascii()
+    )]
     ChunkOverrun { tag: [u8; 4], offset: u64 },
+
+    /// A record of `DIDX` names media that ends after the end of `DATA`.
     #[error("media {source_id} ends after the end of DATA")]
     MediaOutOfBounds { source_id: SourceId },
+
+    /// Two records of `DIDX` have one source ID.
     #[error("two media have the source ID {0}")]
     DuplicateSource(SourceId),
+
     /// The objects of `HIRC` do not end at the end of the chunk.
+    ///
+    /// `offset` is the end of the framing that the counts and sizes give: past `len` when an
+    /// object runs past the chunk, short of `len` when bytes follow the last object.
     #[error("hierarchy framing ends at {offset}, the chunk ends at {len}")]
     Framing { offset: usize, len: usize },
+
+    /// An object payload is shorter than 4 bytes, the length of an object ID.
     #[error("object payload of {0} bytes is shorter than an ID")]
     PayloadTooShort(usize),
-    #[error("no payload layouts for bank version {0:?}")]
+
+    /// The bank version has no payload layouts. Version 132, 134 and 145 have layouts.
+    #[error("no payload layouts for bank version {0}")]
     UnsupportedLayout(BankVersion),
+
     /// A layout did not consume the payload exactly.
-    #[error("{kind} {id}: layout stops at byte {offset} of {len}")]
-    Layout { kind: ObjectKind, id: ObjectId, offset: usize, len: usize },
-    #[error("{id}: unknown action class {class:#06x}")]
+    ///
+    /// `offset` is the end of the layout: past `len` when the layout needs more bytes than the
+    /// payload holds, short of `len` when bytes follow the end of the layout.
+    #[error("layout of {kind} {id} stops at byte {offset} of {len}")]
+    Layout {
+        kind: ObjectKind,
+        id: ObjectId,
+        offset: usize,
+        len: usize,
+    },
+
+    /// An action of a class outside the table of the generation of the bank version.
+    #[error("action {id} has the unknown class {class:#06x}")]
     ActionClass { id: ObjectId, class: u16 },
-    #[error("upgrade refused: {0:?}")]
+
+    /// The upgrade does not rewrite the bank.
+    #[error("upgrade refused: {0}")]
     Upgrade(UpgradeRefusal),
+
+    /// A WEM is not a RIFF `WAVE` file with a `fmt ` and a `data` chunk.
     #[error("invalid WEM: {0}")]
     Wem(&'static str),
 }
 ```
+
+Every message starts lowercase and ends without a period. A message shows each value with
+`Display`, and a chunk tag or a magic as its bytes with `escape_ascii`. `Rejection`
+([section 6.4](#s6.4)) and `UpgradeRefusal` ([section 11](#s11)) implement `std::error::Error`.
+`Error::Upgrade` shows the message of its refusal and has no source.
 
 No function of the crate panics on input bytes.
 

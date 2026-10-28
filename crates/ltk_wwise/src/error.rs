@@ -16,7 +16,11 @@ pub enum Error {
     Io(#[from] io::Error),
 
     /// The first bytes are not the magic of the format.
-    #[error("Invalid magic: expected {expected:?}, found {found:?}")]
+    #[error(
+        "invalid magic: expected {}, found {}",
+        .expected.escape_ascii(),
+        .found.escape_ascii()
+    )]
     InvalidMagic { expected: [u8; 4], found: [u8; 4] },
 
     /// The version of a package is not 1.
@@ -24,7 +28,7 @@ pub enum Error {
     PackageVersion(u32),
 
     /// Two entries of a package have one key.
-    #[error("two package entries have the key {0:?}")]
+    #[error("two package entries have the key {0}")]
     DuplicateKey(PackageKey),
 
     /// An entry record or a media ends after the end of the package.
@@ -41,7 +45,10 @@ pub enum Error {
     InvalidHeader,
 
     /// A chunk of a bank ends after the end of the bank.
-    #[error("chunk {tag:?} at offset {offset} ends after the end of the bank")]
+    #[error(
+        "chunk {} at offset {offset} ends after the end of the bank",
+        .tag.escape_ascii()
+    )]
     ChunkOverrun { tag: [u8; 4], offset: u64 },
 
     /// A record of `DIDX` names media that ends after the end of `DATA`.
@@ -64,14 +71,14 @@ pub enum Error {
     PayloadTooShort(usize),
 
     /// The bank version has no payload layouts. Version 132, 134 and 145 have layouts.
-    #[error("no payload layouts for bank version {0:?}")]
+    #[error("no payload layouts for bank version {0}")]
     UnsupportedLayout(BankVersion),
 
     /// A layout did not consume the payload exactly.
     ///
     /// `offset` is the end of the layout: past `len` when the layout needs more bytes than the
     /// payload holds, short of `len` when bytes follow the end of the layout.
-    #[error("{kind} {id}: layout stops at byte {offset} of {len}")]
+    #[error("layout of {kind} {id} stops at byte {offset} of {len}")]
     Layout {
         kind: ObjectKind,
         id: ObjectId,
@@ -80,11 +87,11 @@ pub enum Error {
     },
 
     /// An action of a class outside the table of the generation of the bank version.
-    #[error("{id}: unknown action class {class:#06x}")]
+    #[error("action {id} has the unknown class {class:#06x}")]
     ActionClass { id: ObjectId, class: u16 },
 
     /// The upgrade does not rewrite the bank.
-    #[error("upgrade refused: {0:?}")]
+    #[error("upgrade refused: {0}")]
     Upgrade(UpgradeRefusal),
 
     /// A WEM is not a RIFF `WAVE` file with a `fmt ` and a `data` chunk.

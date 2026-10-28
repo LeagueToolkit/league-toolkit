@@ -8,6 +8,7 @@
 
 use std::{
     collections::HashSet,
+    fmt,
     io::{self, Cursor, Read, Seek, SeekFrom, Write},
     mem,
 };
@@ -37,6 +38,13 @@ const ALIGNMENT: u64 = 8;
 /// ```
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PackageKey(pub u64);
+
+/// Writes the decimal value.
+impl fmt::Display for PackageKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
+    }
+}
 
 impl PackageKey {
     /// Returns the key of the entry name `name`.

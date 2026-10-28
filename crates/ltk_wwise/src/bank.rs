@@ -401,12 +401,14 @@ pub struct RawSection {
 /// A condition under which the client rejects a bank.
 ///
 /// The retail client rejects such a bank with `AK_WrongBankVersion` and logs nothing.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, thiserror::Error)]
 #[non_exhaustive]
 pub enum Rejection {
     /// The version is below 118 or above 145.
+    #[error("bank version {0} is not 118 to 145")]
     Version(BankVersion),
     /// A legacy version and a chunk other than `DIDX` or `DATA`.
+    #[error("legacy bank version {version} has a {} chunk", .tag.escape_ascii())]
     LegacyChunk {
         /// The version of the bank.
         version: BankVersion,
@@ -414,21 +416,8 @@ pub enum Rejection {
         tag: [u8; 4],
     },
     /// A bank type other than 0, 30 or 31.
+    #[error("bank type {0} is not 0, 30 or 31")]
     BankType(BankType),
-}
-
-impl fmt::Display for Rejection {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Version(version) => write!(f, "bank version {version} is not 118 to 145"),
-            Self::LegacyChunk { version, tag } => write!(
-                f,
-                "legacy bank version {version} has a {} chunk",
-                tag.escape_ascii()
-            ),
-            Self::BankType(bank_type) => write!(f, "bank type {bank_type} is not 0, 30 or 31"),
-        }
-    }
 }
 
 /// One chunk as read.
@@ -495,7 +484,10 @@ pub(crate) fn write_chunk_header(writer: &mut impl Write, tag: [u8; 4], len: usi
     let size = u32::try_from(len).map_err(|_| {
         io::Error::new(
             io::ErrorKind::InvalidInput,
-            format!("chunk {tag:?} of {len} bytes is longer than u32::MAX"),
+            format!(
+                "chunk {} of {len} bytes is longer than u32::MAX",
+                tag.escape_ascii()
+            ),
         )
     })?;
     writer.write_all(&tag)?;
