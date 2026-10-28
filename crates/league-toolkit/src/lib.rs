@@ -27,3 +27,6 @@ pub use ltk_rst as rst;
 
 #[cfg(feature = "ini")]
 pub use ltk_ini as ini;
+
+#[cfg(feature = "wwise")]
+pub use ltk_wwise as wwise;

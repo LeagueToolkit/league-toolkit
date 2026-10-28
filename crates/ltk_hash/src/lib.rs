@@ -12,6 +12,7 @@ use std::{
 };
 
 pub use impls::elf;
+pub use impls::fnv1;
 use impls::fnv1a;
 pub use impls::sdbm;
 pub use value::{HashAlgorithm, HashValue, HashWidth, Hasher};
