@@ -11,10 +11,37 @@ where
     T: Copy + fmt::Display,
     u32: TryFrom<T>,
 {
-    u32::try_from(value).map_err(|_| {
+    narrow(value, what, "u32::MAX")
+}
+
+/// Returns `value` as a `u16` field, or an `InvalidInput` error that names the field `what`.
+pub(crate) fn to_u16<T>(value: T, what: &str) -> io::Result<u16>
+where
+    T: Copy + fmt::Display,
+    u16: TryFrom<T>,
+{
+    narrow(value, what, "u16::MAX")
+}
+
+/// Returns `value` as a `u8` field, or an `InvalidInput` error that names the field `what`.
+pub(crate) fn to_u8<T>(value: T, what: &str) -> io::Result<u8>
+where
+    T: Copy + fmt::Display,
+    u8: TryFrom<T>,
+{
+    narrow(value, what, "u8::MAX")
+}
+
+/// Returns `value` as a field of the type `U`, whose maximum `max` names in the error.
+fn narrow<T, U>(value: T, what: &str, max: &str) -> io::Result<U>
+where
+    T: Copy + fmt::Display,
+    U: TryFrom<T>,
+{
+    U::try_from(value).map_err(|_| {
         io::Error::new(
             io::ErrorKind::InvalidInput,
-            format!("{what} {value} exceeds u32::MAX"),
+            format!("{what} {value} exceeds {max}"),
         )
     })
 }

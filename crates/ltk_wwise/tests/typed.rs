@@ -5,7 +5,9 @@ mod common;
 use common::fixture;
 use ltk_wwise::{
     bank::BankVersion,
-    hierarchy::{Action, ActionType, Event, Object, ObjectKind, Typed},
+    hierarchy::{
+        Action, ActionType, Event, Object, ObjectKind, PropRange, PropValue, PropertyId, Typed,
+    },
     Bank, BankId, Error, ObjectId, SourceId,
 };
 
@@ -286,5 +288,68 @@ fn a_version_without_layouts_is_unsupported() {
             play.encode(version),
             Err(Error::UnsupportedLayout(v)) if v == version
         ));
+    }
+}
+
+#[test]
+fn a_sound_with_a_volume_set_decodes_with_that_volume_and_the_other_properties_unchanged() {
+    let bank = read("events_v145.bnk");
+    let object = bank
+        .hierarchy()
+        .expect("hierarchy")
+        .of_kind(ObjectKind::SOUND)
+        .next()
+        .expect("a sound")
+        .clone();
+    let Typed::Sound(mut sound) = decode(&object, V145) else {
+        panic!("not a sound");
+    };
+    let before = sound.node.props.clone();
+    sound
+        .node
+        .props
+        .set(PropertyId::VOLUME, PropValue::from_f32(-6.0));
+
+    let Typed::Sound(edited) = decode(&encode(&Typed::Sound(sound.clone()), V145), V145) else {
+        panic!("not a sound");
+    };
+
+    assert_eq!(edited.node.props.f32(PropertyId::VOLUME), Some(-6.0));
+    for prop in before.iter().filter(|p| p.id != PropertyId::VOLUME) {
+        assert_eq!(
+            edited.node.props.get(prop.id),
+            Some(prop.value),
+            "{}",
+            prop.id
+        );
+    }
+    assert_eq!(edited, sound);
+}
+
+#[test]
+fn a_play_action_with_a_delay_and_a_ranged_delay_decodes_with_both_at_134_and_145() {
+    let mut play = Action::play(ObjectId(7), ObjectId(8), BankId(9));
+    play.props
+        .set(PropertyId::DELAY_TIME, PropValue::from_i32(250));
+    let range = PropRange {
+        min: PropValue::from_i32(-100),
+        max: PropValue::from_i32(50),
+    };
+    play.ranged_props.set(PropertyId::DELAY_TIME, range);
+
+    for (version, len) in [(V134, 18 + 5 + 9), (V145, 22 + 5 + 9)] {
+        let object = encode(&Typed::Action(play.clone()), version);
+        assert_eq!(object.payload().len(), len, "{version}");
+        let Typed::Action(action) = decode(&object, version) else {
+            panic!("{version}: not an action");
+        };
+        assert_eq!(action.props.i32(PropertyId::DELAY_TIME), Some(250));
+        assert_eq!(
+            action.ranged_props.i32(PropertyId::DELAY_TIME),
+            Some((-100, 50))
+        );
+        assert_eq!(action.props.f32(PropertyId::DELAY_TIME), None);
+        assert_eq!(action.play_bank(), Some(BankId(9)));
+        assert_eq!(action, play);
     }
 }

@@ -2,9 +2,13 @@
 
 use std::fmt;
 
-use crate::{BankId, ObjectId};
+use crate::{BankId, ObjectId, Result};
 
-use super::layout::{Generation, Put, Reader, Step, Stop};
+use super::{
+    layout::{Generation, Put, Reader, Step, Stop},
+    props::{read_bundle, write_bundle},
+    PropBundle, RangedPropBundle,
+};
 
 /// The class of a Play action.
 const PLAY_CLASS: u16 = 0x0400;
@@ -24,8 +28,10 @@ pub struct Action {
     pub target: ObjectId,
     /// The flags of the target: `idExt_4`.
     pub target_flags: u8,
-    /// The `PropBundle` and the `RangedPropBundle`.
-    props: Vec<u8>,
+    /// The properties of the action, such as [`PropertyId::DELAY_TIME`](super::PropertyId::DELAY_TIME).
+    pub props: PropBundle,
+    /// The randomized properties of the action.
+    pub ranged_props: RangedPropBundle,
     /// The extension of the class, without the field of the current generation.
     extension: Vec<u8>,
     /// The `u32` of the current generation after the extension of a Play action.
@@ -51,7 +57,8 @@ impl Action {
             action_type: ActionType::PLAY,
             target,
             target_flags: 0,
-            props: vec![0, 0],
+            props: PropBundle::new(),
+            ranged_props: RangedPropBundle::new(),
             extension,
             play_tail: 0,
         }
@@ -74,10 +81,8 @@ impl Action {
         let action_type = ActionType(reader.u16()?);
         let target = reader.id()?;
         let target_flags = reader.u8()?;
-        let props = reader.bytes_of(|reader| {
-            reader.prop_bundle()?;
-            reader.ranged_prop_bundle()
-        })?;
+        let props = read_bundle(reader)?;
+        let ranged_props = read_bundle(reader)?;
         let class = action_type.class();
         let extension = reader.bytes_of(|reader| read_extension(reader, class, generation))?;
         let play_tail = if class == PLAY_CLASS && generation.is_current() {
@@ -91,22 +96,25 @@ impl Action {
             target,
             target_flags,
             props,
+            ranged_props,
             extension,
             play_tail,
         })
     }
 
     /// Writes an action payload.
-    pub(super) fn write(&self, out: &mut Vec<u8>, generation: Generation) {
+    pub(super) fn write(&self, out: &mut Vec<u8>, generation: Generation) -> Result<()> {
         out.put_u32(self.id.0);
         out.put_u16(self.action_type.0);
         out.put_u32(self.target.0);
         out.put_u8(self.target_flags);
-        out.extend_from_slice(&self.props);
+        write_bundle(&self.props, out)?;
+        write_bundle(&self.ranged_props, out)?;
         out.extend_from_slice(&self.extension);
         if self.action_type.is_play() && generation.is_current() {
             out.put_u32(self.play_tail);
         }
+        Ok(())
     }
 }
 

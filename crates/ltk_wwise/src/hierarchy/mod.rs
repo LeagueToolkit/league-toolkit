@@ -10,16 +10,21 @@ mod container;
 mod event;
 pub(crate) mod layout;
 mod node;
+mod props;
 mod sound;
 mod sources;
 mod typed;
 
 pub use action::{Action, ActionType};
-pub use container::Container;
+pub use container::{
+    Container, ContainerFields, ContainerMode, GroupType, Layer, LayerAssociation, LayerFields,
+    PlaylistItem, RandomSequenceFields, SwitchFields, SwitchNodeParams, SwitchNodes,
+};
 pub use event::Event;
 pub use node::NodeBase;
+pub use props::{Prop, PropBundle, PropRange, PropValue, PropertyId, RangedPropBundle, ValueType};
 pub use sound::{BankSource, Sound, StreamType};
-pub use sources::{event_sources, EventSource};
+pub use sources::{event_sources, event_tree, EventAction, EventNode, EventSource, EventTree};
 pub use typed::Typed;
 
 /// The tag of the hierarchy chunk.

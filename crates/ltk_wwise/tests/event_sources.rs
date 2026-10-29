@@ -6,7 +6,8 @@ use common::fixture;
 use ltk_wwise::{
     bank::{BankHeader, BankVersion, Section},
     hierarchy::{
-        event_sources, Action, Event, EventSource, Hierarchy, Object, ObjectKind, StreamType, Typed,
+        event_sources, event_tree, Action, Event, EventNode, EventSource, Hierarchy, Object,
+        ObjectKind, StreamType, Typed,
     },
     Bank, BankId, Error, ObjectId, SourceId,
 };
@@ -278,4 +279,136 @@ fn an_id_whose_object_is_not_an_event_resolves_to_an_empty_list() {
     let sources = event_sources(&[&bank], ObjectId(30)).expect("query");
 
     assert_eq!(sources, []);
+}
+
+/// Appends the Sounds under `node` to `rows`, depth first, as (sound, source, stream type).
+fn sound_leaves(node: &EventNode, rows: &mut Vec<(u32, u32, u8)>) {
+    match node {
+        EventNode::Sound(sound) => rows.push((
+            sound.id.0,
+            sound.source.source_id.0,
+            sound.source.stream_type.0,
+        )),
+        EventNode::Container { children, .. } => {
+            for child in children {
+                sound_leaves(child, rows);
+            }
+        }
+        EventNode::Other { .. } => {}
+    }
+}
+
+#[test]
+fn the_tree_of_every_event_of_the_event_bank_has_the_event_sources_snapshot_as_its_leaves() {
+    let events = read("events_v145.bnk");
+    let media = read("media_v145.bnk");
+
+    let mut resolved = Vec::new();
+    for event in events
+        .hierarchy()
+        .expect("hierarchy")
+        .of_kind(ObjectKind::EVENT)
+    {
+        let tree = event_tree(&[&events, &media], event.id())
+            .expect("query")
+            .expect("an event");
+        assert_eq!(tree.id, event.id());
+        let mut rows = Vec::new();
+        for target in tree.actions.iter().filter_map(|a| a.target.as_ref()) {
+            sound_leaves(target, &mut rows);
+        }
+        resolved.push((event.id().0, rows));
+    }
+
+    insta::assert_ron_snapshot!(
+        "every_event_of_the_event_bank_resolves_to_media_that_the_media_bank_holds",
+        resolved
+    );
+}
+
+#[test]
+fn the_tree_of_an_event_holds_each_action_and_the_containers_and_sounds_under_a_play() {
+    let bank = bank([
+        event(1, &[10, 11]),
+        play(10, 20),
+        stop(11, 31),
+        mixer(20, &[30, 21]),
+        mixer(21, &[31]),
+        sound(30, 300),
+        sound(31, 310),
+    ]);
+
+    let tree = event_tree(&[&bank], ObjectId(1))
+        .expect("query")
+        .expect("an event");
+
+    let [play, stop] = &tree.actions[..] else {
+        panic!("{tree:?}");
+    };
+    assert!(play.action.action_type.is_play());
+    assert_eq!(stop.action.action_type.class(), 0x0100);
+    assert_eq!(stop.target, None);
+    let Some(EventNode::Container {
+        container,
+        children,
+    }) = &play.target
+    else {
+        panic!("{play:?}");
+    };
+    assert_eq!(container.id, ObjectId(20));
+    let [EventNode::Sound(first), EventNode::Container {
+        container: inner,
+        children: inner_children,
+    }] = &children[..]
+    else {
+        panic!("{children:?}");
+    };
+    assert_eq!(first.source.source_id, SourceId(300));
+    assert_eq!(inner.id, ObjectId(21));
+    let [EventNode::Sound(second)] = &inner_children[..] else {
+        panic!("{inner_children:?}");
+    };
+    assert_eq!(second.id, ObjectId(31));
+}
+
+#[test]
+fn the_tree_of_an_id_whose_object_is_not_an_event_is_none() {
+    let bank = bank([sound(30, 300)]);
+
+    assert_eq!(event_tree(&[&bank], ObjectId(30)).expect("query"), None);
+    assert_eq!(event_tree(&[&bank], ObjectId(31)).expect("query"), None);
+}
+
+#[test]
+fn a_node_of_a_kind_without_a_typed_layout_is_a_leaf_of_its_kind() {
+    let attenuation = read("events_v145.bnk")
+        .hierarchy()
+        .expect("hierarchy")
+        .of_kind(ObjectKind::ATTENUATION)
+        .next()
+        .expect("an attenuation")
+        .clone();
+    let id = attenuation.id();
+    let bank = bank([
+        event(1, &[10]),
+        play(10, 20),
+        mixer(20, &[id.0]),
+        attenuation,
+    ]);
+
+    let tree = event_tree(&[&bank], ObjectId(1))
+        .expect("query")
+        .expect("an event");
+
+    let Some(EventNode::Container { children, .. }) = &tree.actions[0].target else {
+        panic!("{tree:?}");
+    };
+    assert_eq!(
+        children[..],
+        [EventNode::Other {
+            id,
+            kind: ObjectKind::ATTENUATION
+        }]
+    );
+    assert_eq!(tree.sources().count(), 0);
 }

@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 
 use ltk_wwise::{
     bank::{BankVersion, Section},
-    hierarchy::ObjectKind,
+    hierarchy::{ObjectKind, PropBundle, PropertyId, RangedPropBundle, Typed},
     Bank,
 };
 
@@ -34,6 +34,20 @@ struct Counts {
     round_trips: BTreeMap<(u32, ObjectKind), usize>,
     /// The objects that fail, by version and kind.
     failed: BTreeMap<(u32, ObjectKind), usize>,
+    /// The properties of the decoded objects, by ID: plain and ranged.
+    props: BTreeMap<PropertyId, (usize, usize)>,
+}
+
+impl Counts {
+    /// Counts the properties of `props` and `ranged`.
+    fn count_props(&mut self, props: &PropBundle, ranged: &RangedPropBundle) {
+        for prop in props {
+            self.props.entry(prop.id).or_default().0 += 1;
+        }
+        for prop in ranged {
+            self.props.entry(prop.id).or_default().1 += 1;
+        }
+    }
 }
 
 #[test]
@@ -65,7 +79,22 @@ fn every_shipped_object_of_a_typed_kind_decodes_and_encodes_back_to_its_payload(
                 let key = (version.0, object.kind());
                 let result = match object.decode(version) {
                     Ok(Some(typed)) => match typed.encode(version) {
-                        Ok(encoded) if &encoded == object => Ok(()),
+                        Ok(encoded) if &encoded == object => {
+                            match &typed {
+                                Typed::Sound(sound) => {
+                                    counts.count_props(&sound.node.props, &sound.node.ranged_props)
+                                }
+                                Typed::Container(container) => counts.count_props(
+                                    &container.node.props,
+                                    &container.node.ranged_props,
+                                ),
+                                Typed::Action(action) => {
+                                    counts.count_props(&action.props, &action.ranged_props)
+                                }
+                                _ => {}
+                            }
+                            Ok(())
+                        }
                         Ok(encoded) => Err(format!(
                             "encodes to {} bytes, not {}",
                             encoded.payload().len(),
@@ -103,6 +132,10 @@ fn every_shipped_object_of_a_typed_kind_decodes_and_encodes_back_to_its_payload(
             kind.0,
             kind.to_string()
         );
+    }
+    println!("properties by ID (plain, ranged):");
+    for (id, (plain, ranged)) in &counts.props {
+        println!("  {:#04x} {id:<24} {plain:>8} {ranged:>8}", id.0);
     }
     println!("failures by version and kind: {:?}", counts.failed);
     for failure in &failures {
