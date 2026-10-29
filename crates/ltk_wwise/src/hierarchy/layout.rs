@@ -123,6 +123,10 @@ impl<'a> Reader<'a> {
         self.array().map(u32::from_le_bytes)
     }
 
+    pub(crate) fn i32(&mut self) -> Step<i32> {
+        self.array().map(i32::from_le_bytes)
+    }
+
     pub(crate) fn id(&mut self) -> Step<ObjectId> {
         self.u32().map(ObjectId)
     }
@@ -150,18 +154,6 @@ impl<'a> Reader<'a> {
             .iter()
             .map(|id| ObjectId(u32::from_le_bytes(*id)))
             .collect())
-    }
-
-    /// Skips a `PropBundle`: a `u8` count, `count` `u8` IDs and `count` `u32` values.
-    pub(crate) fn prop_bundle(&mut self) -> Step<()> {
-        let count = self.u8()?;
-        self.skip_records(u32::from(count), 1 + 4)
-    }
-
-    /// Skips a `RangedPropBundle`: a `u8` count, `count` `u8` IDs and `count` `u32` pairs.
-    pub(crate) fn ranged_prop_bundle(&mut self) -> Step<()> {
-        let count = self.u8()?;
-        self.skip_records(u32::from(count), 1 + 8)
     }
 
     /// Skips an `ExceptionList`: a varint count of `(u32 id, u8 is_bus)` records.
@@ -242,6 +234,7 @@ pub(crate) trait Put {
     fn put_u8(&mut self, value: u8);
     fn put_u16(&mut self, value: u16);
     fn put_u32(&mut self, value: u32);
+    fn put_i32(&mut self, value: i32);
     /// Appends `value` as a 7-bit big-endian varint of the fewest bytes.
     fn put_var(&mut self, value: u32);
     /// Appends a `u32` count of `len` items, and `what` names the count in the error.
@@ -264,6 +257,10 @@ impl Put for Vec<u8> {
     }
 
     fn put_u32(&mut self, value: u32) {
+        self.extend_from_slice(&value.to_le_bytes());
+    }
+
+    fn put_i32(&mut self, value: i32) {
         self.extend_from_slice(&value.to_le_bytes());
     }
 

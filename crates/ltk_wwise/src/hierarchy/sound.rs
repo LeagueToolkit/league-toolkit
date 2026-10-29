@@ -31,7 +31,7 @@ impl Sound {
     pub(super) fn write(&self, out: &mut Vec<u8>, generation: Generation) -> Result<()> {
         out.put_u32(self.id.0);
         self.source.write(out)?;
-        self.node.write(out, generation);
+        self.node.write(out, generation)?;
         Ok(())
     }
 }

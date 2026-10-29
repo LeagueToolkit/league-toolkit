@@ -1,6 +1,6 @@
 //! Decoding and encoding of the typed hierarchy objects.
 
-use crate::{bank::BankVersion, Error, ObjectId, Result};
+use crate::{bank::BankVersion, ObjectId, Result};
 
 use super::{
     layout::{Generation, Reader, Step},
@@ -34,7 +34,7 @@ impl Typed {
             Self::Event(_) => ObjectKind::EVENT,
             Self::Action(_) => ObjectKind::ACTION,
             Self::Sound(_) => ObjectKind::SOUND,
-            Self::Container(container) => container.kind,
+            Self::Container(container) => container.kind(),
         }
     }
 
@@ -45,31 +45,25 @@ impl Typed {
     ///
     /// # Errors
     ///
-    /// - [`Error::UnsupportedLayout`] for a version other than
+    /// - [`Error::UnsupportedLayout`](crate::Error::UnsupportedLayout) for a version other than
     ///   132, 134 and 145.
-    /// - [`Error::ActionClass`] for an action class outside the
+    /// - [`Error::ActionClass`](crate::Error::ActionClass) for an action class outside the
     ///   table of the generation.
-    /// - [`Error::Layout`] when the fields kept as bytes do not fit the action class or the
-    ///   container kind, at offset 0 for a container of a kind without a typed layout.
+    /// - [`Error::Layout`](crate::Error::Layout) when the extension kept as bytes does not fit the action class.
+    /// - [`Error::Io`](crate::Error::Io) when a count does not fit its field, such as a property bundle of more
+    ///   than 255 properties.
     pub fn encode(&self, version: BankVersion) -> Result<Object> {
         let generation = Generation::of(version)?;
         let mut payload = Vec::new();
         match self {
             Self::Event(event) => event.write(&mut payload)?,
-            Self::Action(action) => action.write(&mut payload, generation),
+            Self::Action(action) => action.write(&mut payload, generation)?,
             Self::Sound(sound) => sound.write(&mut payload, generation)?,
             Self::Container(container) => container.write(&mut payload, generation)?,
         }
         let object = Object::new(self.kind(), payload)?;
-        match object.decode(version)? {
-            Some(_) => Ok(object),
-            None => Err(Error::Layout {
-                kind: object.kind(),
-                id: object.id(),
-                offset: 0,
-                len: object.payload().len(),
-            }),
-        }
+        object.decode(version)?;
+        Ok(object)
     }
 }
 
@@ -81,11 +75,11 @@ impl Object {
     ///
     /// # Errors
     ///
-    /// - [`Error::UnsupportedLayout`] for a version other than
+    /// - [`Error::UnsupportedLayout`](crate::Error::UnsupportedLayout) for a version other than
     ///   132, 134 and 145.
-    /// - [`Error::Layout`] when the layout of the kind does not end at the
+    /// - [`Error::Layout`](crate::Error::Layout) when the layout of the kind does not end at the
     ///   end of the payload.
-    /// - [`Error::ActionClass`] for an action class outside the
+    /// - [`Error::ActionClass`](crate::Error::ActionClass) for an action class outside the
     ///   table of the generation.
     pub fn decode(&self, version: BankVersion) -> Result<Option<Typed>> {
         let generation = Generation::of(version)?;

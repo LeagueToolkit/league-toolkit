@@ -1,8 +1,12 @@
 //! The node base: the parameter block of a Sound, a container and an ActorMixer.
 
-use crate::ObjectId;
+use crate::{ObjectId, Result};
 
-use super::layout::{Generation, Put, Reader, Step};
+use super::{
+    layout::{Generation, Put, Reader, Step},
+    props::{read_bundle, write_bundle},
+    PropBundle, RangedPropBundle,
+};
 
 /// The metadata block of the current generation with no metadata: no override, no entries.
 const NO_METADATA: [u8; 2] = [0, 0];
@@ -25,8 +29,14 @@ pub struct NodeBase {
     metadata: Vec<u8>,
     /// `override_attachment_params`.
     attachment: u8,
-    /// The fields from `bits` to the end of the aux block.
-    params: Vec<u8>,
+    /// The `bits` before the property bundles.
+    bits: u8,
+    /// The properties of the node.
+    pub props: PropBundle,
+    /// The randomized properties of the node.
+    pub ranged_props: RangedPropBundle,
+    /// The `Positioning` block and the aux block.
+    positioning: Vec<u8>,
     /// The reflections aux bus of the current generation. Zero at the legacy generation.
     reflections_aux_bus: u32,
     /// The advanced settings, the `StateChunk` and the `RtpcList`.
@@ -57,10 +67,10 @@ impl NodeBase {
         let attachment = reader.u8()?;
         let override_bus = reader.id()?;
         let parent = reader.id()?;
-        let params = reader.bytes_of(|reader| {
-            reader.skip(1)?;
-            reader.prop_bundle()?;
-            reader.ranged_prop_bundle()?;
+        let bits = reader.u8()?;
+        let props = read_bundle(reader)?;
+        let ranged_props = read_bundle(reader)?;
+        let positioning = reader.bytes_of(|reader| {
             reader.positioning()?;
             let aux_bits = reader.u8()?;
             if aux_bits & 0b1000 != 0 {
@@ -84,14 +94,17 @@ impl NodeBase {
             fx,
             metadata,
             attachment,
-            params,
+            bits,
+            props,
+            ranged_props,
+            positioning,
             reflections_aux_bus,
             tail,
         })
     }
 
     /// Writes the node base with the layout of `generation`.
-    pub(super) fn write(&self, out: &mut Vec<u8>, generation: Generation) {
+    pub(super) fn write(&self, out: &mut Vec<u8>, generation: Generation) -> Result<()> {
         out.extend_from_slice(&self.fx);
         if generation.is_current() {
             if self.metadata.is_empty() {
@@ -103,10 +116,14 @@ impl NodeBase {
         out.put_u8(self.attachment);
         out.put_u32(self.override_bus.0);
         out.put_u32(self.parent.0);
-        out.extend_from_slice(&self.params);
+        out.put_u8(self.bits);
+        write_bundle(&self.props, out)?;
+        write_bundle(&self.ranged_props, out)?;
+        out.extend_from_slice(&self.positioning);
         if generation.is_current() {
             out.put_u32(self.reflections_aux_bus);
         }
         out.extend_from_slice(&self.tail);
+        Ok(())
     }
 }

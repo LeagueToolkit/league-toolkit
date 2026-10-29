@@ -24,8 +24,9 @@ The client plays all sound through Audiokinetic Wwise, linked statically. The ba
 does not edit writes back byte for byte. The crate edits the media of a package and of a media
 bank by source ID ([section 5](#s5) and [section 7](#s7)). It exposes every hierarchy object as a
 kind, an ID and a payload ([section 8](#s8)). It decodes the objects that a mod edits
-([section 9](#s9)). It resolves an event to the WEM sources that it plays ([section 10](#s10)). It
-rewrites a version 132 or 134 bank as a version 145 bank ([section 11](#s11)).
+([section 9](#s9)). It resolves an event to the tree of the actions and nodes that it reaches,
+and to the WEM sources that it plays ([section 10](#s10)). It rewrites a version 132 or 134 bank
+as a version 145 bank ([section 11](#s11)).
 
 `ltk_wwise` does not decode audio. A WEM is opaque bytes, except for its format chunk
 ([section 13](#s13)).
@@ -56,6 +57,18 @@ rewrites a version 132 or 134 bank as a version 145 bank ([section 11](#s11)).
   "type" for it. "Type" means a Rust type.
 - **node base** - the block of parameters that every node object carries: Sound, the containers,
   ActorMixer and the music objects ([section 9.3](#s9.3)).
+- **property** - one entry of a property bundle: a property ID and a value. The type is `Prop`.
+  Audiokinetic calls the ID `AkPropID` and the value `AkPropValue`.
+- **property bundle** - the list of properties of a node or an action. The type is `PropBundle`.
+  A ranged property bundle holds the bounds of a random offset per property. The type is
+  `RangedPropBundle`.
+- **container fields** - the fields of a container that belong to its kind: the playlist of a
+  RandomSequenceContainer, the group and switches of a SwitchContainer, the layers of a
+  LayerContainer. The type is `ContainerFields`.
+- **switch** - one value of the switch group or state group of a SwitchContainer, with the list of
+  nodes that it plays. The type is `SwitchNodes`.
+- **event tree** - the actions of an event and the nodes that each Play action reaches. The type
+  is `EventTree` ([section 10](#s10)).
 - **layout generation** - a set of bank versions that share one set of payload layouts. Version
   132 and version 134 are the legacy generation. Version 145 is the current generation.
 - **bank ID** - the ID under which the client registers a bank. The type is `BankId`. The client
@@ -92,7 +105,7 @@ parses to the last byte. In-game playback of an upgraded bank is unverified.
 | `package` | **`Package`**, `PackageEntry`, `PackageKey`, **`MountedPackage`**, `MountedEntry` | [section 5](#s5) |
 | `bank` | **`Bank`**, `BankHeader`, `BankVersion`, `BankType`, `Section`, `RawSection`, `Rejection` | [section 6](#s6) |
 | `media` | **`MediaIndex`** | [section 7](#s7) |
-| `hierarchy` | **`Hierarchy`**, `Object`, `ObjectKind`, the typed objects, `event_sources` | [section 8](#s8) to [section 10](#s10) |
+| `hierarchy` | **`Hierarchy`**, `Object`, `ObjectKind`, the typed objects, the property bundles, `event_tree`, `event_sources` | [section 8](#s8) to [section 10](#s10) |
 | `upgrade` | `UpgradeRefusal` and the upgrade transforms | [section 11](#s11) |
 | `path` | `AudioPath`, `AudioFileKind` | [section 12](#s12) |
 | `wem` | `WemInfo`, `WemCodec` | [section 13](#s13) |
@@ -702,6 +715,114 @@ BankSource
 ExceptionList         var count; (u32 id, u8 is_bus)[count]
 ```
 
+A property bundle decodes into a list of properties in payload order. The writer writes the IDs
+first and the values after them, in list order. A bundle of more than 255 properties is an
+`Error::Io` on encode.
+
+```rust
+/// The ID of a property: `AkPropID`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct PropertyId(pub u8);
+
+impl PropertyId {
+    pub const VOLUME: Self;         // and the other IDs of the table below
+    /// Returns the Wwise name, or `None` for an ID that the crate does not name.
+    pub fn name(self) -> Option<&'static str>;
+    /// Returns the type of the value, or `None` for an ID that the crate does not name.
+    pub fn value_type(self) -> Option<ValueType>;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ValueType { F32, I32, U32 }
+
+/// The bits of an `f32`, an `i32` or a `u32`.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PropValue(pub u32);
+
+impl PropValue {
+    pub fn from_f32(value: f32) -> Self;
+    pub fn to_f32(self) -> f32;
+    pub fn from_i32(value: i32) -> Self;
+    pub fn to_i32(self) -> i32;
+}
+
+/// The bounds of the random offset of a property.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PropRange { pub min: PropValue, pub max: PropValue }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Prop<V = PropValue> { pub id: PropertyId, pub value: V }
+
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
+pub struct PropBundle<V = PropValue> { /* the properties, in payload order */ }
+
+pub type RangedPropBundle = PropBundle<PropRange>;
+
+impl<V: Copy> PropBundle<V> {
+    pub fn new() -> Self;
+    pub fn len(&self) -> usize;
+    pub fn is_empty(&self) -> bool;
+    pub fn iter(&self) -> std::slice::Iter<'_, Prop<V>>;
+    /// Returns the value of the first property with the ID.
+    pub fn get(&self, id: PropertyId) -> Option<V>;
+    /// Sets the value of the first property with the ID, or appends the property.
+    pub fn set(&mut self, id: PropertyId, value: V) -> Option<V>;
+    /// Removes the first property with the ID.
+    pub fn remove(&mut self, id: PropertyId) -> Option<V>;
+}
+
+impl PropBundle {
+    /// Returns the value as an `f32` when the type of the ID is `F32`.
+    pub fn f32(&self, id: PropertyId) -> Option<f32>;
+    /// Returns the value as an `i32` when the type of the ID is `I32`.
+    pub fn i32(&self, id: PropertyId) -> Option<i32>;
+    /// Returns the value as a `u32` when the type of the ID is `U32`.
+    pub fn u32(&self, id: PropertyId) -> Option<u32>;
+}
+
+impl RangedPropBundle {
+    pub fn f32(&self, id: PropertyId) -> Option<(f32, f32)>;
+    pub fn i32(&self, id: PropertyId) -> Option<(i32, i32)>;
+    pub fn u32(&self, id: PropertyId) -> Option<(u32, u32)>;
+}
+```
+
+`PropertyId` implements `Display` as the Wwise name, or `prop(0xNN)` for an ID that the crate
+does not name. A value keeps its bits (ADR-0032). `f32`, `i32` and `u32` give `None` for an ID of
+another type, and for an ID that the crate does not name.
+
+**The property ID table.** Bank versions 132, 134 and 145 share one table of IDs: `AkPropID` of
+the wwiser parser for bank versions 128 to 145. The crate names the 20 IDs that shipped objects
+hold, and no other ([appendix B](#appendix-b)). The values that shipped objects hold for each ID
+fix its type. An `F32` ID holds finite floats in the range of its unit. An `I32` ID holds integers
+below `2^23` in magnitude, and its ranged minimums are negative integers. The `U32` ID holds
+values spread over the whole `u32` range, as hashed object IDs are. The legacy objects hold IDs
+0x00, 0x02, 0x03, 0x04, 0x06, 0x07, 0x0F, 0x10, 0x11, 0x3A, 0x3B and 0x46, with values of the same
+types and ranges.
+
+| ID | Constant | Wwise name | Type | Shipped values |
+| --- | --- | --- | --- | --- |
+| 0x00 | `VOLUME` | Volume | `F32` | -99 to 15 dB |
+| 0x02 | `PITCH` | Pitch | `F32` | -2400 to 2400 cents |
+| 0x03 | `LPF` | LPF | `F32` | 1 to 100 |
+| 0x04 | `HPF` | HPF | `F32` | 1 to 95 |
+| 0x06 | `MAKE_UP_GAIN` | MakeUpGain | `F32` | -200 to 29 dB |
+| 0x07 | `PRIORITY` | Priority | `F32` | 2 to 100 |
+| 0x08 | `PRIORITY_DISTANCE_OFFSET` | PriorityDistanceOffset | `F32` | -70 to -1 |
+| 0x0C | `PAN_LR` | PAN_LR | `F32` | -100 to 100 |
+| 0x0D | `PAN_FR` | PAN_FR | `F32` | -70.6 to 100 |
+| 0x0E | `CENTER_PCT` | CenterPCT | `F32` | 20 to 100 |
+| 0x0F | `DELAY_TIME` | DelayTime | `I32` | 1 to 180,000 ms, on actions |
+| 0x10 | `TRANSITION_TIME` | TransitionTime | `I32` | 7 to 30,000 ms, on actions |
+| 0x11 | `PROBABILITY` | Probability | `F32` | 0 to 98 percent, on Play actions |
+| 0x13 | `USER_AUX_SEND_VOLUME_0` | UserAuxSendVolume0 | `F32` | -96 to 2 dB |
+| 0x18 | `OUTPUT_BUS_VOLUME` | OutputBusVolume | `F32` | -200 dB |
+| 0x21 | `HDR_ACTIVE_RANGE` | HDRActiveRange | `F32` | 0 to 96 dB |
+| 0x3A | `LOOP` | Loop | `I32` | 0 to 8, ranged -3 to 14 |
+| 0x3B | `INITIAL_DELAY` | InitialDelay | `F32` | 0.001 to 35 s |
+| 0x46 | `ATTENUATION_ID` | AttenuationID | `U32` | object IDs |
+| 0x47 | `POSITIONING_TYPE_BLEND` | PositioningTypeBlend | `F32` | 0 to 99 |
+
 ### <a id="s9.3"></a>9.3 Node base
 
 ```text
@@ -732,6 +853,8 @@ NodeBase
 pub struct NodeBase {
     pub override_bus: ObjectId,
     pub parent: ObjectId,
+    pub props: PropBundle,
+    pub ranged_props: RangedPropBundle,
     /* the other fields of the grammar, kept as bytes */
 }
 ```
@@ -807,7 +930,9 @@ pub struct Action {
     pub action_type: ActionType,
     pub target: ObjectId,
     pub target_flags: u8,
-    /* the property bundles and the extension, kept as bytes */
+    pub props: PropBundle,
+    pub ranged_props: RangedPropBundle,
+    /* the extension, kept as bytes */
 }
 
 impl Action {
@@ -854,16 +979,19 @@ pub struct Event {
 ```text
 RandomSequenceContainer payload (kind 5)
   u32 id; NodeBase
-  u16; u16; u16; f32; f32; f32; u16; u8; u8; u8; u8
+  u16 loop_count; u16 loop_mod_min; u16 loop_mod_max
+  f32 transition_time; f32 transition_time_mod_min; f32 transition_time_mod_max
+  u16 avoid_repeat_count; u8 transition_mode; u8 random_mode; u8 mode; u8 bits
   u32 child_count; u32 child_id[child_count]
-  u16 playlist_count; (u32 id, u32 weight)[playlist_count]
+  u16 playlist_count; (u32 child_id, u32 weight)[playlist_count]
 
 SwitchContainer payload (kind 6)
   u32 id; NodeBase
   u8 group_type; u32 group_id; u32 default_switch; u8 continuous_validation
   u32 child_count; u32 child_id[child_count]
-  u32 group_count;  per group: u32 switch_id; u32 node_count; u32 node_id[node_count]
-  u32 param_count;  (u32 node_id, u8, u8, f32, f32)[param_count]
+  u32 switch_count;  per switch: u32 switch_id; u32 node_count; u32 node_id[node_count]
+  u32 param_count;   (u32 node_id, u8 bits, u8 on_switch_bits, i32 fade_out_time,
+                      i32 fade_in_time)[param_count]
 
 ActorMixer payload (kind 7)
   u32 id; NodeBase
@@ -874,24 +1002,120 @@ LayerContainer payload (kind 9)
   u32 child_count; u32 child_id[child_count]
   u32 layer_count;  per layer: u32 id; RtpcList; u32 rtpc_id; u8 rtpc_type;
                     u32 assoc_count; per association: u32 child_id; u32 point_count;
-                                     (12 bytes)[point_count]
+                                     (f32 from, f32 to, u32 interp)[point_count]
   u8 continuous_validation
 ```
+
+`mode` is 0 for random and 1 for sequence. `group_type` is 0 for a switch group and 1 for a state
+group. `group_id`, `default_switch` and `switch_id` are FNV-1 hashes of Wwise names. A fade time
+is in milliseconds.
 
 ```rust
 /// A RandomSequenceContainer, a SwitchContainer, an ActorMixer or a LayerContainer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Container {
     pub id: ObjectId,
-    pub kind: ObjectKind,
     pub node: NodeBase,
     pub children: Vec<ObjectId>,
-    /* the fields before and after the children, kept as bytes */
+    pub fields: ContainerFields,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ContainerFields {
+    RandomSequence(RandomSequenceFields),   // kind 5
+    Switch(SwitchFields),                   // kind 6
+    ActorMixer,                             // kind 7
+    Layer(LayerFields),                     // kind 9
+}
+
+impl Container {
+    /// Returns the kind that the variant of `fields` selects.
+    pub fn kind(&self) -> ObjectKind;
+    /// Removes the child from `children` and from every list of `fields` that names it.
+    pub fn remove_child(&mut self, child: ObjectId) -> bool;
+    /// Replaces the child in `children` and in every list of `fields` that names it.
+    pub fn replace_child(&mut self, old: ObjectId, new: ObjectId) -> bool;
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct RandomSequenceFields {
+    pub loop_count: u16,
+    pub loop_mod_min: u16,
+    pub loop_mod_max: u16,
+    pub transition_time: PropValue,
+    pub transition_time_mod_min: PropValue,
+    pub transition_time_mod_max: PropValue,
+    pub avoid_repeat_count: u16,
+    pub transition_mode: u8,
+    pub random_mode: u8,
+    pub mode: ContainerMode,
+    pub bits: u8,
+    pub playlist: Vec<PlaylistItem>,
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PlaylistItem { pub child: ObjectId, pub weight: u32 }
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ContainerMode(pub u8);   // RANDOM 0, SEQUENCE 1
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct SwitchFields {
+    pub group_type: GroupType,
+    pub group: u32,
+    pub default_switch: u32,
+    pub continuous_validation: u8,
+    pub switches: Vec<SwitchNodes>,
+    pub params: Vec<SwitchNodeParams>,
+}
+
+impl SwitchFields {
+    /// Returns the nodes of the first entry of the switch.
+    pub fn nodes_of(&self, switch: u32) -> Option<&[ObjectId]>;
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct GroupType(pub u8);       // SWITCH 0, STATE 1
+
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
+pub struct SwitchNodes { pub switch: u32, pub nodes: Vec<ObjectId> }
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct SwitchNodeParams {
+    pub node: ObjectId,
+    pub bits: u8,
+    pub on_switch_bits: u8,
+    pub fade_out_time: i32,
+    pub fade_in_time: i32,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct LayerFields { pub layers: Vec<Layer>, pub continuous_validation: u8 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Layer {
+    pub id: u32,
+    pub rtpc: u32,
+    pub rtpc_type: u8,
+    pub associations: Vec<LayerAssociation>,
+    /* the RtpcList, kept as bytes */
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LayerAssociation {
+    pub child: ObjectId,
+    /* the curve points, kept as bytes */
 }
 ```
 
-A SwitchContainer and a LayerContainer name children again in their groups and layers. An edit of
-`children` does not change those lists.
+The variant of `fields` selects the kind (ADR-0033). The transition times are the bits of `f32`
+values (ADR-0032). A playlist weight is relative to the other weights of the playlist.
+
+`remove_child` drops the child from `children`, the playlist items of the child, the child from
+the node list of each switch, the node parameters of the child and the associations of the child.
+A switch or a layer whose list becomes empty keeps its place. `replace_child` renames the child
+in the same lists, and each ID keeps its place. Both return `true` when `children` held the
+child. A direct edit of `children` leaves `fields` as it is.
 
 ### <a id="s9.8"></a>9.8 Decoding and encoding
 
@@ -927,16 +1151,42 @@ of the generation returns `Error::ActionClass`.
 
 Decoding then encoding with the same version gives the original payload. Encoding with the other
 generation writes zero into each **current** field and drops it for the legacy generation.
-`encode` decodes its output at `version` and returns the decoding error. The fields kept as bytes
-belong to the action class and the container kind of the decode. A `Container` of a kind other
-than 5, 6, 7 and 9 returns `Error::Layout` at offset 0.
+`encode` decodes its output at `version` and returns the decoding error. The extension kept as
+bytes belongs to the action class of the decode. A layer keeps its `RtpcList` and an association
+keeps its curve points as bytes.
 
 A caller edits an object by decoding it, changing a field, encoding it and passing it to
 `Hierarchy::replace`. The other objects keep their bytes.
 
-## <a id="s10"></a>10. Event sources
+## <a id="s10"></a>10. Event tree and event sources
 
 ```rust
+/// The objects that an event reaches.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EventTree {
+    pub id: ObjectId,
+    pub actions: Vec<EventAction>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EventAction {
+    pub action: Action,
+    /// The node tree of the target of a Play action.
+    pub target: Option<EventNode>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EventNode {
+    Sound(Sound),
+    Container { container: Container, children: Vec<EventNode> },
+    Other { id: ObjectId, kind: ObjectKind },
+}
+
+impl EventTree {
+    /// Returns the Sounds of the tree as sources, depth first.
+    pub fn sources(&self) -> impl Iterator<Item = EventSource> + '_;
+}
+
 /// One media that an event plays.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct EventSource {
@@ -945,24 +1195,38 @@ pub struct EventSource {
     pub stream_type: StreamType,
 }
 
+/// Returns the tree of the event `event`, from the hierarchies of `banks`.
+pub fn event_tree(banks: &[&Bank], event: ObjectId) -> Result<Option<EventTree>>;
+
 /// Returns the media that the event `event` plays, from the hierarchies of `banks`.
 pub fn event_sources(banks: &[&Bank], event: ObjectId) -> Result<Vec<EventSource>>;
 ```
 
-The query finds an object by ID in the banks in order and takes the first match: the first bank
+`event_tree` finds an object by ID in the banks in order and takes the first match: the first bank
 that holds the ID, and the first object of the ID in that bank. It indexes the objects of the
 banks by ID once per call. It decodes each object with the version of the bank that holds it.
-From the event it follows each action of the class Play to its target. It reads the class of an
-action from bytes 4 to 6 of its payload. An action of another class is not decoded and gives
-nothing. A Sound gives one `EventSource`. A container gives the sources of its
-children in order. Every other kind gives nothing. An object that no bank holds gives nothing. The
-query visits each object once. The result is in the order of the walk, depth first. An event that
-no bank holds gives an empty list. An ID whose first match is not an event gives an empty list. A
-decoding error of the event, a Play action, a Sound or a container stops the query and returns
-the error.
 
-`stream_type` names the file that holds the media: a media index for `DATA_BANK`, a package for
-`STREAMING`, both for `PREFETCH`.
+The tree holds each action of the event, in event order. An action that no bank holds, an ID
+whose object is not an action, and an action of a class other than Play that does not decode give
+no `EventAction`. The class of an action comes from bytes 4 to 6 of its payload. The target of a
+Play action is its node tree. The target of an action of another class is `None`.
+
+A node is the target of a Play action or a child of a container. A Sound is an
+`EventNode::Sound` leaf. A container is an `EventNode::Container` with the node trees of its
+children in child order. An object of a kind without a typed layout is an `EventNode::Other`
+leaf with its ID and kind. An object that no bank holds, and an event or an action in the place
+of a node, give no node.
+
+The walk visits each object once, depth first, and the event first. An ID that the walk has
+visited gives no action and no node. The walk keeps the open containers on a heap stack: a deep
+chain of containers in a bank does not exhaust the call stack.
+
+An event that no bank holds gives `None`. An ID whose first match is not an event gives `None`. A
+decoding error of the event, a Play action or a node stops the query and returns the error.
+
+`event_sources` is the list of the Sound leaves of `event_tree`, depth first, and an empty list
+where `event_tree` gives `None`. `stream_type` names the file that holds the media: a media index
+for `DATA_BANK`, a package for `STREAMING`, both for `PREFETCH`.
 
 ## <a id="s11"></a>11. Upgrade
 
@@ -1226,8 +1490,8 @@ test calls a private layout function.
   - every package entry key equals the source ID of its name;
   - every `DIDX` lists its records in ascending source ID order;
   - every `HIRC` framing ends at the end of its chunk;
-  - every object of a typed kind in a version 132, 134 or 145 bank decodes, and encodes back to
-    its payload;
+  - every object of a typed kind in a version 132, 134 or 145 bank decodes, with its property
+    bundles and container fields, and encodes back to its payload;
   - every legacy bank with a chunk other than `DIDX` or `DATA` fails `Bank::check`;
   - every version 132 and 134 bank without a refusal upgrades, reads back to an equal bank, and
     starts its `DATA` body at a multiple of 16.
@@ -1241,7 +1505,12 @@ test calls a private layout function.
   current layouts. A version 125 bank, a bank with a MusicSegment and a bank with a kind 17 object
   are refused.
 - **Event sources.** The event bank fixture and its media bank resolve each event. An `insta`
-  snapshot in `.ron` holds the result.
+  snapshot in `.ron` holds the result. The Sound leaves of the event tree of each event equal its
+  event sources, in order.
+- **Edits.** A test sets a property of a node and of an action and removes a child of each
+  container kind, encodes, decodes, and asserts the edit and the unchanged rest. A SwitchContainer
+  and a LayerContainer, which the fixtures lack, are built from the grammar of
+  [section 9.7](#s9.7).
 
 ## <a id="s16"></a>16. Rules
 
@@ -1254,7 +1523,7 @@ test calls a private layout function.
 | W5  | Reading does not check client acceptance. `Bank::check` does. | Rejecting a legacy event bank in the reader. | A tool inspects and upgrades a bank that the client rejects. | [section 6.4](#s6.4) |
 | W6  | An unedited package writes back byte for byte. An unedited bank and media index write back byte for byte when their media start on the media alignment (W15). | Normalizing on write. | A mod changes only the bytes that it edits. | [section 5.5](#s5.5), [section 6.3](#s6.3), [section 7.3](#s7.3) |
 | W7  | Every hierarchy object keeps its payload as bytes. Typed objects are decoded on request. | A typed enum for every kind in `Hierarchy`. | Kinds 8 and 10 to 22 have no checked layout. A raw payload round-trips every kind. | [section 8](#s8), [section 9.8](#s9.8) |
-| W8  | `ObjectKind`, `BankVersion`, `BankType`, `StreamType`, `ActionType` and `WemCodec` are newtypes with constants. | Exhaustive enums. | A file carries values that the crate does not name. A Wwise upgrade adds values. | [section 6.2](#s6.2), [section 8.2](#s8.2) |
+| W8  | `ObjectKind`, `BankVersion`, `BankType`, `StreamType`, `ActionType`, `WemCodec`, `PropertyId`, `ContainerMode` and `GroupType` are newtypes with constants. | Exhaustive enums. | A file carries values that the crate does not name. A Wwise upgrade adds values. | [section 6.2](#s6.2), [section 8.2](#s8.2) |
 | W9  | A typed object decodes only when its layout consumes the whole payload. | Decoding the leading fields and ignoring the rest. | A layout error desynchronizes the client reader for every later object. | [section 9.8](#s9.8) |
 | W10 | The upgrade fills new curve slots with `0xFE`. | `0xFF`. | `0xFF` disables obstruction, occlusion, diffraction and transmission in the version 145 reader. | [section 11](#s11) |
 | W11 | The upgrade refuses music kinds, kinds 8 and 15 to 22, chunks kept as bytes, and version 125. | Passing them through. | The version 145 reader reads payloads in sequence. One payload of the old layout corrupts every later object. | [section 11](#s11) |
@@ -1262,6 +1531,9 @@ test calls a private layout function.
 | W13 | `ltk_wwise` does not depend on `ltk_meta`. | A typed `BankUnit` in the crate. | `ltk_meta` holds no schema. | [section 12](#s12); ADR-0006 |
 | W14 | The crate does not decode audio. | A Vorbis or Opus decoder. | The decoders are large dependencies. A mod replaces media with files that the Wwise tool encodes. | [section 13](#s13) |
 | W15 | The writer starts the `DATA` body of a media bank at a multiple of the media alignment from the start of the file. The `BKHD` padding places it. | Writing the padding as read after an edit. | Every shipped media bank starts `DATA` at a multiple of 16. An edited `DIDX`, a media-only bank and an upgraded header move `DATA`. | [section 6.2](#s6.2), [section 7.3](#s7.3) |
+| W16 | A property value and a transition time keep the bits as read. `PropertyId::value_type` gives the type of a named ID. | An `f32` or an enum of the member per value. | The wire carries no type. Every shipped value round-trips, and the typed objects keep `Eq`. | [section 9.2](#s9.2); ADR-0032 |
+| W17 | `Container` holds the fields of its kind in a `ContainerFields` enum, and the variant selects the kind. `remove_child` and `replace_child` edit `children` and every list that names the child. | One `Typed` variant per kind. Fields kept as bytes. | A walk reads `children` of every kind. A playlist, a switch or a layer that names a removed child is a dangling reference. | [section 9.7](#s9.7); ADR-0033 |
+| W18 | `event_sources` is the Sound leaves of `event_tree`. | Two walks. | One walk defines the order and the visited set of both queries. | [section 10](#s10) |
 
 ## <a id="appendix-a"></a>Appendix A. Client functions
 
@@ -1354,12 +1626,33 @@ with the version of its bank and encodes back to its payload: 768,553 objects, n
 | 7 `ACTOR_MIXER` | 78 | 5 | 27,557 |
 | 9 `LAYER_CONTAINER` | 3 | 6 | 1316 |
 
+**Retail 16.x, `DATA/FINAL`, `ltk_wwise` `typed_corpus`, 2026-10-29.** The 768,553 objects of
+kinds 2 to 7 and 9 decode with their property bundles and container fields, and encode back to
+their payloads, with no failure. Their bundles hold 20 property IDs, the IDs of the table in
+[section 9.2](#s9.2), and no other.
+
+| ID | Name | Properties | Ranged | ID | Name | Properties | Ranged |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 0x00 | Volume | 2215 | 80 | 0x0F | DelayTime | 21,550 | 149 |
+| 0x02 | Pitch | 6296 | 16,790 | 0x10 | TransitionTime | 29,600 | 0 |
+| 0x03 | LPF | 2358 | 285 | 0x11 | Probability | 2265 | 0 |
+| 0x04 | HPF | 2533 | 70 | 0x13 | UserAuxSendVolume0 | 372 | 0 |
+| 0x06 | MakeUpGain | 124,665 | 775 | 0x18 | OutputBusVolume | 33 | 0 |
+| 0x07 | Priority | 208,846 | 0 | 0x21 | HDRActiveRange | 458 | 0 |
+| 0x08 | PriorityDistanceOffset | 85 | 0 | 0x3A | Loop | 3098 | 12 |
+| 0x0C | PAN_LR | 159 | 0 | 0x3B | InitialDelay | 3240 | 643 |
+| 0x0D | PAN_FR | 121 | 0 | 0x46 | AttenuationID | 14,917 | 0 |
+| 0x0E | CenterPCT | 22 | 0 | 0x47 | PositioningTypeBlend | 1183 | 0 |
+
+The ranged minimums of DelayTime and Loop are negative integers. The values of AttenuationID
+spread over the whole `u32` range.
+
 **Retail 16.x, `DATA/FINAL`, `ltk_wwise` `upgrade_corpus`, 2026-10-28.** 825 readable legacy
 banks: 823 at version 134, 2 at version 132. 823 upgrade: 822 at version 134, 1 at version 132.
 Each upgraded bank writes, reads back to the same bytes, passes `Bank::check`, and every object
 decodes with the current layouts. 2 are refused, one at each version: one bank holds a kind 11
-object, the other a kind 17 object. 593 upgraded banks hold a media index. In 112 of them the
-`DATA` body starts at a multiple of 16 from the start of the file.
+object, the other a kind 17 object. 593 upgraded banks hold a media index. In all 593 the `DATA`
+body starts at a multiple of 16 from the start of the file.
 
 **Retail 16.x, `Ahri.en_US.wad.client`, 2026-10-28.** Every package is `r3d2` version 1. Entry
 records and media start on 8-byte boundaries. The data region starts at the end of the last entry
