@@ -1,6 +1,6 @@
 [package]
 name = "ltk_wwise"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Wwise bank and WPK package reading/writing for League Toolkit"
 license = "Apache-2.0"
