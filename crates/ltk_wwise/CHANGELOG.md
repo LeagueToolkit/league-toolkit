@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_wwise-v0.1.0...ltk_wwise-v0.2.0) - 2026-10-29
+
+### Added
+
+- *(ltk_wwise)* decode props, containers and event trees
+
 ## [0.1.0](https://github.com/LeagueToolkit/league-toolkit/releases/tag/ltk_wwise-v0.1.0) - 2026-10-28
 
 ### Added
