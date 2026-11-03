@@ -30,3 +30,6 @@ pub use ltk_ini as ini;
 
 #[cfg(feature = "wwise")]
 pub use ltk_wwise as wwise;
+
+#[cfg(feature = "navgrid")]
+pub use ltk_navgrid as navgrid;

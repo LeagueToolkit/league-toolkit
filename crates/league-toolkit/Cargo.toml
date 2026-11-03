@@ -43,6 +43,7 @@ hash = ["dep:ltk_hash"]
 rst = ["dep:ltk_rst"]
 ini = ["dep:ltk_ini"]
 wwise = ["dep:ltk_wwise"]
+navgrid = ["dep:ltk_navgrid"]
 
 [dependencies]
 ltk_anim = { version = "0.3.14", path = "../ltk_anim", optional = true }
@@ -56,6 +57,7 @@ ltk_hash = { version = "0.5.3", path = "../ltk_hash", optional = true }
 ltk_rst = { version = "0.2.3", path = "../ltk_rst", optional = true }
 ltk_ini = { version = "0.2.1", path = "../ltk_ini", optional = true }
 ltk_wwise = { version = "0.2.0", path = "../ltk_wwise", optional = true }
+ltk_navgrid = { version = "0.1.0", path = "../ltk_navgrid", optional = true }
 
 [dev-dependencies]
 image = { version = "0.25.2", default-features = false }

@@ -928,6 +928,9 @@ use glam::{Vec2, Vec3, Vec4, Mat4, Quat};
 | `.dds` | `ltk_texture` | `Dds` | DirectDraw Surface |
 | `.mapgeo` | `ltk_mapgeo` | `EnvironmentAsset` | Map geometry |
 | `.nvr` | `ltk_mapgeo` | `nvr::SimpleEnvironment` | Legacy map geometry (read-only) |
+| `.aimesh_ngrid` | `ltk_navgrid` | `NavGrid` | Map navigation grid |
+| `.ngrid_overlay` | `ltk_navgrid` | `NavGridOverlay` | Cell flag rectangles for a navigation grid |
+| `.rg_overlay` | `ltk_navgrid` | `RegionOverlay` | Region tag rectangles for a navigation grid |
 | `.inibin` / `.troybin` / `.cfgbin` | `ltk_ini` | `Inibin` | Binary ini file of the legacy data system |
 
 ---

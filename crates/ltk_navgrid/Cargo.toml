@@ -1,0 +1,18 @@
+[package]
+name = "ltk_navgrid"
+version = "0.1.0"
+edition = "2021"
+description = "Navigation grid (.aimesh_ngrid) and grid overlay reading/writing for League Toolkit"
+license = "Apache-2.0"
+readme = "../../README.md"
+
+[lints]
+workspace = true
+
+[dependencies]
+byteorder = { workspace = true }
+bitflags = { workspace = true }
+thiserror = { workspace = true }
+glam = { workspace = true }
+
+ltk_io_ext = { version = "0.4.9", path = "../ltk_io_ext" }
