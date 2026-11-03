@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_ini_unhash-v0.1.1...ltk_ini_unhash-v0.1.2) - 2026-11-03
+
+### Added
+
+- *(ltk_navgrid)* read and write navigation grids and overlays
+
 ## [0.1.1](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_ini_unhash-v0.1.0...ltk_ini_unhash-v0.1.1) - 2026-10-28
 
 ### Other

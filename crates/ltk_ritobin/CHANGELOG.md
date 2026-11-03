@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.3](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_ritobin-v0.12.2...ltk_ritobin-v0.12.3) - 2026-11-03
+
+### Added
+
+- *(ltk_navgrid)* read and write navigation grids and overlays
+
 ## [0.12.2](https://github.com/LeagueToolkit/league-toolkit/compare/ltk_ritobin-v0.12.1...ltk_ritobin-v0.12.2) - 2026-10-28
 
 ### Other
