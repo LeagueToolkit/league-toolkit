@@ -6,7 +6,7 @@ use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 use glam::Vec3;
 use ltk_io_ext::{untrusted::UntrustedCapacity, ReaderExt, WriterExt};
 
-use crate::{CellFlags, ParseError, Result};
+use crate::{CellFlags, NavGridOverlay, ParseError, RegionOverlay, Result};
 
 /// The grid version that [`NavGrid::to_writer`] writes.
 pub const WRITE_VERSION: u8 = 7;
@@ -75,18 +75,20 @@ impl NavGridCell {
 }
 
 /// One tag slot of a [`RegionTagGroup`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct RegionTag {
-    /// The FNV-1 hash of the lowercased tag name.
+    /// The FNV-1 hash of the lowercased tag name, the value of `ltk_hash::fnv1::hash_lower`.
+    /// The hash is FNV-1, not the FNV-1a of bin names.
     pub name: u32,
     /// A second hash word. Shipped grids store 0.
     pub name2: u32,
 }
 
 /// One group of region tags, for example the music areas of a map.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct RegionTagGroup {
-    /// The FNV-1 hash of the lowercased group name. 0 marks an unused group.
+    /// The FNV-1 hash of the lowercased group name, the value of `ltk_hash::fnv1::hash_lower`.
+    /// 0 marks an unused group.
     pub name: u32,
     /// The tags of the group, indexed by the 4-bit value in each cell.
     pub tags: [RegionTag; REGION_TAGS_PER_GROUP],
@@ -94,9 +96,14 @@ pub struct RegionTagGroup {
 
 /// A navigation grid: a `.aimesh_ngrid` file.
 ///
-/// The grid covers the ground plane from [`NavGrid::min_position`] to
-/// [`NavGrid::max_position`] in square cells. World `x` maps to cell `x` and world `z` maps to
-/// cell `y`. A second, finer grid of sampled heights covers the same area.
+/// The grid covers the ground plane in square cells. Cell `(0, 0)` starts at
+/// [`NavGrid::min_position`]. The cells span `x_cell_count * cell_size` world units along world
+/// `x` and `y_cell_count * cell_size` world units along world `z`. The last column and the last
+/// row can extend past [`NavGrid::max_position`]. World `x` maps to cell `x` and world `z` maps
+/// to cell `y`.
+///
+/// A second, finer grid of sampled heights spans from `min_position` to `max_position`. The `y`
+/// of `min_position` and `max_position` does not bound the sampled heights.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NavGrid {
     flags: u16,
@@ -330,10 +337,26 @@ impl NavGrid {
         &mut self.cells
     }
 
-    /// Returns the index of cell `(x, y)`, or `None` if it is outside the grid.
-    fn cell_index(&self, x: u32, y: u32) -> Option<usize> {
+    /// Returns the index of cell `(x, y)` in [`NavGrid::cells`]. Returns `None` if the cell is
+    /// outside the grid.
+    #[must_use]
+    pub fn cell_index(&self, x: u32, y: u32) -> Option<usize> {
         (x < self.x_cell_count && y < self.y_cell_count)
             .then(|| x as usize + y as usize * self.x_cell_count as usize)
+    }
+
+    /// Returns the `(x, y)` coordinates of the cell at `index` in [`NavGrid::cells`]. Returns
+    /// `None` if `index` is outside the cells.
+    #[must_use]
+    pub fn cell_coords(&self, index: usize) -> Option<(u32, u32)> {
+        if index >= self.cells.len() {
+            return None;
+        }
+        let width = self.x_cell_count as usize;
+        Some((
+            u32::try_from(index % width).ok()?,
+            u32::try_from(index / width).ok()?,
+        ))
     }
 
     /// Returns cell `(x, y)`. Returns `None` if the cell is outside the grid.
@@ -375,6 +398,67 @@ impl NavGrid {
             to_cell(position.x - self.min_position.x, self.x_cell_count)?,
             to_cell(position.z - self.min_position.z, self.y_cell_count)?,
         ))
+    }
+
+    /// Writes the flags of every rectangle of `overlay` into the cells that the rectangle covers.
+    ///
+    /// Each overlay value replaces the whole flag word of its cell. The rectangles apply in
+    /// order. A later rectangle overwrites an earlier one where they overlap. The part of a
+    /// rectangle outside the grid has no effect. A rectangle applies only its complete rows of
+    /// `width` values, up to `height` rows.
+    pub fn apply_overlay(&mut self, overlay: &NavGridOverlay) {
+        for rect in &overlay.rects {
+            self.apply_rect(
+                (i64::from(rect.x), i64::from(rect.y)),
+                (rect.width as usize, rect.height as usize),
+                &rect.flags,
+                |cell, flags| cell.flags = flags,
+            );
+        }
+    }
+
+    /// Writes the region tag words of every rectangle of `overlay` into the cells that the
+    /// rectangle covers.
+    ///
+    /// Each overlay value replaces the whole region tag word of its cell, all
+    /// [`REGION_TAG_GROUP_COUNT`] groups at once. The rectangles apply in order, with the same
+    /// clipping as [`NavGrid::apply_overlay`].
+    pub fn apply_region_overlay(&mut self, overlay: &RegionOverlay) {
+        for rect in &overlay.rects {
+            self.apply_rect(
+                (i64::from(rect.x), i64::from(rect.y)),
+                (usize::from(rect.width), usize::from(rect.height)),
+                &rect.region_tags,
+                |cell, region_tags| cell.region_tags = region_tags,
+            );
+        }
+    }
+
+    /// Calls `apply` for each value of a `width` x `height` rectangle with its first cell at
+    /// `(x, y)`, where the value's cell is inside the grid.
+    fn apply_rect<T: Copy>(
+        &mut self,
+        (x, y): (i64, i64),
+        (width, height): (usize, usize),
+        values: &[T],
+        mut apply: impl FnMut(&mut NavGridCell, T),
+    ) {
+        if width == 0 {
+            return;
+        }
+        for (row, cell_y) in values.chunks_exact(width).take(height).zip(y..) {
+            let Ok(cell_y) = u32::try_from(cell_y) else {
+                continue;
+            };
+            for (&value, cell_x) in row.iter().zip(x..) {
+                if let Some(cell) = u32::try_from(cell_x)
+                    .ok()
+                    .and_then(|cell_x| self.cell_mut(cell_x, cell_y))
+                {
+                    apply(cell, value);
+                }
+            }
+        }
     }
 
     /// Returns the region tag groups. A group with name 0 is unused.
@@ -427,6 +511,31 @@ impl NavGrid {
         &mut self.sampled_heights
     }
 
+    /// Returns the height at the world `x` and `z` of `position`, interpolated between the four
+    /// sampled heights around it. The `y` of `position` has no effect.
+    ///
+    /// Returns `None` if the position is outside the samples. The samples span from
+    /// `min_position.x` to `min_position.x + (x_sample_count - 1) * x_sample_spacing` along world
+    /// `x`. The span along world `z` uses the `y` sample count and spacing.
+    #[must_use]
+    pub fn sampled_height_at(&self, position: Vec3) -> Option<f32> {
+        let (x0, x1, tx) = sample_span(
+            position.x - self.min_position.x,
+            self.x_sample_spacing,
+            self.x_sample_count,
+        )?;
+        let (z0, z1, tz) = sample_span(
+            position.z - self.min_position.z,
+            self.y_sample_spacing,
+            self.y_sample_count,
+        )?;
+        let width = self.x_sample_count as usize;
+        let height = |x: usize, z: usize| self.sampled_heights.get(x + z * width).copied();
+        let near = lerp(height(x0, z0)?, height(x1, z0)?, tx);
+        let far = lerp(height(x0, z1)?, height(x1, z1)?, tx);
+        Some(lerp(near, far, tz))
+    }
+
     /// Returns the raw bytes of the hint grid, [`HINT_GRID_SIZE`] long. The game skips the hint
     /// grid.
     #[must_use]
@@ -435,9 +544,28 @@ impl NavGrid {
     }
 }
 
+/// Returns the indices of the two samples around `offset` along one axis, and the weight of the
+/// second sample. Returns `None` if `offset` is outside the samples.
+fn sample_span(offset: f32, spacing: f32, count: u32) -> Option<(usize, usize, f32)> {
+    let last = count.checked_sub(1)?;
+    let position = offset / spacing;
+    // `contains` is false for NaN
+    if !(0.0..=last as f32).contains(&position) {
+        return None;
+    }
+    let first = (position.floor() as u32).min(last);
+    let second = (first + 1).min(last);
+    Some((first as usize, second as usize, position - first as f32))
+}
+
+fn lerp(from: f32, to: f32, weight: f32) -> f32 {
+    from + (to - from) * weight
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{NavGridOverlayRect, RegionOverlayRect};
 
     /// Returns a grid of `width` x `height` cells and 3 x 2 samples in `version`.
     fn grid_bytes(version: u8, width: u32, height: u32) -> Vec<u8> {
@@ -572,5 +700,102 @@ mod tests {
         assert_eq!(grid.world_to_cell(Vec3::new(-0.1, 0.0, 0.0)), None);
         assert_eq!(grid.world_to_cell(Vec3::new(f32::NAN, 0.0, 0.0)), None);
         assert_eq!(grid.cell_center(2, 0), None);
+    }
+
+    #[test]
+    fn nav_grid_cell_coords_inverts_cell_index() {
+        let grid = NavGrid::from_reader(&mut &grid_bytes(7, 2, 3)[..]).unwrap();
+        assert_eq!(grid.cell_index(1, 2), Some(5));
+        assert_eq!(grid.cell_coords(5), Some((1, 2)));
+        assert_eq!(grid.cell_index(2, 0), None);
+        assert_eq!(grid.cell_coords(6), None);
+    }
+
+    #[test]
+    fn nav_grid_sampled_height_at_interpolates_samples() {
+        // 3 x 2 samples 50 units apart, sample (i, j) holds height i + 3 * j
+        let grid = NavGrid::from_reader(&mut &grid_bytes(7, 2, 1)[..]).unwrap();
+        assert_eq!(grid.sampled_height_at(Vec3::new(0.0, 9.0, 0.0)), Some(0.0));
+        assert_eq!(
+            grid.sampled_height_at(Vec3::new(25.0, 0.0, 25.0)),
+            Some(2.0)
+        );
+        assert_eq!(grid.sampled_height_at(Vec3::new(75.0, 0.0, 0.0)), Some(1.5));
+        assert_eq!(
+            grid.sampled_height_at(Vec3::new(100.0, 0.0, 50.0)),
+            Some(5.0)
+        );
+        assert_eq!(grid.sampled_height_at(Vec3::new(100.1, 0.0, 0.0)), None);
+        assert_eq!(grid.sampled_height_at(Vec3::new(0.0, 0.0, -0.1)), None);
+        assert_eq!(grid.sampled_height_at(Vec3::new(f32::NAN, 0.0, 0.0)), None);
+    }
+
+    #[test]
+    fn nav_grid_apply_overlay_replaces_flags_inside_grid() {
+        let mut grid = NavGrid::from_reader(&mut &grid_bytes(7, 2, 1)[..]).unwrap();
+        let overlay = NavGridOverlay {
+            rects: vec![
+                NavGridOverlayRect {
+                    x: -1,
+                    y: 0,
+                    width: 2,
+                    height: 1,
+                    flags: vec![CellFlags::GRASS, CellFlags::WALL],
+                },
+                NavGridOverlayRect {
+                    x: 1,
+                    y: 0,
+                    width: 2,
+                    height: 2,
+                    flags: vec![CellFlags::empty(); 4],
+                },
+            ],
+            ..Default::default()
+        };
+        grid.apply_overlay(&overlay);
+        assert_eq!(grid.cell(0, 0).unwrap().flags, CellFlags::WALL);
+        assert_eq!(grid.cell(1, 0).unwrap().flags, CellFlags::empty());
+    }
+
+    #[test]
+    fn nav_grid_apply_overlay_skips_incomplete_rows() {
+        let mut grid = NavGrid::from_reader(&mut &grid_bytes(7, 2, 1)[..]).unwrap();
+        let overlay = NavGridOverlay {
+            rects: vec![
+                NavGridOverlayRect {
+                    width: 0,
+                    height: 1,
+                    flags: vec![CellFlags::WALL],
+                    ..Default::default()
+                },
+                NavGridOverlayRect {
+                    width: 2,
+                    height: 1,
+                    flags: vec![CellFlags::WALL],
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        grid.apply_overlay(&overlay);
+        assert_eq!(grid.cell(0, 0).unwrap().flags.bits(), 0x0442);
+    }
+
+    #[test]
+    fn nav_grid_apply_region_overlay_replaces_region_tags() {
+        let mut grid = NavGrid::from_reader(&mut &grid_bytes(7, 2, 1)[..]).unwrap();
+        let overlay = RegionOverlay {
+            version: 1,
+            rects: vec![RegionOverlayRect {
+                x: 1,
+                y: 0,
+                width: 1,
+                height: 1,
+                region_tags: vec![0xDEAD_BEEF],
+            }],
+        };
+        grid.apply_region_overlay(&overlay);
+        assert_eq!(grid.cell(0, 0).unwrap().region_tags, 0x8765_4321);
+        assert_eq!(grid.cell(1, 0).unwrap().region_tags, 0xDEAD_BEEF);
     }
 }

@@ -10,11 +10,12 @@ use ltk_io_ext::untrusted::UntrustedCapacity;
 use crate::{grid::element_count, CellFlags, Result, WriteError};
 
 /// One rectangle of a [`NavGridOverlay`].
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct NavGridOverlayRect {
-    /// The cell `x` of the first column.
+    /// The cell `x` of the first column. The value can be negative or past the grid.
+    /// [`NavGrid::apply_overlay`](crate::NavGrid::apply_overlay) skips the cells outside the grid.
     pub x: i32,
-    /// The cell `y` of the first row.
+    /// The cell `y` of the first row. The value can be negative or past the grid.
     pub y: i32,
     /// The number of columns.
     pub width: u32,
@@ -25,7 +26,9 @@ pub struct NavGridOverlayRect {
 }
 
 /// A cell flag overlay: a `.ngrid_overlay` file.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+///
+/// [`NavGrid::apply_overlay`](crate::NavGrid::apply_overlay) writes the overlay into a grid.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct NavGridOverlay {
     /// The version byte. The game ignores it. Shipped files store 1.
     pub version: u8,
@@ -104,7 +107,7 @@ impl NavGridOverlay {
 }
 
 /// One rectangle of a [`RegionOverlay`].
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct RegionOverlayRect {
     /// The cell `x` of the first column.
     pub x: u16,
@@ -122,8 +125,9 @@ pub struct RegionOverlayRect {
 /// A region tag overlay: a `.rg_overlay` file.
 ///
 /// An empty file is an overlay without rectangles. An overlay without rectangles writes as an
-/// empty file.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+/// empty file. [`NavGrid::apply_region_overlay`](crate::NavGrid::apply_region_overlay) writes the
+/// overlay into a grid.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct RegionOverlay {
     /// The version byte. The game ignores it. Shipped files store 1.
     pub version: u8,

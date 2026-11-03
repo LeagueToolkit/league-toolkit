@@ -9,7 +9,9 @@ bitflags! {
     /// tags set two bits. [`CellFlags::contains`] tests a whole tag. [`CellFlags::bits`] gives
     /// access to a single bit.
     ///
-    /// A value keeps every bit, including bits that no tag names.
+    /// A value keeps every bit, including bits that no tag names. Bits `0x8` and `0x80` belong
+    /// to no tag. The Summoner's Rift grid sets `0x80` in about a third of its cells. A color
+    /// scheme built from these constants alone leaves those cells without a tag.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
     pub struct CellFlags: u16 {
         /// The `Grass` tag.
