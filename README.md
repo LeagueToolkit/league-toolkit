@@ -27,6 +27,7 @@ installers - these crates read and write what the game ships. Building mods on t
 | [`ltk_mesh`](crates/ltk_mesh)             | [![crates.io](https://img.shields.io/crates/v/ltk_mesh.svg)](https://crates.io/crates/ltk_mesh)              | `.skn`, `.scb`, `.sco`  | Skinned and static meshes, with typed vertex-buffer accessors                   |
 | [`ltk_anim`](crates/ltk_anim)             | [![crates.io](https://img.shields.io/crates/v/ltk_anim.svg)](https://crates.io/crates/ltk_anim)              | `.skl`, `.anm`          | Skeletons, joints and animations                                                |
 | [`ltk_mapgeo`](crates/ltk_mapgeo)         | [![crates.io](https://img.shields.io/crates/v/ltk_mapgeo.svg)](https://crates.io/crates/ltk_mapgeo)          | `.mapgeo`, `.nvr`       | Map environment geometry                                                        |
+| [`ltk_navgrid`](crates/ltk_navgrid)       | [![crates.io](https://img.shields.io/crates/v/ltk_navgrid.svg)](https://crates.io/crates/ltk_navgrid)        | `.aimesh_ngrid`, `.ngrid_overlay`, `.rg_overlay` | Map navigation grids: cell flags, heights and region tags, and their overlays |
 | [`ltk_rst`](crates/ltk_rst)               | [![crates.io](https://img.shields.io/crates/v/ltk_rst.svg)](https://crates.io/crates/ltk_rst)                | `.stringtable`          | Riot String Tables: localized strings keyed by hash                             |
 | [`ltk_ini`](crates/ltk_ini)               | [![crates.io](https://img.shields.io/crates/v/ltk_ini.svg)](https://crates.io/crates/ltk_ini)                | `.inibin`, `.troybin`   | Binary ini files of the legacy data system: read, edit and write values by section and property name |
 | [`ltk_ritobin`](crates/ltk_ritobin)       | [![crates.io](https://img.shields.io/crates/v/ltk_ritobin.svg)](https://crates.io/crates/ltk_ritobin)        | ritobin text            | The human-readable bin dialect: parse, print, round-trip                        |
@@ -81,6 +82,7 @@ dependencies; the umbrella crate does not re-export them.
 | `wad`        | `ltk_wad`                                                                             | yes     |
 | `rst`        | `ltk_rst`                                                                             | no      |
 | `ini`        | `ltk_ini`                                                                             | no      |
+| `navgrid`    | `ltk_navgrid`                                                                         | no      |
 | `serde`      | `Serialize` and `Deserialize` on `ltk_wad`, `ltk_file`, `ltk_meta`, `ltk_rst` and `ltk_ini` types | no |
 
 For a minimal build, turn the defaults off and opt in:
@@ -243,6 +245,7 @@ league-toolkit
 |   |-- ltk_mesh          # meshes
 |   |-- ltk_anim          # skeletons and animations
 |   |-- ltk_mapgeo        # map geometry
+|   |-- ltk_navgrid       # navigation grids
 |   |-- ltk_rst           # string tables
 |   |-- ltk_ini           # binary ini files
 |   |-- ltk_shader        # shaders
