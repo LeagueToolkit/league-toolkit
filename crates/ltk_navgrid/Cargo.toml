@@ -15,4 +15,4 @@ bitflags = { workspace = true }
 thiserror = { workspace = true }
 glam = { workspace = true }
 
-ltk_io_ext = { version = "0.4.9", path = "../ltk_io_ext" }
+ltk_io_ext = { version = "0.4.10", path = "../ltk_io_ext" }

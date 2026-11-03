@@ -1,6 +1,6 @@
 [package]
 name = "league-toolkit"
-version = "0.2.46"
+version = "0.2.47"
 edition = "2021"
 
 description = "Toolkit library for serializing and editing various League of Legends formats"
@@ -46,17 +46,17 @@ wwise = ["dep:ltk_wwise"]
 navgrid = ["dep:ltk_navgrid"]
 
 [dependencies]
-ltk_anim = { version = "0.3.14", path = "../ltk_anim", optional = true }
-ltk_file = { version = "0.2.13", path = "../ltk_file", optional = true }
-ltk_mesh = { version = "0.5.5", path = "../ltk_mesh", optional = true }
-ltk_meta = { version = "0.9.3", path = "../ltk_meta", optional = true }
-ltk_primitives = { version = "0.3.8", path = "../ltk_primitives", optional = true }
-ltk_texture = { version = "0.6.6", path = "../ltk_texture", optional = true }
-ltk_wad = { version = "0.5.12", path = "../ltk_wad", optional = true }
-ltk_hash = { version = "0.5.3", path = "../ltk_hash", optional = true }
-ltk_rst = { version = "0.2.3", path = "../ltk_rst", optional = true }
-ltk_ini = { version = "0.2.1", path = "../ltk_ini", optional = true }
-ltk_wwise = { version = "0.2.0", path = "../ltk_wwise", optional = true }
+ltk_anim = { version = "0.3.15", path = "../ltk_anim", optional = true }
+ltk_file = { version = "0.2.14", path = "../ltk_file", optional = true }
+ltk_mesh = { version = "0.5.6", path = "../ltk_mesh", optional = true }
+ltk_meta = { version = "0.9.4", path = "../ltk_meta", optional = true }
+ltk_primitives = { version = "0.3.9", path = "../ltk_primitives", optional = true }
+ltk_texture = { version = "0.6.7", path = "../ltk_texture", optional = true }
+ltk_wad = { version = "0.5.13", path = "../ltk_wad", optional = true }
+ltk_hash = { version = "0.5.4", path = "../ltk_hash", optional = true }
+ltk_rst = { version = "0.2.4", path = "../ltk_rst", optional = true }
+ltk_ini = { version = "0.2.2", path = "../ltk_ini", optional = true }
+ltk_wwise = { version = "0.2.1", path = "../ltk_wwise", optional = true }
 ltk_navgrid = { version = "0.1.0", path = "../ltk_navgrid", optional = true }
 
 [dev-dependencies]
