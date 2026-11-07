@@ -68,7 +68,7 @@ impl Print for BinOverride {
         let (config, hashes) = config.take_hashes();
         let (cst, buf) = cst::builder::Builder::new()
             .with_hashes(hashes)
-            .with_vector_form(config.wrap.vector_form)
+            .with_vector_form(config.wrap.vectors)
             .build_override(self);
         CstPrinter::new(&buf, writer, config).print(&cst)
     }
@@ -93,6 +93,8 @@ mod test {
         cst::Cst,
         print::{config::PrintConfig, CstPrinter, WrapConfig},
     };
+
+    use super::Wrap;
 
     fn assert_pretty(input: &str, is: &str, config: PrintConfig<()>) {
         let cst = Cst::parse(input);
@@ -275,7 +277,7 @@ linked: list[string] = { "DATA/Characters/Viego/Viego.bin"
     fn inline_single_field_struct() {
         assert_pretty_rt(
             r#"loadscreen: embed = CensoredImage { image: string = "val" }"#,
-            PrintConfig::default().wrap(WrapConfig::default().inline_structs(true)),
+            PrintConfig::default().wrap(WrapConfig::default().structs(Wrap::AllowInline)),
         );
     }
     #[test]
@@ -284,7 +286,7 @@ linked: list[string] = { "DATA/Characters/Viego/Viego.bin"
             r#"loadscreen: embed = CensoredImage {
     image: embed = Image { src: string = "val" }
 }"#,
-            PrintConfig::default().wrap(WrapConfig::default().inline_structs(true)),
+            PrintConfig::default().wrap(WrapConfig::default().structs(Wrap::AllowInline)),
         );
     }
 
@@ -296,7 +298,7 @@ linked: list[string] = { "DATA/Characters/Viego/Viego.bin"
         src: string = "val"
     }
 }"#,
-            PrintConfig::default().wrap(WrapConfig::default().inline_structs(false)),
+            PrintConfig::default().wrap(WrapConfig::default().structs(Wrap::Always)),
         );
     }
 
@@ -315,8 +317,8 @@ linked: list[string] = { "DATA/Characters/Viego/Viego.bin"
 }"#,
             PrintConfig::default().wrap(
                 WrapConfig::default()
-                    .inline_lists(false)
-                    .inline_structs(false),
+                    .lists(Wrap::Always)
+                    .structs(Wrap::Always),
             ),
         );
     }
@@ -333,8 +335,8 @@ linked: list[string] = { "DATA/Characters/Viego/Viego.bin"
 }"#,
             PrintConfig::default().wrap(
                 WrapConfig::default()
-                    .inline_lists(false)
-                    .inline_structs(true),
+                    .lists(Wrap::Always)
+                    .structs(Wrap::AllowInline),
             ),
         );
     }
@@ -349,8 +351,8 @@ linked: list[string] = { "DATA/Characters/Viego/Viego.bin"
 }"#,
             PrintConfig::default().wrap(
                 WrapConfig::default()
-                    .inline_lists(true)
-                    .inline_structs(false),
+                    .lists(Wrap::AllowInline)
+                    .structs(Wrap::Always),
             ),
         );
     }

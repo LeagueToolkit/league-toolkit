@@ -23,7 +23,7 @@ pub struct Builder<H: HashProvider> {
     children: Vec<Child>,
     errors: Vec<Error>,
     tokens: Vec<Token>,
-    vector_form: crate::print::VectorForm,
+    vector_form: crate::print::VectorWrap,
 }
 
 impl Builder<()> {
@@ -46,7 +46,7 @@ impl<H: HashProvider> Builder<H> {
     }
 
     /// Sets how vectors/colors (`vec2`/`vec3`/`vec4`/`rgba`) are rendered.
-    pub fn with_vector_form(mut self, vector_form: crate::print::VectorForm) -> Self {
+    pub fn with_vector_form(mut self, vector_form: crate::print::VectorWrap) -> Self {
         self.vector_form = vector_form;
         self
     }
@@ -247,8 +247,8 @@ impl<H: HashProvider> Builder<H> {
     /// Wraps the components of a vector/color (`vec2`/`vec3`/`vec4`/`rgba`).
     fn vector_block(&mut self, components: Vec<Child>) -> Child {
         match self.vector_form {
-            crate::print::VectorForm::Inline => self.block_literal(components),
-            crate::print::VectorForm::List => self.block(components),
+            crate::print::VectorWrap::Never => self.block_literal(components),
+            crate::print::VectorWrap::List => self.block(components),
         }
     }
 
