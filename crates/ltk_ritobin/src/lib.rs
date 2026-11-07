@@ -139,6 +139,7 @@ pub mod types;
 pub use hashes::*;
 pub use types::*;
 
+pub use ast::Ast;
 pub use cst::Cst;
 
 /// Items that `rito!` names through `$crate`. Not part of the public API.
