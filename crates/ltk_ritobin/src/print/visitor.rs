@@ -11,7 +11,7 @@ use crate::{
     parse::TokenKind,
     print::{
         command::{Cmd, Mode},
-        PrintConfig, PrintError,
+        PrintConfig, PrintError, Wrap,
     },
 };
 
@@ -213,7 +213,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
             if self
                 .config
                 .wrap
-                .line_width
+                .wrap_width
                 .is_some_and(|line_width| self.col + size > line_width)
             {
                 self.break_first_group()?;
@@ -233,7 +233,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
             match cmd {
                 Cmd::Text(s) | Cmd::TextIf(s, Mode::Flat) => {
                     col += s.len();
-                    if self.config.wrap.line_width.is_some_and(|width| col > width) {
+                    if self.config.wrap.wrap_width.is_some_and(|width| col > width) {
                         return false;
                     }
                 }
@@ -490,7 +490,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                     })
                     .count();
 
-                if self.config.wrap.inline_structs {
+                if self.config.wrap.structs == Wrap::AllowInline {
                     if let Some(last) = self.list_stack.last() {
                         if struct_len > 1 {
                             self.force_group(grp, Mode::Break);
@@ -499,9 +499,11 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                         }
                     }
                 }
-                if !self.config.wrap.inline_lists && list_len > 0 {
+
+                if self.config.wrap.lists == Wrap::Always && list_len > 0 {
                     self.force_group(grp, Mode::Break);
                 }
+
                 let len = struct_len + list_len;
 
                 self.list_stack.push(ListContext {
@@ -557,9 +559,9 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                 }
             }
             Kind::Entry => {
-                match self.config.wrap.inline_structs {
-                    true => self.softline()?,
-                    false => self.line()?,
+                match self.config.wrap.structs {
+                    Wrap::AllowInline => self.softline()?,
+                    Wrap::Always => self.line()?,
                 };
                 // self.flush().unwrap();
             }
@@ -582,7 +584,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
             Kind::BlockLiteral | Kind::Block | Kind::BlockMatrix => {
                 self.dedent(4)?;
                 let list = self.list_stack.pop();
-                if list.is_some_and(|list| list.len > 0) || self.config.empty_block_spaces {
+                if list.is_some_and(|list| list.len > 0) || self.config.spaces.inside_empty_blocks {
                     self.softline()?;
                 }
                 self.text("}")?;
@@ -596,7 +598,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                 }
                 self.end_group()?;
             }
-            Kind::Entry if self.config.wrap.inline_structs => {
+            Kind::Entry if self.config.wrap.structs == Wrap::AllowInline => {
                 if let Some(list) = self.list_stack.last() {
                     if list.len > 1 {
                         self.force_group(list.grp, Mode::Break);
@@ -629,7 +631,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                                     Kind::ListItem | Kind::AnnotationArg => {
                                         self.softline()?;
                                     }
-                                    Kind::TypeArg if self.config.type_expr_spaces => {
+                                    Kind::TypeArg if self.config.spaces.between_type_arguments => {
                                         self.space()?;
                                     }
                                     _ => {}
