@@ -181,13 +181,13 @@ impl<'a, W: Write> CstVisitor<'a, W> {
         Ok(())
     }
 
-    pub fn indent(&mut self, n: usize) -> fmt::Result {
-        self.push(Cmd::Indent(n))?;
+    pub fn indent(&mut self) -> fmt::Result {
+        self.push(Cmd::Indent(self.config.indent_size))?;
         Ok(())
     }
 
-    pub fn dedent(&mut self, n: usize) -> fmt::Result {
-        self.push(Cmd::Dedent(n))?;
+    pub fn dedent(&mut self) -> fmt::Result {
+        self.push(Cmd::Dedent(self.config.indent_size))?;
         Ok(())
     }
 
@@ -463,7 +463,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                 }
                 self.space()?;
                 self.text("{")?;
-                self.indent(4)?;
+                self.indent()?;
                 if len > 0 {
                     self.softline()?;
                 }
@@ -515,7 +515,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
 
                 self.space()?;
                 self.text("{")?;
-                self.indent(4)?;
+                self.indent()?;
                 if len > 0 {
                     self.softline()?;
                 }
@@ -537,7 +537,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                     cols: Some(4),
                 });
                 self.text("{")?;
-                self.indent(4)?;
+                self.indent()?;
                 if len > 0 {
                     self.softline()?;
                 }
@@ -582,7 +582,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                 self.end_group()?;
             }
             Kind::BlockLiteral | Kind::Block | Kind::BlockMatrix => {
-                self.dedent(4)?;
+                self.dedent()?;
                 let list = self.list_stack.pop();
                 if list.is_some_and(|list| list.len > 0) || self.config.spaces.inside_empty_blocks {
                     self.softline()?;
