@@ -11,7 +11,7 @@ use crate::{
     parse::TokenKind,
     print::{
         command::{Cmd, Mode},
-        PrintConfig, PrintError,
+        PrintConfig, PrintError, Wrap,
     },
 };
 
@@ -23,6 +23,8 @@ struct ListContext {
     len: u32,
     idx: u32,
     grp: GroupId,
+    /// number of items per column, for a matrix layout
+    cols: Option<u32>,
 }
 
 const MAX_QUEUE: usize = 4096;
@@ -46,6 +48,8 @@ pub struct CstVisitor<'a, W: Write> {
     list_stack: Vec<ListContext>,
     /// running inline size for each group
     size_stack: Vec<usize>,
+    /// Kind of each open ancestor node
+    node_stack: Vec<Kind>,
 
     pub error: Option<PrintError>,
 
@@ -90,6 +94,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
             group_stack: Vec::new(),
             list_stack: Vec::new(),
             size_stack: Vec::new(),
+            node_stack: Vec::new(),
 
             error: None,
 
@@ -176,24 +181,27 @@ impl<'a, W: Write> CstVisitor<'a, W> {
         Ok(())
     }
 
-    pub fn indent(&mut self, n: usize) -> fmt::Result {
-        self.push(Cmd::Indent(n))?;
+    pub fn indent(&mut self) -> fmt::Result {
+        self.push(Cmd::Indent(self.config.indent_size))?;
         Ok(())
     }
 
-    pub fn dedent(&mut self, n: usize) -> fmt::Result {
-        self.push(Cmd::Dedent(n))?;
+    pub fn dedent(&mut self) -> fmt::Result {
+        self.push(Cmd::Dedent(self.config.indent_size))?;
         Ok(())
     }
 
-    /// break the first/oldest group if running size is too big (bottom of the stack)
+    /// Break the first breakable group. A group that was opened as [`Mode::Flat`] can never break.
     pub fn break_first_group(&mut self) -> fmt::Result {
-        if let Some(&idx) = self.group_stack.first() {
-            // eprintln!("[printer] breaking first group");
-            self.force_group(GroupId(idx), Mode::Break);
-
+        while let Some(&idx) = self.group_stack.first() {
             self.group_stack.remove(0);
             self.size_stack.remove(0);
+            if self.group_began_flat(idx) {
+                continue;
+            }
+            // eprintln!("[printer] breaking first group");
+            self.force_group(GroupId(idx), Mode::Break);
+            break;
         }
         self.print_safe()?;
         Ok(())
@@ -202,7 +210,12 @@ impl<'a, W: Write> CstVisitor<'a, W> {
     /// break the first/oldest group if running size is too big (bottom of the stack)
     pub fn check_running_size(&mut self) -> fmt::Result {
         if let Some(size) = self.size_stack.last() {
-            if self.col + size > self.config.wrap.line_width {
+            if self
+                .config
+                .wrap
+                .wrap_width
+                .is_some_and(|line_width| self.col + size > line_width)
+            {
                 self.break_first_group()?;
             }
         }
@@ -220,7 +233,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
             match cmd {
                 Cmd::Text(s) | Cmd::TextIf(s, Mode::Flat) => {
                     col += s.len();
-                    if col > self.config.wrap.line_width {
+                    if self.config.wrap.wrap_width.is_some_and(|width| col > width) {
                         return false;
                     }
                 }
@@ -252,6 +265,13 @@ impl<'a, W: Write> CstVisitor<'a, W> {
             unreachable!("grp pointing at non begin cmd {cmd:?}");
         };
         grp_mode.replace(mode)
+    }
+
+    /// Whether the group opened at `idx` started out [`Mode::Flat`]
+    fn group_began_flat(&self, idx: usize) -> bool {
+        idx.checked_sub(self.printed_commands)
+            .and_then(|i| self.queue.get(i))
+            .is_some_and(|cmd| matches!(cmd, Cmd::Begin(Some(Mode::Flat))))
     }
 
     fn last_mode(&self) -> &Mode {
@@ -393,6 +413,8 @@ impl<'a, W: Write> CstVisitor<'a, W> {
 
     fn enter_tree_inner(&mut self, ctx: &VisitCtx<'_>, tree: NodeId) -> Result<(), PrintError> {
         let tree = ctx.node(tree).unwrap();
+        let parent_kind = self.node_stack.last().copied();
+        self.node_stack.push(tree.kind);
 
         match tree.kind {
             Kind::TypeArgList | Kind::AnnotationArgList => {
@@ -414,11 +436,15 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                         .unwrap(),
                     idx: 0,
                     grp,
+                    cols: None,
                 });
             }
-            Kind::ListItemBlock => {
-                self.softline()?;
-                let grp = self.begin_group(None)?;
+            Kind::BlockLiteral => {
+                let is_list_item = parent_kind == Some(Kind::Block);
+                if is_list_item {
+                    self.softline()?;
+                }
+                let grp = self.begin_group(Some(Mode::Flat))?;
 
                 let len = tree
                     .children
@@ -427,16 +453,19 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                     .filter(|n| n.tree(ctx.cst).is_some_and(|t| t.kind == Kind::ListItem))
                     .count();
 
-                if !self.config.wrap.inline_lists {
-                    self.force_group(grp, Mode::Break);
-                }
-
                 if len > 0 {
                     self.list_stack.push(ListContext {
                         len: len.try_into().unwrap(),
                         idx: 0,
                         grp,
+                        cols: None,
                     });
+                }
+                self.space()?;
+                self.text("{")?;
+                self.indent()?;
+                if len > 0 {
+                    self.softline()?;
                 }
             }
             Kind::Block => {
@@ -448,7 +477,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                     .iter()
                     .filter(|n| {
                         n.tree(ctx.cst)
-                            .is_some_and(|t| matches!(t.kind, Kind::ListItem | Kind::ListItemBlock))
+                            .is_some_and(|t| matches!(t.kind, Kind::ListItem | Kind::BlockLiteral))
                     })
                     .count();
                 let struct_len = tree
@@ -461,7 +490,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                     })
                     .count();
 
-                if self.config.wrap.inline_structs {
+                if self.config.wrap.structs == Wrap::AllowInline {
                     if let Some(last) = self.list_stack.last() {
                         if struct_len > 1 {
                             self.force_group(grp, Mode::Break);
@@ -470,20 +499,49 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                         }
                     }
                 }
-                if !self.config.wrap.inline_lists && list_len > 0 {
+
+                if self.config.wrap.lists == Wrap::Always && list_len > 0 {
                     self.force_group(grp, Mode::Break);
                 }
+
                 let len = struct_len + list_len;
 
+                self.list_stack.push(ListContext {
+                    len: len.try_into().unwrap(),
+                    idx: 0,
+                    grp,
+                    cols: None,
+                });
+
+                self.space()?;
+                self.text("{")?;
+                self.indent()?;
                 if len > 0 {
-                    self.list_stack.push(ListContext {
-                        len: len.try_into().unwrap(),
-                        idx: 0,
-                        grp,
-                    });
+                    self.softline()?;
                 }
             }
             Kind::Class => {}
+            Kind::BlockMatrix => {
+                self.space()?;
+                let grp = self.begin_group(Some(Mode::Break))?;
+                let len = tree
+                    .children
+                    .get(ctx.cst)
+                    .iter()
+                    .filter(|n| n.tree(ctx.cst).is_some_and(|t| t.kind == Kind::ListItem))
+                    .count();
+                self.list_stack.push(ListContext {
+                    len: len.try_into().unwrap(),
+                    idx: 0,
+                    grp,
+                    cols: Some(4),
+                });
+                self.text("{")?;
+                self.indent()?;
+                if len > 0 {
+                    self.softline()?;
+                }
+            }
             Kind::ListItem => {
                 if tree
                     .children
@@ -495,12 +553,15 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                         self.force_group(list.grp, Mode::Break);
                     }
                 }
-                self.softline()?;
+                // matrix blocks (c.cols is Some) have their line breaks handled per item
+                if self.list_stack.last().and_then(|c| c.cols).is_none() {
+                    self.softline()?;
+                }
             }
             Kind::Entry => {
-                match self.config.wrap.inline_structs {
-                    true => self.softline()?,
-                    false => self.line()?,
+                match self.config.wrap.structs {
+                    Wrap::AllowInline => self.softline()?,
+                    Wrap::Always => self.line()?,
                 };
                 // self.flush().unwrap();
             }
@@ -514,13 +575,20 @@ impl<'a, W: Write> CstVisitor<'a, W> {
 
     fn exit_tree_inner(&mut self, ctx: &VisitCtx<'_>, tree: NodeId) -> Result<(), PrintError> {
         let tree = ctx.node(tree).unwrap();
+        self.node_stack.pop();
         match tree.kind {
             Kind::TypeArgList | Kind::AnnotationArgList => {
                 self.list_stack.pop();
                 self.end_group()?;
             }
-            Kind::ListItemBlock | Kind::Block => {
-                self.list_stack.pop();
+            Kind::BlockLiteral | Kind::Block | Kind::BlockMatrix => {
+                self.dedent()?;
+                let list = self.list_stack.pop();
+                if list.is_some_and(|list| list.len > 0) || self.config.spaces.inside_empty_blocks {
+                    self.softline()?;
+                }
+                self.text("}")?;
+
                 // eprintln!("exit {} | stack: {}", tree.kind, self.list_stack.len());
                 if let Some(list) = self.list_stack.last() {
                     if list.len > 1 {
@@ -530,7 +598,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                 }
                 self.end_group()?;
             }
-            Kind::Entry if self.config.wrap.inline_structs => {
+            Kind::Entry if self.config.wrap.structs == Wrap::AllowInline => {
                 if let Some(list) = self.list_stack.last() {
                     if list.len > 1 {
                         self.force_group(list.grp, Mode::Break);
@@ -542,18 +610,41 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                     // self.softline();
                 }
             }
-            Kind::ListItem | Kind::TypeArg | Kind::AnnotationArg => {
+            kind @ (Kind::ListItem | Kind::TypeArg | Kind::AnnotationArg) => {
                 if let Some(ctx) = self.list_stack.last() {
                     let last_item = ctx.idx + 1 == ctx.len;
 
                     if !last_item {
-                        self.text_if(",", Mode::Flat)?;
-                        self.space()?;
-                        self.softline()?;
+                        match ctx.cols {
+                            // matrix layout
+                            Some(cols) if kind == Kind::ListItem => {
+                                if (ctx.idx + 1) % cols == 0 {
+                                    self.softline()?;
+                                } else {
+                                    self.text(",")?;
+                                    self.space()?;
+                                }
+                            }
+                            _ => {
+                                self.text_if(",", Mode::Flat)?;
+                                match kind {
+                                    Kind::ListItem | Kind::AnnotationArg => {
+                                        self.softline()?;
+                                    }
+                                    Kind::TypeArg if self.config.spaces.between_type_arguments => {
+                                        self.space()?;
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
                     }
 
                     self.list_stack.last_mut().unwrap(/* Safety: guaranteed by if let */).idx += 1;
                 }
+            }
+            Kind::File => {
+                self.line()?;
             }
             _ => {}
         }
@@ -569,10 +660,10 @@ impl<'a, W: Write> CstVisitor<'a, W> {
         let token = ctx.cst.token(token).unwrap();
         let parent = ctx.node(parent).unwrap();
 
-        let txt = self.src[token.span].trim();
+        let txt = &self.src[token.span];
         let print_value = token.kind.print_value();
 
-        if txt.is_empty() && print_value.is_none() {
+        if txt.trim().is_empty() && print_value.is_none() {
             return Ok(());
         }
 
@@ -596,19 +687,7 @@ impl<'a, W: Write> CstVisitor<'a, W> {
                 }
                 self.text(txt)?;
             }
-            TokenKind::LCurly => {
-                self.space()?;
-                self.text("{")?;
-                self.indent(4)?;
-                self.space()?;
-                // self.softline();
-            }
-
-            TokenKind::RCurly => {
-                self.dedent(4)?;
-                self.softline()?;
-                self.text("}")?;
-            }
+            TokenKind::LCurly | TokenKind::RCurly => {}
 
             TokenKind::Comma => {
                 // self.text_if(",", Mode::Flat);

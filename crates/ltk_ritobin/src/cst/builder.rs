@@ -1,7 +1,4 @@
-use std::{
-    fmt::{LowerHex, Write},
-    iter::once,
-};
+use std::fmt::{LowerHex, Write};
 
 use ltk_hash::{BinHash, HashValue, WadHash};
 use ltk_meta::{
@@ -14,7 +11,7 @@ use crate::{
     cst::{Child, ChildRange, Cst, ErrorRange, Kind, Node, NodeId, TokenId},
     hash_algorithm_name, hash_width_name,
     parse::{Error, Token, TokenKind as Tok},
-    rito, HashProvider, HashType, PropertyValueExt as _, RitoType, RitobinName as _,
+    rito, FloatLiteral, HashProvider, HashType, PropertyValueExt as _, RitoType, RitobinName as _,
 };
 use crate::{span::Span, ScalarType};
 
@@ -26,6 +23,7 @@ pub struct Builder<H: HashProvider> {
     children: Vec<Child>,
     errors: Vec<Error>,
     tokens: Vec<Token>,
+    vector_form: crate::print::VectorWrap,
 }
 
 impl Builder<()> {
@@ -43,7 +41,14 @@ impl<H: HashProvider> Builder<H> {
             children: self.children,
             tokens: self.tokens,
             errors: self.errors,
+            vector_form: self.vector_form,
         }
+    }
+
+    /// Sets how vectors/colors (`vec2`/`vec3`/`vec4`/`rgba`) are rendered.
+    pub fn with_vector_form(mut self, vector_form: crate::print::VectorWrap) -> Self {
+        self.vector_form = vector_form;
+        self
     }
 
     pub fn build(mut self, bin: &Bin) -> (Cst, String) {
@@ -217,12 +222,48 @@ impl<H: HashProvider> Builder<H> {
     }
 
     fn block(&mut self, children: Vec<Child>) -> Child {
-        let lcurly = self.token(Tok::LCurly);
-        let rcurly = self.token(Tok::RCurly);
-        self.tree(
-            Kind::Block,
-            once(lcurly).chain(children).chain(once(rcurly)),
-        )
+        self.tree(Kind::Block, children)
+    }
+
+    fn block_literal(&mut self, children: Vec<Child>) -> Child {
+        self.tree(Kind::BlockLiteral, children)
+    }
+
+    fn list_child(&mut self, item: Child) -> Child {
+        match self.child_kind(item) {
+            Some(Kind::BlockLiteral) => item,
+            _ => self.tree(Kind::ListItem, [item]),
+        }
+    }
+
+    /// The [`Kind`] of `child`, or `None` when it is a token.
+    fn child_kind(&self, child: Child) -> Option<Kind> {
+        match child {
+            Child::Tree(id) => self.nodes.get(id.0 as usize).map(|n| n.kind),
+            Child::Token(_) => None,
+        }
+    }
+
+    /// Wraps the components of a vector/color (`vec2`/`vec3`/`vec4`/`rgba`).
+    fn vector_block(&mut self, components: Vec<Child>) -> Child {
+        match self.vector_form {
+            crate::print::VectorWrap::Never => self.block_literal(components),
+            crate::print::VectorWrap::List => self.block(components),
+        }
+    }
+
+    /// Builds one [`Kind::ListItem`] per value.
+    fn number_items<T: std::fmt::Display>(
+        &mut self,
+        values: impl IntoIterator<Item = T>,
+    ) -> Vec<Child> {
+        values
+            .into_iter()
+            .map(|v| {
+                let v = self.number(v);
+                self.tree(Kind::ListItem, [v])
+            })
+            .collect()
     }
 
     fn bool(&mut self, v: bool) -> Child {
@@ -246,72 +287,28 @@ impl<H: HashProvider> Builder<H> {
             PropertyValueEnum::I16(n) => self.number(**n),
             PropertyValueEnum::I32(n) => self.number(**n),
             PropertyValueEnum::I64(n) => self.number(**n),
-            PropertyValueEnum::F32(n) => self.number(**n),
+            PropertyValueEnum::F32(n) => self.number(FloatLiteral(**n)),
             PropertyValueEnum::Vector2(v) => {
-                let items = v
-                    .to_array()
-                    .iter()
-                    .map(|v| {
-                        let v = self.number(*v);
-                        self.tree(Kind::ListItem, [v])
-                    })
-                    .collect();
-                self.block(items)
+                let items = self.number_items(v.to_array().into_iter().map(FloatLiteral));
+                self.vector_block(items)
             }
             PropertyValueEnum::Vector3(v) => {
-                let items = v
-                    .to_array()
-                    .iter()
-                    .map(|v| {
-                        let v = self.number(*v);
-                        self.tree(Kind::ListItem, [v])
-                    })
-                    .collect();
-                self.block(items)
+                let items = self.number_items(v.to_array().into_iter().map(FloatLiteral));
+                self.vector_block(items)
             }
             PropertyValueEnum::Vector4(v) => {
-                let items = v
-                    .to_array()
-                    .iter()
-                    .map(|v| {
-                        let v = self.number(*v);
-                        self.tree(Kind::ListItem, [v])
-                    })
-                    .collect();
-                self.block(items)
+                let items = self.number_items(v.to_array().into_iter().map(FloatLiteral));
+                self.vector_block(items)
             }
             PropertyValueEnum::Matrix44(v) => {
-                let items = v
-                    .transpose() // ritobin text stores matrices row-major, glam::Mat4 is column-major.
-                    .to_cols_array_2d()
-                    .iter()
-                    .flat_map(|v| {
-                        let values = [
-                            self.number(v[0]),
-                            self.number(v[1]),
-                            self.number(v[2]),
-                            self.number(v[3]),
-                        ];
-                        [
-                            self.tree(Kind::ListItem, [values[0]]),
-                            self.tree(Kind::ListItem, [values[1]]),
-                            self.tree(Kind::ListItem, [values[2]]),
-                            self.tree(Kind::ListItem, [values[3]]),
-                        ]
-                    })
-                    .collect();
-                self.block(items)
+                // ritobin is row-major, glam::Mat4 is column-major
+                let items =
+                    self.number_items(v.transpose().to_cols_array().into_iter().map(FloatLiteral));
+                self.tree(Kind::BlockMatrix, items)
             }
             PropertyValueEnum::Color(v) => {
-                let items = v
-                    .to_array()
-                    .iter()
-                    .map(|v| {
-                        let v = self.number(*v);
-                        self.tree(Kind::ListItem, [v])
-                    })
-                    .collect();
-                self.block(items)
+                let items = self.number_items(v.to_array());
+                self.vector_block(items)
             }
             PropertyValueEnum::String(s) => {
                 let s = self.string(crate::escaping::escape(s));
@@ -327,15 +324,14 @@ impl<H: HashProvider> Builder<H> {
 
             PropertyValueEnum::Container(container)
             | PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(container)) => {
-                let mut children = vec![self.token(Tok::LCurly)];
+                let mut children = vec![];
 
                 for item in container.clone().into_items() {
                     let item = self.value_to_cst(&item);
-                    children.push(self.tree(Kind::ListItem, [item]));
+                    children.push(self.list_child(item));
                 }
 
-                children.push(self.token(Tok::RCurly));
-                self.tree(Kind::TypeArgList, children)
+                self.block(children)
             }
             PropertyValueEnum::Embedded(values::Embedded(s)) | PropertyValueEnum::Struct(s) => {
                 if *s.class_hash == 0 && s.properties.is_empty() {
@@ -355,7 +351,10 @@ impl<H: HashProvider> Builder<H> {
 
             PropertyValueEnum::Optional(optional) => {
                 let children = match optional.clone().into_inner() {
-                    Some(v) => vec![self.value_to_cst(&v)],
+                    Some(v) => {
+                        let v = self.value_to_cst(&v);
+                        vec![self.list_child(v)]
+                    }
                     None => vec![],
                 };
                 self.block(children)
@@ -490,18 +489,18 @@ impl<H: HashProvider> Builder<H> {
         }
     }
 
-    /// The `#PROP_text` or `#PTCH_text` comment, then the `type` and `version` roots.
-    fn header_to_cst(&mut self, file_kind: FileKind) -> [Child; 3] {
-        let comment = self.spanned_token(Tok::Comment, format!("#{file_kind}_text"));
-        let comment = self.tree(Kind::Comment, vec![comment]);
+    /// The `#PROP_text` or `#PTCH_text` magic comment, then the `type` and `version` roots.
+    fn header_to_cst(&mut self, file_kind: FileKind, version: u32) -> [Child; 3] {
+        let magic = self.spanned_token(Tok::Comment, format!("#{file_kind}_text"));
+        let magic = self.tree(Kind::Comment, vec![magic]);
 
         let type_entry = self.string(format!("\"{file_kind}\""));
         let type_entry = self.entry("type", rito!(String), type_entry);
 
-        let version = self.number("3");
+        let version = self.number(version);
         let version = self.entry("version", rito!(U32), version);
 
-        [comment, type_entry, version]
+        [magic, type_entry, version]
     }
 
     /// A root holding a list of `items`, each wrapped as a list item.
@@ -537,16 +536,21 @@ impl<H: HashProvider> Builder<H> {
 
     fn bin_to_cst(&mut self, bin: &Bin) {
         self.file_node();
-        let [comment, type_entry, version] = self.header_to_cst(FileKind::Prop);
-        let linked = self.linked_to_cst(&bin.dependencies);
+        let [magic, type_entry, version] = self.header_to_cst(FileKind::Prop, bin.version);
+        let mut roots = vec![magic, type_entry, version];
+        if bin.version >= 2 {
+            let linked = self.linked_to_cst(&bin.dependencies);
+            roots.push(linked);
+        }
         let entries = self.entries_to_cst(bin.objects.values());
+        roots.push(entries);
 
-        self.set_file_roots([comment, type_entry, version, linked, entries]);
+        self.set_file_roots(roots);
     }
 
     fn override_to_cst(&mut self, patch: &BinOverride) {
         self.file_node();
-        let [comment, type_entry, version] = self.header_to_cst(FileKind::Patch);
+        let [magic, type_entry, version] = self.header_to_cst(FileKind::Patch, 3);
         let linked = self.linked_to_cst(&[]);
         let entries = self.entries_to_cst(patch.objects.values());
 
@@ -558,7 +562,7 @@ impl<H: HashProvider> Builder<H> {
         let records = self.block(records);
         let records = self.entry("patches", rito!(Map[Hash, Embedded]), records);
 
-        let mut roots = vec![comment, type_entry, version, linked, entries, records];
+        let mut roots = vec![magic, type_entry, version, linked, entries, records];
         if !patch.deleted.is_empty() {
             let deleted = patch
                 .deleted
