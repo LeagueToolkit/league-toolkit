@@ -480,7 +480,8 @@ patches: map[hash, embed] = {
         value: vec2 = { 0, 1 }
     }
 }
-deleted: list[hash] = { 0xdeadbeef }"#
+deleted: list[hash] = { 0xdeadbeef }
+"#
     );
 }
 

@@ -251,10 +251,11 @@ impl<'a> Cursor<'a> {
 
         let mut escaped = false;
         while let Some(&b) = self.bytes.get(self.pos) {
+            if matches!(b, b'\n' | b'\r') {
+                return UnterminatedString;
+            }
             self.pos += 1;
             match b {
-                b'\n' | b'\r' => return UnterminatedString,
-
                 _ if escaped => escaped = false,
                 b'\\' => escaped = true,
                 _ if b == quote => return String,
@@ -328,16 +329,30 @@ fn scan_number(bytes: &[u8]) -> Option<usize> {
 
     // check for inf/nan, only if there's no minus, or a minus as first char
     if matches!(i, 0 | 1) {
-        let end = i + 3;
-        if bytes.len() >= end {
-            // 0 1 2 3 4
-            // - i n f
-            for word in [b"inf", b"nan"] {
-                if bytes[i..end].eq_ignore_ascii_case(word)
-                    && bytes.get(end).is_none_or(|c| !is_name_char(c))
-                {
-                    return Some(end);
+        let inf_end = i + 3;
+        if bytes.len() >= inf_end
+            && bytes[i..inf_end].eq_ignore_ascii_case(b"inf")
+            && bytes.get(inf_end).is_none_or(|c| !is_name_char(c))
+        {
+            return Some(inf_end);
+        }
+        let nan_end = i + 3;
+        if bytes.len() >= nan_end && bytes[i..nan_end].eq_ignore_ascii_case(b"nan") {
+            if bytes.get(nan_end).is_some_and(|c| *c == b'(') {
+                let start = nan_end + 1;
+                const WORDS: [&[u8]; 2] = [b"snan", b"ind"];
+                for word in WORDS {
+                    let end = start + word.len();
+                    if bytes.len() > end
+                        && bytes[start..end].eq_ignore_ascii_case(word)
+                        && bytes[end] == b')'
+                    {
+                        return Some(end + 1);
+                    }
                 }
+            }
+            if bytes.get(nan_end).is_none_or(|c| !is_name_char(c)) {
+                return Some(nan_end);
             }
         }
     }
@@ -382,5 +397,11 @@ mod tests {
 
         assert_eq!(scan_number(b"Inf"), Some(3));
         assert_eq!(scan_number(b"-inf"), Some(4));
+        assert_eq!(scan_number(b"-nan(snan)"), Some(10));
+        assert_eq!(scan_number(b"nan(ind)"), Some(8));
+
+        assert_eq!(scan_number(b"nancy"), None);
+        assert_eq!(scan_number(b"nanometer"), None);
+        assert_eq!(scan_number(b"infantry"), None);
     }
 }

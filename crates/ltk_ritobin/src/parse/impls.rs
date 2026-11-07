@@ -44,7 +44,7 @@ pub fn stmt_or_list_item(p: &mut Parser) -> (MarkClosed, TreeKind) {
                 let m = p.close(m, TreeKind::BlockKey);
                 res = (stmt(p, Some(m)), TreeKind::Entry);
             } else {
-                res = (p.close(m, TreeKind::ListItemBlock), TreeKind::ListItemBlock);
+                res = (p.close(m, TreeKind::BlockLiteral), TreeKind::BlockLiteral);
                 p.eat(Comma);
             }
         }
@@ -261,6 +261,7 @@ pub fn block(p: &mut Parser) -> MarkOpened {
         if kind == TreeKind::Class {
             let m = p.open_before(mark);
             p.close(m, TreeKind::ListItem);
+            // TODO: also wrap ListItem around BlockLiteral
         }
     }
     p.expect(RCurly);

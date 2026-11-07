@@ -55,6 +55,7 @@ ltk_ritobin_derive = { version = "0.1.2", path = "../ltk_ritobin_derive", option
 
 serde = { workspace = true, optional = true }
 salsa = { version = "0.22.0", optional = true }
+ryu = "1.0.23"
 
 [dev-dependencies]
 insta.workspace = true

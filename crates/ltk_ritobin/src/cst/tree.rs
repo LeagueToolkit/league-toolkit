@@ -20,15 +20,24 @@ use crate::{
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[rustfmt::skip]
 pub enum Kind {
-  ErrorTree,
-  File, 
-  TypeExpr, TypeArgList, TypeArg,
-  Block, BlockKey, Class, ListItem, ListItemBlock,
+    ErrorTree,
+    File, 
+    TypeExpr, TypeArgList, TypeArg,
+    Class, ListItem, 
 
-  Entry, EntryKey, EntryValue, EntryTerminator,
-  Literal,
+    /// a block of `{` `}`
+    Block, 
+    /// a block that is an entry key
+    BlockKey,
+    /// a literal that looks like a block (vec's, rgba)
+    BlockLiteral,
+    /// a matrix block, printed as rows of fixed width (`mtx44`: 4 rows of 4)
+    BlockMatrix,
 
-  Comment, Annotation, AnnotationArgList, AnnotationArg,
+    Entry, EntryKey, EntryValue, EntryTerminator,
+    Literal,
+
+    Comment, Annotation, AnnotationArgList, AnnotationArg,
 }
 impl Display for Kind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -47,7 +56,8 @@ impl Display for Kind {
             Self::BlockKey => "key",
             Self::Class => "bin class",
             Self::ListItem => "list item",
-            Self::ListItemBlock => "list item (block)",
+            Self::BlockLiteral => "block literal",
+            Self::BlockMatrix => "matrix block",
             Self::Comment => "comment",
             Self::Annotation => "annotation",
             Self::AnnotationArgList => "annotation argument list",

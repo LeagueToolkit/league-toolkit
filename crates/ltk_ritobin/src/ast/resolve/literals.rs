@@ -11,7 +11,7 @@ use crate::{
     },
     escaping,
     parse::{Token, TokenKind},
-    RitoType, RitobinName, Spanned, SpannedExt,
+    FloatLiteral, RitoType, RitobinName, Spanned, SpannedExt,
 };
 use crate::{span::Span, ScalarType};
 
@@ -226,10 +226,12 @@ impl Value {
                             })?,
                             K::F32 => Self::F32(Spanned::new(
                                 *span,
-                                txt.parse().map_err(|_| ParseNumericError {
-                                    expected: S::F32,
-                                    error: None,
-                                    span: *span,
+                                txt.parse::<FloatLiteral>().map(|f| f.0).map_err(|_| {
+                                    ParseNumericError {
+                                        expected: S::F32,
+                                        error: None,
+                                        span: *span,
+                                    }
                                 })?,
                             )),
                             expected => {

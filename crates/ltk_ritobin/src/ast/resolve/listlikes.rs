@@ -1,3 +1,5 @@
+use std::ops::ControlFlow;
+
 use crate::{
     ast::{
         builder::Builder,
@@ -11,27 +13,49 @@ use crate::{rito, span::Span};
 
 use super::literals::ExpectedType;
 
-struct ListIter<'a, 'b, 'c> {
+/// Iterate a list-like (`vec*`,`rgba`,`mtx44`) block's children, emitting resolved [`Value`]s.
+/// This does **NOT** handle actual lists (`list`/`list2`).
+struct ListLikeIter<'a, 'b, 'c> {
     ctx: &'a mut Builder<'b>,
-    children: std::slice::Iter<'c, Child>,
     cst: &'c Cst,
     span: Span,
     type_span: Option<Span>,
     count: u8,
     /// The list-like being read, for diagnosing items it cannot hold.
     kind: ScalarType,
+
+    children: std::slice::Iter<'c, Child>,
+    /// Iterator over the children of a `BlockLiteral` (for handling mtx44 rows).
+    nested_block: Option<std::slice::Iter<'c, Child>>,
 }
 
-impl<'c> ListIter<'_, '_, 'c> {
-    fn next_value(&mut self, expected: ScalarType) -> Option<Result<Value, MaybeSpanDiag>> {
-        for child in self.children.by_ref() {
-            let Some(node) = child.tree(self.cst) else {
-                continue;
-            };
-            match node.kind {
-                Kind::Comment => continue,
-                // a list-like is one value, so there is nothing inside it to annotate
-                Kind::Annotation => {
+impl<'c> ListLikeIter<'_, '_, 'c> {
+    fn resolve_numeric(
+        &mut self,
+        node: &Node,
+        expected: ScalarType,
+    ) -> Result<Value, MaybeSpanDiag> {
+        self.count += 1;
+        self.span = node.span;
+        self.ctx
+            .resolve_numeric(node, expected, self.type_span)
+            .map_err(MaybeSpanDiag::from)
+    }
+
+    fn visit_node(
+        &mut self,
+        child: &Child,
+        expected: ScalarType,
+    ) -> ControlFlow<Result<Value, MaybeSpanDiag>> {
+        let Some(node) = child.tree(self.cst) else {
+            return ControlFlow::Continue(());
+        };
+        match node.kind {
+            Kind::Comment => ControlFlow::Continue(()),
+            // mtx44's can be represented as a block with 4 block children,
+            // one for each row of the matrix
+            Kind::BlockLiteral | Kind::Block => {
+                if self.nested_block.is_some() {
                     self.ctx.push(
                         D::UnexpectedItem {
                             span: node.span,
@@ -40,19 +64,41 @@ impl<'c> ListIter<'_, '_, 'c> {
                         }
                         .unwrap(),
                     );
-                    continue;
+                } else {
+                    self.nested_block
+                        .replace(node.children.get(self.cst).iter());
                 }
-                _ => {}
+                ControlFlow::Continue(())
             }
-            self.count += 1;
-            self.span = node.span;
-            return Some(
-                self.ctx
-                    .resolve_numeric(node, expected, self.type_span)
-                    .map_err(MaybeSpanDiag::from),
-            );
+            Kind::Annotation => {
+                self.ctx.push(
+                    D::UnexpectedItem {
+                        span: node.span,
+                        parent: self.kind.into(),
+                        expected: crate::ItemShape::Value,
+                    }
+                    .unwrap(),
+                );
+                ControlFlow::Continue(())
+            }
+            _ => ControlFlow::Break(self.resolve_numeric(node, expected)),
         }
-        None
+    }
+    fn next_value(&mut self, expected: ScalarType) -> Option<Result<Value, MaybeSpanDiag>> {
+        loop {
+            // take from any nested blocks first
+            let child = match self.nested_block.as_mut().and_then(|it| it.next()) {
+                Some(child) => child,
+                None => {
+                    self.nested_block = None;
+                    self.children.next()?
+                }
+            };
+            match self.visit_node(child, expected) {
+                ControlFlow::Continue(()) => continue,
+                ControlFlow::Break(v) => return Some(v),
+            }
+        }
     }
 
     fn expect_next(
@@ -132,9 +178,10 @@ impl<'a> Builder<'a> {
     ) -> Result<Value, MaybeSpanDiag> {
         let cst = self.cst();
         let span = block.span;
-        let mut items = ListIter {
+        let mut items = ListLikeIter {
             ctx: self,
             children: block.children.get(cst).iter(),
+            nested_block: None,
             cst,
             span,
             type_span,

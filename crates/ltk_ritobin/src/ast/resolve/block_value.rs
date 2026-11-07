@@ -90,7 +90,7 @@ impl<'a> Builder<'a> {
                     // `option[vec3] = { { 0.5, 5.3, -0.2 } }` - the listlike wrapped in its own
                     // block, the same shape a listlike takes as a `list[vec3]` item.
                     if let [only] = content[..] {
-                        if only.kind == Kind::ListItemBlock {
+                        if only.kind == Kind::BlockLiteral {
                             let inner = self.resolve_list_item_block(only, item_kind, hint_span)?;
                             return Ok(Value::Optional {
                                 item_kind: Some(item_kind),
@@ -143,7 +143,7 @@ impl<'a> Builder<'a> {
                                 Err(e) => self.push(e.default_span(node.span)),
                             }
                         }
-                        Kind::ListItemBlock => {
+                        Kind::BlockLiteral => {
                             match self.resolve_list_item_block(node, item_kind, hint_span) {
                                 Ok(v) => value = Some(v),
                                 Err(e) => self.push(e.fallback(node.span)),
@@ -324,7 +324,7 @@ impl<'a> Builder<'a> {
                         Err(e) => self.push(e.default_span(node.span)),
                     }
                 }
-                Kind::ListItemBlock => {
+                Kind::BlockLiteral => {
                     match self.resolve_list_item_block(node, item_kind, hint_span) {
                         Ok(v) => items.push(v),
                         Err(e) => self.push(e.fallback(node.span)),
